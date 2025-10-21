@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, 
   Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon,
-  Mic, FileUp, Check, CheckCheck, MoreVertical, Phone, Video, Info
+  Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
@@ -35,6 +35,10 @@ interface Conversation {
   messages: Message[];
   tags: string[];
   funnelStage?: string;
+  responsavel?: string;
+  produto?: string;
+  valor?: string;
+  anotacoes?: string;
 }
 
 interface QuickMessage {
@@ -58,10 +62,19 @@ interface ScheduledMessage {
   datetime: string;
 }
 
+interface Meeting {
+  id: string;
+  conversationId: string;
+  title: string;
+  datetime: string;
+  notes: string;
+}
+
 const CONVERSATIONS_KEY = "continuum_conversations";
 const QUICK_MESSAGES_KEY = "continuum_quick_messages";
 const REMINDERS_KEY = "continuum_reminders";
 const SCHEDULED_MESSAGES_KEY = "continuum_scheduled_messages";
+const MEETINGS_KEY = "continuum_meetings";
 const AI_MODE_KEY = "continuum_ai_mode";
 
 const initialConversations: Conversation[] = [
@@ -74,6 +87,10 @@ const initialConversations: Conversation[] = [
     unread: 2,
     tags: ["cliente", "interesse"],
     funnelStage: "Novo",
+    responsavel: "Você",
+    produto: "Sistema CRM Premium",
+    valor: "R$ 5.000,00",
+    anotacoes: "Cliente interessado em plano anual",
     messages: [
       { id: "1", content: "Olá! Gostaria de saber mais sobre o produto", type: "text", sender: "contact", timestamp: new Date(Date.now() - 300000), delivered: true },
       { id: "2", content: "Vocês têm disponibilidade para esta semana?", type: "text", sender: "contact", timestamp: new Date(Date.now() - 180000), delivered: true },
@@ -88,6 +105,9 @@ const initialConversations: Conversation[] = [
     unread: 0,
     tags: ["promoção"],
     funnelStage: "Qualificado",
+    responsavel: "Ana Costa",
+    produto: "Consultoria Digital",
+    valor: "R$ 2.500,00",
     messages: [
       { id: "1", content: "Vi o post sobre promoção", type: "text", sender: "contact", timestamp: new Date(Date.now() - 7200000), delivered: true },
       { id: "2", content: "Olá Maria! Temos várias opções em promoção. Qual produto te interessa?", type: "text", sender: "user", timestamp: new Date(Date.now() - 7000000), delivered: true },
@@ -103,6 +123,9 @@ const initialConversations: Conversation[] = [
     unread: 0,
     tags: ["venda", "fechado"],
     funnelStage: "Fechado",
+    responsavel: "Pedro Lima",
+    produto: "Plano Enterprise",
+    valor: "R$ 15.000,00",
     messages: [
       { id: "1", content: "Quero fazer uma compra", type: "text", sender: "contact", timestamp: new Date(Date.now() - 86400000), delivered: true },
       { id: "2", content: "Ótimo! Vou te passar os detalhes.", type: "text", sender: "user", timestamp: new Date(Date.now() - 86000000), delivered: true },
@@ -121,35 +144,37 @@ export default function Conversas() {
   const [quickMessages, setQuickMessages] = useState<QuickMessage[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [showInfoPanel, setShowInfoPanel] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Quick messages dialog states
+  // Form states
   const [newQuickTitle, setNewQuickTitle] = useState("");
   const [newQuickContent, setNewQuickContent] = useState("");
-  
-  // Reminder dialog states
   const [reminderTitle, setReminderTitle] = useState("");
   const [reminderDatetime, setReminderDatetime] = useState("");
   const [reminderNotes, setReminderNotes] = useState("");
-  
-  // Scheduled message dialog states
   const [scheduledContent, setScheduledContent] = useState("");
   const [scheduledDatetime, setScheduledDatetime] = useState("");
-  
-  // Tag dialog state
+  const [meetingTitle, setMeetingTitle] = useState("");
+  const [meetingDatetime, setMeetingDatetime] = useState("");
+  const [meetingNotes, setMeetingNotes] = useState("");
   const [newTag, setNewTag] = useState("");
-  
-  // Funnel dialog state
   const [selectedFunnel, setSelectedFunnel] = useState("");
+  const [newResponsavel, setNewResponsavel] = useState("");
+  const [newProduto, setNewProduto] = useState("");
+  const [newValor, setNewValor] = useState("");
+  const [newAnotacoes, setNewAnotacoes] = useState("");
 
   const funnelStages = ["Novo", "Qualificado", "Em Negociação", "Fechado", "Perdido"];
+  const usuarios = ["Você", "Ana Costa", "Pedro Lima", "Julia Santos", "Carlos Mendes"];
 
   useEffect(() => {
     loadConversations();
     loadQuickMessages();
     loadReminders();
     loadScheduledMessages();
+    loadMeetings();
     loadAiMode();
   }, []);
 
@@ -203,6 +228,11 @@ export default function Conversas() {
     if (saved) setScheduledMessages(JSON.parse(saved));
   };
 
+  const loadMeetings = () => {
+    const saved = localStorage.getItem(MEETINGS_KEY);
+    if (saved) setMeetings(JSON.parse(saved));
+  };
+
   const loadAiMode = () => {
     const saved = localStorage.getItem(AI_MODE_KEY);
     if (saved) setAiMode(JSON.parse(saved));
@@ -228,6 +258,11 @@ export default function Conversas() {
     setScheduledMessages(updated);
   };
 
+  const saveMeetings = (updated: Meeting[]) => {
+    localStorage.setItem(MEETINGS_KEY, JSON.stringify(updated));
+    setMeetings(updated);
+  };
+
   const saveAiMode = (updated: Record<string, boolean>) => {
     localStorage.setItem(AI_MODE_KEY, JSON.stringify(updated));
     setAiMode(updated);
@@ -236,11 +271,11 @@ export default function Conversas() {
   const getChannelIcon = (channel: string) => {
     switch (channel) {
       case "whatsapp":
-        return <MessageSquare className="h-3.5 w-3.5 text-green-500" />;
+        return <MessageSquare className="h-3.5 w-3.5 text-[#25D366]" />;
       case "instagram":
         return <Instagram className="h-3.5 w-3.5 text-pink-500" />;
       case "facebook":
-        return <Facebook className="h-3.5 w-3.5 text-blue-500" />;
+        return <Facebook className="h-3.5 w-3.5 text-blue-600" />;
       default:
         return <MessageSquare className="h-3.5 w-3.5" />;
     }
@@ -317,7 +352,6 @@ export default function Conversas() {
 
   const handleFileAttach = (type: "image" | "audio" | "pdf") => {
     toast.info(`Anexando ${type}...`);
-    // Simulate file upload
     setTimeout(() => {
       handleSendMessage(`Arquivo ${type} anexado`, type);
     }, 1000);
@@ -384,6 +418,25 @@ export default function Conversas() {
     toast.success("Mensagem agendada!");
   };
 
+  const scheduleMeeting = () => {
+    if (!selectedConv || !meetingTitle.trim() || !meetingDatetime) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+    const newMeeting: Meeting = {
+      id: Date.now().toString(),
+      conversationId: selectedConv.id,
+      title: meetingTitle,
+      datetime: meetingDatetime,
+      notes: meetingNotes,
+    };
+    saveMeetings([...meetings, newMeeting]);
+    setMeetingTitle("");
+    setMeetingDatetime("");
+    setMeetingNotes("");
+    toast.success("Reunião agendada!");
+  };
+
   const addTag = () => {
     if (!selectedConv || !newTag.trim()) {
       toast.error("Digite uma tag");
@@ -416,36 +469,77 @@ export default function Conversas() {
     toast.success("Adicionado ao funil!");
   };
 
+  const updateResponsavel = () => {
+    if (!selectedConv || !newResponsavel) {
+      toast.error("Selecione um responsável");
+      return;
+    }
+    const updatedConversations = conversations.map((conv) =>
+      conv.id === selectedConv.id
+        ? { ...conv, responsavel: newResponsavel }
+        : conv
+    );
+    saveConversations(updatedConversations);
+    setSelectedConv({ ...selectedConv, responsavel: newResponsavel });
+    setNewResponsavel("");
+    toast.success("Responsável atualizado!");
+  };
+
+  const updateLeadInfo = () => {
+    if (!selectedConv) return;
+    
+    const updatedConversations = conversations.map((conv) =>
+      conv.id === selectedConv.id
+        ? { 
+            ...conv, 
+            produto: newProduto || conv.produto,
+            valor: newValor || conv.valor,
+            anotacoes: newAnotacoes !== undefined ? newAnotacoes : conv.anotacoes
+          }
+        : conv
+    );
+    saveConversations(updatedConversations);
+    setSelectedConv({ 
+      ...selectedConv, 
+      produto: newProduto || selectedConv.produto,
+      valor: newValor || selectedConv.valor,
+      anotacoes: newAnotacoes !== undefined ? newAnotacoes : selectedConv.anotacoes
+    });
+    setNewProduto("");
+    setNewValor("");
+    setNewAnotacoes("");
+    toast.success("Informações atualizadas!");
+  };
+
   const filteredConversations = conversations
     .filter((conv) => filter === "all" || conv.status === filter)
     .filter((conv) => conv.contactName.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="h-screen bg-[#1e1e1e] flex overflow-hidden">
-      {/* Sidebar esquerda */}
-      <div className="w-[380px] bg-[#2b2b2b] border-r border-[#3a3a3a] flex flex-col">
+    <div className="h-screen bg-background flex overflow-hidden">
+      {/* Sidebar esquerda - tema cinza claro */}
+      <div className="w-[380px] bg-muted/30 border-r border-border flex flex-col">
         {/* Header */}
-        <div className="p-4 bg-[#2b2b2b] border-b border-[#3a3a3a]">
-          <h1 className="text-xl font-semibold text-white mb-4">Continuum Conversas</h1>
+        <div className="p-4 bg-background border-b border-border">
+          <h1 className="text-xl font-semibold text-foreground mb-4">Conversas</h1>
           
           {/* Search */}
           <div className="relative mb-4">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="🔍 Buscar conversa..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-[#3a3a3a] border-[#5f5f5f] text-white placeholder:text-gray-400"
+              className="pl-10 bg-background"
             />
           </div>
 
           {/* Filters */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               variant={filter === "all" ? "default" : "ghost"}
               size="sm"
               onClick={() => setFilter("all")}
-              className={filter === "all" ? "bg-[#00a884] hover:bg-[#00a884]/90 text-white" : "text-gray-300 hover:bg-[#3a3a3a]"}
             >
               Todos
             </Button>
@@ -453,7 +547,6 @@ export default function Conversas() {
               variant={filter === "waiting" ? "default" : "ghost"}
               size="sm"
               onClick={() => setFilter("waiting")}
-              className={filter === "waiting" ? "bg-[#00a884] hover:bg-[#00a884]/90 text-white" : "text-gray-300 hover:bg-[#3a3a3a]"}
             >
               Aguardando
             </Button>
@@ -461,7 +554,6 @@ export default function Conversas() {
               variant={filter === "answered" ? "default" : "ghost"}
               size="sm"
               onClick={() => setFilter("answered")}
-              className={filter === "answered" ? "bg-[#00a884] hover:bg-[#00a884]/90 text-white" : "text-gray-300 hover:bg-[#3a3a3a]"}
             >
               Respondidos
             </Button>
@@ -469,7 +561,6 @@ export default function Conversas() {
               variant={filter === "resolved" ? "default" : "ghost"}
               size="sm"
               onClick={() => setFilter("resolved")}
-              className={filter === "resolved" ? "bg-[#00a884] hover:bg-[#00a884]/90 text-white" : "text-gray-300 hover:bg-[#3a3a3a]"}
             >
               Resolvidos
             </Button>
@@ -481,31 +572,31 @@ export default function Conversas() {
           {filteredConversations.map((conv) => (
             <div
               key={conv.id}
-              className={`p-4 border-b border-[#3a3a3a] cursor-pointer transition-colors hover:bg-[#3a3a3a] ${
-                selectedConv?.id === conv.id ? "bg-[#3a3a3a]" : ""
+              className={`p-4 border-b border-border cursor-pointer transition-colors hover:bg-muted/50 ${
+                selectedConv?.id === conv.id ? "bg-muted/70" : ""
               }`}
               onClick={() => setSelectedConv(conv)}
             >
               <div className="flex items-start justify-between mb-1">
                 <div className="flex items-center gap-2">
                   {getChannelIcon(conv.channel)}
-                  <span className="font-medium text-sm text-white">{conv.contactName}</span>
+                  <span className="font-medium text-sm text-foreground">{conv.contactName}</span>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-muted-foreground">
                     {new Date(conv.messages[conv.messages.length - 1]?.timestamp).toLocaleTimeString("pt-BR", {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
                   </span>
                   {conv.unread > 0 && (
-                    <Badge className="bg-[#00a884] hover:bg-[#00a884] text-white text-xs h-5 min-w-5 rounded-full flex items-center justify-center">
+                    <Badge className="bg-[#25D366] hover:bg-[#25D366] text-white text-xs h-5 min-w-5 rounded-full flex items-center justify-center">
                       {conv.unread}
                     </Badge>
                   )}
                 </div>
               </div>
-              <p className="text-sm text-gray-400 truncate">{conv.lastMessage}</p>
+              <p className="text-sm text-muted-foreground truncate">{conv.lastMessage}</p>
             </div>
           ))}
         </ScrollArea>
@@ -515,35 +606,57 @@ export default function Conversas() {
       <div className="flex-1 flex flex-col">
         {selectedConv ? (
           <>
-            {/* Chat Header */}
-            <div className="h-[70px] bg-[#2b2b2b] border-b border-[#3a3a3a] flex items-center justify-between px-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#5f5f5f] flex items-center justify-center">
-                  <User className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-white font-medium">{selectedConv.contactName}</h2>
-                  <div className="flex items-center gap-2">
-                    {getChannelIcon(selectedConv.channel)}
-                    <span className="text-xs text-gray-400 capitalize">{selectedConv.channel}</span>
+            {/* Chat Header com info do lead */}
+            <div className="bg-background border-b border-border px-6 py-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                    <User className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <h2 className="text-foreground font-medium">{selectedConv.contactName}</h2>
+                    <div className="flex items-center gap-2">
+                      {getChannelIcon(selectedConv.channel)}
+                      <span className="text-xs text-muted-foreground capitalize">{selectedConv.channel}</span>
+                    </div>
                   </div>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="icon">
+                    <Phone className="h-5 w-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon">
+                    <Video className="h-5 w-5" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => setShowInfoPanel(!showInfoPanel)}
+                  >
+                    <Info className="h-5 w-5" />
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-[#3a3a3a]">
-                  <Phone className="h-5 w-5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-[#3a3a3a]">
-                  <Video className="h-5 w-5" />
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="text-gray-400 hover:text-white hover:bg-[#3a3a3a]"
-                  onClick={() => setShowInfoPanel(!showInfoPanel)}
-                >
-                  <Info className="h-5 w-5" />
-                </Button>
+              {/* Informações do Lead */}
+              <div className="flex items-center gap-4 text-sm">
+                {selectedConv.produto && (
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <FileText className="h-3.5 w-3.5" />
+                    <span>{selectedConv.produto}</span>
+                  </div>
+                )}
+                {selectedConv.valor && (
+                  <div className="flex items-center gap-1 text-success font-medium">
+                    <DollarSign className="h-3.5 w-3.5" />
+                    <span>{selectedConv.valor}</span>
+                  </div>
+                )}
+                {selectedConv.responsavel && (
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <User className="h-3.5 w-3.5" />
+                    <span>{selectedConv.responsavel}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -551,18 +664,18 @@ export default function Conversas() {
               {/* Messages Area */}
               <div className="flex-1 flex flex-col">
                 {/* Messages */}
-                <ScrollArea className="flex-1 p-6 bg-[#1e1e1e]" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.02'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')" }}>
-                  <div className="space-y-3">
+                <ScrollArea className="flex-1 p-6 bg-[#e5ddd5]" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d9d9d9' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')" }}>
+                  <div className="space-y-2">
                     {selectedConv.messages.map((msg) => (
                       <div
                         key={msg.id}
                         className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"} animate-fade-in`}
                       >
                         <div
-                          className={`max-w-[65%] rounded-lg px-4 py-2 shadow-md ${
+                          className={`max-w-[65%] rounded-lg px-3 py-2 shadow-sm ${
                             msg.sender === "user"
-                              ? "bg-[#005c4b] text-white"
-                              : "bg-[#2b2b2b] text-white"
+                              ? "bg-[#d9fdd3] text-foreground"
+                              : "bg-white text-foreground"
                           }`}
                         >
                           {msg.type === "text" && <p className="text-sm">{msg.content}</p>}
@@ -585,14 +698,14 @@ export default function Conversas() {
                             </div>
                           )}
                           <div className="flex items-center justify-end gap-1 mt-1">
-                            <span className="text-[10px] opacity-70">
+                            <span className="text-[10px] text-muted-foreground">
                               {msg.timestamp.toLocaleTimeString("pt-BR", {
                                 hour: "2-digit",
                                 minute: "2-digit",
                               })}
                             </span>
                             {msg.sender === "user" && (
-                              msg.delivered ? <CheckCheck className="h-3 w-3" /> : <Check className="h-3 w-3" />
+                              msg.delivered ? <CheckCheck className="h-3 w-3 text-[#53bdeb]" /> : <Check className="h-3 w-3" />
                             )}
                           </div>
                         </div>
@@ -603,34 +716,37 @@ export default function Conversas() {
                 </ScrollArea>
 
                 {/* Input Area */}
-                <div className="bg-[#2b2b2b] border-t border-[#3a3a3a] p-4">
+                <div className="bg-background border-t border-border p-4">
                   <div className="flex items-center gap-3">
                     <Dialog>
                       <DialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-[#3a3a3a]">
+                        <Button variant="ghost" size="icon">
                           <Paperclip className="h-5 w-5" />
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="bg-[#2b2b2b] border-[#3a3a3a] text-white">
+                      <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Anexar arquivo</DialogTitle>
                         </DialogHeader>
                         <div className="space-y-2">
                           <Button 
                             onClick={() => handleFileAttach("image")} 
-                            className="w-full justify-start bg-[#3a3a3a] hover:bg-[#5f5f5f] text-white"
+                            className="w-full justify-start"
+                            variant="outline"
                           >
                             <ImageIcon className="h-4 w-4 mr-2" /> Enviar imagem
                           </Button>
                           <Button 
                             onClick={() => handleFileAttach("audio")} 
-                            className="w-full justify-start bg-[#3a3a3a] hover:bg-[#5f5f5f] text-white"
+                            className="w-full justify-start"
+                            variant="outline"
                           >
                             <Mic className="h-4 w-4 mr-2" /> Enviar áudio
                           </Button>
                           <Button 
                             onClick={() => handleFileAttach("pdf")} 
-                            className="w-full justify-start bg-[#3a3a3a] hover:bg-[#5f5f5f] text-white"
+                            className="w-full justify-start"
+                            variant="outline"
                           >
                             <FileUp className="h-4 w-4 mr-2" /> Enviar documento (PDF)
                           </Button>
@@ -643,12 +759,12 @@ export default function Conversas() {
                       value={messageInput}
                       onChange={(e) => setMessageInput(e.target.value)}
                       onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-                      className="flex-1 bg-[#3a3a3a] border-[#5f5f5f] text-white placeholder:text-gray-400"
+                      className="flex-1"
                     />
                     <Button 
                       onClick={() => handleSendMessage()} 
                       size="icon"
-                      className="bg-[#00a884] hover:bg-[#00a884]/90 text-white"
+                      className="bg-[#25D366] hover:bg-[#128C7E] text-white"
                     >
                       <Send className="h-5 w-5" />
                     </Button>
@@ -658,36 +774,135 @@ export default function Conversas() {
 
               {/* Info Panel */}
               {showInfoPanel && (
-                <div className="w-[340px] bg-[#2b2b2b] border-l border-[#3a3a3a] overflow-y-auto">
+                <div className="w-[340px] bg-background border-l border-border overflow-y-auto">
                   <div className="p-6 space-y-6">
                     {/* Contact Info */}
                     <div className="text-center">
-                      <div className="w-20 h-20 rounded-full bg-[#5f5f5f] flex items-center justify-center mx-auto mb-3">
-                        <User className="h-10 w-10 text-white" />
+                      <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+                        <User className="h-10 w-10 text-muted-foreground" />
                       </div>
-                      <h3 className="text-white font-medium text-lg">{selectedConv.contactName}</h3>
-                      <p className="text-gray-400 text-sm capitalize">{selectedConv.channel}</p>
+                      <h3 className="text-foreground font-medium text-lg">{selectedConv.contactName}</h3>
+                      <p className="text-muted-foreground text-sm capitalize">{selectedConv.channel}</p>
+                    </div>
+
+                    {/* Informações do Lead */}
+                    <div>
+                      <h4 className="text-foreground font-medium mb-3 flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" /> Informações do Lead
+                      </h4>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button size="sm" variant="outline" className="w-full mb-2">
+                            <FileText className="h-3 w-3 mr-2" /> Editar Informações
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Informações do Lead</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div>
+                              <Label>Produto de Interesse</Label>
+                              <Input
+                                placeholder={selectedConv.produto || "Ex: Sistema CRM"}
+                                value={newProduto}
+                                onChange={(e) => setNewProduto(e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <Label>Valor da Negociação</Label>
+                              <Input
+                                placeholder={selectedConv.valor || "Ex: R$ 5.000,00"}
+                                value={newValor}
+                                onChange={(e) => setNewValor(e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <Label>Anotações Internas</Label>
+                              <Textarea
+                                placeholder={selectedConv.anotacoes || "Observações sobre o lead..."}
+                                value={newAnotacoes}
+                                onChange={(e) => setNewAnotacoes(e.target.value)}
+                                rows={4}
+                              />
+                            </div>
+                            <Button onClick={updateLeadInfo} className="w-full">
+                              Salvar Informações
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                      {selectedConv.produto && (
+                        <p className="text-sm text-muted-foreground mb-1">
+                          <strong>Produto:</strong> {selectedConv.produto}
+                        </p>
+                      )}
+                      {selectedConv.valor && (
+                        <p className="text-sm text-success font-medium mb-1">
+                          <strong>Valor:</strong> {selectedConv.valor}
+                        </p>
+                      )}
+                      {selectedConv.anotacoes && (
+                        <div className="mt-2 p-2 bg-muted rounded text-sm">
+                          <strong>Anotações:</strong> {selectedConv.anotacoes}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Responsável */}
+                    <div>
+                      <h4 className="text-foreground font-medium mb-2 flex items-center gap-2">
+                        <Users className="h-4 w-4" /> Responsável
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-2">{selectedConv.responsavel || "Não definido"}</p>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button size="sm" variant="outline" className="w-full">
+                            <User className="h-3 w-3 mr-2" /> Atribuir Responsável
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Atribuir Responsável</DialogTitle>
+                          </DialogHeader>
+                          <Select value={newResponsavel} onValueChange={setNewResponsavel}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o responsável" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {usuarios.map((user) => (
+                                <SelectItem key={user} value={user}>
+                                  {user}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button onClick={updateResponsavel}>
+                            Atribuir
+                          </Button>
+                        </DialogContent>
+                      </Dialog>
                     </div>
 
                     {/* Tags */}
                     <div>
-                      <h4 className="text-white font-medium mb-2 flex items-center gap-2">
+                      <h4 className="text-foreground font-medium mb-2 flex items-center gap-2">
                         <Tag className="h-4 w-4" /> Tags
                       </h4>
                       <div className="flex flex-wrap gap-2 mb-2">
                         {selectedConv.tags?.map((tag, idx) => (
-                          <Badge key={idx} className="bg-[#3a3a3a] text-white hover:bg-[#3a3a3a]">
+                          <Badge key={idx} variant="secondary">
                             {tag}
                           </Badge>
                         ))}
                       </div>
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button size="sm" variant="outline" className="w-full border-[#5f5f5f] text-gray-300 hover:bg-[#3a3a3a]">
+                          <Button size="sm" variant="outline" className="w-full">
                             <Tag className="h-3 w-3 mr-2" /> Adicionar Tag
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="bg-[#2b2b2b] border-[#3a3a3a] text-white">
+                        <DialogContent>
                           <DialogHeader>
                             <DialogTitle>Adicionar Tag</DialogTitle>
                           </DialogHeader>
@@ -695,9 +910,8 @@ export default function Conversas() {
                             placeholder="Nome da tag"
                             value={newTag}
                             onChange={(e) => setNewTag(e.target.value)}
-                            className="bg-[#3a3a3a] border-[#5f5f5f] text-white"
                           />
-                          <Button onClick={addTag} className="bg-[#00a884] hover:bg-[#00a884]/90 text-white">
+                          <Button onClick={addTag}>
                             Adicionar
                           </Button>
                         </DialogContent>
@@ -706,33 +920,33 @@ export default function Conversas() {
 
                     {/* Funnel Stage */}
                     <div>
-                      <h4 className="text-white font-medium mb-2 flex items-center gap-2">
+                      <h4 className="text-foreground font-medium mb-2 flex items-center gap-2">
                         <TrendingUp className="h-4 w-4" /> Estágio do Funil
                       </h4>
-                      <p className="text-sm text-gray-400 mb-2">{selectedConv.funnelStage || "Não definido"}</p>
+                      <p className="text-sm text-muted-foreground mb-2">{selectedConv.funnelStage || "Não definido"}</p>
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button size="sm" variant="outline" className="w-full border-[#5f5f5f] text-gray-300 hover:bg-[#3a3a3a]">
+                          <Button size="sm" variant="outline" className="w-full">
                             <TrendingUp className="h-3 w-3 mr-2" /> Adicionar ao Funil
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="bg-[#2b2b2b] border-[#3a3a3a] text-white">
+                        <DialogContent>
                           <DialogHeader>
                             <DialogTitle>Adicionar ao Funil</DialogTitle>
                           </DialogHeader>
                           <Select value={selectedFunnel} onValueChange={setSelectedFunnel}>
-                            <SelectTrigger className="bg-[#3a3a3a] border-[#5f5f5f] text-white">
+                            <SelectTrigger>
                               <SelectValue placeholder="Selecione o estágio" />
                             </SelectTrigger>
-                            <SelectContent className="bg-[#2b2b2b] border-[#3a3a3a]">
+                            <SelectContent>
                               {funnelStages.map((stage) => (
-                                <SelectItem key={stage} value={stage} className="text-white focus:bg-[#3a3a3a]">
+                                <SelectItem key={stage} value={stage}>
                                   {stage}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
-                          <Button onClick={addToFunnel} className="bg-[#00a884] hover:bg-[#00a884]/90 text-white">
+                          <Button onClick={addToFunnel}>
                             Adicionar
                           </Button>
                         </DialogContent>
@@ -741,17 +955,13 @@ export default function Conversas() {
 
                     {/* Quick Actions */}
                     <div>
-                      <h4 className="text-white font-medium mb-3">Ações Rápidas</h4>
+                      <h4 className="text-foreground font-medium mb-3">Ações Rápidas</h4>
                       <div className="space-y-2">
                         {/* AI Toggle */}
                         <Button
                           onClick={() => toggleAiMode(selectedConv.id)}
-                          variant="outline"
-                          className={`w-full justify-start ${
-                            aiMode[selectedConv.id]
-                              ? "bg-[#00a884] border-[#00a884] text-white hover:bg-[#00a884]/90"
-                              : "border-[#5f5f5f] text-gray-300 hover:bg-[#3a3a3a]"
-                          }`}
+                          variant={aiMode[selectedConv.id] ? "default" : "outline"}
+                          className="w-full justify-start"
                         >
                           <Bot className="h-4 w-4 mr-2" />
                           {aiMode[selectedConv.id] ? "Desativar IA" : "Ativar IA"}
@@ -760,11 +970,11 @@ export default function Conversas() {
                         {/* Quick Messages */}
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start border-[#5f5f5f] text-gray-300 hover:bg-[#3a3a3a]">
+                            <Button variant="outline" className="w-full justify-start">
                               <Zap className="h-4 w-4 mr-2" /> Mensagens Rápidas
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="bg-[#2b2b2b] border-[#3a3a3a] text-white max-w-2xl">
+                          <DialogContent className="max-w-2xl">
                             <DialogHeader>
                               <DialogTitle>💡 Mensagens Rápidas</DialogTitle>
                             </DialogHeader>
@@ -775,7 +985,6 @@ export default function Conversas() {
                                   value={newQuickTitle}
                                   onChange={(e) => setNewQuickTitle(e.target.value)}
                                   placeholder="Ex: Saudação"
-                                  className="bg-[#3a3a3a] border-[#5f5f5f] text-white"
                                 />
                               </div>
                               <div className="space-y-2">
@@ -784,26 +993,24 @@ export default function Conversas() {
                                   value={newQuickContent}
                                   onChange={(e) => setNewQuickContent(e.target.value)}
                                   placeholder="Digite a mensagem..."
-                                  className="bg-[#3a3a3a] border-[#5f5f5f] text-white"
                                 />
                               </div>
-                              <Button onClick={addQuickMessage} className="w-full bg-[#00a884] hover:bg-[#00a884]/90 text-white">
+                              <Button onClick={addQuickMessage} className="w-full">
                                 Criar Mensagem Rápida
                               </Button>
-                              <div className="border-t border-[#3a3a3a] pt-4">
+                              <div className="border-t pt-4">
                                 <h4 className="text-sm font-medium mb-2">Mensagens salvas:</h4>
                                 <div className="space-y-2">
                                   {quickMessages.map((qm) => (
-                                    <div key={qm.id} className="flex items-center justify-between p-2 bg-[#3a3a3a] rounded">
+                                    <div key={qm.id} className="flex items-center justify-between p-2 bg-muted rounded">
                                       <div className="flex-1">
                                         <p className="text-sm font-medium">{qm.title}</p>
-                                        <p className="text-xs text-gray-400 truncate">{qm.content}</p>
+                                        <p className="text-xs text-muted-foreground truncate">{qm.content}</p>
                                       </div>
                                       <div className="flex gap-1">
                                         <Button
                                           size="sm"
                                           onClick={() => sendQuickMessage(qm.content)}
-                                          className="bg-[#00a884] hover:bg-[#00a884]/90 text-white"
                                         >
                                           Enviar
                                         </Button>
@@ -826,11 +1033,11 @@ export default function Conversas() {
                         {/* Schedule Message */}
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start border-[#5f5f5f] text-gray-300 hover:bg-[#3a3a3a]">
+                            <Button variant="outline" className="w-full justify-start">
                               <Clock className="h-4 w-4 mr-2" /> Agendar Mensagem
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="bg-[#2b2b2b] border-[#3a3a3a] text-white">
+                          <DialogContent>
                             <DialogHeader>
                               <DialogTitle>Agendar Mensagem</DialogTitle>
                             </DialogHeader>
@@ -841,7 +1048,6 @@ export default function Conversas() {
                                   value={scheduledContent}
                                   onChange={(e) => setScheduledContent(e.target.value)}
                                   placeholder="Digite a mensagem..."
-                                  className="bg-[#3a3a3a] border-[#5f5f5f] text-white"
                                 />
                               </div>
                               <div>
@@ -850,10 +1056,9 @@ export default function Conversas() {
                                   type="datetime-local"
                                   value={scheduledDatetime}
                                   onChange={(e) => setScheduledDatetime(e.target.value)}
-                                  className="bg-[#3a3a3a] border-[#5f5f5f] text-white"
                                 />
                               </div>
-                              <Button onClick={scheduleMessage} className="w-full bg-[#00a884] hover:bg-[#00a884]/90 text-white">
+                              <Button onClick={scheduleMessage} className="w-full">
                                 Agendar Envio
                               </Button>
                             </div>
@@ -863,11 +1068,11 @@ export default function Conversas() {
                         {/* Schedule Reminder */}
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start border-[#5f5f5f] text-gray-300 hover:bg-[#3a3a3a]">
-                              <Calendar className="h-4 w-4 mr-2" /> Agendar Lembrete
+                            <Button variant="outline" className="w-full justify-start">
+                              <Bell className="h-4 w-4 mr-2" /> Agendar Lembrete
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="bg-[#2b2b2b] border-[#3a3a3a] text-white">
+                          <DialogContent>
                             <DialogHeader>
                               <DialogTitle>Agendar Lembrete</DialogTitle>
                             </DialogHeader>
@@ -878,7 +1083,6 @@ export default function Conversas() {
                                   value={reminderTitle}
                                   onChange={(e) => setReminderTitle(e.target.value)}
                                   placeholder="Ex: Ligar para cliente"
-                                  className="bg-[#3a3a3a] border-[#5f5f5f] text-white"
                                 />
                               </div>
                               <div>
@@ -887,7 +1091,6 @@ export default function Conversas() {
                                   type="datetime-local"
                                   value={reminderDatetime}
                                   onChange={(e) => setReminderDatetime(e.target.value)}
-                                  className="bg-[#3a3a3a] border-[#5f5f5f] text-white"
                                 />
                               </div>
                               <div>
@@ -896,11 +1099,53 @@ export default function Conversas() {
                                   value={reminderNotes}
                                   onChange={(e) => setReminderNotes(e.target.value)}
                                   placeholder="Notas adicionais..."
-                                  className="bg-[#3a3a3a] border-[#5f5f5f] text-white"
                                 />
                               </div>
-                              <Button onClick={addReminder} className="w-full bg-[#00a884] hover:bg-[#00a884]/90 text-white">
+                              <Button onClick={addReminder} className="w-full">
                                 Criar Lembrete
+                              </Button>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+
+                        {/* Schedule Meeting */}
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start">
+                              <Calendar className="h-4 w-4 mr-2" /> Agendar Reunião
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Agendar Reunião</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              <div>
+                                <Label>Título da Reunião</Label>
+                                <Input
+                                  value={meetingTitle}
+                                  onChange={(e) => setMeetingTitle(e.target.value)}
+                                  placeholder="Ex: Apresentação de proposta"
+                                />
+                              </div>
+                              <div>
+                                <Label>Data e Hora</Label>
+                                <Input
+                                  type="datetime-local"
+                                  value={meetingDatetime}
+                                  onChange={(e) => setMeetingDatetime(e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <Label>Observações</Label>
+                                <Textarea
+                                  value={meetingNotes}
+                                  onChange={(e) => setMeetingNotes(e.target.value)}
+                                  placeholder="Pauta, participantes, etc..."
+                                />
+                              </div>
+                              <Button onClick={scheduleMeeting} className="w-full">
+                                Agendar Reunião
                               </Button>
                             </div>
                           </DialogContent>
@@ -909,24 +1154,28 @@ export default function Conversas() {
                         {/* Transfer */}
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start border-[#5f5f5f] text-gray-300 hover:bg-[#3a3a3a]">
+                            <Button variant="outline" className="w-full justify-start">
                               <ArrowRightLeft className="h-4 w-4 mr-2" /> Transferir Atendimento
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="bg-[#2b2b2b] border-[#3a3a3a] text-white">
+                          <DialogContent>
                             <DialogHeader>
                               <DialogTitle>Transferir Atendimento</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-2">
-                              <Button variant="outline" className="w-full justify-start border-[#5f5f5f] text-gray-300 hover:bg-[#3a3a3a]">
-                                Agente 1
-                              </Button>
-                              <Button variant="outline" className="w-full justify-start border-[#5f5f5f] text-gray-300 hover:bg-[#3a3a3a]">
-                                Agente 2
-                              </Button>
-                              <Button variant="outline" className="w-full justify-start border-[#5f5f5f] text-gray-300 hover:bg-[#3a3a3a]">
-                                Agente 3
-                              </Button>
+                              {usuarios.filter(u => u !== selectedConv.responsavel).map((user) => (
+                                <Button 
+                                  key={user}
+                                  variant="outline" 
+                                  className="w-full justify-start"
+                                  onClick={() => {
+                                    setNewResponsavel(user);
+                                    updateResponsavel();
+                                  }}
+                                >
+                                  {user}
+                                </Button>
+                              ))}
                             </div>
                           </DialogContent>
                         </Dialog>
@@ -938,10 +1187,10 @@ export default function Conversas() {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center bg-[#1e1e1e]">
+          <div className="flex-1 flex items-center justify-center bg-muted/30">
             <div className="text-center">
-              <MessageSquare className="h-16 w-16 text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400 text-lg">Selecione uma conversa para começar</p>
+              <MessageSquare className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground text-lg">Selecione uma conversa para começar</p>
             </div>
           </div>
         )}
