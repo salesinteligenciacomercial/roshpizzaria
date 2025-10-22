@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { LeadCard } from "@/components/funil/LeadCard";
 import { NovoLeadDialog } from "@/components/funil/NovoLeadDialog";
 import { NovoFunilDialog } from "@/components/funil/NovoFunilDialog";
+import { EditarFunilDialog } from "@/components/funil/EditarFunilDialog";
 import { toast } from "sonner";
 
 interface Lead {
@@ -100,6 +101,14 @@ const Kanban = () => {
 
   const etapasFiltradas = etapas.filter((etapa) => etapa.funil_id === selectedFunil);
 
+  const calcularTotalEtapa = (etapaId: string) => {
+    return leads
+      .filter(l => l.etapa_id === etapaId)
+      .reduce((total, lead) => total + (lead.value || 0), 0);
+  };
+
+  const funilSelecionado = funis.find(f => f.id === selectedFunil);
+
   if (loading) return <div className="flex items-center justify-center h-screen"><p>Carregando...</p></div>;
 
   return (
@@ -125,11 +134,22 @@ const Kanban = () => {
       </div>
 
       {funis.length > 0 && (
-        <div className="mb-6">
-          <Label>Funil</Label>
-          <select value={selectedFunil} onChange={(e) => setSelectedFunil(e.target.value)} className="w-full max-w-xs p-2 border rounded-md mt-2">
-            {funis.map((funil) => <option key={funil.id} value={funil.id}>{funil.nome}</option>)}
-          </select>
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex-1 max-w-xs">
+            <Label>Funil</Label>
+            <select value={selectedFunil} onChange={(e) => setSelectedFunil(e.target.value)} className="w-full p-2 border rounded-md mt-2">
+              {funis.map((funil) => <option key={funil.id} value={funil.id}>{funil.nome}</option>)}
+            </select>
+          </div>
+          {funilSelecionado && (
+            <div className="mt-6">
+              <EditarFunilDialog 
+                funilId={funilSelecionado.id}
+                funilNome={funilSelecionado.nome}
+                onFunilUpdated={carregarDados}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -141,29 +161,44 @@ const Kanban = () => {
       ) : (
         <DndContext collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {etapasFiltradas.map((etapa) => (
-              <div key={etapa.id}>
-                <div className="text-white p-3 rounded-t-lg" style={{ backgroundColor: etapa.cor }}>
-                  <h3 className="font-semibold">{etapa.nome}</h3>
-                  <span className="text-sm">{leads.filter(l => l.etapa_id === etapa.id).length} leads</span>
-                </div>
-                <SortableContext id={etapa.id} items={leads.filter(l => l.etapa_id === etapa.id)} strategy={verticalListSortingStrategy}>
-                  <div className="bg-secondary/20 p-4 rounded-b-lg min-h-[500px]">
-                    {leads.filter(l => l.etapa_id === etapa.id).map((lead) => (
-                      <LeadCard key={lead.id} lead={lead} onDelete={async (id) => {
-                        await supabase.functions.invoke("api-funil-vendas", { body: { action: "deletar_lead", data: { lead_id: id } } });
-                        carregarDados();
-                      }} />
-                    ))}
-                    {leads.filter(l => l.etapa_id === etapa.id).length === 0 && (
-                      <div className="text-center py-8 text-muted-foreground text-sm">
-                        Nenhum lead nesta etapa
+            {etapasFiltradas.map((etapa) => {
+              const totalEtapa = calcularTotalEtapa(etapa.id);
+              const quantidadeLeads = leads.filter(l => l.etapa_id === etapa.id).length;
+              
+              return (
+                <div key={etapa.id}>
+                  <div className="text-white p-3 rounded-t-lg" style={{ backgroundColor: etapa.cor }}>
+                    <h3 className="font-semibold">{etapa.nome}</h3>
+                    <div className="text-sm mt-1">
+                      <div>{quantidadeLeads} lead{quantidadeLeads !== 1 ? 's' : ''}</div>
+                      <div className="font-bold">
+                        R$ {totalEtapa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
-                    )}
+                    </div>
                   </div>
-                </SortableContext>
-              </div>
-            ))}
+                  <SortableContext id={etapa.id} items={leads.filter(l => l.etapa_id === etapa.id)} strategy={verticalListSortingStrategy}>
+                    <div className="bg-secondary/20 p-4 rounded-b-lg min-h-[500px]">
+                      {leads.filter(l => l.etapa_id === etapa.id).map((lead) => (
+                        <LeadCard key={lead.id} lead={lead} onDelete={async (id) => {
+                          const { error } = await supabase.from("leads").delete().eq("id", id);
+                          if (error) {
+                            toast.error("Erro ao deletar lead");
+                            return;
+                          }
+                          toast.success("Lead deletado!");
+                          carregarDados();
+                        }} />
+                      ))}
+                      {leads.filter(l => l.etapa_id === etapa.id).length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground text-sm">
+                          Nenhum lead nesta etapa
+                        </div>
+                      )}
+                    </div>
+                  </SortableContext>
+                </div>
+              );
+            })}
           </div>
         </DndContext>
       )}

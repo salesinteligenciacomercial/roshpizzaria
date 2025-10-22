@@ -2,7 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Phone, Mail, User, Trash2, ExternalLink } from "lucide-react";
+import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface LeadCardProps {
@@ -73,19 +73,23 @@ export function LeadCard({ lead, onDelete }: LeadCardProps) {
         )}
 
         {lead.telefone && (
-          <div className="flex items-center gap-2 text-xs">
-            <Phone className="h-3 w-3" />
-            <span>{lead.telefone}</span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs">
+              <Phone className="h-3 w-3" />
+              <span>{lead.telefone}</span>
+            </div>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-5 w-5 ml-auto"
+              size="sm"
+              className="h-7 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
               onClick={(e) => {
                 e.stopPropagation();
                 abrirWhatsapp();
               }}
+              title="Abrir WhatsApp"
             >
-              <ExternalLink className="h-3 w-3" />
+              <MessageCircle className="h-4 w-4 mr-1" />
+              <span className="text-xs">WhatsApp</span>
             </Button>
           </div>
         )}

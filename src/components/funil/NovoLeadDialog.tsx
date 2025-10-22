@@ -84,26 +84,26 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
         return;
       }
 
-      const response = await supabase.functions.invoke("api-funil-vendas", {
-        body: {
-          action: "criar_lead",
-          data: {
-            nome: formData.nome,
-            telefone: formData.telefone,
-            email: formData.email,
-            cpf: formData.cpf,
-            valor: formData.valor ? parseFloat(formData.valor) : 0,
-            company: formData.company,
-            source: formData.source,
-            notes: formData.notes,
-            etapa_id: formData.etapa_id,
-            funil_id: formData.funil_id
-          }
-        }
-      });
+      const { data, error } = await supabase
+        .from("leads")
+        .insert([{
+          name: formData.nome,
+          telefone: formData.telefone,
+          email: formData.email,
+          cpf: formData.cpf,
+          value: formData.valor ? parseFloat(formData.valor) : 0,
+          company: formData.company,
+          source: formData.source,
+          notes: formData.notes,
+          etapa_id: formData.etapa_id,
+          funil_id: formData.funil_id,
+          owner_id: session.user.id
+        }])
+        .select();
 
-      if (response.error) {
-        throw response.error;
+      if (error) {
+        console.error("Erro ao criar lead:", error);
+        throw error;
       }
 
       toast.success("Lead criado com sucesso!");
