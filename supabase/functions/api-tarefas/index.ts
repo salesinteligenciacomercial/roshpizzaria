@@ -151,6 +151,129 @@ serve(async (req) => {
         });
       }
 
+      case "editar_tarefa": {
+        const { task_id, title, description, priority, due_date, assignee_id, lead_id } = data;
+        const { data: task, error } = await supabase
+          .from("tasks")
+          .update({
+            title,
+            description,
+            priority,
+            due_date,
+            assignee_id,
+            lead_id,
+          })
+          .eq("id", task_id)
+          .select()
+          .single();
+
+        if (error) {
+          console.error("Error updating task:", error);
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true, data: task }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      case "editar_board": {
+        const { board_id, nome } = data;
+        const { data: board, error } = await supabase
+          .from("task_boards")
+          .update({ nome })
+          .eq("id", board_id)
+          .select()
+          .single();
+
+        if (error) {
+          console.error("Error updating board:", error);
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true, data: board }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      case "deletar_board": {
+        const { board_id } = data;
+        
+        // Primeiro deletar todas as colunas do board
+        await supabase.from("task_columns").delete().eq("board_id", board_id);
+        
+        // Depois deletar o board
+        const { error } = await supabase
+          .from("task_boards")
+          .delete()
+          .eq("id", board_id);
+
+        if (error) {
+          console.error("Error deleting board:", error);
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      case "editar_coluna": {
+        const { column_id, nome, cor } = data;
+        const { data: column, error } = await supabase
+          .from("task_columns")
+          .update({ nome, cor })
+          .eq("id", column_id)
+          .select()
+          .single();
+
+        if (error) {
+          console.error("Error updating column:", error);
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true, data: column }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      case "deletar_coluna": {
+        const { column_id } = data;
+        const { error } = await supabase
+          .from("task_columns")
+          .delete()
+          .eq("id", column_id);
+
+        if (error) {
+          console.error("Error deleting column:", error);
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Ação inválida" }), {
           status: 400,

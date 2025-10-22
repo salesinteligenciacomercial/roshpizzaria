@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { User, Calendar as CalendarIcon, Trash2, ExternalLink } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { EditarTarefaDialog } from "./EditarTarefaDialog";
 
 interface Task {
   id: string;
@@ -21,9 +22,10 @@ interface Task {
 interface TaskCardProps {
   task: Task;
   onDelete: (id: string) => void;
+  onUpdate: () => void;
 }
 
-export function TaskCard({ task, onDelete }: TaskCardProps) {
+export function TaskCard({ task, onDelete, onUpdate }: TaskCardProps) {
   const navigate = useNavigate();
   const {
     attributes,
@@ -101,7 +103,8 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
             )}
           </div>
         )}
-        <div className="flex justify-end pt-2">
+        <div className="flex justify-end gap-1 pt-2">
+          <EditarTarefaDialog task={task} onTaskUpdated={onUpdate} />
           <Button
             variant="ghost"
             size="sm"

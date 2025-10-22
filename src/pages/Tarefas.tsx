@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { supabase } from "@/integrations/supabase/client";
 import { TaskCard } from "@/components/tarefas/TaskCard";
 import { NovaTarefaDialog } from "@/components/tarefas/NovaTarefaDialog";
+import { EditarQuadroDialog } from "@/components/tarefas/EditarQuadroDialog";
 import { toast } from "sonner";
 
 interface Task {
@@ -122,11 +123,31 @@ export default function Tarefas() {
     if (!novoBoardNome.trim()) return;
 
     try {
-      await supabase.functions.invoke("api-tarefas", {
+      const { data: boardData } = await supabase.functions.invoke("api-tarefas", {
         body: { action: "criar_board", data: { nome: novoBoardNome } }
       });
 
-      toast.success("Quadro criado!");
+      const newBoardId = boardData?.data?.id;
+
+      // Criar colunas padrão
+      if (newBoardId) {
+        const colunasDefault = [
+          { nome: "A Fazer", cor: "#3b82f6", posicao: 0 },
+          { nome: "Em Progresso", cor: "#eab308", posicao: 1 },
+          { nome: "Concluído", cor: "#22c55e", posicao: 2 },
+        ];
+
+        for (const coluna of colunasDefault) {
+          await supabase.functions.invoke("api-tarefas", {
+            body: {
+              action: "criar_coluna",
+              data: { ...coluna, board_id: newBoardId },
+            },
+          });
+        }
+      }
+
+      toast.success("Quadro criado com colunas padrão!");
       setNovoBoardNome("");
       setDialogNovoBoard(false);
       carregarDados();
@@ -147,6 +168,13 @@ export default function Tarefas() {
           <p className="text-muted-foreground">Gerencie suas tarefas em quadros Kanban</p>
         </div>
         <div className="flex gap-2">
+          {selectedBoard && (
+            <EditarQuadroDialog
+              boardId={selectedBoard}
+              boardNome={boards.find((b) => b.id === selectedBoard)?.nome || ""}
+              onUpdated={carregarDados}
+            />
+          )}
           <Dialog open={dialogNovoBoard} onOpenChange={setDialogNovoBoard}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -209,9 +237,9 @@ export default function Tarefas() {
         </div>
       ) : (
         <DndContext collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="flex overflow-x-auto gap-4 pb-4">
             {columnsFiltradas.map((column) => (
-              <div key={column.id}>
+              <div key={column.id} className="min-w-[300px] flex-shrink-0">
                 <div 
                   className="text-white p-3 rounded-t-lg" 
                   style={{ backgroundColor: column.cor }}
@@ -235,13 +263,14 @@ export default function Tarefas() {
                     {tasks.filter(t => t.column_id === column.id).map((task) => (
                       <TaskCard 
                         key={task.id} 
-                        task={task} 
+                        task={task}
                         onDelete={async (id) => {
                           await supabase.functions.invoke("api-tarefas", { 
                             body: { action: "deletar_tarefa", data: { task_id: id } } 
                           });
                           carregarDados();
-                        }} 
+                        }}
+                        onUpdate={carregarDados}
                       />
                     ))}
                   </div>
