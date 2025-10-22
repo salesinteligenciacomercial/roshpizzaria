@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { DndContext, DragEndEvent, closestCorners } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { DndContext, DragEndEvent, closestCenter } from "@dnd-kit/core";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { LeadCard } from "@/components/funil/LeadCard";
+import { DroppableColumn } from "@/components/funil/DroppableColumn";
 import { NovoLeadDialog } from "@/components/funil/NovoLeadDialog";
 import { NovoFunilDialog } from "@/components/funil/NovoFunilDialog";
 import { EditarFunilDialog } from "@/components/funil/EditarFunilDialog";
@@ -77,23 +77,57 @@ const Kanban = () => {
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over) return;
+    
+    console.log("=== DRAG END ===");
+    console.log("Active ID:", active.id);
+    console.log("Active Data:", active.data.current);
+    console.log("Over ID:", over?.id);
+    console.log("Over Data:", over?.data.current);
+    
+    if (!over) {
+      console.log("❌ Sem destino (over)");
+      return;
+    }
 
+    // Pegar o ID do lead que está sendo movido
     const leadId = active.id as string;
-    const newEtapaId = over.id as string;
+    
+    // Pegar o ID da etapa de destino do data do over
+    const overData = over.data.current;
+    const newEtapaId = overData?.type === 'etapa' ? over.id as string : overData?.etapaId as string;
+    
+    console.log("Lead ID:", leadId);
+    console.log("Nova Etapa ID:", newEtapaId);
+
+    if (!newEtapaId) {
+      console.log("❌ ID da etapa de destino não encontrado");
+      toast.error("Etapa de destino inválida");
+      return;
+    }
 
     // Verificar se o lead já está na etapa de destino
     const lead = leads.find(l => l.id === leadId);
-    if (!lead || lead.etapa_id === newEtapaId) {
-      return; // Não fazer nada se já está na mesma etapa
+    if (!lead) {
+      console.log("❌ Lead não encontrado:", leadId);
+      toast.error("Lead não encontrado");
+      return;
+    }
+
+    if (lead.etapa_id === newEtapaId) {
+      console.log("✅ Lead já está na etapa de destino");
+      return;
     }
 
     // Verificar se o destino é realmente uma etapa válida
     const etapaDestino = etapas.find(e => e.id === newEtapaId);
     if (!etapaDestino) {
+      console.log("❌ Etapa de destino não encontrada:", newEtapaId);
+      console.log("Etapas disponíveis:", etapas.map(e => ({ id: e.id, nome: e.nome })));
       toast.error("Etapa de destino inválida");
       return;
     }
+
+    console.log(`✅ Movendo lead "${lead.name}" de "${lead.etapa_id}" para "${etapaDestino.nome}"`);
 
     // Atualizar localmente primeiro
     setLeads((leads) => 
@@ -108,9 +142,10 @@ const Kanban = () => {
         .eq("id", leadId);
 
       if (error) throw error;
-      toast.success("Lead movido com sucesso!");
+      console.log("✅ Lead atualizado no banco com sucesso");
+      toast.success(`Lead movido para ${etapaDestino.nome}!`);
     } catch (error) {
-      console.error("Erro ao mover lead:", error);
+      console.error("❌ Erro ao mover lead:", error);
       toast.error("Erro ao mover lead");
       carregarDados(); // Recarregar em caso de erro
     }
@@ -176,44 +211,43 @@ const Kanban = () => {
           <NovoFunilDialog onFunilCreated={carregarDados} />
         </div>
       ) : (
-        <DndContext collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
+        <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {etapasFiltradas.map((etapa) => {
               const totalEtapa = calcularTotalEtapa(etapa.id);
               const quantidadeLeads = leads.filter(l => l.etapa_id === etapa.id).length;
+              const leadsNaEtapa = leads.filter(l => l.etapa_id === etapa.id);
               
               return (
-                <div key={etapa.id}>
-                  <div className="text-white p-3 rounded-t-lg" style={{ backgroundColor: etapa.cor }}>
-                    <h3 className="font-semibold">{etapa.nome}</h3>
-                    <div className="text-sm mt-1">
-                      <div>{quantidadeLeads} lead{quantidadeLeads !== 1 ? 's' : ''}</div>
-                      <div className="font-bold">
-                        R$ {totalEtapa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
+                <DroppableColumn
+                  key={etapa.id}
+                  id={etapa.id}
+                  cor={etapa.cor}
+                  nome={etapa.nome}
+                  quantidadeLeads={quantidadeLeads}
+                  totalEtapa={totalEtapa}
+                >
+                  {leadsNaEtapa.map((lead) => (
+                    <LeadCard 
+                      key={lead.id} 
+                      lead={lead} 
+                      onDelete={async (id) => {
+                        const { error } = await supabase.from("leads").delete().eq("id", id);
+                        if (error) {
+                          toast.error("Erro ao deletar lead");
+                          return;
+                        }
+                        toast.success("Lead deletado!");
+                        carregarDados();
+                      }} 
+                    />
+                  ))}
+                  {leadsNaEtapa.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground text-sm">
+                      Arraste leads para cá
                     </div>
-                  </div>
-                  <SortableContext id={etapa.id} items={leads.filter(l => l.etapa_id === etapa.id).map(l => l.id)} strategy={verticalListSortingStrategy}>
-                    <div className="bg-secondary/20 p-4 rounded-b-lg min-h-[500px]">
-                      {leads.filter(l => l.etapa_id === etapa.id).map((lead) => (
-                        <LeadCard key={lead.id} lead={lead} onDelete={async (id) => {
-                          const { error } = await supabase.from("leads").delete().eq("id", id);
-                          if (error) {
-                            toast.error("Erro ao deletar lead");
-                            return;
-                          }
-                          toast.success("Lead deletado!");
-                          carregarDados();
-                        }} />
-                      ))}
-                      {leads.filter(l => l.etapa_id === etapa.id).length === 0 && (
-                        <div className="text-center py-8 text-muted-foreground text-sm">
-                          Nenhum lead nesta etapa
-                        </div>
-                      )}
-                    </div>
-                  </SortableContext>
-                </div>
+                  )}
+                </DroppableColumn>
               );
             })}
           </div>

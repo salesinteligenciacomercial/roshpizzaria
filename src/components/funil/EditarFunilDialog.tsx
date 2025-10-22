@@ -54,7 +54,7 @@ export function EditarFunilDialog({ funilId, funilNome, onFunilUpdated }: Editar
 
   const adicionarEtapa = () => {
     const novaEtapa: Etapa = {
-      id: `novo-${Date.now()}`,
+      id: `temp-${Date.now()}`,
       nome: `Etapa ${etapas.length + 1}`,
       posicao: etapas.length,
       cor: CORES_PADRAO[etapas.length % CORES_PADRAO.length],
@@ -69,7 +69,7 @@ export function EditarFunilDialog({ funilId, funilNome, onFunilUpdated }: Editar
       return;
     }
 
-    if (!etapa.id.startsWith("novo-")) {
+    if (!etapa.id.startsWith("temp-")) {
       // Etapa existente - deletar do banco
       const { error } = await supabase
         .from("etapas")
@@ -143,8 +143,14 @@ export function EditarFunilDialog({ funilId, funilNome, onFunilUpdated }: Editar
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast.error("Não autenticado");
+        setLoading(false);
         return;
       }
+
+      console.log("=== ATUALIZANDO FUNIL ===");
+      console.log("Funil ID:", funilId);
+      console.log("Novo nome:", nomeFunil);
+      console.log("Etapas a processar:", etapas);
 
       // Atualizar nome do funil
       const { error: funilError } = await supabase
@@ -152,27 +158,51 @@ export function EditarFunilDialog({ funilId, funilNome, onFunilUpdated }: Editar
         .update({ nome: nomeFunil })
         .eq("id", funilId);
 
-      if (funilError) throw funilError;
+      if (funilError) {
+        console.error("❌ Erro ao atualizar nome do funil:", funilError);
+        throw funilError;
+      }
+
+      console.log("✅ Nome do funil atualizado");
 
       // Processar etapas
       for (let i = 0; i < etapas.length; i++) {
         const etapa = etapas[i];
         
-        if (etapa.id.startsWith("novo-")) {
+        if (etapa.id.startsWith("temp-")) {
+          console.log(`➕ Criando nova etapa: "${etapa.nome}"`);
+          
           // Nova etapa - criar diretamente
-          const { error: etapaError } = await supabase
+          const { data, error: etapaError } = await supabase
             .from("etapas")
             .insert({
               nome: etapa.nome,
               funil_id: funilId,
               posicao: i,
               cor: etapa.cor
-            });
+            })
+            .select();
           
-          if (etapaError) throw etapaError;
+          if (etapaError) {
+            console.error("❌ Erro ao criar etapa:", {
+              erro: etapaError,
+              etapa: {
+                nome: etapa.nome,
+                funil_id: funilId,
+                posicao: i,
+                cor: etapa.cor
+              }
+            });
+            toast.error(`Erro ao criar etapa "${etapa.nome}": ${etapaError.message}`);
+            throw etapaError;
+          }
+          
+          console.log(`✅ Etapa "${etapa.nome}" criada:`, data);
         } else {
+          console.log(`🔄 Atualizando etapa existente: "${etapa.nome}"`);
+          
           // Etapa existente - atualizar
-          await supabase
+          const { error } = await supabase
             .from("etapas")
             .update({
               nome: etapa.nome,
@@ -180,15 +210,23 @@ export function EditarFunilDialog({ funilId, funilNome, onFunilUpdated }: Editar
               cor: etapa.cor
             })
             .eq("id", etapa.id);
+          
+          if (error) {
+            console.error("❌ Erro ao atualizar etapa:", error);
+            throw error;
+          }
+          
+          console.log(`✅ Etapa "${etapa.nome}" atualizada`);
         }
       }
 
+      console.log("✅ Funil completo atualizado com sucesso!");
       toast.success("Funil atualizado com sucesso!");
       setOpen(false);
       onFunilUpdated();
-    } catch (error) {
-      console.error("Erro ao atualizar funil:", error);
-      toast.error("Erro ao atualizar funil. Tente novamente.");
+    } catch (error: any) {
+      console.error("❌ Erro ao atualizar funil:", error);
+      toast.error(`Erro ao atualizar funil: ${error.message || 'Erro desconhecido'}`);
     } finally {
       setLoading(false);
     }

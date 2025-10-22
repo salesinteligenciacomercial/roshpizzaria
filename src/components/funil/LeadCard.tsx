@@ -1,5 +1,4 @@
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { useDraggable } from "@dnd-kit/core";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag } from "lucide-react";
@@ -24,15 +23,20 @@ export function LeadCard({ lead, onDelete }: LeadCardProps) {
     listeners,
     setNodeRef,
     transform,
-    transition,
     isDragging,
-  } = useSortable({ id: lead.id });
+  } = useDraggable({
+    id: lead.id,
+    data: {
+      type: 'lead',
+      lead: lead
+    }
+  });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
     opacity: isDragging ? 0.5 : 1,
-  };
+    cursor: isDragging ? 'grabbing' : 'grab',
+  } : undefined;
 
   const abrirWhatsapp = () => {
     if (lead.telefone) {
