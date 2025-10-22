@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      conversas: {
+        Row: {
+          created_at: string | null
+          id: string
+          mensagem: string
+          midia_url: string | null
+          nome_contato: string | null
+          numero: string
+          origem: string
+          owner_id: string | null
+          status: string
+          tipo_mensagem: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          mensagem: string
+          midia_url?: string | null
+          nome_contato?: string | null
+          numero: string
+          origem?: string
+          owner_id?: string | null
+          status?: string
+          tipo_mensagem?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          mensagem?: string
+          midia_url?: string | null
+          nome_contato?: string | null
+          numero?: string
+          origem?: string
+          owner_id?: string | null
+          status?: string
+          tipo_mensagem?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       leads: {
         Row: {
           company: string | null

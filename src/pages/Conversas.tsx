@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Message {
   id: string;
@@ -176,6 +177,29 @@ export default function Conversas() {
     loadScheduledMessages();
     loadMeetings();
     loadAiMode();
+    loadSupabaseConversations();
+
+    // Subscrever para atualizações em tempo real
+    const channel = supabase
+      .channel('conversas_realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversas'
+        },
+        (payload) => {
+          console.log('📩 Nova mensagem recebida:', payload);
+          loadSupabaseConversations();
+          toast.success('Nova mensagem recebida do WhatsApp!');
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -201,6 +225,81 @@ export default function Conversas() {
     } else {
       setConversations(initialConversations);
       localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(initialConversations));
+    }
+  };
+
+  const loadSupabaseConversations = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('conversas')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erro ao carregar conversas:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        // Agrupar mensagens por número
+        const conversasAgrupadas = data.reduce((acc: Record<string, any[]>, conv: any) => {
+          if (!acc[conv.numero]) {
+            acc[conv.numero] = [];
+          }
+          acc[conv.numero].push(conv);
+          return acc;
+        }, {});
+
+        // Converter para formato local
+        const novasConversas: Conversation[] = Object.entries(conversasAgrupadas).map(([numero, mensagens]) => {
+          const ultima = mensagens[0];
+          return {
+            id: numero,
+            contactName: ultima.nome_contato || numero,
+            channel: (ultima.origem.toLowerCase() === 'whatsapp' ? 'whatsapp' : 
+                     ultima.origem.toLowerCase() === 'instagram' ? 'instagram' : 'facebook') as "whatsapp" | "instagram" | "facebook",
+            lastMessage: ultima.mensagem,
+            unread: mensagens.filter(m => m.status === 'Recebida').length,
+            status: ultima.status === 'Recebida' ? 'waiting' : 'answered' as "waiting" | "answered" | "resolved",
+            messages: mensagens.reverse().map(m => ({
+              id: m.id,
+              content: m.mensagem,
+              type: (m.tipo_mensagem || 'text') as "text" | "image" | "audio" | "pdf",
+              sender: m.status === 'Enviada' ? 'user' : 'contact' as "user" | "contact",
+              timestamp: new Date(m.created_at),
+              delivered: true,
+              fileUrl: m.midia_url || undefined,
+            })),
+            tags: [],
+            funnelStage: "Novo",
+          };
+        });
+
+        setConversations(prev => {
+          // Mesclar com conversas existentes do localStorage
+          const merged = [...prev];
+          novasConversas.forEach(nova => {
+            const existingIndex = merged.findIndex(c => c.id === nova.id);
+            if (existingIndex >= 0) {
+              merged[existingIndex] = {
+                ...merged[existingIndex],
+                ...nova,
+                tags: merged[existingIndex].tags || [],
+                funnelStage: merged[existingIndex].funnelStage || "Novo",
+                responsavel: merged[existingIndex].responsavel,
+                produto: merged[existingIndex].produto,
+                valor: merged[existingIndex].valor,
+                anotacoes: merged[existingIndex].anotacoes,
+              };
+            } else {
+              merged.push(nova);
+            }
+          });
+          return merged;
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar conversas:', error);
     }
   };
 
@@ -287,7 +386,7 @@ export default function Conversas() {
     toast.success(updated[convId] ? "IA ativada" : "IA desativada");
   };
 
-  const handleSendMessage = (content?: string, type: Message["type"] = "text") => {
+  const handleSendMessage = async (content?: string, type: Message["type"] = "text") => {
     const messageContent = content || messageInput.trim();
     if (!messageContent || !selectedConv) return;
 
@@ -321,6 +420,25 @@ export default function Conversas() {
     });
     setMessageInput("");
     toast.success("Mensagem enviada!");
+
+    // Salvar no Supabase
+    try {
+      const { error } = await supabase.from('conversas').insert([{
+        numero: selectedConv.id,
+        mensagem: messageContent,
+        origem: selectedConv.channel === 'whatsapp' ? 'WhatsApp' : 
+                selectedConv.channel === 'instagram' ? 'Instagram' : 'Facebook',
+        status: 'Enviada',
+        tipo_mensagem: type,
+        nome_contato: selectedConv.contactName,
+      }]);
+
+      if (error) {
+        console.error('Erro ao salvar mensagem:', error);
+      }
+    } catch (error) {
+      console.error('Erro ao salvar mensagem:', error);
+    }
 
     // Simulate contact response if AI is active
     if (aiMode[selectedConv.id]) {
