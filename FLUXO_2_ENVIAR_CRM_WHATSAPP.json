@@ -1,0 +1,145 @@
+{
+  "name": "✅ ENVIAR - CEUSIA CRM → WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "table",
+        "table": "conversas",
+        "event": "INSERT",
+        "additionalFields": {
+          "filter": "status=eq.Enviada"
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "id": "supabase-trigger",
+      "name": "Monitorar Conversas CRM",
+      "credentials": {
+        "supabaseApi": {
+          "id": "CONFIGURAR_CREDENCIAL_SUPABASE",
+          "name": "Supabase - CEUSIA CRM"
+        }
+      },
+      "webhookId": "supabase-conversas-enviada"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Formata dados do Supabase para Evolution API\nconst item = $json;\n\nlet numero = item.numero || \"\";\nconst mensagem = item.mensagem || \"\";\n\n// Remove @s.whatsapp.net se já existir\nnumero = numero.replace(\"@s.whatsapp.net\", \"\");\n\n// Remove caracteres especiais (mantém apenas números)\nnumero = numero.replace(/\\D/g, \"\");\n\n// Adiciona @s.whatsapp.net no formato correto\nconst numeroFormatado = `${numero}@s.whatsapp.net`;\n\nconsole.log('✅ Dados formatados para Evolution:', {\n  numero_original: item.numero,\n  numero_formatado: numeroFormatado,\n  mensagem: mensagem\n});\n\nreturn {\n  number: numeroFormatado,\n  text: mensagem,\n  conversa_id: item.id,\n  nome_contato: item.nome_contato\n};"
+      },
+      "name": "Formatar para Evolution API",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "id": "function-format"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://SUA_EVOLUTION_API.com/message/sendText/SUA_INSTANCIA",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "SUA_API_KEY_EVOLUTION"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $json.number }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Enviar via Evolution API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "id": "http-to-evolution"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Log de sucesso no envio\nconst response = $json;\n\nconsole.log('✅ Mensagem enviada com sucesso via Evolution API:', {\n  conversa_id: $node[\"Formatar para Evolution API\"].json.conversa_id,\n  numero: $node[\"Formatar para Evolution API\"].json.number,\n  response: response\n});\n\nreturn {\n  success: true,\n  conversa_id: $node[\"Formatar para Evolution API\"].json.conversa_id,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "name": "Log Sucesso",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "id": "function-log"
+    }
+  ],
+  "connections": {
+    "Monitorar Conversas CRM": {
+      "main": [
+        [
+          {
+            "node": "Formatar para Evolution API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatar para Evolution API": {
+      "main": [
+        [
+          {
+            "node": "Enviar via Evolution API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar via Evolution API": {
+      "main": [
+        [
+          {
+            "node": "Log Sucesso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "ceusia-crm-enviar"
+  },
+  "tags": [
+    {
+      "name": "CEUSIA CRM",
+      "id": "ceusia"
+    },
+    {
+      "name": "WhatsApp",
+      "id": "whatsapp"
+    },
+    {
+      "name": "Enviar Mensagens",
+      "id": "enviar"
+    }
+  ]
+}
