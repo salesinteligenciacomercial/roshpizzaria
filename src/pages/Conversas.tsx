@@ -437,11 +437,27 @@ export default function Conversas() {
       status: "answered",
     });
     setMessageInput("");
-    toast.success("Mensagem enviada!");
-
-    // Salvar no Supabase
+    // Enviar mensagem via Evolution API
     try {
-      const { error } = await supabase.from('conversas').insert([{
+      const { data, error } = await supabase.functions.invoke('enviar-whatsapp', {
+        body: {
+          numero: selectedConv.id,
+          mensagem: messageContent,
+          tipo_mensagem: type,
+        }
+      });
+
+      if (error) {
+        console.error('Erro ao enviar para WhatsApp:', error);
+        toast.error('Erro ao enviar mensagem para WhatsApp');
+        return;
+      }
+
+      console.log('✅ Resposta Evolution API:', data);
+      toast.success("Mensagem enviada para WhatsApp!");
+
+      // Salvar no Supabase após sucesso
+      const { error: dbError } = await supabase.from('conversas').insert([{
         numero: selectedConv.id,
         mensagem: messageContent,
         origem: selectedConv.channel === 'whatsapp' ? 'WhatsApp' : 
@@ -451,11 +467,12 @@ export default function Conversas() {
         nome_contato: selectedConv.contactName,
       }]);
 
-      if (error) {
-        console.error('Erro ao salvar mensagem:', error);
+      if (dbError) {
+        console.error('Erro ao salvar mensagem no banco:', dbError);
       }
     } catch (error) {
-      console.error('Erro ao salvar mensagem:', error);
+      console.error('Erro ao enviar mensagem:', error);
+      toast.error('Erro ao processar envio');
     }
 
     // Simulate contact response if AI is active
