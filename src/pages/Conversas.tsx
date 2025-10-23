@@ -888,10 +888,11 @@ export default function Conversas() {
                                     className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
                                     style={{ maxHeight: '400px', maxWidth: '300px' }}
                                     onError={(e) => {
+                                      console.error('Erro ao carregar imagem:', msg.mediaUrl);
                                       (e.target as HTMLImageElement).style.display = 'none';
                                       const parent = (e.target as HTMLElement).parentElement?.parentElement;
                                       if (parent) {
-                                        parent.innerHTML = '<div class="flex items-center gap-2 text-muted-foreground"><svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg><span class="text-xs">Imagem anexada</span></div>';
+                                        parent.innerHTML = '<div class="flex items-center gap-2 text-muted-foreground"><svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg><span class="text-xs">Imagem não disponível</span></div>';
                                       }
                                     }}
                                   />
@@ -901,7 +902,7 @@ export default function Conversas() {
                                 )}
                                 <a 
                                   href={msg.mediaUrl} 
-                                  download 
+                                  download={`imagem-${msg.id}.jpg`}
                                   className="text-xs underline opacity-70 hover:opacity-100 flex items-center gap-1"
                                 >
                                   <Download className="h-3 w-3" />
@@ -917,14 +918,12 @@ export default function Conversas() {
                                   <span className="text-sm font-medium">Mensagem de áudio</span>
                                 </div>
                                 <audio controls className="w-full h-8" style={{ maxWidth: '300px' }}>
-                                  <source src={msg.mediaUrl} type="audio/ogg" />
-                                  <source src={msg.mediaUrl} type="audio/mpeg" />
-                                  <source src={msg.mediaUrl} type="audio/mp4" />
+                                  <source src={msg.mediaUrl} />
                                   Seu navegador não suporta reprodução de áudio.
                                 </audio>
                                 <a 
                                   href={msg.mediaUrl} 
-                                  download 
+                                  download={`audio-${msg.id}.ogg`}
                                   className="text-xs underline opacity-70 hover:opacity-100 flex items-center gap-1"
                                 >
                                   <Download className="h-3 w-3" />
@@ -943,7 +942,9 @@ export default function Conversas() {
                                 </div>
                                 <a 
                                   href={msg.mediaUrl} 
-                                  download={msg.fileName}
+                                  download={msg.fileName || 'documento.pdf'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
                                   className="inline-flex items-center gap-2 text-xs bg-background/50 hover:bg-background px-3 py-2 rounded border transition-colors"
                                 >
                                   <Download className="h-3 w-3" />

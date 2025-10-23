@@ -22,6 +22,7 @@ function transformEvolutionPayload(body: any) {
   let mensagem = '';
   let tipo_mensagem = 'text';
   let midia_url = null;
+  let arquivo_nome = null;
   
   if (data.message.conversation) {
     mensagem = data.message.conversation;
@@ -30,21 +31,46 @@ function transformEvolutionPayload(body: any) {
     mensagem = data.message.extendedTextMessage.text;
     tipo_mensagem = 'texto';
   } else if (data.message.imageMessage) {
-    mensagem = data.message.imageMessage.caption || '[Imagem]';
+    const img = data.message.imageMessage;
+    mensagem = img.caption || '[Imagem]';
     tipo_mensagem = 'image';
-    midia_url = data.message.imageMessage.url || null;
+    // Priorizar base64 quando disponível
+    if (img.base64) {
+      midia_url = `data:${img.mimetype || 'image/jpeg'};base64,${img.base64}`;
+    } else {
+      midia_url = img.url || null;
+    }
   } else if (data.message.audioMessage) {
+    const audio = data.message.audioMessage;
     mensagem = '[Áudio]';
     tipo_mensagem = 'audio';
-    midia_url = data.message.audioMessage.url || null;
+    // Priorizar base64 quando disponível
+    if (audio.base64) {
+      midia_url = `data:${audio.mimetype || 'audio/ogg'};base64,${audio.base64}`;
+    } else {
+      midia_url = audio.url || null;
+    }
   } else if (data.message.videoMessage) {
-    mensagem = data.message.videoMessage.caption || '[Vídeo]';
+    const video = data.message.videoMessage;
+    mensagem = video.caption || '[Vídeo]';
     tipo_mensagem = 'video';
-    midia_url = data.message.videoMessage.url || null;
+    // Priorizar base64 quando disponível
+    if (video.base64) {
+      midia_url = `data:${video.mimetype || 'video/mp4'};base64,${video.base64}`;
+    } else {
+      midia_url = video.url || null;
+    }
   } else if (data.message.documentMessage) {
-    mensagem = `[Documento: ${data.message.documentMessage.fileName || 'arquivo'}]`;
+    const doc = data.message.documentMessage;
+    arquivo_nome = doc.fileName || 'arquivo';
+    mensagem = `[Documento: ${arquivo_nome}]`;
     tipo_mensagem = 'document';
-    midia_url = data.message.documentMessage.url || null;
+    // Priorizar base64 quando disponível
+    if (doc.base64) {
+      midia_url = `data:${doc.mimetype || 'application/pdf'};base64,${doc.base64}`;
+    } else {
+      midia_url = doc.url || null;
+    }
   } else {
     mensagem = '[Mensagem não suportada]';
     tipo_mensagem = 'text';
@@ -56,7 +82,8 @@ function transformEvolutionPayload(body: any) {
     origem: 'WhatsApp',
     tipo_mensagem,
     midia_url,
-    nome_contato: data.pushName || 'Desconhecido'
+    nome_contato: data.pushName || 'Desconhecido',
+    arquivo_nome
   };
 }
 
@@ -98,7 +125,7 @@ serve(async (req) => {
       }
     }
 
-    const { numero, mensagem, origem = 'WhatsApp', tipo_mensagem = 'text', midia_url, nome_contato } = payload;
+    const { numero, mensagem, origem = 'WhatsApp', tipo_mensagem = 'text', midia_url, nome_contato, arquivo_nome } = payload;
 
     // Validações N8N (apenas se não vier da Evolution API)
     if (!isEvolutionAPI) {
@@ -157,6 +184,7 @@ serve(async (req) => {
         tipo_mensagem,
         midia_url,
         nome_contato,
+        arquivo_nome,
       }])
       .select()
       .single();
