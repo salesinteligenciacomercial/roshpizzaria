@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, 
   Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon,
-  Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell
+  Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
@@ -22,7 +22,7 @@ interface Message {
   sender: "user" | "contact";
   timestamp: Date;
   delivered: boolean;
-  fileUrl?: string;
+  mediaUrl?: string;
   fileName?: string;
 }
 
@@ -274,22 +274,27 @@ export default function Conversas() {
           
           const messagensFormatadas = [...mensagens].reverse().map(m => {
             const msgContent = m.mensagem || 'Sem conteúdo';
-            console.log('🔍 Mensagem do banco:', {
-              id: m.id,
-              mensagem: msgContent,
-              mensagem_original: m.mensagem,
-              tipo: m.tipo_mensagem,
-              status: m.status
-            });
+            let msgType = m.tipo_mensagem || 'text';
+            
+            // Normalizar tipos
+            if (msgType === 'texto') msgType = 'text';
+            if (msgType === 'document') msgType = 'pdf';
+            
+            // Extrair nome do arquivo de documentos
+            let fileName: string | undefined;
+            if (msgType === 'pdf' && msgContent.includes('[Documento:')) {
+              fileName = msgContent.match(/\[Documento: (.+)\]/)?.[1];
+            }
             
             return {
               id: m.id,
               content: msgContent,
-              type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem || 'text') as "text" | "image" | "audio" | "pdf",
+              type: msgType as "text" | "image" | "audio" | "pdf",
               sender: m.status === 'Enviada' ? 'user' : 'contact' as "user" | "contact",
               timestamp: new Date(m.created_at),
               delivered: true,
-              fileUrl: m.midia_url || undefined,
+              mediaUrl: m.midia_url || undefined,
+              fileName: fileName,
             };
           });
           
@@ -858,7 +863,6 @@ export default function Conversas() {
                       </div>
                      ) : (
                       selectedConv.messages.map((msg) => {
-                        console.log('🎨 Renderizando mensagem:', { id: msg.id, content: msg.content, type: msg.type });
                         return (
                         <div
                           key={msg.id}
@@ -874,24 +878,100 @@ export default function Conversas() {
                             {msg.type === "text" && (
                               <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                             )}
-                            {msg.type === "image" && (
+                            
+                            {msg.type === "image" && msg.mediaUrl && (
                               <div className="space-y-2">
+                                <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer">
+                                  <img
+                                    src={msg.mediaUrl}
+                                    alt="Imagem"
+                                    className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                                    style={{ maxHeight: '400px', maxWidth: '300px' }}
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).style.display = 'none';
+                                      const parent = (e.target as HTMLElement).parentElement?.parentElement;
+                                      if (parent) {
+                                        parent.innerHTML = '<div class="flex items-center gap-2 text-muted-foreground"><svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg><span class="text-xs">Imagem anexada</span></div>';
+                                      }
+                                    }}
+                                  />
+                                </a>
+                                {msg.content && !msg.content.includes('[Imagem]') && (
+                                  <p className="text-sm">{msg.content}</p>
+                                )}
+                                <a 
+                                  href={msg.mediaUrl} 
+                                  download 
+                                  className="text-xs underline opacity-70 hover:opacity-100 flex items-center gap-1"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  Baixar imagem
+                                </a>
+                              </div>
+                            )}
+                            
+                            {msg.type === "audio" && msg.mediaUrl && (
+                              <div className="space-y-2 min-w-[250px]">
+                                <div className="flex items-center gap-2">
+                                  <Volume2 className="h-4 w-4" />
+                                  <span className="text-sm font-medium">Mensagem de áudio</span>
+                                </div>
+                                <audio controls className="w-full h-8" style={{ maxWidth: '300px' }}>
+                                  <source src={msg.mediaUrl} type="audio/ogg" />
+                                  <source src={msg.mediaUrl} type="audio/mpeg" />
+                                  <source src={msg.mediaUrl} type="audio/mp4" />
+                                  Seu navegador não suporta reprodução de áudio.
+                                </audio>
+                                <a 
+                                  href={msg.mediaUrl} 
+                                  download 
+                                  className="text-xs underline opacity-70 hover:opacity-100 flex items-center gap-1"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  Baixar áudio
+                                </a>
+                              </div>
+                            )}
+                            
+                            {msg.type === "pdf" && msg.mediaUrl && (
+                              <div className="space-y-2 min-w-[200px]">
+                                <div className="flex items-center gap-2">
+                                  <FileText className="h-5 w-5" />
+                                  <span className="text-sm font-medium">
+                                    {msg.fileName || 'Documento'}
+                                  </span>
+                                </div>
+                                <a 
+                                  href={msg.mediaUrl} 
+                                  download={msg.fileName}
+                                  className="inline-flex items-center gap-2 text-xs bg-background/50 hover:bg-background px-3 py-2 rounded border transition-colors"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  Baixar arquivo
+                                </a>
+                              </div>
+                            )}
+
+                            {/* Fallback para mídias sem URL */}
+                            {msg.type === "image" && !msg.mediaUrl && (
+                              <div className="flex items-center gap-2 text-muted-foreground">
                                 <ImageIcon className="h-8 w-8" />
-                                <p className="text-xs">Imagem anexada</p>
+                                <span className="text-xs">Imagem anexada</span>
                               </div>
                             )}
-                            {msg.type === "audio" && (
-                              <div className="flex items-center gap-2">
+                            {msg.type === "audio" && !msg.mediaUrl && (
+                              <div className="flex items-center gap-2 text-muted-foreground">
                                 <Mic className="h-4 w-4" />
-                                <p className="text-xs">Áudio anexado</p>
+                                <span className="text-xs">Áudio anexado</span>
                               </div>
                             )}
-                            {msg.type === "pdf" && (
-                              <div className="flex items-center gap-2">
+                            {msg.type === "pdf" && !msg.mediaUrl && (
+                              <div className="flex items-center gap-2 text-muted-foreground">
                                 <FileText className="h-4 w-4" />
-                                <p className="text-xs">Documento PDF</p>
+                                <span className="text-xs">Documento PDF</span>
                               </div>
                             )}
+
                             <div className="flex items-center justify-end gap-1 mt-1">
                               <span className="text-[10px] text-muted-foreground">
                                 {msg.timestamp.toLocaleTimeString("pt-BR", {

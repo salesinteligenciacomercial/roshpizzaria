@@ -12,14 +12,14 @@ serve(async (req) => {
   }
 
   try {
-    const { numero, mensagem, tipo_mensagem } = await req.json();
+    const { numero, mensagem, tipo_mensagem, mediaUrl } = await req.json();
 
-    console.log("📨 Recebido pedido de envio:", { numero, mensagem, tipo_mensagem });
+    console.log("📨 Recebido pedido de envio:", { numero, mensagem, tipo_mensagem, mediaUrl });
 
-    if (!numero || !mensagem) {
-      console.error("❌ Número e mensagem são obrigatórios");
+    if (!numero || (!mensagem && !mediaUrl)) {
+      console.error("❌ Número e mensagem/mídia são obrigatórios");
       return new Response(
-        JSON.stringify({ error: "Número e mensagem são obrigatórios" }),
+        JSON.stringify({ error: "Número e mensagem/mídia são obrigatórios" }),
         { 
           status: 400, 
           headers: { ...corsHeaders, "Content-Type": "application/json" } 
@@ -50,14 +50,29 @@ serve(async (req) => {
 
     console.log("📞 Número formatado:", numeroFormatado);
 
-    // Preparar body para Evolution API
-    const body = {
-      number: numeroFormatado,
-      text: mensagem,
-    };
+    let evolutionUrl: string;
+    let body: any;
 
-    // URL completa para envio
-    const evolutionUrl = `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`;
+    // Verificar se é mídia ou texto
+    if (mediaUrl) {
+      // Enviar mídia
+      evolutionUrl = `${EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
+      body = {
+        number: numeroFormatado,
+        mediaUrl: mediaUrl,
+        caption: mensagem || "",
+      };
+      console.log("📸 Enviando mídia:", body);
+    } else {
+      // Enviar texto
+      evolutionUrl = `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`;
+      body = {
+        number: numeroFormatado,
+        text: mensagem,
+      };
+      console.log("💬 Enviando texto:", body);
+    }
+
     console.log("🌐 Enviando para:", evolutionUrl);
 
     // Enviar para Evolution API
