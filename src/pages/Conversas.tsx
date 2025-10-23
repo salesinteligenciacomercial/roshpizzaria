@@ -737,7 +737,10 @@ export default function Conversas() {
               className={`p-4 border-b border-border cursor-pointer transition-colors hover:bg-muted/50 ${
                 selectedConv?.id === conv.id ? "bg-muted/70" : ""
               }`}
-              onClick={() => setSelectedConv(conv)}
+              onClick={() => {
+                console.log('🔍 Conversa selecionada:', conv.id, 'Mensagens:', conv.messages.length);
+                setSelectedConv(conv);
+              }}
             >
               <div className="flex items-start justify-between mb-1">
                 <div className="flex items-center gap-2">
@@ -828,7 +831,14 @@ export default function Conversas() {
                 {/* Messages */}
                 <ScrollArea className="flex-1 p-6 bg-[#e5ddd5]" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d9d9d9' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')" }}>
                   <div className="space-y-2">
-                    {selectedConv.messages.map((msg) => (
+                    {selectedConv.messages.length === 0 && (
+                      <div className="text-center text-muted-foreground py-8">
+                        Nenhuma mensagem ainda
+                      </div>
+                    )}
+                    {selectedConv.messages.map((msg) => {
+                      console.log('📨 Renderizando msg:', msg.id, msg.content);
+                      return (
                       <div
                         key={msg.id}
                         className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"} animate-fade-in`}
@@ -872,7 +882,8 @@ export default function Conversas() {
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                     <div ref={messagesEndRef} />
                   </div>
                 </ScrollArea>
