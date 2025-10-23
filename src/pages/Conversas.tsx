@@ -24,6 +24,7 @@ interface Message {
   delivered: boolean;
   mediaUrl?: string;
   fileName?: string;
+  transcricao?: string;
 }
 
 interface Conversation {
@@ -153,6 +154,7 @@ export default function Conversas() {
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<{ url: string; name?: string } | null>(null);
+  const [transcrevendo, setTranscrevendo] = useState<string | null>(null);
 
   // Form states
   const [newQuickTitle, setNewQuickTitle] = useState("");
@@ -474,6 +476,77 @@ export default function Conversas() {
     } catch (error) {
       console.error('Erro ao baixar mídia:', error);
       toast.error("Não foi possível baixar o arquivo");
+    }
+  };
+
+  const transcreverAudio = async (messageId: string, audioUrl: string) => {
+    try {
+      setTranscrevendo(messageId);
+      
+      // Baixar o áudio
+      const audioResponse = await fetch(audioUrl);
+      const audioBlob = await audioResponse.blob();
+      
+      // Converter para base64
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      
+      reader.onloadend = async () => {
+        const base64Audio = reader.result?.toString().split(',')[1];
+        
+        if (!base64Audio) {
+          toast.error("Não foi possível processar o áudio");
+          setTranscrevendo(null);
+          return;
+        }
+        
+        // Chamar a edge function
+        const { data, error } = await supabase.functions.invoke('transcrever-audio', {
+          body: { audio: base64Audio }
+        });
+        
+        if (error) {
+          console.error('Erro ao transcrever:', error);
+          toast.error("Erro ao transcrever: " + (error.message || "Não foi possível transcrever o áudio"));
+        } else {
+          // Atualizar a mensagem com a transcrição
+          setSelectedConv(prev => {
+            if (!prev) return prev;
+            
+            const updatedMessages = prev.messages.map(msg => 
+              msg.id === messageId 
+                ? { ...msg, transcricao: data.text }
+                : msg
+            );
+            
+            return { ...prev, messages: updatedMessages };
+          });
+          
+          // Atualizar também na lista de conversas
+          setConversations(prevConvs => prevConvs.map(conv => {
+            if (conv.id === selectedConv?.id) {
+              return {
+                ...conv,
+                messages: conv.messages.map(msg => 
+                  msg.id === messageId 
+                    ? { ...msg, transcricao: data.text }
+                    : msg
+                )
+              };
+            }
+            return conv;
+          }));
+          
+          toast.success("Áudio transcrito com sucesso!");
+        }
+        
+        setTranscrevendo(null);
+      };
+      
+    } catch (error) {
+      console.error('Erro ao transcrever áudio:', error);
+      toast.error("Não foi possível transcrever o áudio");
+      setTranscrevendo(null);
     }
   };
 
@@ -960,13 +1033,29 @@ export default function Conversas() {
                                   <source src={msg.mediaUrl} />
                                   Seu navegador não suporta reprodução de áudio.
                                 </audio>
-                                <button 
-                                  onClick={() => downloadMedia(msg.mediaUrl!, `audio-${msg.id}.ogg`)}
-                                  className="text-xs underline opacity-70 hover:opacity-100 flex items-center gap-1"
-                                >
-                                  <Download className="h-3 w-3" />
-                                  Baixar áudio
-                                </button>
+                                <div className="flex gap-2 flex-wrap">
+                                  <button 
+                                    onClick={() => downloadMedia(msg.mediaUrl!, `audio-${msg.id}.ogg`)}
+                                    className="text-xs underline opacity-70 hover:opacity-100 flex items-center gap-1"
+                                  >
+                                    <Download className="h-3 w-3" />
+                                    Baixar áudio
+                                  </button>
+                                  <button 
+                                    onClick={() => transcreverAudio(msg.id, msg.mediaUrl!)}
+                                    disabled={transcrevendo === msg.id}
+                                    className="text-xs underline opacity-70 hover:opacity-100 flex items-center gap-1 disabled:opacity-30"
+                                  >
+                                    <FileText className="h-3 w-3" />
+                                    {transcrevendo === msg.id ? "Transcrevendo..." : "Transcrever"}
+                                  </button>
+                                </div>
+                                {msg.transcricao && (
+                                  <div className="mt-2 p-2 bg-muted/50 rounded text-xs border border-border">
+                                    <strong className="text-foreground">Transcrição:</strong>
+                                    <p className="mt-1 text-muted-foreground">{msg.transcricao}</p>
+                                  </div>
+                                )}
                               </div>
                             )}
                             

@@ -11,3 +11,6 @@ verify_jwt = true
 
 [functions.enviar-whatsapp]
 verify_jwt = true
+
+[functions.transcrever-audio]
+verify_jwt = true
