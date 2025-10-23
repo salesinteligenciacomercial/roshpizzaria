@@ -14,6 +14,114 @@ export type Database = {
   }
   public: {
     Tables: {
+      agendas: {
+        Row: {
+          capacidade_simultanea: number | null
+          created_at: string | null
+          disponibilidade: Json | null
+          id: string
+          nome: string
+          owner_id: string
+          responsavel_id: string | null
+          status: string | null
+          tempo_medio_servico: number | null
+          tipo: string
+          updated_at: string | null
+        }
+        Insert: {
+          capacidade_simultanea?: number | null
+          created_at?: string | null
+          disponibilidade?: Json | null
+          id?: string
+          nome: string
+          owner_id: string
+          responsavel_id?: string | null
+          status?: string | null
+          tempo_medio_servico?: number | null
+          tipo?: string
+          updated_at?: string | null
+        }
+        Update: {
+          capacidade_simultanea?: number | null
+          created_at?: string | null
+          disponibilidade?: Json | null
+          id?: string
+          nome?: string
+          owner_id?: string
+          responsavel_id?: string | null
+          status?: string | null
+          tempo_medio_servico?: number | null
+          tipo?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      compromissos: {
+        Row: {
+          agenda_id: string | null
+          created_at: string | null
+          custo_estimado: number | null
+          data_hora_fim: string
+          data_hora_inicio: string
+          id: string
+          lead_id: string | null
+          lembrete_enviado: boolean | null
+          observacoes: string | null
+          owner_id: string
+          status: string | null
+          tipo_servico: string
+          updated_at: string | null
+          usuario_responsavel_id: string
+        }
+        Insert: {
+          agenda_id?: string | null
+          created_at?: string | null
+          custo_estimado?: number | null
+          data_hora_fim: string
+          data_hora_inicio: string
+          id?: string
+          lead_id?: string | null
+          lembrete_enviado?: boolean | null
+          observacoes?: string | null
+          owner_id: string
+          status?: string | null
+          tipo_servico: string
+          updated_at?: string | null
+          usuario_responsavel_id: string
+        }
+        Update: {
+          agenda_id?: string | null
+          created_at?: string | null
+          custo_estimado?: number | null
+          data_hora_fim?: string
+          data_hora_inicio?: string
+          id?: string
+          lead_id?: string | null
+          lembrete_enviado?: boolean | null
+          observacoes?: string | null
+          owner_id?: string
+          status?: string | null
+          tipo_servico?: string
+          updated_at?: string | null
+          usuario_responsavel_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compromissos_agenda_id_fkey"
+            columns: ["agenda_id"]
+            isOneToOne: false
+            referencedRelation: "agendas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compromissos_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversas: {
         Row: {
           arquivo_nome: string | null
@@ -210,6 +318,47 @@ export type Database = {
             columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lembretes: {
+        Row: {
+          canal: string
+          compromisso_id: string
+          created_at: string | null
+          data_envio: string | null
+          horas_antecedencia: number
+          id: string
+          mensagem: string | null
+          status_envio: string | null
+        }
+        Insert: {
+          canal: string
+          compromisso_id: string
+          created_at?: string | null
+          data_envio?: string | null
+          horas_antecedencia?: number
+          id?: string
+          mensagem?: string | null
+          status_envio?: string | null
+        }
+        Update: {
+          canal?: string
+          compromisso_id?: string
+          created_at?: string | null
+          data_envio?: string | null
+          horas_antecedencia?: number
+          id?: string
+          mensagem?: string | null
+          status_envio?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lembretes_compromisso_id_fkey"
+            columns: ["compromisso_id"]
+            isOneToOne: false
+            referencedRelation: "compromissos"
             referencedColumns: ["id"]
           },
         ]
