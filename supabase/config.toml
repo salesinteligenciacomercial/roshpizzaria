@@ -1,5 +1,10 @@
 project_id = "dteppsfseusqixuppglh"
 
+[auth.password]
+enable_leaked_password_protection = true
+min_length = 8
+required_characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
 [functions.webhook-conversas]
 verify_jwt = false
 
