@@ -6,6 +6,60 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Detectar se o payload é da Evolution API
+function isEvolutionAPIPayload(body: any): boolean {
+  return body.event === 'messages.upsert' && body.data?.key?.remoteJid;
+}
+
+// Transformar payload da Evolution API para formato do CRM
+function transformEvolutionPayload(body: any) {
+  const data = body.data;
+  
+  // Extrair número (remover @s.whatsapp.net)
+  const numero = data.key.remoteJid.replace('@s.whatsapp.net', '');
+  
+  // Extrair mensagem e tipo
+  let mensagem = '';
+  let tipo_mensagem = 'text';
+  let midia_url = null;
+  
+  if (data.message.conversation) {
+    mensagem = data.message.conversation;
+    tipo_mensagem = 'texto';
+  } else if (data.message.extendedTextMessage?.text) {
+    mensagem = data.message.extendedTextMessage.text;
+    tipo_mensagem = 'texto';
+  } else if (data.message.imageMessage) {
+    mensagem = data.message.imageMessage.caption || '[Imagem]';
+    tipo_mensagem = 'image';
+    midia_url = data.message.imageMessage.url || null;
+  } else if (data.message.audioMessage) {
+    mensagem = '[Áudio]';
+    tipo_mensagem = 'audio';
+    midia_url = data.message.audioMessage.url || null;
+  } else if (data.message.videoMessage) {
+    mensagem = data.message.videoMessage.caption || '[Vídeo]';
+    tipo_mensagem = 'video';
+    midia_url = data.message.videoMessage.url || null;
+  } else if (data.message.documentMessage) {
+    mensagem = `[Documento: ${data.message.documentMessage.fileName || 'arquivo'}]`;
+    tipo_mensagem = 'document';
+    midia_url = data.message.documentMessage.url || null;
+  } else {
+    mensagem = '[Mensagem não suportada]';
+    tipo_mensagem = 'text';
+  }
+  
+  return {
+    numero,
+    mensagem,
+    origem: 'WhatsApp',
+    tipo_mensagem,
+    midia_url,
+    nome_contato: data.pushName || 'Desconhecido'
+  };
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -18,44 +72,71 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json();
-    console.log('📩 Webhook recebido do N8n:', body);
+    
+    // Detectar origem do payload
+    const isEvolutionAPI = isEvolutionAPIPayload(body);
+    console.log('📩 Webhook recebido:', {
+      origem: isEvolutionAPI ? 'Evolution API (direto)' : 'N8N',
+      payload: body
+    });
 
-    const { numero, mensagem, origem = 'WhatsApp', tipo_mensagem = 'text', midia_url, nome_contato } = body;
-
-    // Validar se há variáveis não substituídas ou dados inválidos
-    const hasUnsubstitutedVars = (value: string) => {
-      return value?.includes('{{') || value?.includes('$json') || value?.includes('=$json');
-    };
-
-    const isInvalidData = (value: string) => {
-      return !value || value.trim() === '' || value === '=' || value === '[object Object]' || value.startsWith('=');
-    };
-
-    if (hasUnsubstitutedVars(numero) || hasUnsubstitutedVars(mensagem) || hasUnsubstitutedVars(nome_contato || '')) {
-      console.error('❌ Variáveis N8n não substituídas detectadas:', body);
-      return new Response(
-        JSON.stringify({
-          error: 'Variáveis não substituídas detectadas no N8n.',
-          details: 'Configure o node "Set" corretamente. Exemplo: numero deve ser $json.numero (sem = no início)'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+    // Transformar payload se vier da Evolution API
+    let payload = body;
+    if (isEvolutionAPI) {
+      try {
+        payload = transformEvolutionPayload(body);
+        console.log('✅ Payload transformado:', payload);
+      } catch (transformError) {
+        console.error('❌ Erro ao transformar payload da Evolution API:', transformError);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Erro ao processar payload da Evolution API',
+            details: transformError instanceof Error ? transformError.message : 'Erro desconhecido'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
     }
 
-    if (isInvalidData(numero) || isInvalidData(mensagem)) {
-      console.error('❌ Dados inválidos recebidos:', body);
-      return new Response(
-        JSON.stringify({
-          error: 'Dados inválidos recebidos.',
-          details: `numero: ${numero}, mensagem: ${mensagem}. Verifique o node Function no N8n.`,
-          fix: 'O node Function deve retornar strings válidas, não objetos ou valores vazios.'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+    const { numero, mensagem, origem = 'WhatsApp', tipo_mensagem = 'text', midia_url, nome_contato } = payload;
+
+    // Validações N8N (apenas se não vier da Evolution API)
+    if (!isEvolutionAPI) {
+      const hasUnsubstitutedVars = (value: string) => {
+        return value?.includes('{{') || value?.includes('$json') || value?.includes('=$json');
+      };
+
+      const isInvalidData = (value: string) => {
+        return !value || value.trim() === '' || value === '=' || value === '[object Object]' || value.startsWith('=');
+      };
+
+      if (hasUnsubstitutedVars(numero) || hasUnsubstitutedVars(mensagem) || hasUnsubstitutedVars(nome_contato || '')) {
+        console.error('❌ Variáveis N8n não substituídas detectadas:', body);
+        return new Response(
+          JSON.stringify({
+            error: 'Variáveis não substituídas detectadas no N8n.',
+            details: 'Configure o node "Set" corretamente. Exemplo: numero deve ser $json.numero (sem = no início)'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+
+      if (isInvalidData(numero) || isInvalidData(mensagem)) {
+        console.error('❌ Dados inválidos recebidos:', body);
+        return new Response(
+          JSON.stringify({
+            error: 'Dados inválidos recebidos.',
+            details: `numero: ${numero}, mensagem: ${mensagem}. Verifique o node Function no N8n.`,
+            fix: 'O node Function deve retornar strings válidas, não objetos ou valores vazios.'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
     }
 
+    // Validação geral (para ambos formatos)
     if (!numero || !mensagem) {
-      console.error('❌ Dados incompletos:', body);
+      console.error('❌ Dados incompletos:', payload);
       return new Response(
         JSON.stringify({ error: 'Número e mensagem são obrigatórios' }),
         { 
