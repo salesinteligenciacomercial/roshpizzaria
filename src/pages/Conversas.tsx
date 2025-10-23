@@ -836,14 +836,7 @@ export default function Conversas() {
                         Nenhuma mensagem ainda
                       </div>
                     ) : (
-                      selectedConv.messages.map((msg) => {
-                        console.log('📩 Renderizando mensagem:', {
-                          id: msg.id,
-                          content: msg.content,
-                          type: msg.type,
-                          sender: msg.sender
-                        });
-                        return (
+                      selectedConv.messages.map((msg) => (
                         <div
                           key={msg.id}
                           className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"} animate-fade-in`}
@@ -855,8 +848,7 @@ export default function Conversas() {
                                 : "bg-white text-foreground"
                             }`}
                           >
-                            {msg.type === "text" && msg.content && <p className="text-sm">{msg.content}</p>}
-                            {msg.type === "text" && !msg.content && <p className="text-sm text-red-500">Conteúdo vazio</p>}
+                            {msg.type === "text" && <p className="text-sm">{msg.content}</p>}
                             {msg.type === "image" && (
                               <div className="space-y-2">
                                 <ImageIcon className="h-8 w-8" />
@@ -888,8 +880,7 @@ export default function Conversas() {
                             </div>
                           </div>
                         </div>
-                        );
-                      })
+                      ))
                     )}
                     <div ref={messagesEndRef} />
                   </div>
