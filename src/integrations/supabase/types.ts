@@ -127,6 +127,7 @@ export type Database = {
           arquivo_nome: string | null
           created_at: string | null
           id: string
+          lead_id: string | null
           mensagem: string
           midia_url: string | null
           nome_contato: string | null
@@ -134,6 +135,7 @@ export type Database = {
           origem: string
           owner_id: string | null
           status: string
+          telefone_formatado: string | null
           tipo_mensagem: string | null
           updated_at: string | null
         }
@@ -141,6 +143,7 @@ export type Database = {
           arquivo_nome?: string | null
           created_at?: string | null
           id?: string
+          lead_id?: string | null
           mensagem: string
           midia_url?: string | null
           nome_contato?: string | null
@@ -148,6 +151,7 @@ export type Database = {
           origem?: string
           owner_id?: string | null
           status?: string
+          telefone_formatado?: string | null
           tipo_mensagem?: string | null
           updated_at?: string | null
         }
@@ -155,6 +159,7 @@ export type Database = {
           arquivo_nome?: string | null
           created_at?: string | null
           id?: string
+          lead_id?: string | null
           mensagem?: string
           midia_url?: string | null
           nome_contato?: string | null
@@ -162,10 +167,19 @@ export type Database = {
           origem?: string
           owner_id?: string | null
           status?: string
+          telefone_formatado?: string | null
           tipo_mensagem?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "conversas_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       etapas: {
         Row: {
@@ -253,9 +267,13 @@ export type Database = {
           notes: string | null
           owner_id: string | null
           phone: string | null
+          responsavel_id: string | null
+          segmentacao: string | null
+          servico: string | null
           source: string | null
           stage: string | null
           status: string | null
+          tags: string[] | null
           telefone: string | null
           updated_at: string | null
           value: number | null
@@ -272,9 +290,13 @@ export type Database = {
           notes?: string | null
           owner_id?: string | null
           phone?: string | null
+          responsavel_id?: string | null
+          segmentacao?: string | null
+          servico?: string | null
           source?: string | null
           stage?: string | null
           status?: string | null
+          tags?: string[] | null
           telefone?: string | null
           updated_at?: string | null
           value?: number | null
@@ -291,9 +313,13 @@ export type Database = {
           notes?: string | null
           owner_id?: string | null
           phone?: string | null
+          responsavel_id?: string | null
+          segmentacao?: string | null
+          servico?: string | null
           source?: string | null
           stage?: string | null
           status?: string | null
+          tags?: string[] | null
           telefone?: string | null
           updated_at?: string | null
           value?: number | null
@@ -558,7 +584,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      formatar_telefone: { Args: { telefone: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never
