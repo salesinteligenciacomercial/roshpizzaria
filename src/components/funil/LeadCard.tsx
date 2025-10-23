@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
 
 interface LeadCardProps {
   lead: {
@@ -59,17 +60,20 @@ export function LeadCard({ lead, onDelete }: LeadCardProps) {
             <User className="h-4 w-4 text-muted-foreground" />
             <h4 className="font-semibold text-sm">{lead.nome}</h4>
           </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 hover:bg-destructive/10 text-destructive"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(lead.id);
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+          <div className="flex gap-1">
+            <LeadActionsDialog lead={{ id: lead.id, name: lead.nome, telefone: lead.telefone, email: lead.email }} />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 hover:bg-destructive/10 text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(lead.id);
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {lead.company && (

@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Key, 
   Webhook, 
@@ -10,22 +12,126 @@ import {
   Upload, 
   Bot,
   MessageSquare,
-  Mic
+  Mic,
+  UserPlus,
+  Trash2
 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+
+interface Colaborador {
+  id: string;
+  nome: string;
+  email: string;
+  setor: string;
+  funcao: string;
+  atendimentosAtivos: number;
+  capacidadeMaxima: number;
+  status: "disponivel" | "ocupado" | "ausente";
+}
 
 export default function Configuracoes() {
   const { toast } = useToast();
   const [openaiKey, setOpenaiKey] = useState("");
   const [audimaToken, setAudimaToken] = useState("");
   const [elevenlabsKey, setElevenlabsKey] = useState("");
+  
+  // Estados para Fila de Atendimento
+  const [colaboradores, setColaboradores] = useState<Colaborador[]>([
+    {
+      id: "1",
+      nome: "Ana Costa",
+      email: "ana@example.com",
+      setor: "Atendimento",
+      funcao: "Atendente",
+      atendimentosAtivos: 5,
+      capacidadeMaxima: 10,
+      status: "disponivel",
+    },
+    {
+      id: "2",
+      nome: "Pedro Lima",
+      email: "pedro@example.com",
+      setor: "Vendas",
+      funcao: "Vendedor",
+      atendimentosAtivos: 8,
+      capacidadeMaxima: 10,
+      status: "ocupado",
+    },
+  ]);
+  const [novoColaborador, setNovoColaborador] = useState({
+    nome: "",
+    email: "",
+    setor: "",
+    funcao: "",
+    capacidadeMaxima: 10,
+  });
 
   const handleSaveToken = (integration: string) => {
     toast({
       title: "Token salvo",
       description: `Token de ${integration} salvo com sucesso`,
     });
+  };
+
+  const adicionarColaborador = () => {
+    if (!novoColaborador.nome || !novoColaborador.email || !novoColaborador.setor) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Preencha todos os campos obrigatórios",
+      });
+      return;
+    }
+
+    const novo: Colaborador = {
+      id: Date.now().toString(),
+      nome: novoColaborador.nome,
+      email: novoColaborador.email,
+      setor: novoColaborador.setor,
+      funcao: novoColaborador.funcao,
+      atendimentosAtivos: 0,
+      capacidadeMaxima: novoColaborador.capacidadeMaxima,
+      status: "disponivel",
+    };
+
+    setColaboradores([...colaboradores, novo]);
+    setNovoColaborador({
+      nome: "",
+      email: "",
+      setor: "",
+      funcao: "",
+      capacidadeMaxima: 10,
+    });
+    toast({
+      title: "Sucesso",
+      description: "Colaborador adicionado com sucesso!",
+    });
+  };
+
+  const removerColaborador = (id: string) => {
+    setColaboradores(colaboradores.filter((c) => c.id !== id));
+    toast({
+      title: "Colaborador removido",
+    });
+  };
+
+  const getStatusBadge = (status: string) => {
+    const variants = {
+      disponivel: "default",
+      ocupado: "destructive",
+      ausente: "secondary",
+    };
+    const labels = {
+      disponivel: "Disponível",
+      ocupado: "Ocupado",
+      ausente: "Ausente",
+    };
+    return (
+      <Badge variant={variants[status as keyof typeof variants] as any}>
+        {labels[status as keyof typeof labels]}
+      </Badge>
+    );
   };
 
   return (
@@ -37,13 +143,169 @@ export default function Configuracoes() {
         </p>
       </div>
 
-      <Tabs defaultValue="integrations" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+      <Tabs defaultValue="fila" className="w-full">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="fila">Fila de Atendimento</TabsTrigger>
           <TabsTrigger value="integrations">Integrações</TabsTrigger>
           <TabsTrigger value="tokens">Tokens de IA</TabsTrigger>
           <TabsTrigger value="users">Usuários</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="fila" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Adicionar Colaborador</CardTitle>
+              <CardDescription>
+                Configure os colaboradores e seus setores de atendimento
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="nome">Nome *</Label>
+                    <Input
+                      id="nome"
+                      placeholder="Nome completo"
+                      value={novoColaborador.nome}
+                      onChange={(e) =>
+                        setNovoColaborador({ ...novoColaborador, nome: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email">E-mail *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="email@example.com"
+                      value={novoColaborador.email}
+                      onChange={(e) =>
+                        setNovoColaborador({ ...novoColaborador, email: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="setor">Setor *</Label>
+                    <Select
+                      value={novoColaborador.setor}
+                      onValueChange={(value) =>
+                        setNovoColaborador({ ...novoColaborador, setor: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Atendimento">Atendimento</SelectItem>
+                        <SelectItem value="Vendas">Vendas</SelectItem>
+                        <SelectItem value="Financeiro">Financeiro</SelectItem>
+                        <SelectItem value="Suporte">Suporte</SelectItem>
+                        <SelectItem value="Administrativo">Administrativo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="funcao">Função</Label>
+                    <Input
+                      id="funcao"
+                      placeholder="Ex: Atendente, Vendedor"
+                      value={novoColaborador.funcao}
+                      onChange={(e) =>
+                        setNovoColaborador({ ...novoColaborador, funcao: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="capacidade">Capacidade Máxima</Label>
+                    <Input
+                      id="capacidade"
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={novoColaborador.capacidadeMaxima}
+                      onChange={(e) =>
+                        setNovoColaborador({
+                          ...novoColaborador,
+                          capacidadeMaxima: parseInt(e.target.value) || 10,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <Button onClick={adicionarColaborador} className="w-full">
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Adicionar Colaborador
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Colaboradores Ativos</CardTitle>
+              <CardDescription>
+                Lista de colaboradores e suas cargas de trabalho
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {colaboradores.map((colaborador) => (
+                  <div
+                    key={colaborador.id}
+                    className="flex items-center justify-between p-4 border rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <h4 className="font-semibold">{colaborador.nome}</h4>
+                          <p className="text-sm text-muted-foreground">{colaborador.email}</p>
+                        </div>
+                        {getStatusBadge(colaborador.status)}
+                      </div>
+                      <div className="mt-2 flex gap-4 text-sm text-muted-foreground">
+                        <span>
+                          <strong>Setor:</strong> {colaborador.setor}
+                        </span>
+                        <span>
+                          <strong>Função:</strong> {colaborador.funcao || "—"}
+                        </span>
+                        <span>
+                          <strong>Atendimentos:</strong> {colaborador.atendimentosAtivos}/
+                          {colaborador.capacidadeMaxima}
+                        </span>
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => removerColaborador(colaborador.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+
+                {colaboradores.length === 0 && (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Nenhum colaborador cadastrado ainda</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="integrations" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">

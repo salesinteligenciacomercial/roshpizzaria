@@ -6,6 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
+import { NovoLeadDialog } from "@/components/funil/NovoLeadDialog";
+import { ImportarLeadsDialog } from "@/components/funil/ImportarLeadsDialog";
 
 interface Lead {
   id: string;
@@ -94,14 +97,8 @@ export default function Leads() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <Upload className="mr-2 h-4 w-4" />
-            Importar
-          </Button>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Lead
-          </Button>
+          <ImportarLeadsDialog onLeadsImported={fetchLeads} />
+          <NovoLeadDialog onLeadCreated={fetchLeads} />
         </div>
       </div>
 
@@ -179,10 +176,7 @@ export default function Leads() {
                   <div className="text-xl font-bold text-primary">
                     R$ {Number(lead.value).toLocaleString("pt-BR")}
                   </div>
-                  <Button variant="outline" size="sm">
-                    <MessageSquare className="mr-2 h-4 w-4" />
-                    Ver Conversa
-                  </Button>
+                  <LeadActionsDialog lead={{ id: lead.id, name: lead.name, telefone: lead.phone, email: lead.email }} />
                 </div>
               </div>
             </CardContent>
