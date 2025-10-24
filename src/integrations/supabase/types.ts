@@ -17,6 +17,7 @@ export type Database = {
       agendas: {
         Row: {
           capacidade_simultanea: number | null
+          company_id: string | null
           created_at: string | null
           disponibilidade: Json | null
           id: string
@@ -30,6 +31,7 @@ export type Database = {
         }
         Insert: {
           capacidade_simultanea?: number | null
+          company_id?: string | null
           created_at?: string | null
           disponibilidade?: Json | null
           id?: string
@@ -43,6 +45,7 @@ export type Database = {
         }
         Update: {
           capacidade_simultanea?: number | null
+          company_id?: string | null
           created_at?: string | null
           disponibilidade?: Json | null
           id?: string
@@ -54,11 +57,68 @@ export type Database = {
           tipo?: string
           updated_at?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "agendas_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      companies: {
+        Row: {
+          cnpj: string | null
+          created_at: string | null
+          domain: string | null
+          id: string
+          max_leads: number | null
+          max_users: number | null
+          max_whatsapp_messages: number | null
+          name: string
+          owner_user_id: string | null
+          plan: string | null
+          settings: Json | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          cnpj?: string | null
+          created_at?: string | null
+          domain?: string | null
+          id?: string
+          max_leads?: number | null
+          max_users?: number | null
+          max_whatsapp_messages?: number | null
+          name: string
+          owner_user_id?: string | null
+          plan?: string | null
+          settings?: Json | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          cnpj?: string | null
+          created_at?: string | null
+          domain?: string | null
+          id?: string
+          max_leads?: number | null
+          max_users?: number | null
+          max_whatsapp_messages?: number | null
+          name?: string
+          owner_user_id?: string | null
+          plan?: string | null
+          settings?: Json | null
+          status?: string | null
+          updated_at?: string | null
+        }
         Relationships: []
       }
       compromissos: {
         Row: {
           agenda_id: string | null
+          company_id: string | null
           created_at: string | null
           custo_estimado: number | null
           data_hora_fim: string
@@ -75,6 +135,7 @@ export type Database = {
         }
         Insert: {
           agenda_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           custo_estimado?: number | null
           data_hora_fim: string
@@ -91,6 +152,7 @@ export type Database = {
         }
         Update: {
           agenda_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           custo_estimado?: number | null
           data_hora_fim?: string
@@ -114,6 +176,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "compromissos_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "compromissos_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
@@ -125,6 +194,7 @@ export type Database = {
       conversas: {
         Row: {
           arquivo_nome: string | null
+          company_id: string | null
           created_at: string | null
           id: string
           lead_id: string | null
@@ -141,6 +211,7 @@ export type Database = {
         }
         Insert: {
           arquivo_nome?: string | null
+          company_id?: string | null
           created_at?: string | null
           id?: string
           lead_id?: string | null
@@ -157,6 +228,7 @@ export type Database = {
         }
         Update: {
           arquivo_nome?: string | null
+          company_id?: string | null
           created_at?: string | null
           id?: string
           lead_id?: string | null
@@ -173,6 +245,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "conversas_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "conversas_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
@@ -184,6 +263,7 @@ export type Database = {
       etapas: {
         Row: {
           atualizado_em: string | null
+          company_id: string | null
           cor: string | null
           criado_em: string | null
           funil_id: string | null
@@ -193,6 +273,7 @@ export type Database = {
         }
         Insert: {
           atualizado_em?: string | null
+          company_id?: string | null
           cor?: string | null
           criado_em?: string | null
           funil_id?: string | null
@@ -202,6 +283,7 @@ export type Database = {
         }
         Update: {
           atualizado_em?: string | null
+          company_id?: string | null
           cor?: string | null
           criado_em?: string | null
           funil_id?: string | null
@@ -210,6 +292,13 @@ export type Database = {
           posicao?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "etapas_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "etapas_funil_id_fkey"
             columns: ["funil_id"]
@@ -222,6 +311,7 @@ export type Database = {
       funis: {
         Row: {
           atualizado_em: string | null
+          company_id: string | null
           criado_em: string | null
           descricao: string | null
           id: string
@@ -230,6 +320,7 @@ export type Database = {
         }
         Insert: {
           atualizado_em?: string | null
+          company_id?: string | null
           criado_em?: string | null
           descricao?: string | null
           id?: string
@@ -238,6 +329,7 @@ export type Database = {
         }
         Update: {
           atualizado_em?: string | null
+          company_id?: string | null
           criado_em?: string | null
           descricao?: string | null
           id?: string
@@ -245,6 +337,13 @@ export type Database = {
           owner_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "funis_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "funis_owner_id_fkey"
             columns: ["owner_id"]
@@ -257,6 +356,7 @@ export type Database = {
       leads: {
         Row: {
           company: string | null
+          company_id: string | null
           cpf: string | null
           created_at: string | null
           email: string | null
@@ -280,6 +380,7 @@ export type Database = {
         }
         Insert: {
           company?: string | null
+          company_id?: string | null
           cpf?: string | null
           created_at?: string | null
           email?: string | null
@@ -303,6 +404,7 @@ export type Database = {
         }
         Update: {
           company?: string | null
+          company_id?: string | null
           cpf?: string | null
           created_at?: string | null
           email?: string | null
@@ -340,6 +442,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "leads_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "leads_owner_id_fkey"
             columns: ["owner_id"]
             isOneToOne: false
@@ -351,6 +460,7 @@ export type Database = {
       lembretes: {
         Row: {
           canal: string
+          company_id: string | null
           compromisso_id: string
           created_at: string | null
           data_envio: string | null
@@ -361,6 +471,7 @@ export type Database = {
         }
         Insert: {
           canal: string
+          company_id?: string | null
           compromisso_id: string
           created_at?: string | null
           data_envio?: string | null
@@ -371,6 +482,7 @@ export type Database = {
         }
         Update: {
           canal?: string
+          company_id?: string | null
           compromisso_id?: string
           created_at?: string | null
           data_envio?: string | null
@@ -380,6 +492,13 @@ export type Database = {
           status_envio?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "lembretes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "lembretes_compromisso_id_fkey"
             columns: ["compromisso_id"]
@@ -425,6 +544,7 @@ export type Database = {
       task_boards: {
         Row: {
           atualizado_em: string | null
+          company_id: string | null
           criado_em: string | null
           descricao: string | null
           id: string
@@ -433,6 +553,7 @@ export type Database = {
         }
         Insert: {
           atualizado_em?: string | null
+          company_id?: string | null
           criado_em?: string | null
           descricao?: string | null
           id?: string
@@ -441,6 +562,7 @@ export type Database = {
         }
         Update: {
           atualizado_em?: string | null
+          company_id?: string | null
           criado_em?: string | null
           descricao?: string | null
           id?: string
@@ -448,6 +570,13 @@ export type Database = {
           owner_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "task_boards_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "task_boards_owner_id_fkey"
             columns: ["owner_id"]
@@ -461,6 +590,7 @@ export type Database = {
         Row: {
           atualizado_em: string | null
           board_id: string | null
+          company_id: string | null
           cor: string | null
           criado_em: string | null
           id: string
@@ -470,6 +600,7 @@ export type Database = {
         Insert: {
           atualizado_em?: string | null
           board_id?: string | null
+          company_id?: string | null
           cor?: string | null
           criado_em?: string | null
           id?: string
@@ -479,6 +610,7 @@ export type Database = {
         Update: {
           atualizado_em?: string | null
           board_id?: string | null
+          company_id?: string | null
           cor?: string | null
           criado_em?: string | null
           id?: string
@@ -493,6 +625,13 @@ export type Database = {
             referencedRelation: "task_boards"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "task_columns_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
         ]
       }
       tasks: {
@@ -500,6 +639,7 @@ export type Database = {
           assignee_id: string | null
           board_id: string | null
           column_id: string | null
+          company_id: string | null
           created_at: string
           description: string | null
           due_date: string | null
@@ -515,6 +655,7 @@ export type Database = {
           assignee_id?: string | null
           board_id?: string | null
           column_id?: string | null
+          company_id?: string | null
           created_at?: string
           description?: string | null
           due_date?: string | null
@@ -530,6 +671,7 @@ export type Database = {
           assignee_id?: string | null
           board_id?: string | null
           column_id?: string | null
+          company_id?: string | null
           created_at?: string
           description?: string | null
           due_date?: string | null
@@ -564,6 +706,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tasks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "tasks_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
@@ -579,15 +728,120 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_connections: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          evolution_api_key: string | null
+          evolution_api_url: string | null
+          id: string
+          instance_name: string
+          last_connected_at: string | null
+          qr_code: string | null
+          qr_code_expires_at: string | null
+          status: string | null
+          updated_at: string | null
+          whatsapp_number: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          evolution_api_key?: string | null
+          evolution_api_url?: string | null
+          id?: string
+          instance_name: string
+          last_connected_at?: string | null
+          qr_code?: string | null
+          qr_code_expires_at?: string | null
+          status?: string | null
+          updated_at?: string | null
+          whatsapp_number?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          evolution_api_key?: string | null
+          evolution_api_url?: string | null
+          id?: string
+          instance_name?: string
+          last_connected_at?: string | null
+          qr_code?: string | null
+          qr_code_expires_at?: string | null
+          status?: string | null
+          updated_at?: string | null
+          whatsapp_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_connections_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       formatar_telefone: { Args: { telefone: string }; Returns: string }
+      get_user_company_id: { Args: { _user_id: string }; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      user_belongs_to_company: {
+        Args: { _company_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role:
+        | "super_admin"
+        | "company_admin"
+        | "manager"
+        | "sales"
+        | "support"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -714,6 +968,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["super_admin", "company_admin", "manager", "sales", "support"],
+    },
   },
 } as const
