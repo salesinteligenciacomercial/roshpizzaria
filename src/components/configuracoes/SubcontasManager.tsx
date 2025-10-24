@@ -44,14 +44,24 @@ export function SubcontasManager() {
   const loadCompanies = async () => {
     try {
       setLoading(true);
+      console.log("🏢 [SUBCONTAS] Carregando empresas...");
+      
       const { data, error } = await supabase
         .from("companies")
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error("❌ [SUBCONTAS] Erro ao carregar:", error);
+        throw error;
+      }
+      
+      console.log("✅ [SUBCONTAS] Empresas carregadas:", data?.length || 0);
+      console.log("📊 [SUBCONTAS] Dados:", data);
+      
       setCompanies(data || []);
     } catch (error: any) {
+      console.error("❌ [SUBCONTAS] Erro completo:", error);
       toast({
         title: "Erro ao carregar subcontas",
         description: error.message,

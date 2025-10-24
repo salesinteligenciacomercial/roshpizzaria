@@ -55,7 +55,7 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
         },
       };
 
-      console.log("Criando subconta:", companyData);
+      console.log("🏢 [NOVA SUBCONTA] Iniciando criação:", companyData);
 
       // 1. Criar a empresa
       const { data: company, error: companyError } = await supabase
@@ -65,19 +65,19 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
         .single();
 
       if (companyError) {
-        console.error("Erro ao criar subconta:", companyError);
+        console.error("❌ [NOVA SUBCONTA] Erro ao criar empresa:", companyError);
         throw companyError;
       }
 
-      console.log("Subconta criada:", company);
+      console.log("✅ [NOVA SUBCONTA] Empresa criada:", company.id);
 
       // 2. Gerar senha automática forte
       const generatedPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10).toUpperCase() + "!@#123";
       const adminEmail = isTestAccount ? "admin@ceusia.app" : formData.email;
 
-      // 3. Criar usuário administrador
-      console.log("Criando usuário admin:", adminEmail);
+      console.log("👤 [NOVA SUBCONTA] Criando usuário admin:", adminEmail);
       
+      // 3. Criar usuário administrador
       const { data: authUser, error: authError } = await supabase.auth.signUp({
         email: adminEmail,
         password: generatedPassword,
@@ -90,13 +90,13 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
       });
 
       if (authError) {
-        console.error("Erro ao criar usuário:", authError);
+        console.error("❌ [NOVA SUBCONTA] Erro ao criar usuário:", authError);
         // Remover empresa se falhar
         await supabase.from("companies").delete().eq("id", company.id);
         throw authError;
       }
 
-      console.log("Usuário criado:", authUser);
+      console.log("✅ [NOVA SUBCONTA] Usuário criado:", authUser.user?.id);
 
       // 4. Vincular usuário à empresa como company_admin
       if (authUser.user) {
@@ -111,9 +111,11 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
           ]);
 
         if (roleError) {
-          console.error("Erro ao criar role:", roleError);
+          console.error("❌ [NOVA SUBCONTA] Erro ao criar role:", roleError);
           throw roleError;
         }
+        
+        console.log("✅ [NOVA SUBCONTA] Role criada com sucesso");
       }
 
       // 5. Preparar credenciais de acesso
@@ -128,6 +130,8 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
 
       setShowCredentials(true);
 
+      console.log("🎉 [NOVA SUBCONTA] Subconta criada com sucesso!");
+
       toast({
         title: "Subconta criada com sucesso! ✅",
         description: `${companyData.name} foi criada. Copie as credenciais de acesso!`,
@@ -135,7 +139,7 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
 
       onSuccess();
     } catch (error: any) {
-      console.error("Erro completo:", error);
+      console.error("❌ [NOVA SUBCONTA] Erro completo:", error);
       toast({
         title: "Erro ao criar subconta",
         description: error.message || "Ocorreu um erro desconhecido. Verifique o console.",

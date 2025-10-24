@@ -51,30 +51,31 @@ export function UsuariosSubcontaDialog({ company, open, onOpenChange }: Usuarios
   const loadUsers = async () => {
     try {
       setLoading(true);
+      console.log("Carregando usuários para empresa:", company.id);
+      
+      // Busca user_roles com profiles em uma única query usando JOIN
       const { data: userRoles, error } = await supabase
         .from("user_roles")
-        .select("id, user_id, role")
+        .select(`
+          id,
+          user_id,
+          role,
+          profiles!user_roles_user_id_fkey (
+            full_name,
+            email
+          )
+        `)
         .eq("company_id", company.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro ao buscar user_roles:", error);
+        throw error;
+      }
 
-      const usersWithProfiles = await Promise.all(
-        (userRoles || []).map(async (role) => {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("full_name, email")
-            .eq("id", role.user_id)
-            .single();
-          
-          return {
-            ...role,
-            profiles: profile || { full_name: "", email: "" }
-          };
-        })
-      );
-
-      setUsers(usersWithProfiles as any);
+      console.log("Usuários carregados:", userRoles);
+      setUsers(userRoles as any || []);
     } catch (error: any) {
+      console.error("Erro completo ao carregar usuários:", error);
       toast({
         title: "Erro ao carregar usuários",
         description: error.message,
@@ -87,11 +88,17 @@ export function UsuariosSubcontaDialog({ company, open, onOpenChange }: Usuarios
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     try {
-      // Create auth user with signup
+      console.log("➕ [USUÁRIOS] Adicionando novo usuário:", formData.email);
+      
+      // Gerar senha forte automática
+      const tempPassword = Math.random().toString(36).slice(-8) + "Aa1!";
+      
+      // Criar usuário de autenticação
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
-        password: Math.random().toString(36).slice(-8) + "Aa1!", // Generate temporary password
+        password: tempPassword,
         options: {
           data: {
             full_name: formData.full_name,
@@ -100,10 +107,19 @@ export function UsuariosSubcontaDialog({ company, open, onOpenChange }: Usuarios
         },
       });
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error("Failed to create user");
+      if (authError) {
+        console.error("❌ [USUÁRIOS] Erro ao criar auth:", authError);
+        throw authError;
+      }
+      
+      if (!authData.user) {
+        console.error("❌ [USUÁRIOS] Usuário não retornado");
+        throw new Error("Falha ao criar usuário");
+      }
 
-      // Create user role
+      console.log("✅ [USUÁRIOS] Auth criado:", authData.user.id);
+
+      // Criar role do usuário
       const { error: roleError } = await supabase
         .from("user_roles")
         .insert([
@@ -114,7 +130,12 @@ export function UsuariosSubcontaDialog({ company, open, onOpenChange }: Usuarios
           },
         ]);
 
-      if (roleError) throw roleError;
+      if (roleError) {
+        console.error("❌ [USUÁRIOS] Erro ao criar role:", roleError);
+        throw roleError;
+      }
+
+      console.log("✅ [USUÁRIOS] Role criada com sucesso");
 
       toast({
         title: "Usuário adicionado",
@@ -125,6 +146,7 @@ export function UsuariosSubcontaDialog({ company, open, onOpenChange }: Usuarios
       setFormData({ email: "", full_name: "", role: "user" });
       loadUsers();
     } catch (error: any) {
+      console.error("❌ [USUÁRIOS] Erro completo:", error);
       toast({
         title: "Erro ao adicionar usuário",
         description: error.message,
@@ -256,10 +278,10 @@ export function UsuariosSubcontaDialog({ company, open, onOpenChange }: Usuarios
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((user) => (
+                {users.map((user: any) => (
                   <TableRow key={user.id}>
-                    <TableCell>{(user.profiles as any)?.full_name || "-"}</TableCell>
-                    <TableCell>{(user.profiles as any)?.email || "-"}</TableCell>
+                    <TableCell>{user.profiles?.full_name || "-"}</TableCell>
+                    <TableCell>{user.profiles?.email || "-"}</TableCell>
                     <TableCell>{getRoleBadge(user.role)}</TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -267,6 +289,7 @@ export function UsuariosSubcontaDialog({ company, open, onOpenChange }: Usuarios
                         size="icon"
                         onClick={() => handleRemoveUser(user.id)}
                         title="Remover"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
