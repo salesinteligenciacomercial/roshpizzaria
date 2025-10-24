@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { WhatsAppQRCode } from "@/components/configuracoes/WhatsAppQRCode";
 
 interface Colaborador {
   id: string;
@@ -308,28 +309,9 @@ export default function Configuracoes() {
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 text-green-500" />
-                  WhatsApp
-                </CardTitle>
-                <CardDescription>Conecte sua conta do WhatsApp Business</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Token da API</Label>
-                  <Input placeholder="Cole seu token aqui" />
-                </div>
-                <div className="space-y-2">
-                  <Label>URL do Webhook</Label>
-                  <Input placeholder="https://..." />
-                </div>
-                <Button className="w-full">Conectar WhatsApp</Button>
-              </CardContent>
-            </Card>
+          <WhatsAppQRCode />
 
+          <div className="grid gap-4 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
