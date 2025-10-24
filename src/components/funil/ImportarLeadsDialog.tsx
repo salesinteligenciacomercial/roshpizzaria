@@ -63,6 +63,33 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado");
 
+      // Buscar company_id do usuário
+      const { data: userRole } = await supabase
+        .from("user_roles")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!userRole?.company_id) {
+        toast.error("Empresa não encontrada");
+        setLoading(false);
+        return;
+      }
+
+      // Buscar primeiro funil e etapa do usuário
+      const { data: funil } = await supabase
+        .from("funis")
+        .select("id, etapas(id)")
+        .eq("company_id", userRole.company_id)
+        .limit(1)
+        .single();
+
+      if (!funil || !funil.etapas || funil.etapas.length === 0) {
+        toast.error("Crie um funil com etapas antes de importar leads");
+        setLoading(false);
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = async (event) => {
         const text = event.target?.result as string;
@@ -75,6 +102,9 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
             const values = line.split(',');
             const lead: any = {
               owner_id: user.id,
+              company_id: userRole.company_id,
+              funil_id: funil.id,
+              etapa_id: funil.etapas[0].id,
               status: 'novo',
               stage: 'prospeccao',
               value: 0,
@@ -93,8 +123,12 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
                 case 'telefone':
                 case 'phone':
                 case 'whatsapp':
-                  lead.telefone = value;
-                  lead.phone = value;
+                  let telefone = value.replace(/\D/g, "");
+                  if (!telefone.startsWith("55")) {
+                    telefone = "55" + telefone;
+                  }
+                  lead.telefone = telefone;
+                  lead.phone = telefone;
                   break;
                 case 'email':
                 case 'e-mail':

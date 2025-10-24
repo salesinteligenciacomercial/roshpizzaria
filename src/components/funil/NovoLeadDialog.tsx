@@ -89,20 +89,46 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
         return;
       }
 
+      // Buscar company_id do usuário
+      const { data: userRole } = await supabase
+        .from("user_roles")
+        .select("company_id")
+        .eq("user_id", session.user.id)
+        .single();
+
+      if (!userRole?.company_id) {
+        toast.error("Empresa não encontrada");
+        setLoading(false);
+        return;
+      }
+
+      // Formatar telefone
+      let telefoneFormatado = formData.telefone;
+      if (telefoneFormatado) {
+        telefoneFormatado = telefoneFormatado.replace(/\D/g, "");
+        if (!telefoneFormatado.startsWith("55")) {
+          telefoneFormatado = "55" + telefoneFormatado;
+        }
+      }
+
       const { data, error } = await supabase
         .from("leads")
         .insert([{
           name: formData.nome,
-          telefone: formData.telefone,
-          email: formData.email,
-          cpf: formData.cpf,
+          telefone: telefoneFormatado || null,
+          phone: telefoneFormatado || null,
+          email: formData.email || null,
+          cpf: formData.cpf || null,
           value: formData.valor ? parseFloat(formData.valor) : 0,
-          company: formData.company,
-          source: formData.source,
-          notes: formData.notes,
+          company: formData.company || null,
+          source: formData.source || null,
+          notes: formData.notes || null,
           etapa_id: formData.etapa_id,
           funil_id: formData.funil_id,
-          owner_id: session.user.id
+          owner_id: session.user.id,
+          company_id: userRole.company_id,
+          status: "novo",
+          stage: "prospeccao"
         }])
         .select();
 

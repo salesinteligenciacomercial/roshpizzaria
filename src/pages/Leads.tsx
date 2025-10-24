@@ -7,14 +7,17 @@ import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail } from "lucide-re
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
+import { LeadQuickActions } from "@/components/leads/LeadQuickActions";
 import { NovoLeadDialog } from "@/components/funil/NovoLeadDialog";
 import { ImportarLeadsDialog } from "@/components/funil/ImportarLeadsDialog";
+import { formatPhoneNumber } from "@/utils/phoneFormatter";
 
 interface Lead {
   id: string;
   name: string;
   email: string | null;
   phone: string | null;
+  telefone?: string | null;
   company: string | null;
   source: string | null;
   status: string;
@@ -176,7 +179,11 @@ export default function Leads() {
                   <div className="text-xl font-bold text-primary">
                     R$ {Number(lead.value).toLocaleString("pt-BR")}
                   </div>
-                  <LeadActionsDialog lead={{ id: lead.id, name: lead.name, telefone: lead.phone, email: lead.email }} />
+                  <LeadQuickActions 
+                    leadId={lead.id} 
+                    leadName={lead.name} 
+                    leadPhone={lead.phone || lead.telefone || undefined}
+                  />
                 </div>
               </div>
             </CardContent>
