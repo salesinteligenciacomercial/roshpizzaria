@@ -67,6 +67,92 @@ export type Database = {
           },
         ]
       }
+      automation_flow_logs: {
+        Row: {
+          company_id: string
+          completed_at: string | null
+          conversation_id: string | null
+          error_message: string | null
+          execution_data: Json | null
+          flow_id: string
+          id: string
+          lead_id: string | null
+          started_at: string | null
+          status: string | null
+        }
+        Insert: {
+          company_id: string
+          completed_at?: string | null
+          conversation_id?: string | null
+          error_message?: string | null
+          execution_data?: Json | null
+          flow_id: string
+          id?: string
+          lead_id?: string | null
+          started_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          company_id?: string
+          completed_at?: string | null
+          conversation_id?: string | null
+          error_message?: string | null
+          execution_data?: Json | null
+          flow_id?: string
+          id?: string
+          lead_id?: string | null
+          started_at?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_flow_logs_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "automation_flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_flows: {
+        Row: {
+          active: boolean | null
+          company_id: string
+          created_at: string | null
+          description: string | null
+          edges: Json | null
+          id: string
+          name: string
+          nodes: Json | null
+          owner_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          company_id: string
+          created_at?: string | null
+          description?: string | null
+          edges?: Json | null
+          id?: string
+          name: string
+          nodes?: Json | null
+          owner_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          company_id?: string
+          created_at?: string | null
+          description?: string | null
+          edges?: Json | null
+          id?: string
+          name?: string
+          nodes?: Json | null
+          owner_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       companies: {
         Row: {
           cnpj: string | null

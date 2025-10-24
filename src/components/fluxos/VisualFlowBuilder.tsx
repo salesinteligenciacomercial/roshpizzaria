@@ -26,6 +26,16 @@ import { NodePropertiesPanel } from './NodePropertiesPanel';
 import { NodeToolbar } from './NodeToolbar';
 import { supabase } from '@/integrations/supabase/client';
 
+interface AutomationFlow {
+  id: string;
+  name: string;
+  nodes: Node[];
+  edges: Edge[];
+  active: boolean;
+  company_id?: string;
+  owner_id?: string;
+}
+
 const nodeTypes = {
   trigger: TriggerNode,
   action: ActionNode,
@@ -53,16 +63,17 @@ export function VisualFlowBuilder({ fluxoId, onSave }: VisualFlowBuilderProps) {
   const loadFlow = async (id: string) => {
     try {
       const { data, error } = await supabase
-        .from('automation_flows')
+        .from('automation_flows' as any)
         .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       if (data) {
-        setFlowName(data.name);
-        setNodes(data.nodes || []);
-        setEdges(data.edges || []);
+        const flowData = data as any;
+        setFlowName(flowData.name || 'Fluxo sem nome');
+        setNodes(flowData.nodes || []);
+        setEdges(flowData.edges || []);
       }
     } catch (error) {
       console.error('Erro ao carregar fluxo:', error);
@@ -94,25 +105,37 @@ export function VisualFlowBuilder({ fluxoId, onSave }: VisualFlowBuilderProps) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
 
+      // Get company_id from user_roles
+      const { data: userRoles } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!userRoles?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
       const flowData = {
         name: flowName,
-        nodes,
-        edges,
+        nodes: nodes as any,
+        edges: edges as any,
         active: true,
+        company_id: userRoles.company_id,
         owner_id: user.id,
         updated_at: new Date().toISOString(),
       };
 
       if (fluxoId) {
         const { error } = await supabase
-          .from('automation_flows')
+          .from('automation_flows' as any)
           .update(flowData)
           .eq('id', fluxoId);
 
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from('automation_flows')
+          .from('automation_flows' as any)
           .insert(flowData);
 
         if (error) throw error;
@@ -120,9 +143,9 @@ export function VisualFlowBuilder({ fluxoId, onSave }: VisualFlowBuilderProps) {
 
       toast.success('Fluxo salvo com sucesso!');
       onSave?.();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao salvar fluxo:', error);
-      toast.error('Erro ao salvar fluxo');
+      toast.error(error?.message || 'Erro ao salvar fluxo');
     }
   };
 

@@ -19,3 +19,18 @@ verify_jwt = true
 
 [functions.transcrever-audio]
 verify_jwt = true
+
+[functions.executar-fluxo]
+verify_jwt = true
+
+[functions.ia-atendimento]
+verify_jwt = true
+
+[functions.ia-vendedora]
+verify_jwt = true
+
+[functions.ia-suporte]
+verify_jwt = true
+
+[functions.ia-aprendizado]
+verify_jwt = true
