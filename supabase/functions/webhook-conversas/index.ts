@@ -180,8 +180,19 @@ serve(async (req) => {
     
     // Detectar origem do payload
     const isEvolutionAPI = isEvolutionAPIPayload(body);
+    
+    // Ignorar eventos que não sejam mensagens novas
+    if (body.event === 'messages.update') {
+      console.log('⏭️ Ignorando evento de status:', body.event, body.data?.status);
+      return new Response(
+        JSON.stringify({ success: true, message: 'Evento de status ignorado' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     console.log('📩 Webhook recebido:', {
-      origem: isEvolutionAPI ? 'Evolution API (direto)' : 'N8N'
+      origem: isEvolutionAPI ? 'Evolution API (direto)' : 'N8N',
+      evento: body.event || 'unknown'
     });
 
     // Transformar payload se vier da Evolution API
