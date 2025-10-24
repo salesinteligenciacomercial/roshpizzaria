@@ -28,6 +28,21 @@ serve(async (req) => {
       });
     }
 
+    // Get user's company_id
+    const { data: userRole } = await supabase
+      .from('user_roles')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!userRole?.company_id) {
+      return new Response(JSON.stringify({ error: "User not associated with any company" }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const companyId = userRole.company_id;
     const { action, data } = await req.json();
     console.log(`Action: ${action}`, data);
 
@@ -48,7 +63,8 @@ serve(async (req) => {
             source,
             notes,
             phone: telefone,
-            owner_id: user.id
+            owner_id: user.id,
+            company_id: companyId
           }])
           .select()
           .single();
@@ -92,7 +108,7 @@ serve(async (req) => {
         const { nome, descricao } = data;
         const { data: funil, error } = await supabase
           .from("funis")
-          .insert([{ nome, descricao, owner_id: user.id }])
+          .insert([{ nome, descricao, owner_id: user.id, company_id: companyId }])
           .select()
           .single();
 
@@ -114,7 +130,7 @@ serve(async (req) => {
         const { nome, funil_id, posicao, cor } = data;
         const { data: etapa, error } = await supabase
           .from("etapas")
-          .insert([{ nome, funil_id, posicao: posicao || 0, cor: cor || '#3b82f6' }])
+          .insert([{ nome, funil_id, posicao: posicao || 0, cor: cor || '#3b82f6', company_id: companyId }])
           .select()
           .single();
 

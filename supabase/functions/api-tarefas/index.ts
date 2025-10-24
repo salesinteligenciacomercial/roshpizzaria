@@ -28,6 +28,21 @@ serve(async (req) => {
       });
     }
 
+    // Get user's company_id
+    const { data: userRole } = await supabase
+      .from('user_roles')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!userRole?.company_id) {
+      return new Response(JSON.stringify({ error: "User not associated with any company" }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const companyId = userRole.company_id;
     const { action, data } = await req.json();
     console.log(`Action: ${action}`, data);
 
@@ -36,7 +51,7 @@ serve(async (req) => {
         const { nome, descricao } = data;
         const { data: board, error } = await supabase
           .from("task_boards")
-          .insert([{ nome, descricao, owner_id: user.id }])
+          .insert([{ nome, descricao, owner_id: user.id, company_id: companyId }])
           .select()
           .single();
 
@@ -58,7 +73,7 @@ serve(async (req) => {
         const { nome, board_id, posicao, cor } = data;
         const { data: column, error } = await supabase
           .from("task_columns")
-          .insert([{ nome, board_id, posicao: posicao || 0, cor: cor || '#6b7280' }])
+          .insert([{ nome, board_id, posicao: posicao || 0, cor: cor || '#6b7280', company_id: companyId }])
           .select()
           .single();
 
@@ -90,7 +105,8 @@ serve(async (req) => {
             due_date,
             priority: priority || 'media',
             status: 'pendente',
-            owner_id: user.id
+            owner_id: user.id,
+            company_id: companyId
           }])
           .select()
           .single();
