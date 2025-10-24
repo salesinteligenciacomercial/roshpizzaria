@@ -14,11 +14,14 @@ import {
   MessageSquare,
   Mic,
   UserPlus,
-  Trash2
+  Trash2,
+  Building2,
+  Shield
 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { WhatsAppQRCode } from "@/components/configuracoes/WhatsAppQRCode";
+import { SubcontasManager } from "@/components/configuracoes/SubcontasManager";
 
 interface Colaborador {
   id: string;
@@ -144,14 +147,25 @@ export default function Configuracoes() {
         </p>
       </div>
 
-      <Tabs defaultValue="fila" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+      <Tabs defaultValue="subcontas" className="w-full">
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="subcontas">
+            <Building2 className="mr-2 h-4 w-4" />
+            Subcontas
+          </TabsTrigger>
           <TabsTrigger value="fila">Fila de Atendimento</TabsTrigger>
           <TabsTrigger value="integrations">Integrações</TabsTrigger>
           <TabsTrigger value="tokens">Tokens de IA</TabsTrigger>
-          <TabsTrigger value="users">Usuários</TabsTrigger>
+          <TabsTrigger value="permissoes">
+            <Shield className="mr-2 h-4 w-4" />
+            Permissões
+          </TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="subcontas">
+          <SubcontasManager />
+        </TabsContent>
 
         <TabsContent value="fila" className="space-y-4">
           <Card>
@@ -450,20 +464,51 @@ export default function Configuracoes() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="users" className="space-y-4">
+        <TabsContent value="permissoes">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Usuários e Permissões
-              </CardTitle>
+              <CardTitle>Permissões e Perfis</CardTitle>
               <CardDescription>
-                Gerencie usuários e controle de acesso ao sistema
+                Configure permissões por perfil de usuário
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-center py-12">
-                <p className="text-muted-foreground">Em desenvolvimento</p>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  As permissões são gerenciadas através dos perfis de usuário:
+                </p>
+                <div className="grid gap-4">
+                  <div className="rounded-md border p-4">
+                    <h4 className="font-medium mb-2">Super Admin</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Acesso total ao sistema, incluindo gestão de subcontas
+                    </p>
+                  </div>
+                  <div className="rounded-md border p-4">
+                    <h4 className="font-medium mb-2">Administrador</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Acesso total à sua empresa e gestão de usuários
+                    </p>
+                  </div>
+                  <div className="rounded-md border p-4">
+                    <h4 className="font-medium mb-2">Gestor</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Acesso a relatórios, leads, funis e conversas
+                    </p>
+                  </div>
+                  <div className="rounded-md border p-4">
+                    <h4 className="font-medium mb-2">Vendedor</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Acesso a leads, conversas e tarefas
+                    </p>
+                  </div>
+                  <div className="rounded-md border p-4">
+                    <h4 className="font-medium mb-2">Suporte</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Acesso a conversas e agenda
+                    </p>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -1,30 +1,47 @@
-import { Bell, Search } from "lucide-react";
+import { Bell, Search, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export function Header() {
   const [userName, setUserName] = useState("Usuário");
+  const [companyName, setCompanyName] = useState<string>("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", user.id)
-          .single();
-        
-        if (profile?.full_name) {
-          setUserName(profile.full_name);
-        }
-      }
-    };
-    fetchProfile();
+    fetchUserData();
   }, []);
+
+  const fetchUserData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      // Get user profile
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .single();
+      
+      if (profile?.full_name) {
+        setUserName(profile.full_name);
+      }
+
+      // Get company info
+      const { data: userRole } = await supabase
+        .from("user_roles")
+        .select("company_id, companies(name)")
+        .eq("user_id", user.id)
+        .single();
+
+      if (userRole?.companies) {
+        setCompanyName((userRole.companies as any).name);
+      }
+    }
+    setLoading(false);
+  };
 
   const initials = userName
     .split(" ")
@@ -49,6 +66,13 @@ export function Header() {
 
         {/* Actions */}
         <div className="flex items-center gap-3">
+          {!loading && companyName && (
+            <Badge variant="outline" className="flex items-center gap-2">
+              <Building2 className="h-3 w-3" />
+              {companyName}
+            </Badge>
+          )}
+
           <Button 
             variant="ghost" 
             size="icon" 
