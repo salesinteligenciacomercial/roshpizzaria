@@ -1,0 +1,130 @@
+import { useState, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Mic, Square, Send, X } from "lucide-react";
+import { toast } from "sonner";
+
+interface AudioRecorderProps {
+  onSendAudio: (audioBlob: Blob) => Promise<void>;
+}
+
+export function AudioRecorder({ onSendAudio }: AudioRecorderProps) {
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/ogg; codecs=opus" });
+        setAudioBlob(blob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+
+      // Timer
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+
+      toast.success("Gravação iniciada");
+    } catch (error) {
+      console.error("Erro ao acessar microfone:", error);
+      toast.error("Não foi possível acessar o microfone");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  };
+
+  const cancelRecording = () => {
+    stopRecording();
+    setAudioBlob(null);
+    setRecordingTime(0);
+    chunksRef.current = [];
+  };
+
+  const sendAudio = async () => {
+    if (!audioBlob) return;
+    
+    try {
+      await onSendAudio(audioBlob);
+      setAudioBlob(null);
+      setRecordingTime(0);
+      chunksRef.current = [];
+    } catch (error) {
+      console.error("Erro ao enviar áudio:", error);
+      toast.error("Erro ao enviar áudio");
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  if (audioBlob) {
+    return (
+      <div className="flex items-center gap-2 bg-muted p-2 rounded-lg">
+        <audio controls className="flex-1 h-8">
+          <source src={URL.createObjectURL(audioBlob)} type="audio/ogg" />
+        </audio>
+        <Button size="icon" variant="ghost" onClick={cancelRecording}>
+          <X className="h-4 w-4" />
+        </Button>
+        <Button size="icon" onClick={sendAudio} className="bg-[#25D366] hover:bg-[#128C7E]">
+          <Send className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  }
+
+  if (isRecording) {
+    return (
+      <div className="flex items-center gap-3 bg-red-500/10 p-2 rounded-lg animate-pulse">
+        <Mic className="h-5 w-5 text-red-500" />
+        <span className="text-sm font-medium text-red-500">{formatTime(recordingTime)}</span>
+        <div className="flex-1" />
+        <Button size="icon" variant="destructive" onClick={stopRecording}>
+          <Square className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <Button 
+      variant="ghost" 
+      size="icon" 
+      onClick={startRecording}
+      className="hover:bg-primary/10"
+    >
+      <Mic className="h-5 w-5" />
+    </Button>
+  );
+}

@@ -116,7 +116,15 @@ export function MediaUpload({ onSendMedia }: MediaUploadProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="hover:bg-primary/10">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="hover:bg-primary/10"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(true);
+          }}
+        >
           <Paperclip className="h-5 w-5" />
         </Button>
       </DialogTrigger>

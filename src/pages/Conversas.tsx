@@ -14,6 +14,12 @@ import {
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { ConversationHeader } from "@/components/conversas/ConversationHeader";
+import { ConversationListItem } from "@/components/conversas/ConversationListItem";
+import { MessageItem } from "@/components/conversas/MessageItem";
+import { AudioRecorder } from "@/components/conversas/AudioRecorder";
+import { MediaUpload } from "@/components/conversas/MediaUpload";
+import { formatPhoneNumber } from "@/utils/phoneFormatter";
 
 interface Message {
   id: string;
@@ -25,6 +31,9 @@ interface Message {
   mediaUrl?: string;
   fileName?: string;
   transcricao?: string;
+  reaction?: string;
+  replyTo?: string;
+  edited?: boolean;
 }
 
 interface Conversation {
@@ -41,6 +50,8 @@ interface Conversation {
   produto?: string;
   valor?: string;
   anotacoes?: string;
+  avatarUrl?: string;
+  phoneNumber?: string;
 }
 
 interface QuickMessage {
@@ -597,9 +608,78 @@ export default function Conversas() {
     }
   };
 
+  // Funções de mensagem
+  const handleReply = (messageId: string) => {
+    toast.info("Responder à mensagem");
+  };
+
+  const handleEdit = (messageId: string, newContent: string) => {
+    if (!selectedConv) return;
+    const updated = conversations.map(conv => 
+      conv.id === selectedConv.id ? {
+        ...conv,
+        messages: conv.messages.map(msg => 
+          msg.id === messageId ? { ...msg, content: newContent, edited: true } : msg
+        )
+      } : conv
+    );
+    saveConversations(updated);
+    toast.success("Mensagem editada");
+  };
+
+  const handleDelete = (messageId: string, forEveryone: boolean) => {
+    if (!selectedConv) return;
+    const updated = conversations.map(conv => 
+      conv.id === selectedConv.id ? {
+        ...conv,
+        messages: conv.messages.filter(msg => msg.id !== messageId)
+      } : conv
+    );
+    saveConversations(updated);
+    toast.success(forEveryone ? "Mensagem excluída para todos" : "Mensagem excluída");
+  };
+
+  const handleReact = (messageId: string, emoji: string) => {
+    if (!selectedConv) return;
+    const updated = conversations.map(conv => 
+      conv.id === selectedConv.id ? {
+        ...conv,
+        messages: conv.messages.map(msg => 
+          msg.id === messageId ? { ...msg, reaction: emoji } : msg
+        )
+      } : conv
+    );
+    saveConversations(updated);
+  };
+
+  const handleSendMedia = async (file: File, caption: string, type: string) => {
+    if (!selectedConv) return;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('numero', selectedConv.id);
+    formData.append('caption', caption);
+    
+    toast.info(`Enviando ${type}...`);
+    handleSendMessage(caption || `[${type.toUpperCase()}]`, type as Message["type"]);
+  };
+
+  const handleSendAudio = async (audioBlob: Blob) => {
+    const file = new File([audioBlob], `audio-${Date.now()}.ogg`, { type: 'audio/ogg' });
+    await handleSendMedia(file, "", "audio");
+  };
+
   const handleSendMessage = async (content?: string, type: Message["type"] = "text") => {
     const messageContent = content || messageInput.trim();
     if (!messageContent || !selectedConv) return;
+
+    // Validar e formatar número
+    try {
+      const formattedPhone = formatPhoneNumber(selectedConv.id);
+    } catch (error: any) {
+      toast.error(error.message);
+      return;
+    }
 
     const newMessage: Message = {
       id: Date.now().toString(),
