@@ -265,24 +265,27 @@ serve(async (req) => {
       }
     }
 
-    // For webhooks, allow without company_id (will use first company as fallback for testing)
+    // Se não encontrou company pelo lead, buscar a primeira company disponível
     if (!companyId) {
-      console.warn('⚠️ Company não identificada via lead, usando fallback');
-      const { data: firstCompany } = await supabase
+      console.warn('⚠️ Company não identificada via lead');
+      
+      // Buscar a primeira company ativa do sistema
+      const { data: activeCompany } = await supabase
         .from('companies')
         .select('id')
+        .eq('status', 'active')
         .limit(1)
         .single();
       
-      if (firstCompany) {
-        companyId = firstCompany.id;
-        console.log('📌 Usando company fallback:', companyId);
+      if (activeCompany) {
+        companyId = activeCompany.id;
+        console.log('📌 Usando company ativa do sistema:', companyId);
       } else {
-        console.error('❌ Nenhuma company disponível');
+        console.error('❌ Nenhuma company ativa encontrada');
         return new Response(
           JSON.stringify({ 
-            error: 'Sistema não configurado corretamente',
-            code: 'NO_COMPANY_FOUND'
+            error: 'Sistema não configurado - nenhuma empresa ativa',
+            code: 'NO_ACTIVE_COMPANY'
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );

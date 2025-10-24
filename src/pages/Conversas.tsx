@@ -187,14 +187,8 @@ export default function Conversas() {
     loadAiMode();
     
     // Carregar conversas do Supabase imediatamente
-    console.log('🔄 Carregando conversas iniciais...');
+    console.log('🔄 Carregando conversas iniciais do Supabase...');
     loadSupabaseConversations();
-    
-    // Recarregar a cada 5 segundos para garantir sincronização
-    const intervalId = setInterval(() => {
-      console.log('⏰ Recarregamento automático...');
-      loadSupabaseConversations();
-    }, 5000);
 
     // Subscrever para atualizações em tempo real
     const channel = supabase
@@ -218,7 +212,6 @@ export default function Conversas() {
 
     return () => {
       console.log('🔌 Desconectando canal realtime');
-      clearInterval(intervalId);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -251,18 +244,24 @@ export default function Conversas() {
 
   const loadSupabaseConversations = async () => {
     try {
-      console.log('🔄 Carregando conversas do Supabase...');
+      console.log('🔄 [SUPABASE] Iniciando carregamento de conversas...');
+      
       const { data, error } = await supabase
         .from('conversas')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('❌ Erro ao carregar conversas:', error);
+        console.error('❌ [SUPABASE] Erro ao carregar conversas:', error);
+        toast.error(`Erro ao carregar conversas: ${error.message}`);
         return;
       }
       
-      console.log('✅ Conversas carregadas do banco:', data?.length || 0, 'mensagens');
+      console.log('✅ [SUPABASE] Conversas carregadas:', {
+        total: data?.length || 0,
+        primeiraConversa: data?.[0],
+        todasConversas: data?.map(d => ({ numero: d.numero, mensagem: d.mensagem }))
+      });
 
       // Filtrar mensagens com variáveis N8n não substituídas ou dados inválidos
       const validData = data?.filter(conv => {
