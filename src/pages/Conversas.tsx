@@ -237,15 +237,18 @@ export default function Conversas() {
 
   const loadSupabaseConversations = async () => {
     try {
+      console.log('🔄 Carregando conversas do Supabase...');
       const { data, error } = await supabase
         .from('conversas')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Erro ao carregar conversas:', error);
+        console.error('❌ Erro ao carregar conversas:', error);
         return;
       }
+      
+      console.log('✅ Conversas carregadas do banco:', data?.length || 0, 'mensagens');
 
       // Filtrar mensagens com variáveis N8n não substituídas ou dados inválidos
       const validData = data?.filter(conv => {
@@ -326,6 +329,11 @@ export default function Conversas() {
           };
         });
 
+        console.log('📱 Novas conversas do Supabase:', novasConversas.length);
+        novasConversas.forEach(conv => {
+          console.log(`  - ${conv.contactName}: ${conv.messages.length} mensagens`);
+        });
+        
         setConversations(prev => {
           // Mesclar com conversas existentes do localStorage
           const merged = [...prev];
@@ -342,10 +350,14 @@ export default function Conversas() {
                 valor: merged[existingIndex].valor,
                 anotacoes: merged[existingIndex].anotacoes,
               };
+              console.log(`🔄 Conversa atualizada: ${nova.contactName}`);
             } else {
               merged.push(nova);
+              console.log(`➕ Nova conversa adicionada: ${nova.contactName}`);
             }
           });
+          
+          console.log(`📊 Total de conversas após merge: ${merged.length}`);
           
           // ATUALIZAR selectedConv se ela estiver aberta
           if (selectedConv) {
