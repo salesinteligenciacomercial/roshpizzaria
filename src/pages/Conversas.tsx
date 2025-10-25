@@ -27,7 +27,7 @@ import { useLeadsSync } from "@/hooks/useLeadsSync";
 interface Message {
   id: string;
   content: string;
-  type: "text" | "image" | "audio" | "pdf" | "video";
+  type: "text" | "image" | "audio" | "pdf" | "video" | "contact";
   sender: "user" | "contact";
   timestamp: Date;
   delivered: boolean;
@@ -38,6 +38,10 @@ interface Message {
   reaction?: string;
   replyTo?: string;
   edited?: boolean;
+  contactData?: {
+    name: string;
+    phone: string;
+  };
 }
 
 interface Conversation {

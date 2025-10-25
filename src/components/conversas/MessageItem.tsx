@@ -10,7 +10,8 @@ import {
   ImageIcon,
   Video,
   Mic,
-  Reply
+  Reply,
+  User as UserIcon
 } from "lucide-react";
 import { MessageActions } from "./MessageActions";
 import { toast } from "sonner";
@@ -18,7 +19,7 @@ import { toast } from "sonner";
 interface Message {
   id: string;
   content: string;
-  type: "text" | "image" | "audio" | "pdf" | "video";
+  type: "text" | "image" | "audio" | "pdf" | "video" | "contact";
   sender: "user" | "contact";
   timestamp: Date;
   delivered: boolean;
@@ -29,6 +30,10 @@ interface Message {
   reaction?: string;
   replyTo?: string;
   edited?: boolean;
+  contactData?: {
+    name: string;
+    phone: string;
+  };
 }
 
 interface MessageItemProps {
@@ -161,6 +166,18 @@ export function MessageItem({
               <audio controls className="w-full h-8" style={{ maxWidth: '300px' }}>
                 <source src={message.mediaUrl} />
               </audio>
+              {!message.transcricao && onTranscribe && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onTranscribe(message.id, message.mediaUrl!)}
+                  disabled={isTranscribing}
+                  className="w-full"
+                >
+                  <Mic className="h-3 w-3 mr-2" />
+                  {isTranscribing ? 'Transcrevendo...' : 'Transcrever Áudio'}
+                </Button>
+              )}
               {message.transcricao && (
                 <div className="mt-2 p-2 bg-muted/50 rounded text-xs border border-border">
                   <strong>Transcrição:</strong>
@@ -177,14 +194,24 @@ export function MessageItem({
                 <FileText className="h-5 w-5" />
                 <span className="text-sm font-medium">{message.fileName || 'Documento'}</span>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onPdfClick?.(message.mediaUrl!, message.fileName || 'documento.pdf')}
-              >
-                <FileText className="h-3 w-3 mr-2" />
-                Visualizar
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => window.open(message.mediaUrl, '_blank')}
+                  className="flex-1"
+                >
+                  <FileText className="h-3 w-3 mr-2" />
+                  Abrir
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onDownload?.(message.mediaUrl!, message.fileName || 'documento.pdf')}
+                >
+                  <Download className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
           )}
           
@@ -198,6 +225,43 @@ export function MessageItem({
               >
                 <source src={message.mediaUrl} />
               </video>
+            </div>
+          )}
+
+          {/* Contact Message */}
+          {message.type === "contact" && message.contactData && (
+            <div className="space-y-2 min-w-[200px]">
+              <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <UserIcon className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{message.contactData.name}</p>
+                  <p className="text-xs text-muted-foreground">{message.contactData.phone}</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const vcard = `BEGIN:VCARD
+VERSION:3.0
+FN:${message.contactData?.name}
+TEL:${message.contactData?.phone}
+END:VCARD`;
+                  const blob = new Blob([vcard], { type: 'text/vcard' });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `${message.contactData?.name}.vcf`;
+                  link.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="w-full"
+              >
+                <Download className="h-3 w-3 mr-2" />
+                Salvar Contato
+              </Button>
             </div>
           )}
 
