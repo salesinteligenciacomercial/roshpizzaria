@@ -219,6 +219,12 @@ O sistema exibe badges de status no cabeçalho da conversa:
 
 ## 🧪 Testando a Sincronização
 
+📖 **Para testes completos e detalhados, consulte:** [GUIA_TESTES_SINCRONIZACAO.md](./GUIA_TESTES_SINCRONIZACAO.md)
+
+O guia contém 6 cenários principais de teste com instruções passo a passo, critérios de sucesso e troubleshooting.
+
+### Testes Rápidos de Validação
+
 ### Teste 1: Conversas → Leads
 1. Abra uma conversa no menu **Conversas**
 2. Clique em "Adicionar Tag" no Info Panel
