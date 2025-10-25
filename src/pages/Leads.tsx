@@ -3,11 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail } from "lucide-react";
+import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
 import { LeadQuickActions } from "@/components/leads/LeadQuickActions";
+import { LeadTagsDialog } from "@/components/leads/LeadTagsDialog";
 import { NovoLeadDialog } from "@/components/funil/NovoLeadDialog";
 import { ImportarLeadsDialog } from "@/components/funil/ImportarLeadsDialog";
 import { formatPhoneNumber } from "@/utils/phoneFormatter";
@@ -24,6 +25,9 @@ interface Lead {
   stage: string;
   value: number;
   created_at: string;
+  tags?: string[];
+  cpf?: string | null;
+  notes?: string | null;
 }
 
 export default function Leads() {
@@ -34,14 +38,14 @@ export default function Leads() {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchLeads();
+    carregarLeads();
   }, []);
 
   useEffect(() => {
     filterLeads();
   }, [searchTerm, selectedStatus, leads]);
 
-  const fetchLeads = async () => {
+  const carregarLeads = async () => {
     const { data, error } = await supabase
       .from("leads")
       .select("*")
@@ -100,8 +104,8 @@ export default function Leads() {
           </p>
         </div>
         <div className="flex gap-2">
-          <ImportarLeadsDialog onLeadsImported={fetchLeads} />
-          <NovoLeadDialog onLeadCreated={fetchLeads} />
+          <ImportarLeadsDialog onLeadsImported={carregarLeads} />
+          <NovoLeadDialog onLeadCreated={carregarLeads} />
         </div>
       </div>
 
@@ -142,8 +146,8 @@ export default function Leads() {
           <Card key={lead.id} className="transition-all hover:shadow-lg">
             <CardContent className="p-6">
               <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
+                <div className="flex-1 space-y-3">
+                  <div className="flex items-center gap-3">
                     <h3 className="text-lg font-semibold">{lead.name}</h3>
                     <Badge className={getStatusColor(lead.status)}>
                       {lead.status}
@@ -155,6 +159,17 @@ export default function Leads() {
                       </Badge>
                     )}
                   </div>
+                  
+                  {lead.tags && lead.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {lead.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="gap-1">
+                          <Tag className="h-3 w-3" />
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                   <div className="grid grid-cols-3 gap-4 text-sm text-muted-foreground">
                     {lead.email && (
                       <div className="flex items-center gap-2">
@@ -179,11 +194,24 @@ export default function Leads() {
                   <div className="text-xl font-bold text-primary">
                     R$ {Number(lead.value).toLocaleString("pt-BR")}
                   </div>
-                  <LeadQuickActions 
-                    leadId={lead.id} 
-                    leadName={lead.name} 
-                    leadPhone={lead.phone || lead.telefone || undefined}
-                  />
+                  <div className="flex gap-2">
+                    <LeadQuickActions 
+                      leadId={lead.id} 
+                      leadName={lead.name} 
+                      leadPhone={lead.phone || lead.telefone || undefined}
+                    />
+                    <LeadTagsDialog 
+                      leadId={lead.id}
+                      currentTags={lead.tags}
+                      onTagsUpdated={carregarLeads}
+                      triggerButton={
+                        <Button variant="outline" size="sm">
+                          <Tag className="h-4 w-4 mr-2" />
+                          Tags
+                        </Button>
+                      }
+                    />
+                  </div>
                 </div>
               </div>
             </CardContent>

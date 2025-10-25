@@ -9,6 +9,7 @@ import { DroppableColumn } from "@/components/funil/DroppableColumn";
 import { NovoLeadDialog } from "@/components/funil/NovoLeadDialog";
 import { NovoFunilDialog } from "@/components/funil/NovoFunilDialog";
 import { EditarFunilDialog } from "@/components/funil/EditarFunilDialog";
+import { AdicionarEtapaDialog } from "@/components/funil/AdicionarEtapaDialog";
 import { toast } from "sonner";
 
 interface Lead {
@@ -194,7 +195,11 @@ const Kanban = () => {
             </select>
           </div>
           {funilSelecionado && (
-            <div className="mt-6">
+            <div className="mt-6 flex gap-2">
+              <AdicionarEtapaDialog 
+                funilId={funilSelecionado.id}
+                onEtapaAdded={carregarDados}
+              />
               <EditarFunilDialog 
                 funilId={funilSelecionado.id}
                 funilNome={funilSelecionado.nome}
@@ -226,6 +231,7 @@ const Kanban = () => {
                     nome={etapa.nome}
                     quantidadeLeads={quantidadeLeads}
                     totalEtapa={totalEtapa}
+                    onEtapaUpdated={carregarDados}
                   >
                     {leadsNaEtapa.map((lead) => (
                       <LeadCard 
