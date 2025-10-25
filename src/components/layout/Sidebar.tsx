@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useEffect, useState } from "react";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -34,6 +35,20 @@ interface SidebarProps {
 export function Sidebar({ collapsed = false }: SidebarProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detectar se é mobile e colapsar automaticamente
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -48,15 +63,18 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
     }
   };
 
+  // No mobile, sempre mostrar colapsado ou usar drawer
+  const effectiveCollapsed = isMobile || collapsed;
+
   return (
     <div 
       className={`flex h-screen flex-col bg-sidebar border-r border-sidebar-border shadow-xl transition-all duration-300 ease-in-out ${
-        collapsed ? "w-20" : "w-64"
-      }`}
+        effectiveCollapsed ? "w-20" : "w-64"
+      } ${isMobile ? "fixed left-0 top-0 z-50" : ""}`}
     >
       {/* Logo */}
       <div className="flex h-16 items-center justify-center px-3 border-b border-sidebar-border/50">
-        {collapsed ? (
+        {effectiveCollapsed ? (
           <div className="h-10 w-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg shadow-primary/20">
             <span className="text-white font-bold text-xl">C</span>
           </div>
@@ -86,7 +104,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
                       isActive
                         ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md shadow-primary/20"
                         : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-1"
-                    } ${collapsed ? "justify-center" : ""}`
+                    } ${effectiveCollapsed ? "justify-center" : ""}`
                   }
                 >
                   {({ isActive }) => (
@@ -98,12 +116,12 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
                       }`}>
                         <item.icon className="h-4 w-4" />
                       </div>
-                      {!collapsed && <span className="flex-1">{item.name}</span>}
+                      {!effectiveCollapsed && <span className="flex-1">{item.name}</span>}
                     </>
                   )}
                 </NavLink>
               </TooltipTrigger>
-              {collapsed && (
+              {effectiveCollapsed && (
                 <TooltipContent side="right" className="font-medium">
                   {item.name}
                 </TooltipContent>
@@ -121,17 +139,17 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
               <Button
                 variant="ghost"
                 className={`w-full text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive transition-all duration-200 group ${
-                  collapsed ? "justify-center px-0" : "justify-start"
+                  effectiveCollapsed ? "justify-center px-0" : "justify-start"
                 }`}
                 onClick={handleLogout}
               >
                 <div className="p-1.5 rounded-lg bg-sidebar-accent/30 group-hover:bg-destructive/30 transition-colors">
                   <LogOut className="h-4 w-4" />
                 </div>
-                {!collapsed && <span className="font-medium ml-3">Sair do Sistema</span>}
+                {!effectiveCollapsed && <span className="font-medium ml-3">Sair do Sistema</span>}
               </Button>
             </TooltipTrigger>
-            {collapsed && (
+            {effectiveCollapsed && (
               <TooltipContent side="right" className="font-medium">
                 Sair do Sistema
               </TooltipContent>

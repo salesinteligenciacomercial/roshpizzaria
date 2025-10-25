@@ -92,14 +92,47 @@ serve(async (req) => {
       // PDF e document são mantidos como document
       if (mediaType === 'pdf') mediaType = 'document';
       
-      // Definir mimeType baseado no tipo de mídia se não fornecido
+      // Definir mimeType baseado no tipo de mídia e extensão do arquivo
       let mimeType = validatedData.mimeType;
       if (!mimeType) {
-        if (mediaType === 'image') mimeType = 'image/jpeg';
-        else if (mediaType === 'audio') mimeType = 'audio/mpeg';
-        else if (mediaType === 'video') mimeType = 'video/mp4';
-        else if (validatedData.tipo_mensagem === 'pdf') mimeType = 'application/pdf';
-        else mimeType = 'application/octet-stream';
+        const fileName = validatedData.fileName?.toLowerCase() || '';
+        
+        // Detectar por tipo de mídia primeiro
+        if (mediaType === 'image') {
+          if (fileName.endsWith('.png')) mimeType = 'image/png';
+          else if (fileName.endsWith('.gif')) mimeType = 'image/gif';
+          else if (fileName.endsWith('.webp')) mimeType = 'image/webp';
+          else mimeType = 'image/jpeg'; // default para imagens
+        } else if (mediaType === 'audio') {
+          if (fileName.endsWith('.ogg')) mimeType = 'audio/ogg';
+          else if (fileName.endsWith('.wav')) mimeType = 'audio/wav';
+          else if (fileName.endsWith('.m4a')) mimeType = 'audio/mp4';
+          else mimeType = 'audio/mpeg'; // default para áudio
+        } else if (mediaType === 'video') {
+          if (fileName.endsWith('.mov')) mimeType = 'video/quicktime';
+          else if (fileName.endsWith('.avi')) mimeType = 'video/x-msvideo';
+          else if (fileName.endsWith('.webm')) mimeType = 'video/webm';
+          else mimeType = 'video/mp4'; // default para vídeo
+        } else if (validatedData.tipo_mensagem === 'pdf' || fileName.endsWith('.pdf')) {
+          mimeType = 'application/pdf';
+        } else {
+          // Detectar por extensão para documentos
+          if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
+            mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          } else if (fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) {
+            mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+          } else if (fileName.endsWith('.ppt') || fileName.endsWith('.pptx')) {
+            mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+          } else if (fileName.endsWith('.txt')) {
+            mimeType = 'text/plain';
+          } else if (fileName.endsWith('.zip')) {
+            mimeType = 'application/zip';
+          } else {
+            mimeType = 'application/octet-stream'; // fallback genérico
+          }
+        }
+        
+        console.log(`📄 MIME type detectado: ${mimeType} (arquivo: ${fileName})`);
       }
       
       bodyPayload = {

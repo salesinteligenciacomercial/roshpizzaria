@@ -1,6 +1,13 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+
+// Canal singleton compartilhado por todos os componentes
+let sharedChannel: any = null;
+let subscriberCount = 0;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY = 3000;
 
 interface Lead {
   id: string;
@@ -42,8 +49,13 @@ interface UseLeadsSyncOptions {
 
 /**
  * Hook global de sincronização de leads em tempo real
- * Usa Supabase Realtime para observar mudanças na tabela leads
+ * Usa Supabase Realtime com canal compartilhado (singleton) para otimizar recursos
  * e notificar os componentes quando houver alterações
+ * 
+ * OTIMIZAÇÕES:
+ * - Canal compartilhado entre todos os componentes (evita múltiplas conexões)
+ * - Reconexão automática em caso de perda de conexão
+ * - Gerenciamento de subscribers para cleanup correto
  */
 export const useLeadsSync = ({
   onInsert,
@@ -51,36 +63,43 @@ export const useLeadsSync = ({
   onDelete,
   showNotifications = true
 }: UseLeadsSyncOptions = {}) => {
+  const handlersRef = useRef({ onInsert, onUpdate, onDelete, showNotifications });
+  
+  // Atualizar referências sem causar re-subscrição
+  useEffect(() => {
+    handlersRef.current = { onInsert, onUpdate, onDelete, showNotifications };
+  }, [onInsert, onUpdate, onDelete, showNotifications]);
   
   const handleChange = useCallback((payload: any) => {
     console.log('📡 [useLeadsSync] Mudança detectada:', payload);
     
     const { eventType, new: newRecord, old: oldRecord } = payload;
+    const handlers = handlersRef.current;
     
     switch (eventType) {
       case 'INSERT':
-        if (onInsert) {
-          onInsert(newRecord);
+        if (handlers.onInsert) {
+          handlers.onInsert(newRecord);
         }
-        if (showNotifications) {
+        if (handlers.showNotifications) {
           toast.success(`Novo lead adicionado: ${newRecord.name}`);
         }
         break;
         
       case 'UPDATE':
-        if (onUpdate) {
-          onUpdate(newRecord, oldRecord);
+        if (handlers.onUpdate) {
+          handlers.onUpdate(newRecord, oldRecord);
         }
-        if (showNotifications) {
+        if (handlers.showNotifications) {
           toast.info(`Lead atualizado: ${newRecord.name}`);
         }
         break;
         
       case 'DELETE':
-        if (onDelete) {
-          onDelete(oldRecord);
+        if (handlers.onDelete) {
+          handlers.onDelete(oldRecord);
         }
-        if (showNotifications) {
+        if (handlers.showNotifications) {
           toast.info(`Lead removido: ${oldRecord.name}`);
         }
         break;
@@ -88,42 +107,77 @@ export const useLeadsSync = ({
       default:
         console.warn('[useLeadsSync] Evento desconhecido:', eventType);
     }
-  }, [onInsert, onUpdate, onDelete, showNotifications]);
+  }, []);
+
+  const setupChannel = useCallback(async () => {
+    if (!sharedChannel) {
+      console.log('🔄 [useLeadsSync] Criando canal compartilhado...');
+      
+      sharedChannel = supabase
+        .channel('leads_shared_channel')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'leads'
+          },
+          handleChange
+        )
+        .subscribe((status) => {
+          console.log('📡 [useLeadsSync] Status da conexão compartilhada:', status);
+          
+          if (status === 'SUBSCRIBED') {
+            console.log(`✅ [useLeadsSync] Canal compartilhado ativo (${subscriberCount} subscribers)`);
+            reconnectAttempts = 0; // Reset contador de reconexão
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ [useLeadsSync] Erro na conexão realtime');
+            
+            // Tentar reconectar automaticamente
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+              reconnectAttempts++;
+              console.log(`🔄 [useLeadsSync] Tentando reconectar (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+              
+              setTimeout(async () => {
+                if (sharedChannel) {
+                  await supabase.removeChannel(sharedChannel);
+                  sharedChannel = null;
+                }
+                setupChannel();
+              }, RECONNECT_DELAY * reconnectAttempts); // Aumentar delay a cada tentativa
+            } else {
+              console.error('❌ [useLeadsSync] Máximo de tentativas de reconexão atingido');
+              if (handlersRef.current.showNotifications) {
+                toast.error('Erro ao conectar sincronização. Por favor, recarregue a página.');
+              }
+            }
+          } else if (status === 'CLOSED') {
+            console.log('🔌 [useLeadsSync] Canal fechado');
+          }
+        });
+    }
+  }, [handleChange]);
 
   useEffect(() => {
-    console.log('🔄 [useLeadsSync] Iniciando sincronização de leads...');
+    subscriberCount++;
+    console.log(`🔄 [useLeadsSync] Registrando subscriber (${subscriberCount} total)`);
     
-    // Criar canal para mudanças na tabela leads
-    const channel = supabase
-      .channel('leads_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'leads'
-        },
-        handleChange
-      )
-      .subscribe((status) => {
-        console.log('📡 [useLeadsSync] Status da conexão:', status);
-        
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ [useLeadsSync] Sincronização ativa');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ [useLeadsSync] Erro na conexão realtime');
-          if (showNotifications) {
-            toast.error('Erro ao conectar sincronização de leads');
-          }
-        }
-      });
+    setupChannel();
 
     // Cleanup ao desmontar
     return () => {
-      console.log('🔌 [useLeadsSync] Desconectando sincronização...');
-      supabase.removeChannel(channel);
+      subscriberCount--;
+      console.log(`🔌 [useLeadsSync] Removendo subscriber (${subscriberCount} restantes)`);
+      
+      // Só remover canal se não houver mais subscribers
+      if (subscriberCount === 0 && sharedChannel) {
+        console.log('🔌 [useLeadsSync] Último subscriber, fechando canal compartilhado...');
+        supabase.removeChannel(sharedChannel);
+        sharedChannel = null;
+        reconnectAttempts = 0;
+      }
     };
-  }, [handleChange, showNotifications]);
+  }, [setupChannel]);
 
   // Retornar função para forçar recarregamento manual se necessário
   const reloadLeads = useCallback(async () => {
