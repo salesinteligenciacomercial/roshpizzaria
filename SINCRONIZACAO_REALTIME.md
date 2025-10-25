@@ -76,11 +76,13 @@ useLeadsSync({
 - ✅ Recebe atualizações quando lead é movido no Funil
 - ✅ Notifica quando novo lead é criado
 - ✅ Remove lead da lista quando deletado
+- ✅ **Sincronização Bidirecional Completa**
 
 **Como Funciona:**
 1. Hook `useLeadsSync` escuta mudanças na tabela `leads`
 2. Quando evento ocorre, atualiza `state` local com `setLeads()`
 3. Interface reflete mudanças instantaneamente
+4. **Todas as edições em Leads propagam para Conversas e Funil**
 
 **Callbacks:**
 ```typescript
@@ -88,6 +90,11 @@ onInsert: adiciona novo lead no topo da lista
 onUpdate: substitui lead existente com dados atualizados
 onDelete: remove lead da lista
 ```
+
+**Sincronização Reversa:**
+- Quando lead é editado em **Conversas** → atualiza lista em **Leads**
+- Quando lead é movido no **Funil** → atualiza lista em **Leads**
+- Quando lead é editado em **Leads** → propaga para **Conversas** e **Funil**
 
 ---
 
@@ -116,7 +123,7 @@ onDelete: remove lead da lista
 
 ---
 
-## 🔄 Fluxo de Sincronização
+## 🔄 Fluxo de Sincronização (Bidirecional)
 
 ```mermaid
 graph TB
@@ -134,7 +141,17 @@ graph TB
     B -->|Realtime Event| C
     C -->|onUpdate| E
     C -->|onUpdate| G
+    
+    I[Qualquer Módulo] -->|Supabase .update/.insert/.delete| B
+    B -->|Realtime Event| C
+    C -->|onInsert/onUpdate/onDelete| J[Todos os Módulos]
 ```
+
+**Fluxo Bidirecional Completo:**
+1. **Qualquer módulo** pode modificar leads (INSERT, UPDATE, DELETE)
+2. **Supabase Realtime** emite evento para todos os subscribers
+3. **useLeadsSync** captura o evento e chama callbacks apropriados
+4. **Todos os módulos conectados** atualizam automaticamente suas interfaces
 
 ---
 
@@ -224,6 +241,26 @@ O sistema exibe badges de status no cabeçalho da conversa:
 6. Navegue para **Funil de Vendas**
 7. ✅ Verifique se o valor no card foi atualizado
 
+### Teste 7: Leads → Conversas (Bidirecional)
+1. Abra a página **Leads**
+2. Edite um lead (adicione uma tag ou altere informações)
+3. Navegue para **Conversas**
+4. Abra a conversa correspondente ao lead editado
+5. ✅ Verifique se as informações foram atualizadas no Info Panel
+6. **Observe** que a atualização ocorreu automaticamente, sem recarregar
+
+### Teste 8: Leads → Funil (Bidirecional)
+1. Abra a página **Leads**
+2. Edite o valor de um lead
+3. Navegue para **Funil de Vendas**
+4. ✅ Verifique se o valor no card foi atualizado automaticamente
+
+### Teste 9: Funil → Leads (Bidirecional)
+1. Abra o **Funil de Vendas**
+2. Arraste um lead para outra etapa
+3. Navegue para **Leads**
+4. ✅ Verifique se o status/estágio do lead foi atualizado automaticamente
+
 ### Teste 4: Criação Automática de Lead
 1. Abra uma **Conversa** sem lead vinculado
 2. **Observe** o badge "⚠️ Lead não cadastrado" no Info Panel
@@ -289,6 +326,9 @@ Para acompanhar a sincronização, monitore o console:
 - [x] Hook global de sincronização (`useLeadsSync`)
 - [x] Sincronização Conversas ↔ Leads  
 - [x] Sincronização Conversas ↔ Funil
+- [x] Sincronização Leads ↔ Conversas (bidirecional)
+- [x] Sincronização Leads ↔ Funil (bidirecional)
+- [x] Sincronização Funil ↔ Leads (bidirecional)
 - [x] Feedback visual de sincronização
 - [x] Criação automática de leads a partir de conversas
 - [ ] Sincronizar anotações internas entre módulos
