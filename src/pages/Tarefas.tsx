@@ -11,6 +11,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { TaskCard } from "@/components/tarefas/TaskCard";
 import { NovaTarefaDialog } from "@/components/tarefas/NovaTarefaDialog";
 import { EditarQuadroDialog } from "@/components/tarefas/EditarQuadroDialog";
+import { AdicionarColunaDialog } from "@/components/tarefas/AdicionarColunaDialog";
+import { EditarColunaDialog } from "@/components/tarefas/EditarColunaDialog";
+import { DeletarColunaDialog } from "@/components/tarefas/DeletarColunaDialog";
 import { toast } from "sonner";
 
 interface Task {
@@ -257,7 +260,22 @@ export default function Tarefas() {
                   className="text-white p-3 rounded-t-lg" 
                   style={{ backgroundColor: column.cor }}
                 >
-                  <h3 className="font-semibold">{column.nome}</h3>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold">{column.nome}</h3>
+                    <div className="flex gap-1">
+                      <EditarColunaDialog
+                        columnId={column.id}
+                        nomeAtual={column.nome}
+                        corAtual={column.cor}
+                        onColumnUpdated={carregarDados}
+                      />
+                      <DeletarColunaDialog
+                        columnId={column.id}
+                        columnNome={column.nome}
+                        onColumnDeleted={carregarDados}
+                      />
+                    </div>
+                  </div>
                   <span className="text-sm">
                     {tasks.filter(t => t.column_id === column.id).length} tarefas
                   </span>
@@ -290,6 +308,14 @@ export default function Tarefas() {
                 </SortableContext>
               </div>
             ))}
+            {/* Botão para adicionar nova coluna */}
+            <div className="min-w-[280px] flex-shrink-0">
+              <AdicionarColunaDialog
+                boardId={selectedBoard}
+                currentColumnsCount={columnsFiltradas.length}
+                onColumnAdded={carregarDados}
+              />
+            </div>
           </div>
         </DndContext>
       )}
