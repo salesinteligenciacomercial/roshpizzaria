@@ -21,7 +21,7 @@ import { MessageItem } from "@/components/conversas/MessageItem";
 import { AudioRecorder } from "@/components/conversas/AudioRecorder";
 import { MediaUpload } from "@/components/conversas/MediaUpload";
 import { NovaConversaDialog } from "@/components/conversas/NovaConversaDialog";
-import { formatPhoneNumber } from "@/utils/phoneFormatter";
+import { formatPhoneNumber, safeFormatPhoneNumber } from "@/utils/phoneFormatter";
 import { useLeadsSync } from "@/hooks/useLeadsSync";
 
 interface Message {
@@ -465,7 +465,7 @@ function Conversas() {
           .from('leads')
           .select('id, phone, telefone')
           .eq('company_id', userRole?.company_id)
-          .in('phone', numeros.concat(numeros.map(n => formatPhoneNumber(n))));
+          .in('phone', numeros.concat(numeros.map(n => safeFormatPhoneNumber(n))));
 
         // Criar mapeamento de número -> leadId
         const leadsMap: Record<string, string> = {};
@@ -475,7 +475,10 @@ function Conversas() {
             if (phone) {
               leadsMap[phone] = lead.id;
               // Também mapear versões formatadas
-              leadsMap[formatPhoneNumber(phone)] = lead.id;
+              const formatted = safeFormatPhoneNumber(phone);
+              if (formatted) {
+                leadsMap[formatted] = lead.id;
+              }
             }
           });
         }
@@ -1692,10 +1695,11 @@ function Conversas() {
       
       if (lead) {
         // Atualizar o mapeamento de leads vinculados
+        const formatted = safeFormatPhoneNumber(conv.id);
         setLeadsVinculados(prev => ({
           ...prev,
           [conv.id]: lead.id,
-          [formatPhoneNumber(conv.id)]: lead.id
+          ...(formatted ? { [formatted]: lead.id } : {})
         }));
         
         setLeadVinculado(lead);
@@ -1739,7 +1743,10 @@ function Conversas() {
       setLeadsVinculados(prev => {
         const newMap = { ...prev };
         delete newMap[conv.id];
-        delete newMap[formatPhoneNumber(conv.id)];
+        const formatted = safeFormatPhoneNumber(conv.id);
+        if (formatted) {
+          delete newMap[formatted];
+        }
         return newMap;
       });
       
@@ -1882,7 +1889,7 @@ function Conversas() {
               funnelStage={conv.funnelStage}
               valor={conv.valor}
               conversationId={conv.id}
-              leadId={leadsVinculados[conv.id] || leadsVinculados[formatPhoneNumber(conv.id)]}
+              leadId={leadsVinculados[conv.id] || leadsVinculados[safeFormatPhoneNumber(conv.id)]}
               onEditName={() => handleEditName(conv.id)}
               onCreateLead={() => handleCreateLead(conv.id)}
               onDeleteConversation={() => handleDeleteConversation(conv.id)}

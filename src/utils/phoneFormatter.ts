@@ -25,6 +25,20 @@ export function formatPhoneNumber(phone: string): string {
 }
 
 /**
+ * Versão segura que não lança erro - retorna string vazia se inválido
+ */
+export function safeFormatPhoneNumber(phone: string | undefined | null): string {
+  if (!phone) return '';
+  
+  try {
+    return formatPhoneNumber(phone);
+  } catch {
+    // Se falhar, retorna apenas números sem validação
+    return phone.replace(/\D/g, '');
+  }
+}
+
+/**
  * Formata número para exibição: +55 (85) 98765-4321
  */
 export function displayPhoneNumber(phone: string): string {
