@@ -97,7 +97,7 @@ export function ConversationListItem({
                 {contactName}
               </span>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-shrink-0">
               <div className="flex flex-col items-end gap-1">
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                   {timestamp.toLocaleTimeString("pt-BR", {
@@ -111,24 +111,44 @@ export function ConversationListItem({
                   </Badge>
                 )}
               </div>
-              <DropdownMenu>
+              <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild onClick={handleMenuClick}>
-                  <Button variant="ghost" size="icon" className="h-7 w-7">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 flex-shrink-0 hover:bg-accent"
+                  >
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" onClick={handleMenuClick}>
-                  <DropdownMenuItem onClick={onEditName}>
+                <DropdownMenuContent align="end" className="z-50" onClick={handleMenuClick}>
+                  <DropdownMenuItem 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditName?.();
+                    }}
+                  >
                     <Edit className="h-4 w-4 mr-2" />
                     Editar nome
                   </DropdownMenuItem>
                   {!leadId && onCreateLead && (
-                    <DropdownMenuItem onClick={onCreateLead}>
+                    <DropdownMenuItem 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCreateLead();
+                      }}
+                    >
                       <UserPlus className="h-4 w-4 mr-2" />
                       Adicionar ao CRM
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem onClick={onDeleteConversation} className="text-destructive">
+                  <DropdownMenuItem 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteConversation?.();
+                    }}
+                    className="text-destructive"
+                  >
                     <Trash2 className="h-4 w-4 mr-2" />
                     Excluir conversa
                   </DropdownMenuItem>
