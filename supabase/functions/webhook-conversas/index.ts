@@ -9,7 +9,7 @@ const corsHeaders = {
 
 // Input validation schemas - more permissive for webhook compatibility
 const webhookPayloadSchema = z.object({
-  numero: z.string().min(10, 'Número muito curto').max(20, 'Número muito longo'),
+  numero: z.string().min(10, 'Número muito curto').max(100, 'Número muito longo'), // Suporta grupos do WhatsApp
   mensagem: z.string().min(1).max(4096, 'Mensagem muito longa'),
   origem: z.string().default('WhatsApp'),
   tipo_mensagem: z.string().default('text'),
@@ -62,8 +62,8 @@ function isEvolutionAPIPayload(body: any): boolean {
 function transformEvolutionPayload(body: any) {
   const data = body.data;
   
-  // Extrair número (remover @s.whatsapp.net)
-  const numero = data.key.remoteJid.replace('@s.whatsapp.net', '');
+  // Extrair número (remover @s.whatsapp.net ou @g.us para grupos)
+  const numero = data.key.remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
   
   // Extrair mensagem e tipo
   let mensagem = '';
