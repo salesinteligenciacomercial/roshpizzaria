@@ -82,7 +82,7 @@ export function ConversationListItem({
       onClick={onClick}
     >
       <div className="flex gap-3">
-        <Avatar className="h-12 w-12">
+        <Avatar className="h-12 w-12 flex-shrink-0">
           <AvatarImage src={avatarUrl} alt={contactName} />
           <AvatarFallback className="bg-primary/10 text-primary">
             {getInitials(contactName)}
@@ -90,8 +90,8 @@ export function ConversationListItem({
         </Avatar>
         
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between mb-1 gap-2">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
               {getChannelIcon()}
               <span className="font-medium text-sm text-foreground truncate">
                 {contactName}
