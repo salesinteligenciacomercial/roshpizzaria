@@ -28,7 +28,7 @@ export function LeadTagsDialog({ leadId, currentTags = [], onTagsUpdated, trigge
 
   useEffect(() => {
     if (open) {
-      setTags(currentTags);
+      setTags(currentTags || []);
     }
   }, [open, currentTags]);
 
