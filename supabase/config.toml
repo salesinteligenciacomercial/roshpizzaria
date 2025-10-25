@@ -34,3 +34,12 @@ verify_jwt = true
 
 [functions.ia-aprendizado]
 verify_jwt = true
+
+[functions.tornar-super-admin]
+verify_jwt = true
+
+[functions.enviar-credenciais-subconta]
+verify_jwt = true
+
+[functions.redefinir-senha-subconta]
+verify_jwt = true

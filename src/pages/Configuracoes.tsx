@@ -69,6 +69,30 @@ export default function Configuracoes() {
       setLoading(false);
     }
   };
+
+  const tornarSuperAdmin = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('tornar-super-admin');
+      
+      if (error) throw error;
+      
+      toast({
+        title: "✅ Super Admin Ativado!",
+        description: data.mensagem,
+      });
+      
+      // Recarregar página após 2 segundos
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
   
   // Estados para Fila de Atendimento
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([
@@ -180,11 +204,18 @@ export default function Configuracoes() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Configurações</h1>
-        <p className="text-muted-foreground">
-          Gerencie integrações, tokens e configurações do sistema
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Configurações</h1>
+          <p className="text-muted-foreground">
+            Gerencie integrações, tokens e configurações do sistema
+          </p>
+        </div>
+        {!isSuperAdmin && (
+          <Button onClick={tornarSuperAdmin} variant="outline">
+            🔓 Ativar Modo Super Admin
+          </Button>
+        )}
       </div>
 
       <Tabs defaultValue={defaultTab} className="w-full">
