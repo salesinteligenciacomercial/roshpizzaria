@@ -245,7 +245,8 @@ const Kanban = () => {
                           }
                           toast.success("Lead deletado!");
                           carregarDados();
-                        }} 
+                        }}
+                        onLeadMoved={carregarDados}
                       />
                     ))}
                     {leadsNaEtapa.length === 0 && (

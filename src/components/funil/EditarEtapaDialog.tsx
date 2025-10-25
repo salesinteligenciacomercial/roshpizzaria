@@ -38,30 +38,68 @@ export function EditarEtapaDialog({ etapaId, nomeAtual, corAtual, onEtapaUpdated
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!nome.trim()) {
+    const nomeFormatado = nome.trim();
+    
+    if (!nomeFormatado) {
       toast.error("Digite o nome da etapa");
+      return;
+    }
+
+    if (nomeFormatado.length < 3) {
+      toast.error("Nome deve ter pelo menos 3 caracteres");
+      return;
+    }
+
+    if (nomeFormatado.length > 50) {
+      toast.error("Nome deve ter no máximo 50 caracteres");
       return;
     }
 
     setLoading(true);
 
     try {
+      // Buscar funil_id da etapa atual
+      const { data: etapaAtual } = await supabase
+        .from("etapas")
+        .select("funil_id")
+        .eq("id", etapaId)
+        .single();
+
+      if (!etapaAtual) throw new Error("Etapa não encontrada");
+
+      // Verificar duplicata apenas se mudou o nome
+      if (nomeFormatado.toLowerCase() !== nomeAtual.toLowerCase()) {
+        const { data: etapaExistente } = await supabase
+          .from("etapas")
+          .select("id")
+          .eq("funil_id", etapaAtual.funil_id)
+          .ilike("nome", nomeFormatado)
+          .neq("id", etapaId)
+          .maybeSingle();
+
+        if (etapaExistente) {
+          toast.error("Já existe uma etapa com este nome neste funil");
+          setLoading(false);
+          return;
+        }
+      }
+
       const { error } = await supabase
         .from("etapas")
         .update({
-          nome: nome.trim(),
+          nome: nomeFormatado,
           cor,
         })
         .eq("id", etapaId);
 
       if (error) throw error;
 
-      toast.success("Etapa atualizada com sucesso!");
+      toast.success(`Etapa "${nomeFormatado}" atualizada com sucesso!`);
       setOpen(false);
       onEtapaUpdated();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao atualizar etapa:", error);
-      toast.error("Erro ao atualizar etapa");
+      toast.error(error.message || "Erro ao atualizar etapa");
     } finally {
       setLoading(false);
     }
@@ -80,32 +118,49 @@ export function EditarEtapaDialog({ etapaId, nomeAtual, corAtual, onEtapaUpdated
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="nome">Nome da Etapa</Label>
+            <Label htmlFor="nome">Nome da Etapa *</Label>
             <Input
               id="nome"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              placeholder="Ex: Qualificação"
+              placeholder="Ex: Qualificação, Negociação"
               disabled={loading}
+              maxLength={50}
+              required
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              {nome.length}/50 caracteres
+            </p>
           </div>
 
           <div>
             <Label>Cor da Etapa</Label>
-            <div className="flex gap-2 mt-2">
+            <div className="flex gap-2 mt-2 flex-wrap">
               {CORES_PADRAO.map((corPadrao) => (
                 <button
                   key={corPadrao}
                   type="button"
-                  className="w-8 h-8 rounded-full border-2 transition-all hover:scale-110"
+                  className="w-10 h-10 rounded-lg border-2 transition-all hover:scale-110 shadow-sm"
                   style={{
                     backgroundColor: corPadrao,
                     borderColor: cor === corPadrao ? "#000" : "transparent",
+                    boxShadow: cor === corPadrao ? "0 0 0 2px rgba(0,0,0,0.1)" : "none",
                   }}
                   onClick={() => setCor(corPadrao)}
                   disabled={loading}
+                  title={corPadrao}
                 />
               ))}
+              <div className="flex items-center ml-2">
+                <Input
+                  type="color"
+                  value={cor}
+                  onChange={(e) => setCor(e.target.value)}
+                  className="w-10 h-10 p-1 cursor-pointer"
+                  disabled={loading}
+                  title="Escolher cor personalizada"
+                />
+              </div>
             </div>
           </div>
 

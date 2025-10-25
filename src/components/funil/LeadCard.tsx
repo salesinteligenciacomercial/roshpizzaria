@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
+import { MoverLeadFunilDialog } from "./MoverLeadFunilDialog";
 import { useNavigate } from "react-router-dom";
 
 interface LeadCardProps {
@@ -16,11 +17,14 @@ interface LeadCardProps {
     company?: string;
     source?: string;
     tags?: string[];
+    funil_id?: string;
+    etapa_id?: string;
   };
   onDelete: (leadId: string) => void;
+  onLeadMoved?: () => void;
 }
 
-export function LeadCard({ lead, onDelete }: LeadCardProps) {
+export function LeadCard({ lead, onDelete, onLeadMoved }: LeadCardProps) {
   const navigate = useNavigate();
   
   const {
@@ -81,6 +85,13 @@ export function LeadCard({ lead, onDelete }: LeadCardProps) {
             </div>
           </div>
           <div className="flex gap-1">
+            <MoverLeadFunilDialog
+              leadId={lead.id}
+              leadNome={lead.nome}
+              funilAtualId={lead.funil_id}
+              etapaAtualId={lead.etapa_id}
+              onLeadMoved={() => onLeadMoved?.()}
+            />
             <LeadActionsDialog lead={{ id: lead.id, name: lead.nome, telefone: lead.telefone, email: lead.email }} />
             <Button
               variant="ghost"
