@@ -18,10 +18,11 @@ import {
   Building2,
   Shield
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { WhatsAppQRCode } from "@/components/configuracoes/WhatsAppQRCode";
 import { SubcontasManager } from "@/components/configuracoes/SubcontasManager";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Colaborador {
   id: string;
@@ -39,6 +40,35 @@ export default function Configuracoes() {
   const [openaiKey, setOpenaiKey] = useState("");
   const [audimaToken, setAudimaToken] = useState("");
   const [elevenlabsKey, setElevenlabsKey] = useState("");
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    checkUserRole();
+  }, []);
+
+  const checkUserRole = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id);
+
+      const hasSuperAdmin = roles?.some(r => r.role === 'super_admin');
+      setIsSuperAdmin(hasSuperAdmin || false);
+    } catch (error) {
+      console.error('Erro ao verificar role:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // Estados para Fila de Atendimento
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([
@@ -138,6 +168,16 @@ export default function Configuracoes() {
     );
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <p className="text-muted-foreground">Carregando...</p>
+      </div>
+    );
+  }
+
+  const defaultTab = isSuperAdmin ? "subcontas" : "fila";
+
   return (
     <div className="space-y-6">
       <div>
@@ -147,12 +187,14 @@ export default function Configuracoes() {
         </p>
       </div>
 
-      <Tabs defaultValue="subcontas" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="subcontas">
-            <Building2 className="mr-2 h-4 w-4" />
-            Subcontas
-          </TabsTrigger>
+      <Tabs defaultValue={defaultTab} className="w-full">
+        <TabsList className={`grid w-full ${isSuperAdmin ? 'grid-cols-6' : 'grid-cols-5'}`}>
+          {isSuperAdmin && (
+            <TabsTrigger value="subcontas">
+              <Building2 className="mr-2 h-4 w-4" />
+              Subcontas
+            </TabsTrigger>
+          )}
           <TabsTrigger value="fila">Fila de Atendimento</TabsTrigger>
           <TabsTrigger value="integrations">Integrações</TabsTrigger>
           <TabsTrigger value="tokens">Tokens de IA</TabsTrigger>
@@ -163,9 +205,11 @@ export default function Configuracoes() {
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="subcontas">
-          <SubcontasManager />
-        </TabsContent>
+        {isSuperAdmin && (
+          <TabsContent value="subcontas">
+            <SubcontasManager />
+          </TabsContent>
+        )}
 
         <TabsContent value="fila" className="space-y-4">
           <Card>
