@@ -1,8 +1,19 @@
 import { useState, useEffect } from "react";
-import { Calendar as CalendarIcon, Plus, Clock, User, Filter, Settings, Bell, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, Clock, User, Filter, Settings, Bell, CheckCircle2, XCircle, AlertCircle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +27,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseIS
 import { ptBR } from "date-fns/locale";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import { EditarCompromissoDialog } from "@/components/agenda/EditarCompromissoDialog";
 
 interface Compromisso {
   id: string;
@@ -180,6 +192,29 @@ export default function Agenda() {
     } catch (error) {
       console.error('Erro ao atualizar status:', error);
       toast.error("Erro ao atualizar status");
+    }
+  };
+
+  const deletarCompromisso = async (id: string) => {
+    try {
+      // Primeiro deletar lembretes associados
+      await supabase
+        .from('lembretes')
+        .delete()
+        .eq('compromisso_id', id);
+
+      // Depois deletar o compromisso
+      const { error } = await supabase
+        .from('compromissos')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success("Compromisso deletado com sucesso!");
+      carregarCompromissos();
+    } catch (error) {
+      console.error('Erro ao deletar compromisso:', error);
+      toast.error("Erro ao deletar compromisso");
     }
   };
 
@@ -538,12 +573,17 @@ export default function Agenda() {
                                 )}
                               </div>
                               <div className="flex gap-1">
+                                <EditarCompromissoDialog
+                                  compromisso={compromisso}
+                                  onCompromissoUpdated={carregarCompromissos}
+                                />
                                 {compromisso.status === 'agendado' && (
                                   <>
                                     <Button
                                       size="sm"
                                       variant="ghost"
                                       onClick={() => atualizarStatus(compromisso.id, 'concluido')}
+                                      title="Marcar como concluído"
                                     >
                                       <CheckCircle2 className="h-4 w-4" />
                                     </Button>
@@ -551,11 +591,41 @@ export default function Agenda() {
                                       size="sm"
                                       variant="ghost"
                                       onClick={() => atualizarStatus(compromisso.id, 'cancelado')}
+                                      title="Cancelar compromisso"
                                     >
                                       <XCircle className="h-4 w-4" />
                                     </Button>
                                   </>
                                 )}
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      title="Deletar compromisso"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Tem certeza que deseja deletar este compromisso? Esta ação não pode ser desfeita e todos os lembretes associados também serão removidos.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => deletarCompromisso(compromisso.id)}
+                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      >
+                                        Deletar
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               </div>
                             </div>
                           </CardContent>
@@ -587,7 +657,7 @@ export default function Agenda() {
                       <Card key={compromisso.id} className="border-l-4 border-l-blue-500">
                         <CardContent className="pt-4">
                           <div className="flex justify-between items-start">
-                            <div className="space-y-1">
+                            <div className="space-y-1 flex-1">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium">{compromisso.tipo_servico}</span>
                                 {getStatusBadge(compromisso.status)}
@@ -601,14 +671,47 @@ export default function Agenda() {
                                   {compromisso.lead.name}
                                 </p>
                               )}
-                            </div>
-                            {compromisso.custo_estimado && (
-                              <div className="text-right">
-                                <p className="text-sm font-medium">
+                              {compromisso.custo_estimado && (
+                                <p className="text-sm font-medium text-primary">
                                   R$ {compromisso.custo_estimado.toFixed(2)}
                                 </p>
-                              </div>
-                            )}
+                              )}
+                            </div>
+                            <div className="flex gap-1">
+                              <EditarCompromissoDialog
+                                compromisso={compromisso}
+                                onCompromissoUpdated={carregarCompromissos}
+                              />
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    title="Deletar compromisso"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Tem certeza que deseja deletar este compromisso? Esta ação não pode ser desfeita e todos os lembretes associados também serão removidos.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => deletarCompromisso(compromisso.id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Deletar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>

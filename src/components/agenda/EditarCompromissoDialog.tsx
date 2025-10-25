@@ -1,0 +1,360 @@
+import { useState, useEffect } from "react";
+import { Pencil, CalendarIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Switch } from "@/components/ui/switch";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+
+interface Compromisso {
+  id: string;
+  lead_id?: string;
+  data_hora_inicio: string;
+  data_hora_fim: string;
+  tipo_servico: string;
+  observacoes?: string;
+  custo_estimado?: number;
+  status: string;
+}
+
+interface Lead {
+  id: string;
+  name: string;
+  phone?: string;
+}
+
+interface EditarCompromissoDialogProps {
+  compromisso: Compromisso;
+  onCompromissoUpdated: () => void;
+}
+
+export function EditarCompromissoDialog({
+  compromisso,
+  onCompromissoUpdated,
+}: EditarCompromissoDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  const [leadId, setLeadId] = useState(compromisso.lead_id || "");
+  const [data, setData] = useState<Date>(parseISO(compromisso.data_hora_inicio));
+  const [horaInicio, setHoraInicio] = useState(
+    format(parseISO(compromisso.data_hora_inicio), "HH:mm")
+  );
+  const [horaFim, setHoraFim] = useState(
+    format(parseISO(compromisso.data_hora_fim), "HH:mm")
+  );
+  const [tipoServico, setTipoServico] = useState(compromisso.tipo_servico);
+  const [observacoes, setObservacoes] = useState(compromisso.observacoes || "");
+  const [custoEstimado, setCustoEstimado] = useState(
+    compromisso.custo_estimado?.toString() || ""
+  );
+
+  useEffect(() => {
+    if (open) {
+      loadLeads();
+      resetForm();
+    }
+  }, [open, compromisso]);
+
+  const resetForm = () => {
+    setLeadId(compromisso.lead_id || "");
+    setData(parseISO(compromisso.data_hora_inicio));
+    setHoraInicio(format(parseISO(compromisso.data_hora_inicio), "HH:mm"));
+    setHoraFim(format(parseISO(compromisso.data_hora_fim), "HH:mm"));
+    setTipoServico(compromisso.tipo_servico);
+    setObservacoes(compromisso.observacoes || "");
+    setCustoEstimado(compromisso.custo_estimado?.toString() || "");
+    setErrors({});
+  };
+
+  const loadLeads = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("id, name, phone")
+        .order("name");
+
+      if (error) throw error;
+      setLeads(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar leads:", error);
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    // Validar data
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const dataSelecionada = new Date(data);
+    dataSelecionada.setHours(0, 0, 0, 0);
+
+    if (dataSelecionada < hoje && compromisso.status === 'agendado') {
+      newErrors.data = "A data não pode ser no passado para compromissos agendados";
+    }
+
+    // Validar horários
+    const [horaInicioH, horaInicioM] = horaInicio.split(":").map(Number);
+    const [horaFimH, horaFimM] = horaFim.split(":").map(Number);
+    const minutosInicio = horaInicioH * 60 + horaInicioM;
+    const minutosFim = horaFimH * 60 + horaFimM;
+
+    if (minutosFim <= minutosInicio) {
+      newErrors.horaFim = "Horário de término deve ser após o início";
+    }
+
+    if (minutosFim - minutosInicio < 15) {
+      newErrors.horaFim = "Compromisso deve ter no mínimo 15 minutos";
+    }
+
+    // Validar tipo de serviço
+    if (!tipoServico.trim()) {
+      newErrors.tipoServico = "Tipo de serviço é obrigatório";
+    }
+
+    // Validar observações
+    if (observacoes.length > 500) {
+      newErrors.observacoes = "Observações devem ter no máximo 500 caracteres";
+    }
+
+    // Validar custo
+    if (custoEstimado && parseFloat(custoEstimado) < 0) {
+      newErrors.custoEstimado = "Valor não pode ser negativo";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      toast.error("Corrija os erros antes de salvar");
+      return;
+    }
+
+    try {
+      const dataFormatada = format(data, "yyyy-MM-dd");
+      const dataHoraInicio = new Date(`${dataFormatada}T${horaInicio}`);
+      const dataHoraFim = new Date(`${dataFormatada}T${horaFim}`);
+
+      const { error } = await supabase
+        .from("compromissos")
+        .update({
+          lead_id: leadId || null,
+          data_hora_inicio: dataHoraInicio.toISOString(),
+          data_hora_fim: dataHoraFim.toISOString(),
+          tipo_servico: tipoServico.trim(),
+          observacoes: observacoes.trim(),
+          custo_estimado: custoEstimado ? parseFloat(custoEstimado) : null,
+        })
+        .eq("id", compromisso.id);
+
+      if (error) throw error;
+
+      toast.success("Compromisso atualizado com sucesso!");
+      setOpen(false);
+      setErrors({});
+      onCompromissoUpdated();
+    } catch (error) {
+      console.error("Erro ao atualizar compromisso:", error);
+      toast.error("Erro ao atualizar compromisso");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => e.stopPropagation()}
+          className="h-8 w-8 p-0"
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Editar Compromisso</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label>Cliente / Lead</Label>
+            <Select value={leadId} onValueChange={setLeadId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione um cliente" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Nenhum</SelectItem>
+                {leads.map((lead) => (
+                  <SelectItem key={lead.id} value={lead.id}>
+                    {lead.name} {lead.phone && `(${lead.phone})`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label>Data *</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !data && "text-muted-foreground",
+                    errors.data && "border-destructive"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {data ? format(data, "PPP", { locale: ptBR }) : "Selecione a data"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={data}
+                  onSelect={(newDate) => {
+                    if (newDate) {
+                      setData(newDate);
+                      if (errors.data) setErrors({ ...errors, data: "" });
+                    }
+                  }}
+                  locale={ptBR}
+                  initialFocus
+                  className="pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
+            {errors.data && (
+              <p className="text-xs text-destructive mt-1">{errors.data}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Horário de início *</Label>
+              <Input
+                type="time"
+                value={horaInicio}
+                onChange={(e) => {
+                  setHoraInicio(e.target.value);
+                  if (errors.horaInicio) setErrors({ ...errors, horaInicio: "" });
+                }}
+                className={errors.horaInicio ? "border-destructive" : ""}
+              />
+              {errors.horaInicio && (
+                <p className="text-xs text-destructive mt-1">{errors.horaInicio}</p>
+              )}
+            </div>
+            <div>
+              <Label>Horário de término *</Label>
+              <Input
+                type="time"
+                value={horaFim}
+                onChange={(e) => {
+                  setHoraFim(e.target.value);
+                  if (errors.horaFim) setErrors({ ...errors, horaFim: "" });
+                }}
+                className={errors.horaFim ? "border-destructive" : ""}
+              />
+              {errors.horaFim && (
+                <p className="text-xs text-destructive mt-1">{errors.horaFim}</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label>Tipo de serviço *</Label>
+            <Select value={tipoServico} onValueChange={setTipoServico}>
+              <SelectTrigger className={errors.tipoServico ? "border-destructive" : ""}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="reuniao">Reunião</SelectItem>
+                <SelectItem value="consultoria">Consultoria</SelectItem>
+                <SelectItem value="atendimento">Atendimento</SelectItem>
+                <SelectItem value="visita">Visita</SelectItem>
+                <SelectItem value="apresentacao">Apresentação</SelectItem>
+                <SelectItem value="outro">Outro</SelectItem>
+              </SelectContent>
+            </Select>
+            {errors.tipoServico && (
+              <p className="text-xs text-destructive mt-1">{errors.tipoServico}</p>
+            )}
+          </div>
+
+          <div>
+            <Label>Valor estimado (R$)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={custoEstimado}
+              onChange={(e) => {
+                setCustoEstimado(e.target.value);
+                if (errors.custoEstimado) setErrors({ ...errors, custoEstimado: "" });
+              }}
+              className={errors.custoEstimado ? "border-destructive" : ""}
+            />
+            {errors.custoEstimado && (
+              <p className="text-xs text-destructive mt-1">{errors.custoEstimado}</p>
+            )}
+          </div>
+
+          <div>
+            <Label>Observações</Label>
+            <Textarea
+              placeholder="Observações internas sobre o compromisso..."
+              value={observacoes}
+              onChange={(e) => {
+                setObservacoes(e.target.value);
+                if (errors.observacoes) setErrors({ ...errors, observacoes: "" });
+              }}
+              rows={3}
+              className={errors.observacoes ? "border-destructive" : ""}
+            />
+            {errors.observacoes && (
+              <p className="text-xs text-destructive mt-1">{errors.observacoes}</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">
+              {observacoes.length}/500 caracteres
+            </p>
+          </div>
+
+          <Button onClick={handleSubmit} className="w-full">
+            Salvar Alterações
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
