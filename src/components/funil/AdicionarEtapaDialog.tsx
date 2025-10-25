@@ -29,8 +29,20 @@ export function AdicionarEtapaDialog({ funilId, onEtapaAdded }: AdicionarEtapaDi
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!nome.trim()) {
+    const nomeFormatado = nome.trim();
+    
+    if (!nomeFormatado) {
       toast.error("Digite o nome da etapa");
+      return;
+    }
+
+    if (nomeFormatado.length < 3) {
+      toast.error("Nome deve ter pelo menos 3 caracteres");
+      return;
+    }
+
+    if (nomeFormatado.length > 50) {
+      toast.error("Nome deve ter no máximo 50 caracteres");
       return;
     }
 
@@ -49,6 +61,20 @@ export function AdicionarEtapaDialog({ funilId, onEtapaAdded }: AdicionarEtapaDi
 
       if (!userRole) throw new Error("Empresa não encontrada");
 
+      // Verificar se já existe etapa com mesmo nome neste funil
+      const { data: etapaExistente } = await supabase
+        .from("etapas")
+        .select("id")
+        .eq("funil_id", funilId)
+        .ilike("nome", nomeFormatado)
+        .maybeSingle();
+
+      if (etapaExistente) {
+        toast.error("Já existe uma etapa com este nome neste funil");
+        setLoading(false);
+        return;
+      }
+
       // Buscar maior posição atual
       const { data: etapas } = await supabase
         .from("etapas")
@@ -61,7 +87,7 @@ export function AdicionarEtapaDialog({ funilId, onEtapaAdded }: AdicionarEtapaDi
 
       // Criar nova etapa
       const { error } = await supabase.from("etapas").insert({
-        nome: nome.trim(),
+        nome: nomeFormatado,
         cor,
         posicao: novaPosicao,
         funil_id: funilId,
@@ -70,14 +96,14 @@ export function AdicionarEtapaDialog({ funilId, onEtapaAdded }: AdicionarEtapaDi
 
       if (error) throw error;
 
-      toast.success("Etapa adicionada com sucesso!");
+      toast.success(`Etapa "${nomeFormatado}" adicionada com sucesso!`);
       setNome("");
       setCor(CORES_PADRAO[0]);
       setOpen(false);
       onEtapaAdded();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao adicionar etapa:", error);
-      toast.error("Erro ao adicionar etapa");
+      toast.error(error.message || "Erro ao adicionar etapa");
     } finally {
       setLoading(false);
     }
@@ -97,32 +123,49 @@ export function AdicionarEtapaDialog({ funilId, onEtapaAdded }: AdicionarEtapaDi
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="nome">Nome da Etapa</Label>
+            <Label htmlFor="nome">Nome da Etapa *</Label>
             <Input
               id="nome"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              placeholder="Ex: Qualificação"
+              placeholder="Ex: Qualificação, Negociação, Fechamento"
               disabled={loading}
+              maxLength={50}
+              required
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              {nome.length}/50 caracteres
+            </p>
           </div>
 
           <div>
             <Label>Cor da Etapa</Label>
-            <div className="flex gap-2 mt-2">
+            <div className="flex gap-2 mt-2 flex-wrap">
               {CORES_PADRAO.map((corPadrao) => (
                 <button
                   key={corPadrao}
                   type="button"
-                  className="w-8 h-8 rounded-full border-2 transition-all hover:scale-110"
+                  className="w-10 h-10 rounded-lg border-2 transition-all hover:scale-110 shadow-sm"
                   style={{
                     backgroundColor: corPadrao,
                     borderColor: cor === corPadrao ? "#000" : "transparent",
+                    boxShadow: cor === corPadrao ? "0 0 0 2px rgba(0,0,0,0.1)" : "none",
                   }}
                   onClick={() => setCor(corPadrao)}
                   disabled={loading}
+                  title={corPadrao}
                 />
               ))}
+              <div className="flex items-center ml-2">
+                <Input
+                  type="color"
+                  value={cor}
+                  onChange={(e) => setCor(e.target.value)}
+                  className="w-10 h-10 p-1 cursor-pointer"
+                  disabled={loading}
+                  title="Escolher cor personalizada"
+                />
+              </div>
             </div>
           </div>
 
