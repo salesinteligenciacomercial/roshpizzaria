@@ -318,14 +318,92 @@ function Conversas() {
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'conversas'
         },
-        (payload) => {
+        async (payload) => {
           console.log('📩 Nova mensagem recebida via realtime:', payload);
-          loadSupabaseConversations();
-          toast.success('Nova mensagem recebida do WhatsApp!');
+          
+          // Processar apenas a nova mensagem, sem recarregar tudo
+          if (payload.eventType === 'INSERT' && payload.new) {
+            const novaConversa = payload.new;
+            
+            // Buscar foto de perfil da nova mensagem
+            let profilePic: string | undefined;
+            try {
+              const { data: picData } = await supabase.functions.invoke('get-profile-picture', {
+                body: { numero: novaConversa.numero }
+              });
+              profilePic = picData?.profilePicUrl;
+            } catch (error) {
+              console.error('❌ Erro ao buscar foto:', error);
+            }
+            
+            // Converter para formato do componente
+            const novaConvFormatted: Conversation = {
+              id: novaConversa.numero,
+              contactName: novaConversa.nome_contato || novaConversa.numero,
+              avatarUrl: profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(novaConversa.nome_contato || novaConversa.numero)}&background=10b981&color=fff`,
+              channel: 'whatsapp' as const,
+              status: 'waiting' as const,
+              messages: [{
+                id: novaConversa.id,
+                content: novaConversa.mensagem,
+                sender: 'contact',
+                timestamp: new Date(novaConversa.created_at),
+                delivered: true,
+                type: novaConversa.tipo_mensagem === 'audio' ? 'audio' : novaConversa.tipo_mensagem === 'image' ? 'image' : 'text',
+                mediaUrl: novaConversa.midia_url,
+              }],
+              lastMessage: novaConversa.mensagem,
+              unread: 1,
+              tags: [],
+              valor: null,
+              anotacoes: null,
+            };
+            
+            // Atualizar ou adicionar conversa na lista
+            setConversations(prev => {
+              const existingIndex = prev.findIndex(c => c.id === novaConvFormatted.id);
+              
+              if (existingIndex >= 0) {
+                // Conversa já existe - adicionar mensagem
+                const updated = [...prev];
+                updated[existingIndex] = {
+                  ...updated[existingIndex],
+                  messages: [...updated[existingIndex].messages, ...novaConvFormatted.messages],
+                  lastMessage: novaConvFormatted.lastMessage,
+                  unread: updated[existingIndex].unread + 1,
+                };
+                
+                // Mover para o topo
+                const [item] = updated.splice(existingIndex, 1);
+                updated.unshift(item);
+                
+                console.log('🔄 Mensagem adicionada à conversa existente:', novaConvFormatted.contactName);
+                return updated;
+              } else {
+                // Nova conversa - adicionar no topo
+                console.log('➕ Nova conversa criada:', novaConvFormatted.contactName);
+                return [novaConvFormatted, ...prev];
+              }
+            });
+            
+            // Se a conversa está selecionada, atualizar também
+            if (selectedConv && selectedConv.id === novaConvFormatted.id) {
+              setSelectedConv(prev => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  messages: [...prev.messages, ...novaConvFormatted.messages],
+                  lastMessage: novaConvFormatted.lastMessage,
+                };
+              });
+            }
+            
+            toast.success('Nova mensagem recebida do WhatsApp!');
+          }
         }
       )
       .subscribe((status) => {
@@ -397,12 +475,14 @@ function Conversas() {
 
       console.log('🏢 Company ID do usuário:', userRole.company_id);
       
-      // Buscar APENAS conversas da company do usuário
+      // Buscar APENAS as 100 conversas mais recentes da company do usuário
+      // Limitando para evitar timeout com muitas conversas
       const { data, error } = await supabase
         .from('conversas')
         .select('*')
         .eq('company_id', userRole.company_id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100);
 
       if (error) {
         console.error('❌ [SUPABASE] Erro ao carregar conversas:', error);
