@@ -169,6 +169,7 @@ function Conversas() {
   const [verificandoLead, setVerificandoLead] = useState(false);
   const [mostrarBotaoCriarLead, setMostrarBotaoCriarLead] = useState(false);
   const [leadsVinculados, setLeadsVinculados] = useState<Record<string, string>>({}); // conversationId -> leadId
+  const [userCompanyId, setUserCompanyId] = useState<string | null>(null); // Company ID do usuário
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Estados para modais de visualização
@@ -473,6 +474,8 @@ function Conversas() {
         return;
       }
 
+      // Salvar company_id no estado
+      setUserCompanyId(userRole.company_id);
       console.log('🏢 Company ID do usuário:', userRole.company_id);
       
       // Buscar APENAS as 100 conversas mais recentes da company do usuário
@@ -957,7 +960,8 @@ function Conversas() {
           mediaBase64: base64,
           fileName: file.name,
           mimeType: file.type,
-          caption: caption || ''
+          caption: caption || '',
+          company_id: userCompanyId // IMPORTANTE: Adicionar company_id
         }
       });
 
@@ -1054,7 +1058,8 @@ function Conversas() {
           mediaBase64: base64,
           fileName: 'audio.ogg',
           mimeType: 'audio/ogg; codecs=opus',
-          caption: ''
+          caption: '',
+          company_id: userCompanyId // IMPORTANTE: Adicionar company_id
         }
       });
 
@@ -1170,6 +1175,7 @@ function Conversas() {
           numero: selectedConv.id,
           mensagem: messageContent,
           tipo_mensagem: type,
+          company_id: userCompanyId // IMPORTANTE: Adicionar company_id
         }
       });
 

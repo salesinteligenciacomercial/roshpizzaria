@@ -20,7 +20,8 @@ const enviarWhatsAppSchema = z.object({
   mediaBase64: z.string().optional(),
   fileName: z.string().optional(),
   mimeType: z.string().optional(),
-  caption: z.string().optional()
+  caption: z.string().optional(),
+  company_id: z.string().uuid('Company ID deve ser UUID válido').optional()
 }).refine(data => data.mensagem || data.mediaUrl || data.mediaBase64, {
   message: 'Mensagem, mídia URL ou mídia Base64 é obrigatória'
 });
@@ -58,10 +59,11 @@ serve(async (req) => {
     // Buscar configurações dos secrets
     const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
     const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
-    const EVOLUTION_INSTANCE = Deno.env.get("EVOLUTION_INSTANCE");
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) {
-      console.error("❌ Variáveis de ambiente não configuradas");
+    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+      console.error("❌ Variáveis de ambiente da Evolution API não configuradas");
       return new Response(
         JSON.stringify({ 
           error: "Configuração da Evolution API incompleta",
@@ -69,6 +71,53 @@ serve(async (req) => {
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Buscar instância WhatsApp da company
+    let EVOLUTION_INSTANCE: string;
+    
+    if (validatedData.company_id) {
+      console.log("🔍 Buscando instância WhatsApp para company:", validatedData.company_id);
+      
+      // Criar cliente Supabase
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+      const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
+      
+      // Buscar conexão WhatsApp ativa da company
+      const { data: connection, error: connError } = await supabase
+        .from('whatsapp_connections')
+        .select('instance_name, whatsapp_number')
+        .eq('company_id', validatedData.company_id)
+        .eq('status', 'connected')
+        .single();
+      
+      if (connError || !connection) {
+        console.error("❌ Nenhuma conexão WhatsApp ativa encontrada para esta empresa");
+        return new Response(
+          JSON.stringify({ 
+            error: "Nenhuma conexão WhatsApp ativa encontrada",
+            code: "NO_WHATSAPP_CONNECTION"
+          }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      EVOLUTION_INSTANCE = connection.instance_name;
+      console.log("✅ Instância encontrada:", EVOLUTION_INSTANCE, "- Número:", connection.whatsapp_number);
+    } else {
+      // Fallback para instância padrão (compatibilidade)
+      EVOLUTION_INSTANCE = Deno.env.get("EVOLUTION_INSTANCE") || "";
+      if (!EVOLUTION_INSTANCE) {
+        console.error("❌ Instância não especificada e sem fallback");
+        return new Response(
+          JSON.stringify({ 
+            error: "Instância WhatsApp não especificada",
+            code: "NO_INSTANCE"
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      console.log("⚠️ Usando instância padrão:", EVOLUTION_INSTANCE);
     }
 
     // Formatar número no formato correto
