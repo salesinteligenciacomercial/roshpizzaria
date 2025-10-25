@@ -150,6 +150,11 @@ serve(async (req) => {
     const webhookSecret = Deno.env.get('WEBHOOK_SECRET');
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Extrair nome da instância da URL (ex: ?instance=DO2)
+    const url = new URL(req.url);
+    const instanceName = url.searchParams.get('instance');
+    console.log('📡 Instância identificada:', instanceName || 'não especificada');
+
     // Get raw body for signature verification
     const rawBody = await req.text();
     let body;
@@ -230,46 +235,67 @@ serve(async (req) => {
       throw error;
     }
 
-    // Buscar company_id baseado no lead
+    // Buscar company_id baseado na instância primeiro
     let companyId = validatedData.company_id || null;
     let leadId = null;
+
+    // Se temos o nome da instância, buscar company por ela
+    if (instanceName && !companyId) {
+      console.log('🔍 Buscando company pela instância:', instanceName);
+      
+      const { data: whatsappConnection } = await supabase
+        .from('whatsapp_connections')
+        .select('company_id')
+        .eq('instance_name', instanceName)
+        .eq('status', 'connected')
+        .single();
+      
+      if (whatsappConnection) {
+        companyId = whatsappConnection.company_id;
+        console.log('✅ Company encontrada pela instância:', companyId);
+      } else {
+        console.warn('⚠️ Instância não encontrada ou não conectada:', instanceName);
+      }
+    }
 
     // Limpar número para buscar lead (remover caracteres especiais)
     const numeroLimpo = validatedData.numero.replace(/[^0-9]/g, '');
     console.log('🔍 Buscando lead com número:', numeroLimpo);
 
-    // Tentar encontrar lead existente pelo telefone
-    const { data: existingLead } = await supabase
-      .from('leads')
-      .select('id, company_id')
-      .eq('telefone', numeroLimpo)
-      .single();
-
-    if (existingLead) {
-      companyId = existingLead.company_id;
-      leadId = existingLead.id;
-      console.log('📌 Lead encontrado:', { leadId, companyId });
-    } else {
-      // Se não encontrou por telefone exato, tentar encontrar por padrão
-      const { data: leadByPattern } = await supabase
+    // Se temos company_id, buscar lead apenas nessa company
+    if (companyId) {
+      const { data: existingLead } = await supabase
         .from('leads')
-        .select('id, company_id, telefone')
+        .select('id, company_id')
+        .eq('company_id', companyId)
         .or(`telefone.eq.${numeroLimpo},phone.eq.${numeroLimpo}`)
         .limit(1)
         .single();
       
-      if (leadByPattern) {
-        companyId = leadByPattern.company_id;
-        leadId = leadByPattern.id;
-        console.log('📌 Lead encontrado por padrão:', { leadId, companyId });
+      if (existingLead) {
+        leadId = existingLead.id;
+        console.log('📌 Lead encontrado na company:', { leadId, companyId });
+      }
+    } else {
+      // Se não temos company, tentar encontrar lead em qualquer company
+      const { data: existingLead } = await supabase
+        .from('leads')
+        .select('id, company_id')
+        .or(`telefone.eq.${numeroLimpo},phone.eq.${numeroLimpo}`)
+        .limit(1)
+        .single();
+
+      if (existingLead) {
+        companyId = existingLead.company_id;
+        leadId = existingLead.id;
+        console.log('📌 Lead encontrado:', { leadId, companyId });
       }
     }
 
-    // Se não encontrou company pelo lead, buscar a primeira company disponível
+    // Se ainda não encontrou company, buscar a primeira company ativa
     if (!companyId) {
-      console.warn('⚠️ Company não identificada via lead');
+      console.warn('⚠️ Company não identificada - buscando company ativa');
       
-      // Buscar a primeira company ativa do sistema
       const { data: activeCompany } = await supabase
         .from('companies')
         .select('id')
