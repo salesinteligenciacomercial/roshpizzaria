@@ -22,13 +22,13 @@ interface LeadTagsDialogProps {
 
 export function LeadTagsDialog({ leadId, currentTags = [], onTagsUpdated, triggerButton }: LeadTagsDialogProps) {
   const [open, setOpen] = useState(false);
-  const [tags, setTags] = useState<string[]>(currentTags);
+  const [tags, setTags] = useState<string[]>(Array.isArray(currentTags) ? currentTags : []);
   const [newTag, setNewTag] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setTags(currentTags || []);
+      setTags(Array.isArray(currentTags) ? currentTags : []);
     }
   }, [open, currentTags]);
 
