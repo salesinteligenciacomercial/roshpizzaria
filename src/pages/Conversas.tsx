@@ -20,6 +20,7 @@ import { ConversationListItem } from "@/components/conversas/ConversationListIte
 import { MessageItem } from "@/components/conversas/MessageItem";
 import { AudioRecorder } from "@/components/conversas/AudioRecorder";
 import { MediaUpload } from "@/components/conversas/MediaUpload";
+import { NovaConversaDialog } from "@/components/conversas/NovaConversaDialog";
 import { formatPhoneNumber } from "@/utils/phoneFormatter";
 import { useLeadsSync } from "@/hooks/useLeadsSync";
 
@@ -1629,6 +1630,38 @@ function Conversas() {
                 <MessageSquare className="h-3 w-3 mr-1" />
                 {conversations.length} conversas
               </Badge>
+              <NovaConversaDialog
+                onNovaConversa={(nome, numero) => {
+                  // Verificar se já existe conversa com esse número
+                  const existente = conversations.find(c => c.id === numero || c.phoneNumber === numero);
+                  
+                  if (existente) {
+                    setSelectedConv(existente);
+                    toast.info("Conversa já existe!");
+                    return;
+                  }
+                  
+                  // Criar nova conversa
+                  const novaConversa: Conversation = {
+                    id: numero,
+                    contactName: nome,
+                    channel: "whatsapp",
+                    status: "waiting",
+                    lastMessage: "Nova conversa",
+                    unread: 0,
+                    messages: [],
+                    tags: [],
+                    phoneNumber: numero,
+                  };
+                  
+                  const updated = [novaConversa, ...conversations];
+                  setConversations(updated);
+                  setSelectedConv(novaConversa);
+                  saveConversations(updated);
+                  
+                  toast.success(`Contato ${nome} salvo!`);
+                }}
+              />
               <Button 
                 size="sm" 
                 variant="outline"
@@ -1639,7 +1672,7 @@ function Conversas() {
                 }}
                 className="gap-2"
               >
-                <MessageSquare className="h-4 w-4" />
+                <RefreshCw className="h-4 w-4" />
                 Recarregar
               </Button>
             </div>
