@@ -63,6 +63,7 @@ export function MessageItem({
 }: MessageItemProps) {
   const [showActions, setShowActions] = useState(false);
   const [dragStart, setDragStart] = useState<number | null>(null);
+  const [pdfExpanded, setPdfExpanded] = useState(false);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setDragStart(e.touches[0].clientX);
@@ -194,24 +195,52 @@ export function MessageItem({
                 <FileText className="h-5 w-5" />
                 <span className="text-sm font-medium">{message.fileName || 'Documento'}</span>
               </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => window.open(message.mediaUrl, '_blank')}
-                  className="flex-1"
-                >
-                  <FileText className="h-3 w-3 mr-2" />
-                  Abrir
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onDownload?.(message.mediaUrl!, message.fileName || 'documento.pdf')}
-                >
-                  <Download className="h-3 w-3" />
-                </Button>
-              </div>
+              
+              {pdfExpanded ? (
+                <div className="space-y-2">
+                  <iframe 
+                    src={message.mediaUrl} 
+                    className="w-full h-[500px] border border-border rounded"
+                    title="PDF Viewer"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPdfExpanded(false)}
+                      className="flex-1"
+                    >
+                      Fechar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onDownload?.(message.mediaUrl!, message.fileName || 'documento.pdf')}
+                    >
+                      <Download className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPdfExpanded(true)}
+                    className="flex-1"
+                  >
+                    <FileText className="h-3 w-3 mr-2" />
+                    Visualizar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onDownload?.(message.mediaUrl!, message.fileName || 'documento.pdf')}
+                  >
+                    <Download className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
           
