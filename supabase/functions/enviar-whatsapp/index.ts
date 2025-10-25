@@ -15,10 +15,14 @@ const enviarWhatsAppSchema = z.object({
     .min(1, 'Mensagem não pode ser vazia')
     .max(4096, 'Mensagem muito longa')
     .optional(),
-  tipo_mensagem: z.enum(['text', 'texto', 'image', 'audio', 'video', 'document']).optional(),
-  mediaUrl: z.string().url('URL de mídia inválida').optional()
-}).refine(data => data.mensagem || data.mediaUrl, {
-  message: 'Mensagem ou mídia é obrigatória'
+  tipo_mensagem: z.enum(['text', 'texto', 'image', 'audio', 'video', 'document', 'pdf']).optional(),
+  mediaUrl: z.string().url('URL de mídia inválida').optional(),
+  mediaBase64: z.string().optional(),
+  fileName: z.string().optional(),
+  mimeType: z.string().optional(),
+  caption: z.string().optional()
+}).refine(data => data.mensagem || data.mediaUrl || data.mediaBase64, {
+  message: 'Mensagem, mídia URL ou mídia Base64 é obrigatória'
 });
 
 serve(async (req) => {
@@ -77,16 +81,34 @@ serve(async (req) => {
     let evolutionUrl: string;
     let bodyPayload: any;
 
-    // Verificar se é mídia ou texto
-    if (validatedData.mediaUrl) {
-      // Enviar mídia
+    // Verificar se é mídia (base64, URL) ou texto
+    if (validatedData.mediaBase64) {
+      // Enviar mídia via base64
+      evolutionUrl = `${EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
+      
+      // Normalizar tipo de mídia
+      let mediaType = validatedData.tipo_mensagem || 'document';
+      if (mediaType === 'pdf') mediaType = 'document';
+      if (mediaType === 'texto') mediaType = 'text';
+      
+      bodyPayload = {
+        number: numeroFormatado,
+        mediatype: mediaType,
+        mimetype: validatedData.mimeType || 'application/octet-stream',
+        caption: validatedData.caption || validatedData.mensagem || "",
+        fileName: validatedData.fileName || 'arquivo',
+        media: validatedData.mediaBase64,
+      };
+      console.log(`📸 Enviando mídia base64 (${mediaType})`);
+    } else if (validatedData.mediaUrl) {
+      // Enviar mídia via URL
       evolutionUrl = `${EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
       bodyPayload = {
         number: numeroFormatado,
         mediaUrl: validatedData.mediaUrl,
-        caption: validatedData.mensagem || "",
+        caption: validatedData.mensagem || validatedData.caption || "",
       };
-      console.log("📸 Enviando mídia");
+      console.log("📸 Enviando mídia via URL");
     } else {
       // Enviar texto
       evolutionUrl = `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`;

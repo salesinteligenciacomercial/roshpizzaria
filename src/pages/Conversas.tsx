@@ -806,7 +806,7 @@ function Conversas() {
   const handleSendMedia = async (file: File, caption: string, type: string) => {
     if (!selectedConv) return;
 
-    const formattedPhone = formatPhoneNumber(selectedConv.id);
+    setSyncStatus('syncing');
 
     // Definir texto correto por tipo
     const tipoMensagem: { [key: string]: string } = {
@@ -818,41 +818,37 @@ function Conversas() {
     };
 
     try {
-      const evolutionUrl = import.meta.env.VITE_EVOLUTION_API_URL || 'https://evo.easysend.app';
-      const instanceName = import.meta.env.VITE_EVOLUTION_INSTANCE || 'easycrm';
-      const apiKey = import.meta.env.VITE_EVOLUTION_API_KEY;
+      console.log('📤 Enviando mídia via edge function...');
 
       // Converter arquivo para base64
-      const base64 = await new Promise<string>((resolve) => {
+      const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64String = reader.result as string;
           resolve(base64String.split(',')[1]);
         };
+        reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
         reader.readAsDataURL(file);
       });
 
-      const mediaMessage = {
-        number: formattedPhone,
-        mediatype: type,
-        mimetype: file.type,
-        caption: caption || '',
-        fileName: file.name,
-        media: base64,
-      };
-
-      const response = await fetch(`${evolutionUrl}/message/sendMedia/${instanceName}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': apiKey,
-        },
-        body: JSON.stringify(mediaMessage),
+      // Enviar via edge function (mais seguro)
+      const { data, error } = await supabase.functions.invoke('enviar-whatsapp', {
+        body: {
+          numero: selectedConv.id,
+          mensagem: caption || tipoMensagem[type],
+          tipo_mensagem: type,
+          mediaBase64: base64,
+          fileName: file.name,
+          mimeType: file.type,
+          caption: caption || ''
+        }
       });
 
-      if (!response.ok) {
-        throw new Error('Erro ao enviar mídia');
+      if (error) {
+        throw error;
       }
+
+      console.log('✅ Mídia enviada com sucesso');
 
       const newMessage: Message = {
         id: Date.now().toString(),
@@ -860,7 +856,7 @@ function Conversas() {
         type: type as "image" | "audio" | "pdf" | "video",
         sender: "user",
         timestamp: new Date(),
-        delivered: false,
+        delivered: true,
         read: false,
         mediaUrl: URL.createObjectURL(file),
         fileName: file.name,
@@ -883,9 +879,32 @@ function Conversas() {
         ...selectedConv,
         messages: [...selectedConv.messages, newMessage],
       });
+
+      // Salvar no Supabase
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .single();
+
+      await supabase.from('conversas').insert([{
+        numero: selectedConv.id,
+        mensagem: caption || tipoMensagem[type],
+        origem: 'WhatsApp',
+        status: 'Enviada',
+        tipo_mensagem: type,
+        nome_contato: selectedConv.contactName,
+        arquivo_nome: file.name,
+        company_id: userRole?.company_id,
+      }]);
+
+      setSyncStatus('synced');
+      setTimeout(() => setSyncStatus('idle'), 2000);
       toast.success(tipoMensagem[type] || "Mídia enviada!");
     } catch (error) {
-      console.error("Erro ao enviar mídia:", error);
+      console.error("❌ Erro ao enviar mídia:", error);
+      setSyncStatus('error');
+      setTimeout(() => setSyncStatus('idle'), 3000);
       toast.error("Erro ao enviar mídia");
     }
   };
@@ -893,41 +912,40 @@ function Conversas() {
   const handleSendAudio = async (audioBlob: Blob) => {
     if (!selectedConv) return;
 
-    const formattedPhone = formatPhoneNumber(selectedConv.id);
+    setSyncStatus('syncing');
 
     try {
-      const evolutionUrl = import.meta.env.VITE_EVOLUTION_API_URL || 'https://evo.easysend.app';
-      const instanceName = import.meta.env.VITE_EVOLUTION_INSTANCE || 'easycrm';
-      const apiKey = import.meta.env.VITE_EVOLUTION_API_KEY;
+      console.log('🎤 Enviando áudio via edge function...');
 
-      const base64 = await new Promise<string>((resolve) => {
+      // Converter áudio para base64
+      const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64String = reader.result as string;
           resolve(base64String.split(',')[1]);
         };
+        reader.onerror = () => reject(new Error('Erro ao ler áudio'));
         reader.readAsDataURL(audioBlob);
       });
 
-      const audioMessage = {
-        number: formattedPhone,
-        mediatype: 'audio',
-        mimetype: 'audio/ogg; codecs=opus',
-        media: base64,
-      };
-
-      const response = await fetch(`${evolutionUrl}/message/sendMedia/${instanceName}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': apiKey,
-        },
-        body: JSON.stringify(audioMessage),
+      // Enviar via edge function (mais seguro)
+      const { data, error } = await supabase.functions.invoke('enviar-whatsapp', {
+        body: {
+          numero: selectedConv.id,
+          mensagem: 'Áudio enviado',
+          tipo_mensagem: 'audio',
+          mediaBase64: base64,
+          fileName: 'audio.ogg',
+          mimeType: 'audio/ogg; codecs=opus',
+          caption: ''
+        }
       });
 
-      if (!response.ok) {
-        throw new Error('Erro ao enviar áudio');
+      if (error) {
+        throw error;
       }
+
+      console.log('✅ Áudio enviado com sucesso');
 
       const newMessage: Message = {
         id: Date.now().toString(),
@@ -935,7 +953,7 @@ function Conversas() {
         type: "audio",
         sender: "user",
         timestamp: new Date(),
-        delivered: false,
+        delivered: true,
         read: false,
         mediaUrl: URL.createObjectURL(audioBlob),
       };
@@ -957,9 +975,32 @@ function Conversas() {
         ...selectedConv,
         messages: [...selectedConv.messages, newMessage],
       });
+
+      // Salvar no Supabase
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .single();
+
+      await supabase.from('conversas').insert([{
+        numero: selectedConv.id,
+        mensagem: 'Áudio enviado',
+        origem: 'WhatsApp',
+        status: 'Enviada',
+        tipo_mensagem: 'audio',
+        nome_contato: selectedConv.contactName,
+        arquivo_nome: 'audio.ogg',
+        company_id: userRole?.company_id,
+      }]);
+
+      setSyncStatus('synced');
+      setTimeout(() => setSyncStatus('idle'), 2000);
       toast.success("Áudio enviado!");
     } catch (error) {
-      console.error("Erro ao enviar áudio:", error);
+      console.error("❌ Erro ao enviar áudio:", error);
+      setSyncStatus('error');
+      setTimeout(() => setSyncStatus('idle'), 3000);
       toast.error("Erro ao enviar áudio");
     }
   };
