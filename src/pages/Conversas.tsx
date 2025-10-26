@@ -10,7 +10,7 @@ import {
   MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, 
   Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon,
   Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2,
-  RefreshCw, CheckCircle2, AlertCircle
+  RefreshCw, CheckCircle2, AlertCircle, Reply
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
@@ -860,14 +860,12 @@ function Conversas() {
     }
   };
 
-  
   // Funções de mensagem
   const handleReply = (messageId: string) => {
     const message = selectedConv?.messages.find(m => m.id === messageId);
     if (message) {
       setReplyingTo(messageId);
-      setMessageInput(`↩️ Respondendo: "${message.content.substring(0, 50)}${message.content.length > 50 ? '...' : ''}"\n\n`);
-      toast.success("Digite sua resposta");
+      toast.success("Digite sua resposta abaixo");
     }
   };
 
@@ -1155,6 +1153,7 @@ function Conversas() {
       sender: "user",
       timestamp: new Date(),
       delivered: true,
+      replyTo: replyingTo || undefined,
     };
 
     const updatedConversations = conversations.map((conv) =>
@@ -2048,6 +2047,7 @@ function Conversas() {
                         <MessageItem
                           key={msg.id}
                           message={msg}
+                          allMessages={selectedConv.messages}
                           onDownload={downloadMedia}
                           onTranscribe={transcreverAudio}
                           onImageClick={(url, name) => {
@@ -2073,20 +2073,28 @@ function Conversas() {
                 {/* Input Area */}
                 <div className="bg-background border-t border-border p-4">
                   {replyingTo && (
-                    <div className="mb-2 p-2 bg-muted rounded-lg flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">
-                        ↩️ Respondendo mensagem
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setReplyingTo(null);
-                          setMessageInput("");
-                        }}
-                      >
-                        Cancelar
-                      </Button>
+                    <div className="mb-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-start gap-2 flex-1 min-w-0">
+                          <Reply className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">
+                              Respondendo mensagem
+                            </p>
+                            <p className="text-sm text-muted-foreground truncate">
+                              {selectedConv?.messages.find(m => m.id === replyingTo)?.content || ''}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setReplyingTo(null)}
+                          className="flex-shrink-0 h-7 w-7 p-0"
+                        >
+                          ✕
+                        </Button>
+                      </div>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
@@ -2106,6 +2114,7 @@ function Conversas() {
                       }} 
                       size="icon"
                       className="bg-[#25D366] hover:bg-[#128C7E] text-white"
+                      disabled={!messageInput.trim()}
                     >
                       <Send className="h-5 w-5" />
                     </Button>

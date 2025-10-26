@@ -40,6 +40,7 @@ interface Message {
 
 interface MessageItemProps {
   message: Message;
+  allMessages?: Message[];
   onDownload?: (url: string, fileName: string) => void;
   onTranscribe?: (messageId: string, audioUrl: string) => void;
   onImageClick?: (url: string, name: string) => void;
@@ -53,6 +54,7 @@ interface MessageItemProps {
 
 export function MessageItem({
   message,
+  allMessages,
   onDownload,
   onTranscribe,
   onImageClick,
@@ -66,6 +68,10 @@ export function MessageItem({
   const [showActions, setShowActions] = useState(false);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [pdfExpanded, setPdfExpanded] = useState(false);
+
+  const repliedMessage = message.replyTo && allMessages 
+    ? allMessages.find(m => m.id === message.replyTo)
+    : null;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setDragStart(e.touches[0].clientX);
@@ -101,10 +107,19 @@ export function MessageItem({
     >
       <div className="relative">
         {/* Reply indicator */}
-        {message.replyTo && (
-          <div className="text-xs text-muted-foreground mb-1 px-3 py-1 bg-muted/50 rounded-t-lg">
-            <Reply className="h-3 w-3 inline mr-1" />
-            Respondendo mensagem
+        {message.replyTo && repliedMessage && (
+          <div className="text-xs mb-1 px-3 py-2 bg-muted/70 rounded-t-lg border-l-4 border-blue-500">
+            <div className="flex items-center gap-1 mb-1">
+              <Reply className="h-3 w-3 text-blue-600" />
+              <span className="font-medium text-blue-600">
+                {repliedMessage.sender === "user" ? "Você" : "Cliente"}
+              </span>
+            </div>
+            <p className="text-muted-foreground line-clamp-2">
+              {repliedMessage.type === "text" 
+                ? repliedMessage.content
+                : `[${repliedMessage.type.toUpperCase()}]`}
+            </p>
           </div>
         )}
         
