@@ -60,11 +60,56 @@ export function EditarInformacoesLeadDialog({
 
   const carregarDados = async () => {
     try {
-      // Carregar funis e etapas
-      const { data: funisData } = await supabase.from("funis").select("*").order("criado_em");
-      const { data: etapasData } = await supabase.from("etapas").select("*").order("posicao");
+      console.log('🔄 Carregando funis e etapas do banco de dados...');
       
+      // Buscar company_id do usuário
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Usuário não autenticado");
+        return;
+      }
+
+      const { data: userRole } = await supabase
+        .from("user_roles")
+        .select("company_id")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (!userRole?.company_id) {
+        toast.error("Empresa não encontrada");
+        return;
+      }
+
+      // Carregar funis da empresa
+      const { data: funisData, error: funisError } = await supabase
+        .from("funis")
+        .select("*")
+        .eq("company_id", userRole.company_id)
+        .order("criado_em");
+
+      if (funisError) {
+        console.error('❌ Erro ao carregar funis:', funisError);
+        toast.error("Erro ao carregar funis");
+        return;
+      }
+
+      console.log('📊 Funis carregados:', funisData?.length || 0, funisData);
       setFunis(funisData || []);
+
+      // Carregar todas as etapas da empresa
+      const { data: etapasData, error: etapasError } = await supabase
+        .from("etapas")
+        .select("*")
+        .eq("company_id", userRole.company_id)
+        .order("posicao");
+
+      if (etapasError) {
+        console.error('❌ Erro ao carregar etapas:', etapasError);
+        toast.error("Erro ao carregar etapas");
+        return;
+      }
+
+      console.log('📍 Etapas carregadas:', etapasData?.length || 0, etapasData);
       setEtapas(etapasData || []);
 
       // Se existe leadId, carregar os dados completos do lead
@@ -74,7 +119,7 @@ export function EditarInformacoesLeadDialog({
           .from("leads")
           .select("*")
           .eq("id", leadId)
-          .single();
+          .maybeSingle();
 
         if (leadError) {
           console.error('❌ Erro ao carregar lead:', leadError);
@@ -83,6 +128,8 @@ export function EditarInformacoesLeadDialog({
         if (leadData) {
           console.log('✅ Dados do lead carregados:', {
             nome: leadData.name,
+            funil: leadData.funil_id,
+            etapa: leadData.etapa_id,
             tags: leadData.tags,
             totalTags: leadData.tags?.length || 0
           });
@@ -111,11 +158,17 @@ export function EditarInformacoesLeadDialog({
           nome: nomeContato,
           telefone: telefone,
           funil_id: funisData && funisData.length > 0 ? funisData[0].id : "",
+          etapa_id: "",
           tags: []
         }));
       }
+
+      // Se não há funis, avisar o usuário
+      if (!funisData || funisData.length === 0) {
+        toast.error("Nenhum funil encontrado. Crie um funil no menu Kanban primeiro.");
+      }
     } catch (error) {
-      console.error("Erro ao carregar dados:", error);
+      console.error("❌ Erro ao carregar dados:", error);
       toast.error("Erro ao carregar informações do lead");
     }
   };
@@ -254,20 +307,43 @@ export function EditarInformacoesLeadDialog({
                 value={formData.funil_id} 
                 onValueChange={(value) => {
                   console.log('📊 Funil selecionado:', value);
+                  const funilSelecionado = funis.find(f => f.id === value);
+                  console.log('📊 Funil encontrado:', funilSelecionado?.nome);
                   setFormData({ ...formData, funil_id: value, etapa_id: "" });
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Escolha um funil de vendas" />
+                  <SelectValue placeholder={
+                    funis.length === 0 
+                      ? "Nenhum funil disponível" 
+                      : "Escolha um funil de vendas"
+                  } />
                 </SelectTrigger>
                 <SelectContent>
-                  {funis.map((funil) => (
-                    <SelectItem key={funil.id} value={funil.id}>
-                      {funil.nome}
-                    </SelectItem>
-                  ))}
+                  {funis.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground text-center">
+                      <p>Nenhum funil criado</p>
+                      <p className="text-xs mt-1">Crie um funil no menu Kanban</p>
+                    </div>
+                  ) : (
+                    funis.map((funil) => (
+                      <SelectItem key={funil.id} value={funil.id}>
+                        📊 {funil.nome}
+                        {funil.descricao && (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            - {funil.descricao}
+                          </span>
+                        )}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
+              {funis.length === 0 && (
+                <p className="text-xs text-destructive mt-1">
+                  ⚠️ Crie um funil no menu Kanban para continuar
+                </p>
+              )}
             </div>
 
             <div>
