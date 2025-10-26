@@ -1702,6 +1702,13 @@ function Conversas() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado");
 
+      // Buscar company_id do lead vinculado
+      const companyId = leadVinculado.company_id;
+      if (!companyId) {
+        toast.error("Lead sem company_id associado");
+        return;
+      }
+
       // Buscar ou criar compromisso
       const dataHoraCompromisso = new Date(reminderDatetime);
       
@@ -1711,6 +1718,7 @@ function Conversas() {
           lead_id: leadVinculado.id,
           usuario_responsavel_id: user.id,
           owner_id: user.id,
+          company_id: companyId,
           data_hora_inicio: dataHoraCompromisso.toISOString(),
           data_hora_fim: new Date(dataHoraCompromisso.getTime() + 60 * 60 * 1000).toISOString(),
           tipo_servico: reminderTitle,
@@ -1732,6 +1740,7 @@ function Conversas() {
           mensagem: `Olá! Lembramos: ${reminderTitle}`,
           status_envio: 'pendente',
           destinatario: 'lead',
+          company_id: companyId,
         });
 
       if (lembreteError) throw lembreteError;
