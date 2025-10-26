@@ -8,11 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
+import { 
   MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, 
   Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon,
   Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2,
-  RefreshCw, CheckCircle2, AlertCircle, Reply
+  RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
@@ -216,6 +216,13 @@ function Conversas() {
   const [newValor, setNewValor] = useState("");
   const [newAnotacoes, setNewAnotacoes] = useState("");
   
+  // Estados para tarefas do lead
+  const [leadTasks, setLeadTasks] = useState<any[]>([]);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState("media");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+
   // Estados para funis e etapas do banco
   const [funis, setFunis] = useState<any[]>([]);
   const [etapas, setEtapas] = useState<any[]>([]);
@@ -280,6 +287,68 @@ function Conversas() {
       console.error('❌ Erro ao carregar funis e etapas:', error);
     }
   };
+
+  const carregarTarefasDoLead = async (leadId: string) => {
+    try {
+      const { data: tasks, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ Erro ao carregar tarefas:', error);
+        return;
+      }
+
+      console.log('📋 Tarefas carregadas:', tasks?.length || 0);
+      setLeadTasks(tasks || []);
+    } catch (error) {
+      console.error('❌ Erro ao carregar tarefas:', error);
+    }
+  };
+
+  // Sincronizar tarefas em tempo real quando o lead muda
+  useEffect(() => {
+    if (!leadVinculado?.id) {
+      setLeadTasks([]);
+      return;
+    }
+
+    // Carregar tarefas do lead
+    carregarTarefasDoLead(leadVinculado.id);
+
+    // Configurar subscrição em tempo real
+    const channel = supabase
+      .channel(`tasks-${leadVinculado.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+          filter: `lead_id=eq.${leadVinculado.id}`,
+        },
+        (payload) => {
+          console.log('📡 Atualização de tarefa em tempo real:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            setLeadTasks(prev => [payload.new as any, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            setLeadTasks(prev => prev.map(task => 
+              task.id === payload.new.id ? payload.new as any : task
+            ));
+          } else if (payload.eventType === 'DELETE') {
+            setLeadTasks(prev => prev.filter(task => task.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [leadVinculado?.id]);
 
   // Função para recarregar dados do lead vinculado
   const recarregarLeadVinculado = async (conversaId: string) => {
@@ -1772,7 +1841,7 @@ function Conversas() {
         setTimeout(() => setSyncStatus('idle'), 4000);
       }
       
-      // Atualizar localmente (será sincronizado via realtime)
+      // Atualizar localmente
       const updatedConversations = conversations.map((conv) =>
         conv.id === selectedConv.id
           ? { ...conv, responsavel: newResponsavel }
@@ -1787,6 +1856,113 @@ function Conversas() {
       setSyncStatus('error');
       toast.error('Erro ao atualizar responsável');
       setTimeout(() => setSyncStatus('idle'), 5000);
+    }
+  };
+
+  // Criar tarefa vinculada ao lead
+  const criarTarefaDoLead = async () => {
+    if (!selectedConv || !newTaskTitle.trim()) {
+      toast.error("Digite o título da tarefa");
+      return;
+    }
+
+    if (!leadVinculado?.id) {
+      toast.error("Nenhum lead vinculado. Crie um lead primeiro.");
+      return;
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Usuário não autenticado");
+        return;
+      }
+
+      const { data: userRole } = await supabase
+        .from("user_roles")
+        .select("company_id")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (!userRole?.company_id) {
+        toast.error("Empresa não encontrada");
+        return;
+      }
+
+      const taskData = {
+        title: newTaskTitle,
+        description: newTaskDescription || null,
+        priority: newTaskPriority,
+        due_date: newTaskDueDate || null,
+        status: 'pendente',
+        lead_id: leadVinculado.id,
+        company_id: userRole.company_id,
+        owner_id: session.user.id,
+      };
+
+      const { error } = await supabase
+        .from('tasks')
+        .insert([taskData]);
+
+      if (error) {
+        console.error('❌ Erro ao criar tarefa:', error);
+        toast.error('Erro ao criar tarefa');
+        return;
+      }
+
+      console.log('✅ Tarefa criada com sucesso');
+      toast.success('Tarefa criada!');
+      
+      // Limpar campos
+      setNewTaskTitle("");
+      setNewTaskDescription("");
+      setNewTaskPriority("media");
+      setNewTaskDueDate("");
+    } catch (error) {
+      console.error('❌ Erro ao criar tarefa:', error);
+      toast.error('Erro ao criar tarefa');
+    }
+  };
+
+  const deletarTarefa = async (taskId: string) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (error) {
+        console.error('❌ Erro ao deletar tarefa:', error);
+        toast.error('Erro ao deletar tarefa');
+        return;
+      }
+
+      console.log('✅ Tarefa deletada');
+    } catch (error) {
+      console.error('❌ Erro ao deletar tarefa:', error);
+      toast.error('Erro ao deletar tarefa');
+    }
+  };
+
+  const toggleTaskStatus = async (taskId: string, currentStatus: string) => {
+    try {
+      const newStatus = currentStatus === 'concluida' ? 'pendente' : 'concluida';
+      
+      const { error } = await supabase
+        .from('tasks')
+        .update({ status: newStatus })
+        .eq('id', taskId);
+
+      if (error) {
+        console.error('❌ Erro ao atualizar status:', error);
+        toast.error('Erro ao atualizar status');
+        return;
+      }
+
+      console.log('✅ Status atualizado');
+    } catch (error) {
+      console.error('❌ Erro ao atualizar status:', error);
+      toast.error('Erro ao atualizar status');
     }
   };
 
@@ -2987,6 +3163,168 @@ function Conversas() {
                                 Agendar Reunião
                               </Button>
                             </div>
+                          </DialogContent>
+                        </Dialog>
+
+                        {/* Tarefas do Lead */}
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start">
+                              <CheckSquare className="h-4 w-4 mr-2" /> Tarefas do Lead
+                              {leadTasks.length > 0 && (
+                                <Badge variant="secondary" className="ml-auto">
+                                  {leadTasks.filter(t => t.status !== 'concluida').length}
+                                </Badge>
+                              )}
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                            <DialogHeader>
+                              <DialogTitle>📋 Tarefas do Lead</DialogTitle>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                Gerencie as tarefas relacionadas a este lead
+                              </p>
+                            </DialogHeader>
+
+                            {!leadVinculado?.id ? (
+                              <div className="text-center py-8 text-muted-foreground">
+                                <CheckSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                                <p>Crie um lead primeiro para adicionar tarefas</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-4">
+                                {/* Criar nova tarefa */}
+                                <div className="space-y-3 p-4 border rounded-lg bg-muted/20">
+                                  <h4 className="text-sm font-semibold">Criar Nova Tarefa</h4>
+                                  <div className="space-y-2">
+                                    <Label>Título *</Label>
+                                    <Input
+                                      value={newTaskTitle}
+                                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                                      placeholder="Ex: Enviar proposta comercial"
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <Label>Descrição</Label>
+                                    <Textarea
+                                      value={newTaskDescription}
+                                      onChange={(e) => setNewTaskDescription(e.target.value)}
+                                      placeholder="Detalhes da tarefa..."
+                                      rows={2}
+                                    />
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-2">
+                                      <Label>Prioridade</Label>
+                                      <Select value={newTaskPriority} onValueChange={setNewTaskPriority}>
+                                        <SelectTrigger>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="baixa">🟢 Baixa</SelectItem>
+                                          <SelectItem value="media">🟡 Média</SelectItem>
+                                          <SelectItem value="alta">🔴 Alta</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>Data de Vencimento</Label>
+                                      <Input
+                                        type="date"
+                                        value={newTaskDueDate}
+                                        onChange={(e) => setNewTaskDueDate(e.target.value)}
+                                      />
+                                    </div>
+                                  </div>
+                                  <Button onClick={criarTarefaDoLead} className="w-full">
+                                    <CheckSquare className="h-4 w-4 mr-2" />
+                                    Criar Tarefa
+                                  </Button>
+                                </div>
+
+                                {/* Lista de tarefas */}
+                                <div className="border-t pt-4">
+                                  <h4 className="text-sm font-medium mb-3">
+                                    Tarefas ({leadTasks.length})
+                                  </h4>
+                                  {leadTasks.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground text-center py-8">
+                                      Nenhuma tarefa criada ainda
+                                    </p>
+                                  ) : (
+                                    <div className="space-y-2">
+                                      {leadTasks.map((task) => (
+                                        <div
+                                          key={task.id}
+                                          className={`p-3 border rounded-lg ${
+                                            task.status === 'concluida' 
+                                              ? 'bg-muted/50 opacity-60' 
+                                              : 'bg-background'
+                                          }`}
+                                        >
+                                          <div className="flex items-start gap-3">
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-6 w-6 mt-0.5"
+                                              onClick={() => toggleTaskStatus(task.id, task.status)}
+                                            >
+                                              {task.status === 'concluida' ? (
+                                                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                              ) : (
+                                                <div className="h-5 w-5 border-2 rounded-full" />
+                                              )}
+                                            </Button>
+                                            <div className="flex-1 min-w-0">
+                                              <p className={`text-sm font-medium ${
+                                                task.status === 'concluida' ? 'line-through' : ''
+                                              }`}>
+                                                {task.title}
+                                              </p>
+                                              {task.description && (
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                  {task.description}
+                                                </p>
+                                              )}
+                                              <div className="flex items-center gap-2 mt-2">
+                                                {task.priority === 'alta' && (
+                                                  <Badge variant="destructive" className="text-xs">
+                                                    🔴 Alta
+                                                  </Badge>
+                                                )}
+                                                {task.priority === 'media' && (
+                                                  <Badge variant="secondary" className="text-xs">
+                                                    🟡 Média
+                                                  </Badge>
+                                                )}
+                                                {task.priority === 'baixa' && (
+                                                  <Badge variant="outline" className="text-xs">
+                                                    🟢 Baixa
+                                                  </Badge>
+                                                )}
+                                                {task.due_date && (
+                                                  <span className="text-xs text-muted-foreground">
+                                                    📅 {new Date(task.due_date).toLocaleDateString('pt-BR')}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-8 w-8"
+                                              onClick={() => deletarTarefa(task.id)}
+                                            >
+                                              <X className="h-4 w-4" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </DialogContent>
                         </Dialog>
 
