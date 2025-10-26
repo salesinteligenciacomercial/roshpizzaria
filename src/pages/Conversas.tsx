@@ -112,10 +112,21 @@ interface ScheduledMessage {
 
 interface Meeting {
   id: string;
-  conversationId: string;
-  title: string;
-  datetime: string;
-  notes: string;
+  lead_id?: string;
+  usuario_responsavel_id: string;
+  data_hora_inicio: string;
+  data_hora_fim: string;
+  tipo_servico: string;
+  status: string;
+  observacoes?: string;
+  custo_estimado?: number;
+  lembrete_enviado: boolean;
+  created_at: string;
+  company_id?: string;
+  lead?: {
+    name: string;
+    phone?: string;
+  };
 }
 
 const CONVERSATIONS_KEY = "continuum_conversations";
@@ -1026,9 +1037,27 @@ function Conversas() {
     }
   };
 
-  const loadMeetings = () => {
-    const saved = localStorage.getItem(MEETINGS_KEY);
-    if (saved) setMeetings(JSON.parse(saved));
+  const loadMeetings = async () => {
+    if (!leadVinculado?.id) {
+      setMeetings([]);
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('compromissos')
+        .select(`
+          *,
+          lead:leads(name, phone)
+        `)
+        .eq('lead_id', leadVinculado.id)
+        .order('data_hora_inicio', { ascending: false });
+
+      if (error) throw error;
+      setMeetings(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar reuniões:', error);
+    }
   };
 
   const loadAiMode = () => {
@@ -1050,11 +1079,6 @@ function Conversas() {
   const saveQuickCategories = (updated: QuickMessageCategory[]) => {
     localStorage.setItem(QUICK_CATEGORIES_KEY, JSON.stringify(updated));
     setQuickCategories(updated);
-  };
-
-  const saveMeetings = (updated: Meeting[]) => {
-    localStorage.setItem(MEETINGS_KEY, JSON.stringify(updated));
-    setMeetings(updated);
   };
 
   const saveAiMode = (updated: Record<string, boolean>) => {
@@ -1895,23 +1919,57 @@ function Conversas() {
     };
   }, [selectedConv?.id]);
 
-  const scheduleMeeting = () => {
+  const scheduleMeeting = async () => {
     if (!selectedConv || !meetingTitle.trim() || !meetingDatetime) {
       toast.error("Preencha todos os campos");
       return;
     }
-    const newMeeting: Meeting = {
-      id: Date.now().toString(),
-      conversationId: selectedConv.id,
-      title: meetingTitle,
-      datetime: meetingDatetime,
-      notes: meetingNotes,
-    };
-    saveMeetings([...meetings, newMeeting]);
-    setMeetingTitle("");
-    setMeetingDatetime("");
-    setMeetingNotes("");
-    toast.success("Reunião agendada!");
+    
+    if (!leadVinculado?.id) {
+      toast.error("Vincule um lead primeiro");
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
+      // Buscar company_id do lead vinculado
+      const companyId = leadVinculado.company_id;
+      if (!companyId) {
+        toast.error("Lead sem company_id associado");
+        return;
+      }
+
+      // Criar compromisso/reunião
+      const dataHoraInicio = new Date(meetingDatetime);
+      const dataHoraFim = new Date(dataHoraInicio.getTime() + 60 * 60 * 1000); // 1 hora de duração
+      
+      const { error } = await supabase
+        .from('compromissos')
+        .insert({
+          lead_id: leadVinculado.id,
+          usuario_responsavel_id: user.id,
+          owner_id: user.id,
+          company_id: companyId,
+          data_hora_inicio: dataHoraInicio.toISOString(),
+          data_hora_fim: dataHoraFim.toISOString(),
+          tipo_servico: meetingTitle,
+          observacoes: meetingNotes,
+          status: 'agendado',
+        });
+
+      if (error) throw error;
+
+      setMeetingTitle("");
+      setMeetingDatetime("");
+      setMeetingNotes("");
+      toast.success("Reunião agendada e sincronizada com Agenda!");
+      loadMeetings();
+    } catch (error) {
+      console.error('Erro ao agendar reunião:', error);
+      toast.error("Erro ao agendar reunião");
+    }
   };
 
   const addTag = async () => {
@@ -3560,42 +3618,129 @@ function Conversas() {
                         <Dialog>
                           <DialogTrigger asChild>
                             <Button variant="outline" className="w-full justify-start">
-                              <Calendar className="h-4 w-4 mr-2" /> Agendar Reunião
+                              <Calendar className="h-4 w-4 mr-2" /> Gerenciar Reuniões
                             </Button>
                           </DialogTrigger>
-                          <DialogContent>
+                          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                             <DialogHeader>
-                              <DialogTitle>Agendar Reunião</DialogTitle>
+                              <DialogTitle>Reuniões e Compromissos</DialogTitle>
                             </DialogHeader>
-                            <div className="space-y-4">
-                              <div>
-                                <Label>Título da Reunião</Label>
-                                <Input
-                                  value={meetingTitle}
-                                  onChange={(e) => setMeetingTitle(e.target.value)}
-                                  placeholder="Ex: Apresentação de proposta"
-                                />
-                              </div>
-                              <div>
-                                <Label>Data e Hora</Label>
-                                <Input
-                                  type="datetime-local"
-                                  value={meetingDatetime}
-                                  onChange={(e) => setMeetingDatetime(e.target.value)}
-                                />
-                              </div>
-                              <div>
-                                <Label>Observações</Label>
-                                <Textarea
-                                  value={meetingNotes}
-                                  onChange={(e) => setMeetingNotes(e.target.value)}
-                                  placeholder="Pauta, participantes, etc..."
-                                />
-                              </div>
-                              <Button onClick={scheduleMeeting} className="w-full">
-                                Agendar Reunião
-                              </Button>
-                            </div>
+                            
+                            <Tabs defaultValue="criar" className="w-full">
+                              <TabsList className="grid w-full grid-cols-2">
+                                <TabsTrigger value="criar">Agendar Nova</TabsTrigger>
+                                <TabsTrigger value="historico">
+                                  Histórico ({meetings.length})
+                                </TabsTrigger>
+                              </TabsList>
+
+                              <TabsContent value="criar" className="space-y-4">
+                                <div>
+                                  <Label>Título da Reunião</Label>
+                                  <Input
+                                    value={meetingTitle}
+                                    onChange={(e) => setMeetingTitle(e.target.value)}
+                                    placeholder="Ex: Apresentação de proposta"
+                                  />
+                                </div>
+                                <div>
+                                  <Label>Data e Hora</Label>
+                                  <Input
+                                    type="datetime-local"
+                                    value={meetingDatetime}
+                                    onChange={(e) => setMeetingDatetime(e.target.value)}
+                                  />
+                                </div>
+                                <div>
+                                  <Label>Observações</Label>
+                                  <Textarea
+                                    value={meetingNotes}
+                                    onChange={(e) => setMeetingNotes(e.target.value)}
+                                    placeholder="Pauta, participantes, etc..."
+                                  />
+                                </div>
+                                {!leadVinculado && (
+                                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md">
+                                    <p className="text-sm text-yellow-600">
+                                      ⚠️ Vincule um lead primeiro para agendar reuniões
+                                    </p>
+                                  </div>
+                                )}
+                                <Button 
+                                  onClick={scheduleMeeting} 
+                                  className="w-full"
+                                  disabled={!leadVinculado}
+                                >
+                                  Agendar Reunião
+                                </Button>
+                              </TabsContent>
+
+                              <TabsContent value="historico" className="space-y-4">
+                                <ScrollArea className="h-[400px]">
+                                  {meetings.length === 0 ? (
+                                    <div className="text-center py-12 text-muted-foreground">
+                                      <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                                      <p>Nenhuma reunião agendada</p>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      {meetings.map((meeting) => (
+                                        <Card key={meeting.id} className={`border-l-4 ${
+                                          meeting.status === 'concluido' ? 'border-l-green-500' :
+                                          meeting.status === 'agendado' ? 'border-l-blue-500' :
+                                          'border-l-red-500'
+                                        }`}>
+                                          <CardContent className="pt-4">
+                                            <div className="space-y-2">
+                                              <div className="flex justify-between items-start">
+                                                <div className="space-y-1 flex-1">
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="font-medium">
+                                                      {meeting.tipo_servico}
+                                                    </span>
+                                                    <Badge variant={
+                                                      meeting.status === 'concluido' ? 'default' :
+                                                      meeting.status === 'agendado' ? 'secondary' :
+                                                      'destructive'
+                                                    }>
+                                                      {meeting.status === 'concluido' ? '✓ Concluído' :
+                                                       meeting.status === 'agendado' ? '📅 Agendado' :
+                                                       '✗ Cancelado'}
+                                                    </Badge>
+                                                  </div>
+                                                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                                    <Clock className="h-3 w-3" />
+                                                    {format(parseISO(meeting.data_hora_inicio), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                                                    {' - '}
+                                                    {format(parseISO(meeting.data_hora_fim), "HH:mm", { locale: ptBR })}
+                                                  </p>
+                                                  {meeting.lead && (
+                                                    <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                                      <User className="h-3 w-3" />
+                                                      {meeting.lead.name}
+                                                    </p>
+                                                  )}
+                                                  {meeting.custo_estimado && (
+                                                    <p className="text-sm text-muted-foreground">
+                                                      <strong>Valor:</strong> R$ {meeting.custo_estimado.toFixed(2)}
+                                                    </p>
+                                                  )}
+                                                  {meeting.observacoes && (
+                                                    <p className="text-xs text-muted-foreground mt-2 p-2 bg-muted rounded">
+                                                      {meeting.observacoes}
+                                                    </p>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </CardContent>
+                                        </Card>
+                                      ))}
+                                    </div>
+                                  )}
+                                </ScrollArea>
+                              </TabsContent>
+                            </Tabs>
                           </DialogContent>
                         </Dialog>
 
