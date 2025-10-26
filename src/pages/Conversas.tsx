@@ -869,8 +869,9 @@ function Conversas() {
     }
   };
 
-  const handleEdit = (messageId: string, newContent: string) => {
+  const handleEdit = async (messageId: string, newContent: string) => {
     if (!selectedConv) return;
+    
     const updated = conversations.map(conv => 
       conv.id === selectedConv.id ? {
         ...conv,
@@ -886,7 +887,28 @@ function Conversas() {
         msg.id === messageId ? { ...msg, content: newContent, edited: true } : msg
       )
     });
-    toast.success("Mensagem editada com sucesso");
+    
+    // Enviar mensagem editada via WhatsApp
+    try {
+      const { error } = await supabase.functions.invoke('enviar-whatsapp', {
+        body: {
+          numero: selectedConv.id,
+          mensagem: `✏️ *[Mensagem editada]*\n\n${newContent}`,
+          tipo_mensagem: 'text',
+          company_id: userCompanyId
+        }
+      });
+
+      if (error) {
+        console.error('Erro ao enviar edição para WhatsApp:', error);
+        toast.error('Mensagem editada localmente, mas não enviada ao WhatsApp');
+      } else {
+        toast.success("Mensagem editada e enviada ao cliente!");
+      }
+    } catch (error) {
+      console.error('Erro ao processar edição:', error);
+      toast.error('Mensagem editada localmente');
+    }
   };
 
   const handleDelete = (messageId: string, forEveryone: boolean) => {
@@ -1176,14 +1198,30 @@ function Conversas() {
       status: "answered",
     });
     setMessageInput("");
+    
+    // Preparar dados para envio via WhatsApp
+    const mensagemParaEnviar = replyingTo && selectedConv.messages.find(m => m.id === replyingTo)
+      ? {
+          mensagem: messageContent,
+          quoted: {
+            key: {
+              id: replyingTo
+            },
+            message: {
+              conversation: selectedConv.messages.find(m => m.id === replyingTo)?.content || ''
+            }
+          }
+        }
+      : { mensagem: messageContent };
+    
     // Enviar mensagem via Evolution API
     try {
       const { data, error } = await supabase.functions.invoke('enviar-whatsapp', {
         body: {
           numero: selectedConv.id,
-          mensagem: messageContent,
+          ...mensagemParaEnviar,
           tipo_mensagem: type,
-          company_id: userCompanyId // IMPORTANTE: Adicionar company_id
+          company_id: userCompanyId
         }
       });
 

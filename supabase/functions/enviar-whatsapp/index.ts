@@ -21,7 +21,15 @@ const enviarWhatsAppSchema = z.object({
   fileName: z.string().optional(),
   mimeType: z.string().optional(),
   caption: z.string().optional(),
-  company_id: z.string().uuid('Company ID deve ser UUID válido').optional()
+  company_id: z.string().uuid('Company ID deve ser UUID válido').optional(),
+  quoted: z.object({
+    key: z.object({
+      id: z.string()
+    }),
+    message: z.object({
+      conversation: z.string()
+    })
+  }).optional()
 }).refine(data => data.mensagem || data.mediaUrl || data.mediaBase64, {
   message: 'Mensagem, mídia URL ou mídia Base64 é obrigatória'
 });
@@ -217,7 +225,14 @@ serve(async (req) => {
         number: numeroFormatado,
         text: validatedData.mensagem,
       };
-      console.log("💬 Enviando texto");
+      
+      // Adicionar mensagem citada se houver
+      if (validatedData.quoted) {
+        bodyPayload.quoted = validatedData.quoted;
+        console.log("💬 Enviando texto com citação");
+      } else {
+        console.log("💬 Enviando texto");
+      }
     }
 
     // Enviar para Evolution API
