@@ -12,7 +12,7 @@ import {
   MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, 
   Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon,
   Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2,
-  RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X
+  RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
@@ -2879,45 +2879,57 @@ function Conversas() {
                               </TabsList>
                               
                               <TabsContent value="messages" className="space-y-4">
-                                {/* Criar nova mensagem */}
-                                <div className="space-y-3 p-4 border rounded-lg bg-muted/20">
-                                  <h4 className="text-sm font-semibold">Criar Nova Mensagem</h4>
-                                  <div className="space-y-2">
-                                    <Label>Categoria *</Label>
-                                    <Select value={newQuickCategory} onValueChange={setNewQuickCategory}>
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Selecione a categoria" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {quickCategories.map((cat) => (
-                                          <SelectItem key={cat.id} value={cat.id}>
-                                            {cat.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div className="space-y-2">
-                                    <Label>Título *</Label>
-                                    <Input
-                                      value={newQuickTitle}
-                                      onChange={(e) => setNewQuickTitle(e.target.value)}
-                                      placeholder="Ex: Saudação"
-                                    />
-                                  </div>
-                                  <div className="space-y-2">
-                                    <Label>Mensagem *</Label>
-                                    <Textarea
-                                      value={newQuickContent}
-                                      onChange={(e) => setNewQuickContent(e.target.value)}
-                                      placeholder="Digite a mensagem..."
-                                      rows={3}
-                                    />
-                                  </div>
-                                  <Button onClick={addQuickMessage} className="w-full">
-                                    Criar Mensagem Rápida
-                                  </Button>
-                                </div>
+                                {/* Botão para criar nova mensagem */}
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button className="w-full">
+                                      <Plus className="h-4 w-4 mr-2" />
+                                      Criar Nova Mensagem
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>Criar Nova Mensagem</DialogTitle>
+                                    </DialogHeader>
+                                    <div className="space-y-3">
+                                      <div className="space-y-2">
+                                        <Label>Categoria *</Label>
+                                        <Select value={newQuickCategory} onValueChange={setNewQuickCategory}>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="Selecione a categoria" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {quickCategories.map((cat) => (
+                                              <SelectItem key={cat.id} value={cat.id}>
+                                                {cat.name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label>Título *</Label>
+                                        <Input
+                                          value={newQuickTitle}
+                                          onChange={(e) => setNewQuickTitle(e.target.value)}
+                                          placeholder="Ex: Saudação"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label>Mensagem *</Label>
+                                        <Textarea
+                                          value={newQuickContent}
+                                          onChange={(e) => setNewQuickContent(e.target.value)}
+                                          placeholder="Digite a mensagem..."
+                                          rows={3}
+                                        />
+                                      </div>
+                                      <Button onClick={addQuickMessage} className="w-full">
+                                        Criar Mensagem Rápida
+                                      </Button>
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
 
                                 {/* Mensagens organizadas por categoria */}
                                 <div className="border-t pt-4">
