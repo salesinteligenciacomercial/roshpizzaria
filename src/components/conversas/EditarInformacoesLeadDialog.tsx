@@ -67,15 +67,26 @@ export function EditarInformacoesLeadDialog({
       setFunis(funisData || []);
       setEtapas(etapasData || []);
 
-      // Se existe leadId, carregar os dados do lead
+      // Se existe leadId, carregar os dados completos do lead
       if (leadId) {
-        const { data: leadData } = await supabase
+        console.log('📋 Carregando dados do lead:', leadId);
+        const { data: leadData, error: leadError } = await supabase
           .from("leads")
           .select("*")
           .eq("id", leadId)
           .single();
 
+        if (leadError) {
+          console.error('❌ Erro ao carregar lead:', leadError);
+        }
+
         if (leadData) {
+          console.log('✅ Dados do lead carregados:', {
+            nome: leadData.name,
+            tags: leadData.tags,
+            totalTags: leadData.tags?.length || 0
+          });
+          
           setFormData({
             nome: leadData.name || nomeContato,
             telefone: leadData.telefone || telefone,
@@ -87,22 +98,25 @@ export function EditarInformacoesLeadDialog({
             notes: leadData.notes || "",
             funil_id: leadData.funil_id || (funisData && funisData.length > 0 ? funisData[0].id : ""),
             etapa_id: leadData.etapa_id || "",
-            tags: leadData.tags || [],
+            tags: Array.isArray(leadData.tags) ? leadData.tags : [],
             servico: leadData.servico || "",
             segmentacao: leadData.segmentacao || ""
           });
         }
       } else {
+        console.log('ℹ️ Nenhum lead vinculado, iniciando com dados básicos');
         // Resetar para dados básicos da conversa
         setFormData(prev => ({
           ...prev,
           nome: nomeContato,
           telefone: telefone,
-          funil_id: funisData && funisData.length > 0 ? funisData[0].id : ""
+          funil_id: funisData && funisData.length > 0 ? funisData[0].id : "",
+          tags: []
         }));
       }
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
+      toast.error("Erro ao carregar informações do lead");
     }
   };
 
@@ -169,28 +183,37 @@ export function EditarInformacoesLeadDialog({
 
       if (leadId) {
         // Atualizar lead existente
+        console.log('🔄 Atualizando lead:', leadId, {
+          tags: leadDataToSave.tags,
+          totalTags: leadDataToSave.tags?.length || 0
+        });
+        
         const { error } = await supabase
           .from("leads")
           .update(leadDataToSave)
           .eq("id", leadId);
 
         if (error) {
-          console.error("Erro ao atualizar lead:", error);
+          console.error("❌ Erro ao atualizar lead:", error);
           throw error;
         }
 
+        console.log('✅ Lead atualizado com sucesso');
         toast.success("Informações atualizadas com sucesso!");
       } else {
         // Criar novo lead
+        console.log('➕ Criando novo lead com tags:', leadDataToSave.tags);
+        
         const { error } = await supabase
           .from("leads")
           .insert([leadDataToSave]);
 
         if (error) {
-          console.error("Erro ao criar lead:", error);
+          console.error("❌ Erro ao criar lead:", error);
           throw error;
         }
 
+        console.log('✅ Lead criado com sucesso');
         toast.success("Lead criado com sucesso!");
       }
 
@@ -372,8 +395,11 @@ export function EditarInformacoesLeadDialog({
                     e.preventDefault();
                     const tagTrimmed = newTag.trim();
                     if (tagTrimmed && !formData.tags.includes(tagTrimmed)) {
+                      console.log('➕ Adicionando tag:', tagTrimmed);
                       setFormData({ ...formData, tags: [...formData.tags, tagTrimmed] });
                       setNewTag("");
+                    } else if (formData.tags.includes(tagTrimmed)) {
+                      toast.error("Esta tag já foi adicionada");
                     }
                   }
                 }}
@@ -385,8 +411,11 @@ export function EditarInformacoesLeadDialog({
                 onClick={() => {
                   const tagTrimmed = newTag.trim();
                   if (tagTrimmed && !formData.tags.includes(tagTrimmed)) {
+                    console.log('➕ Adicionando tag:', tagTrimmed);
                     setFormData({ ...formData, tags: [...formData.tags, tagTrimmed] });
                     setNewTag("");
+                  } else if (tagTrimmed && formData.tags.includes(tagTrimmed)) {
+                    toast.error("Esta tag já foi adicionada");
                   }
                 }}
               >
@@ -397,8 +426,8 @@ export function EditarInformacoesLeadDialog({
               {formData.tags.length === 0 ? (
                 <p className="text-xs text-muted-foreground">Nenhuma tag adicionada</p>
               ) : (
-                formData.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="gap-1">
+                formData.tags.map((tag, index) => (
+                  <Badge key={`${tag}-${index}`} variant="secondary" className="gap-1">
                     <Tag className="h-3 w-3" />
                     {tag}
                     <Button
@@ -407,6 +436,7 @@ export function EditarInformacoesLeadDialog({
                       size="icon"
                       className="h-4 w-4 p-0 hover:bg-transparent"
                       onClick={() => {
+                        console.log('🗑️ Removendo tag:', tag);
                         setFormData({ ...formData, tags: formData.tags.filter(t => t !== tag) });
                       }}
                     >
@@ -416,6 +446,11 @@ export function EditarInformacoesLeadDialog({
                 ))
               )}
             </div>
+            {leadId && (
+              <p className="text-xs text-muted-foreground mt-2">
+                💡 As tags são sincronizadas com o funil de vendas e menu de leads
+              </p>
+            )}
           </div>
 
           <div className="flex gap-2 pt-4">
