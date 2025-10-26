@@ -407,7 +407,48 @@ function Conversas() {
               });
             }
             
-            toast.success('Nova mensagem recebida do WhatsApp!');
+            // Notificar APENAS se for mensagem RECEBIDA do cliente (não quando o CRM envia)
+            if (novaConversa.status === 'Recebida' && novaConversa.origem === 'WhatsApp') {
+              toast.custom((t) => (
+                <div className="bg-card border border-border rounded-lg shadow-lg p-4 max-w-md animate-slide-in-right">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
+                      {novaConvFormatted.contactName.charAt(0).toUpperCase()}
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-semibold text-foreground">
+                          Nova mensagem de {novaConvFormatted.contactName}
+                        </p>
+                        <button
+                          onClick={() => toast.dismiss(t)}
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      
+                      <p className="text-sm text-muted-foreground truncate mb-3">
+                        {novaConversa.mensagem}
+                      </p>
+                      
+                      <button
+                        onClick={() => {
+                          setSelectedConv(novaConvFormatted);
+                          toast.dismiss(t);
+                        }}
+                        className="w-full px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+                      >
+                        💬 Visualizar e Responder
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ), {
+                duration: 8000,
+              });
+            }
           }
         }
       )
@@ -1051,7 +1092,9 @@ function Conversas() {
 
       setSyncStatus('synced');
       setTimeout(() => setSyncStatus('idle'), 4000);
-      toast.success(tipoMensagem[type] || "Mídia enviada!");
+      
+      // Não mostrar notificação ao enviar mídia - apenas logs
+      console.log('✅ Mídia enviada com sucesso');
     } catch (error) {
       console.error("❌ Erro ao enviar mídia:", error);
       setSyncStatus('error');
@@ -1148,7 +1191,9 @@ function Conversas() {
 
       setSyncStatus('synced');
       setTimeout(() => setSyncStatus('idle'), 4000);
-      toast.success("Áudio enviado!");
+      
+      // Não mostrar notificação ao enviar áudio - apenas logs
+      console.log('✅ Áudio enviado com sucesso');
     } catch (error) {
       console.error("❌ Erro ao enviar áudio:", error);
       setSyncStatus('error');
@@ -1233,7 +1278,9 @@ function Conversas() {
       }
 
       console.log('✅ Resposta Evolution API:', data);
-      toast.success("Mensagem enviada para WhatsApp!");
+      
+      // Não mostrar notificação ao enviar - apenas logs
+      console.log('✅ Mensagem enviada para WhatsApp com sucesso');
 
       // Buscar company_id do usuário
       const { data: userRole } = await supabase
