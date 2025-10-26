@@ -203,9 +203,71 @@ function Conversas() {
   const [newProduto, setNewProduto] = useState("");
   const [newValor, setNewValor] = useState("");
   const [newAnotacoes, setNewAnotacoes] = useState("");
+  
+  // Estados para funis e etapas do banco
+  const [funis, setFunis] = useState<any[]>([]);
+  const [etapas, setEtapas] = useState<any[]>([]);
+  const [selectedFunilId, setSelectedFunilId] = useState("");
+  const [etapasFiltradas, setEtapasFiltradas] = useState<any[]>([]);
 
   const funnelStages = ["Novo", "Qualificado", "Em Negociação", "Fechado", "Perdido"];
   const usuarios = ["Você", "Ana Costa", "Pedro Lima", "Julia Santos", "Carlos Mendes"];
+
+  // Carregar funis e etapas ao montar o componente
+  useEffect(() => {
+    carregarFunisEEtapas();
+  }, []);
+
+  // Filtrar etapas quando funil é selecionado
+  useEffect(() => {
+    if (selectedFunilId) {
+      const filtered = etapas.filter(e => e.funil_id === selectedFunilId);
+      setEtapasFiltradas(filtered);
+    } else {
+      setEtapasFiltradas([]);
+    }
+  }, [selectedFunilId, etapas]);
+
+  const carregarFunisEEtapas = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data: userRole } = await supabase
+        .from("user_roles")
+        .select("company_id")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (!userRole?.company_id) return;
+
+      // Carregar funis
+      const { data: funisData, error: funisError } = await supabase
+        .from("funis")
+        .select("*")
+        .eq("company_id", userRole.company_id)
+        .order("criado_em");
+
+      if (!funisError && funisData) {
+        console.log('📊 Funis carregados:', funisData.length);
+        setFunis(funisData);
+      }
+
+      // Carregar etapas
+      const { data: etapasData, error: etapasError } = await supabase
+        .from("etapas")
+        .select("*")
+        .eq("company_id", userRole.company_id)
+        .order("posicao");
+
+      if (!etapasError && etapasData) {
+        console.log('📍 Etapas carregadas:', etapasData.length);
+        setEtapas(etapasData);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar funis e etapas:', error);
+    }
+  };
 
   // Integrar sincronização de leads em tempo real
   useLeadsSync({
@@ -1518,8 +1580,8 @@ function Conversas() {
   };
 
   const addToFunnel = async () => {
-    if (!selectedConv || !selectedFunnel) {
-      toast.error("Selecione um estágio");
+    if (!selectedConv || !selectedFunilId || !selectedFunnel) {
+      toast.error("Selecione o funil e a etapa");
       return;
     }
     
@@ -1530,35 +1592,43 @@ function Conversas() {
       const leadData = await findOrCreateLead(selectedConv);
       
       if (leadData) {
-        // Atualizar estágio no Supabase
+        // Atualizar funil e etapa no Supabase
         const { error } = await supabase
           .from('leads')
-          .update({ stage: selectedFunnel.toLowerCase() })
+          .update({ 
+            funil_id: selectedFunilId,
+            etapa_id: selectedFunnel,
+          })
           .eq('id', leadData.id);
         
         if (error) {
           console.error('Erro ao atualizar funil no Supabase:', error);
           setSyncStatus('error');
-          toast.error('Erro ao salvar estágio');
+          toast.error('Erro ao salvar no funil');
           setTimeout(() => setSyncStatus('idle'), 5000);
           return;
         }
         
-        console.log('✅ Estágio atualizado no Supabase');
+        console.log('✅ Lead adicionado ao funil no Supabase');
         setSyncStatus('synced');
         setTimeout(() => setSyncStatus('idle'), 4000);
       }
       
+      // Buscar nome da etapa para exibição local
+      const etapaSelecionada = etapas.find(e => e.id === selectedFunnel);
+      const nomeEtapa = etapaSelecionada?.nome || "Adicionado";
+      
       // Atualizar localmente (será sincronizado via realtime)
       const updatedConversations = conversations.map((conv) =>
         conv.id === selectedConv.id
-          ? { ...conv, funnelStage: selectedFunnel }
+          ? { ...conv, funnelStage: nomeEtapa }
           : conv
       );
       saveConversations(updatedConversations);
-      setSelectedConv({ ...selectedConv, funnelStage: selectedFunnel });
+      setSelectedConv({ ...selectedConv, funnelStage: nomeEtapa });
+      setSelectedFunilId("");
       setSelectedFunnel("");
-      toast.success("Adicionado ao funil!");
+      toast.success(`Lead adicionado ao funil!`);
     } catch (error) {
       console.error('Erro ao adicionar ao funil:', error);
       setSyncStatus('error');
@@ -2388,19 +2458,90 @@ function Conversas() {
                         <DialogContent>
                           <DialogHeader>
                             <DialogTitle>Adicionar ao Funil</DialogTitle>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Selecione o funil de vendas e a etapa para adicionar este lead
+                            </p>
                           </DialogHeader>
-                          <Select value={selectedFunnel} onValueChange={setSelectedFunnel}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o estágio" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {funnelStages.map((stage) => (
-                                <SelectItem key={stage} value={stage}>
-                                  {stage}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          
+                          <div className="space-y-4">
+                            <div>
+                              <Label htmlFor="funil-select">Funil de Vendas *</Label>
+                              <Select value={selectedFunilId} onValueChange={setSelectedFunilId}>
+                                <SelectTrigger id="funil-select">
+                                  <SelectValue placeholder={
+                                    funis.length === 0 
+                                      ? "Nenhum funil disponível" 
+                                      : "Escolha um funil"
+                                  } />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {funis.length === 0 ? (
+                                    <div className="p-2 text-sm text-muted-foreground text-center">
+                                      <p>Nenhum funil criado</p>
+                                      <p className="text-xs mt-1">Crie um no menu Kanban</p>
+                                    </div>
+                                  ) : (
+                                    funis.map((funil) => (
+                                      <SelectItem key={funil.id} value={funil.id}>
+                                        📊 {funil.nome}
+                                        {funil.descricao && (
+                                          <span className="text-xs text-muted-foreground ml-2">
+                                            - {funil.descricao}
+                                          </span>
+                                        )}
+                                      </SelectItem>
+                                    ))
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              {funis.length === 0 && (
+                                <p className="text-xs text-destructive mt-1">
+                                  ⚠️ Crie um funil no menu Kanban
+                                </p>
+                              )}
+                            </div>
+
+                            <div>
+                              <Label htmlFor="etapa-select">Etapa *</Label>
+                              <Select 
+                                value={selectedFunnel} 
+                                onValueChange={setSelectedFunnel}
+                                disabled={!selectedFunilId}
+                              >
+                                <SelectTrigger id="etapa-select">
+                                  <SelectValue placeholder={
+                                    !selectedFunilId 
+                                      ? "Selecione um funil primeiro" 
+                                      : "Escolha a etapa"
+                                  } />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {etapasFiltradas.length === 0 ? (
+                                    <div className="p-2 text-sm text-muted-foreground">
+                                      Nenhuma etapa disponível neste funil
+                                    </div>
+                                  ) : (
+                                    etapasFiltradas.map((etapa) => (
+                                      <SelectItem key={etapa.id} value={etapa.id}>
+                                        <div className="flex items-center gap-2">
+                                          <div 
+                                            className="w-3 h-3 rounded-full" 
+                                            style={{ backgroundColor: etapa.cor || '#3b82f6' }}
+                                          />
+                                          {etapa.nome}
+                                        </div>
+                                      </SelectItem>
+                                    ))
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              {!selectedFunilId && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  💡 Selecione um funil para ver as etapas
+                                </p>
+                              )}
+                            </div>
+                          </div>
                           <Button onClick={addToFunnel}>
                             Adicionar
                           </Button>
