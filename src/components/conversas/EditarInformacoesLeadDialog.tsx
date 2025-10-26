@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Tag, X, Plus } from "lucide-react";
+import { FileText, Tag, X, Plus, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -237,44 +237,84 @@ export function EditarInformacoesLeadDialog({
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Informações do Lead</DialogTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            {leadId ? 'Edite as informações e mova o lead entre etapas' : 'Adicione o lead ao funil de vendas'}
+          </p>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="funil">Funil</Label>
-            <Select 
-              value={formData.funil_id} 
-              onValueChange={(value) => setFormData({ ...formData, funil_id: value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o funil" />
-              </SelectTrigger>
-              <SelectContent>
-                {funis.map((funil) => (
-                  <SelectItem key={funil.id} value={funil.id}>
-                    {funil.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 space-y-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Funil de Vendas
+            </h3>
+            
+            <div>
+              <Label htmlFor="funil">Selecione o Funil *</Label>
+              <Select 
+                value={formData.funil_id} 
+                onValueChange={(value) => {
+                  console.log('📊 Funil selecionado:', value);
+                  setFormData({ ...formData, funil_id: value, etapa_id: "" });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Escolha um funil de vendas" />
+                </SelectTrigger>
+                <SelectContent>
+                  {funis.map((funil) => (
+                    <SelectItem key={funil.id} value={funil.id}>
+                      {funil.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div>
-            <Label htmlFor="etapa">Etapa</Label>
-            <Select 
-              value={formData.etapa_id} 
-              onValueChange={(value) => setFormData({ ...formData, etapa_id: value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione a etapa" />
-              </SelectTrigger>
-              <SelectContent>
-                {etapasFiltradas.map((etapa) => (
-                  <SelectItem key={etapa.id} value={etapa.id}>
-                    {etapa.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div>
+              <Label htmlFor="etapa">
+                Selecione a Etapa {leadId ? '(mover lead)' : '(adicionar lead)'} *
+              </Label>
+              <Select 
+                value={formData.etapa_id} 
+                onValueChange={(value) => {
+                  console.log('📍 Etapa selecionada:', value);
+                  setFormData({ ...formData, etapa_id: value });
+                }}
+                disabled={!formData.funil_id}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={
+                    !formData.funil_id 
+                      ? "Selecione um funil primeiro" 
+                      : "Escolha a etapa do funil"
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {etapasFiltradas.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground">
+                      Nenhuma etapa disponível neste funil
+                    </div>
+                  ) : (
+                    etapasFiltradas.map((etapa) => (
+                      <SelectItem key={etapa.id} value={etapa.id}>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: etapa.cor || '#3b82f6' }}
+                          />
+                          {etapa.nome}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              {!formData.funil_id && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  💡 Selecione um funil para ver as etapas disponíveis
+                </p>
+              )}
+            </div>
           </div>
 
           <div>
