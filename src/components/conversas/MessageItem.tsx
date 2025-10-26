@@ -191,11 +191,6 @@ export function MessageItem({
           {/* PDF Message */}
           {message.type === "pdf" && message.mediaUrl && (
             <div className="space-y-2 min-w-[200px]">
-              <div className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                <span className="text-sm font-medium">{message.fileName || 'Documento'}</span>
-              </div>
-              
               {pdfExpanded ? (
                 <div className="space-y-2">
                   <iframe 
@@ -222,23 +217,44 @@ export function MessageItem({
                   </div>
                 </div>
               ) : (
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
+                <div className="space-y-2">
+                  {/* Preview thumbnail do PDF */}
+                  <div 
+                    className="relative cursor-pointer hover:opacity-90 transition-opacity border border-border rounded overflow-hidden"
                     onClick={() => setPdfExpanded(true)}
-                    className="flex-1"
                   >
-                    <FileText className="h-3 w-3 mr-2" />
-                    Visualizar
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onDownload?.(message.mediaUrl!, message.fileName || 'documento.pdf')}
-                  >
-                    <Download className="h-3 w-3" />
-                  </Button>
+                    <iframe 
+                      src={message.mediaUrl} 
+                      className="w-[200px] h-[260px] pointer-events-none"
+                      title="PDF Preview"
+                      style={{ transform: 'scale(1)', transformOrigin: 'top left' }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-2">
+                      <div className="text-white text-xs font-medium truncate w-full">
+                        <FileText className="h-4 w-4 inline mr-1" />
+                        {message.fileName || 'Documento PDF'}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPdfExpanded(true)}
+                      className="flex-1"
+                    >
+                      <FileText className="h-3 w-3 mr-2" />
+                      Abrir
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onDownload?.(message.mediaUrl!, message.fileName || 'documento.pdf')}
+                    >
+                      <Download className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
