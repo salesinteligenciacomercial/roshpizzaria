@@ -981,14 +981,23 @@ function Conversas() {
       };
       
       // Buscar company_id do usuário autenticado
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.warn('⚠️ Usuário não autenticado');
+        toast.error('Você precisa estar logado');
+        return;
+      }
+      
       const { data: userRole } = await supabase
         .from('user_roles')
         .select('company_id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-        .single();
+        .eq('user_id', user.id)
+        .maybeSingle();
 
       if (!userRole?.company_id) {
-        console.warn('⚠️ Usuário sem company_id');
+        console.error('❌ Usuário sem company_id associado. User:', user.email);
+        toast.error('Erro: Usuário sem empresa associada. Entre em contato com o administrador.');
         return;
       }
 
@@ -1034,11 +1043,20 @@ function Conversas() {
           !conv.numero || conv.numero === '=' || conv.numero.trim() === '' ||
           !conv.mensagem || conv.mensagem === '[object Object]' || conv.mensagem.trim() === '';
         
-        if (hasInvalidVariables || hasInvalidData) {
-          console.warn('⚠️ Mensagem inválida ignorada:', conv);
+        // VALIDAR se é número brasileiro válido (12 ou 13 dígitos)
+        const numeroLimpo = conv.numero?.replace(/[^0-9]/g, '') || '';
+        const isValidBrazilianNumber = numeroLimpo.length === 12 || numeroLimpo.length === 13;
+        
+        if (hasInvalidVariables || hasInvalidData || !isValidBrazilianNumber) {
+          console.warn('⚠️ Mensagem inválida ignorada:', {
+            numero: conv.numero,
+            numeroLimpo,
+            tamanho: numeroLimpo.length,
+            mensagem: conv.mensagem?.substring(0, 50)
+          });
         }
         
-        return !hasInvalidVariables && !hasInvalidData;
+        return !hasInvalidVariables && !hasInvalidData && isValidBrazilianNumber;
       }) || [];
 
       if (validData && validData.length > 0) {
@@ -1075,8 +1093,15 @@ function Conversas() {
 
         // Agrupar mensagens por número NORMALIZADO (telefone_formatado)
         const conversasAgrupadas = validData.reduce((acc: Record<string, any[]>, conv: any) => {
-          // Usar telefone_formatado como chave de agrupamento (sempre normalizado)
-          const chaveAgrupamento = conv.telefone_formatado || conv.numero.replace(/[^0-9]/g, '');
+          // SEMPRE usar telefone_formatado se disponível, senão normalizar
+          const numeroLimpo = conv.numero.replace(/[^0-9]/g, '');
+          const chaveAgrupamento = conv.telefone_formatado || numeroLimpo;
+          
+          // GARANTIR que a chave seja sempre 12 ou 13 dígitos
+          if (chaveAgrupamento.length < 12 || chaveAgrupamento.length > 13) {
+            console.warn('⚠️ Ignorando conversa com número inválido:', chaveAgrupamento);
+            return acc;
+          }
           
           if (!acc[chaveAgrupamento]) {
             acc[chaveAgrupamento] = [];

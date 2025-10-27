@@ -64,7 +64,31 @@ function transformEvolutionPayload(body: any) {
   const data = body.data;
   
   // Extrair número (remover @s.whatsapp.net ou @g.us para grupos)
-  const numero = data.key.remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
+  const remoteJid = data.key.remoteJid;
+  
+  // IGNORAR mensagens de grupos, status e números inválidos
+  if (remoteJid.includes('@g.us') || remoteJid.includes('@broadcast') || remoteJid.includes('status@')) {
+    throw new Error('IGNORE: Mensagem de grupo/status/broadcast não será salva');
+  }
+  
+  // Limpar número e normalizar
+  let numero = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+  
+  // Remover caracteres especiais
+  numero = numero.replace(/[^0-9]/g, '');
+  
+  // VALIDAR se é número brasileiro válido
+  // Números brasileiros: 55 + DDD (2 dígitos) + número (8 ou 9 dígitos) = 12 ou 13 dígitos
+  if (!numero.startsWith('55')) {
+    // Se não começar com 55, adicionar
+    numero = '55' + numero;
+  }
+  
+  // Validar comprimento
+  if (numero.length < 12 || numero.length > 13) {
+    console.warn('⚠️ Número com tamanho inválido:', numero, 'Original:', remoteJid);
+    throw new Error(`IGNORE: Número inválido (${numero.length} dígitos): ${numero}`);
+  }
   
   // Extrair mensagem e tipo
   let mensagem = '';
@@ -138,8 +162,9 @@ function transformEvolutionPayload(body: any) {
     tipo_mensagem = 'text';
   }
   
+  // Retornar com número NORMALIZADO
   return {
-    numero,
+    numero, // JÁ NORMALIZADO (apenas números, com 55)
     mensagem,
     origem: 'WhatsApp',
     tipo_mensagem,
@@ -223,8 +248,16 @@ serve(async (req) => {
       try {
         payload = transformEvolutionPayload(body);
         console.log('✅ Payload transformado');
-      } catch (transformError) {
-        console.error('❌ Erro ao transformar payload da Evolution API');
+      } catch (transformError: any) {
+        // Se for mensagem de grupo/status, retornar sucesso sem salvar
+        if (transformError.message?.startsWith('IGNORE:')) {
+          console.log('⏭️', transformError.message);
+          return new Response(
+            JSON.stringify({ success: true, message: 'Mensagem ignorada' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        console.error('❌ Erro ao transformar payload da Evolution API:', transformError);
         return new Response(
           JSON.stringify({ error: 'Erro ao processar payload' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
@@ -278,6 +311,15 @@ serve(async (req) => {
     // Limpar e normalizar número (remover caracteres especiais e garantir formato consistente)
     const numeroLimpo = validatedData.numero.replace(/[^0-9]/g, '');
     console.log('🔍 Número normalizado:', numeroLimpo);
+    
+    // VALIDAR número brasileiro (12 ou 13 dígitos)
+    if (numeroLimpo.length < 12 || numeroLimpo.length > 13) {
+      console.warn('⚠️ Número inválido após limpeza:', numeroLimpo, 'Tamanho:', numeroLimpo.length);
+      return new Response(
+        JSON.stringify({ success: true, message: 'Número inválido ignorado' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Se temos company_id, buscar lead apenas nessa company
     if (companyId) {
