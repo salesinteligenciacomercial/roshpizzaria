@@ -76,12 +76,12 @@ export function ConversationListItem({
 
   return (
     <div
-      className={`p-4 border-b border-border cursor-pointer transition-colors hover:bg-muted/50 ${
+      className={`relative p-4 border-b border-border cursor-pointer transition-colors hover:bg-muted/50 ${
         isSelected ? "bg-muted/70" : ""
       }`}
       onClick={onClick}
     >
-      <div className="flex gap-3">
+      <div className="flex gap-3 relative">
         <Avatar className="h-12 w-12 flex-shrink-0">
           <AvatarImage src={avatarUrl} alt={contactName} />
           <AvatarFallback className="bg-primary/10 text-primary">
@@ -89,8 +89,8 @@ export function ConversationListItem({
           </AvatarFallback>
         </Avatar>
         
-        <div className="flex-1 min-w-0 overflow-visible">
-          <div className="flex items-center justify-between mb-1 gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between mb-1 gap-3">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               {getChannelIcon()}
               <span className="font-medium text-sm text-foreground truncate">
@@ -111,55 +111,6 @@ export function ConversationListItem({
                   </Badge>
                 )}
               </div>
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild onClick={handleMenuClick}>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 flex-shrink-0 hover:bg-accent/80"
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent 
-                  align="end" 
-                  className="z-[100] bg-popover border border-border shadow-lg min-w-[180px]"
-                  onClick={handleMenuClick}
-                >
-                  <DropdownMenuItem 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEditName?.();
-                    }}
-                    className="cursor-pointer hover:bg-accent"
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Editar nome
-                  </DropdownMenuItem>
-                  {!leadId && onCreateLead && (
-                    <DropdownMenuItem 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCreateLead();
-                      }}
-                      className="cursor-pointer hover:bg-accent"
-                    >
-                      <UserPlus className="h-4 w-4 mr-2" />
-                      Adicionar ao CRM
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteConversation?.();
-                    }}
-                    className="text-destructive cursor-pointer hover:bg-accent"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Excluir conversa
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </div>
           <p className="text-sm text-muted-foreground truncate">{lastMessage}</p>
@@ -205,6 +156,59 @@ export function ConversationListItem({
               )}
             </div>
           </div>
+        </div>
+        
+        {/* Botão de menu posicionado absolutamente */}
+        <div className="absolute top-4 right-4 z-10">
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild onClick={handleMenuClick}>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 hover:bg-accent/80 opacity-100"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent 
+              align="end" 
+              className="z-[100] bg-popover border border-border shadow-lg min-w-[180px]"
+              onClick={handleMenuClick}
+            >
+              <DropdownMenuItem 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditName?.();
+                }}
+                className="cursor-pointer hover:bg-accent"
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Editar nome
+              </DropdownMenuItem>
+              {!leadId && onCreateLead && (
+                <DropdownMenuItem 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCreateLead();
+                  }}
+                  className="cursor-pointer hover:bg-accent"
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Adicionar ao CRM
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteConversation?.();
+                }}
+                className="text-destructive cursor-pointer hover:bg-accent"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Excluir conversa
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>
