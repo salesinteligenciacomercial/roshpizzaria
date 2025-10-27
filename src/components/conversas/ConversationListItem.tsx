@@ -81,7 +81,60 @@ export function ConversationListItem({
       }`}
       onClick={onClick}
     >
-      <div className="flex gap-3 relative">
+      {/* Botão de menu - MOVIDO PARA FORA DO FLEX */}
+      <div className="absolute top-2 right-2 z-50">
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild onClick={handleMenuClick}>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8 hover:bg-accent/80"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent 
+            align="end" 
+            className="z-[100] bg-popover border border-border shadow-lg min-w-[180px]"
+            onClick={handleMenuClick}
+          >
+            <DropdownMenuItem 
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditName?.();
+              }}
+              className="cursor-pointer hover:bg-accent"
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Editar nome
+            </DropdownMenuItem>
+            {!leadId && onCreateLead && (
+              <DropdownMenuItem 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreateLead();
+                }}
+                className="cursor-pointer hover:bg-accent"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Adicionar ao CRM
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem 
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteConversation?.();
+              }}
+              className="text-destructive cursor-pointer hover:bg-accent"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Excluir conversa
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      
+      <div className="flex gap-3">
         <Avatar className="h-12 w-12 flex-shrink-0">
           <AvatarImage src={avatarUrl} alt={contactName} />
           <AvatarFallback className="bg-primary/10 text-primary">
@@ -156,59 +209,6 @@ export function ConversationListItem({
               )}
             </div>
           </div>
-        </div>
-        
-        {/* Botão de menu posicionado absolutamente */}
-        <div className="absolute top-4 right-4 z-10">
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild onClick={handleMenuClick}>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8 hover:bg-accent/80 opacity-100"
-              >
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent 
-              align="end" 
-              className="z-[100] bg-popover border border-border shadow-lg min-w-[180px]"
-              onClick={handleMenuClick}
-            >
-              <DropdownMenuItem 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEditName?.();
-                }}
-                className="cursor-pointer hover:bg-accent"
-              >
-                <Edit className="h-4 w-4 mr-2" />
-                Editar nome
-              </DropdownMenuItem>
-              {!leadId && onCreateLead && (
-                <DropdownMenuItem 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCreateLead();
-                  }}
-                  className="cursor-pointer hover:bg-accent"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Adicionar ao CRM
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteConversation?.();
-                }}
-                className="text-destructive cursor-pointer hover:bg-accent"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Excluir conversa
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
     </div>
