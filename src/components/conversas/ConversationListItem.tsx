@@ -74,6 +74,15 @@ export function ConversationListItem({
     e.stopPropagation();
   };
 
+  console.log('🔘 Renderizando ConversationListItem:', {
+    contactName,
+    hasCallbacks: {
+      onEditName: !!onEditName,
+      onCreateLead: !!onCreateLead,
+      onDeleteConversation: !!onDeleteConversation
+    }
+  });
+
   return (
     <div
       className={`relative p-4 border-b border-border cursor-pointer transition-colors hover:bg-muted/50 ${
@@ -82,13 +91,17 @@ export function ConversationListItem({
       onClick={onClick}
     >
       {/* Botão de menu - MOVIDO PARA FORA DO FLEX */}
-      <div className="absolute top-2 right-2 z-50">
+      <div className="absolute top-2 right-2 z-50 bg-red-500">
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild onClick={handleMenuClick}>
             <Button 
               variant="ghost" 
               size="icon" 
-              className="h-8 w-8 hover:bg-accent/80"
+              className="h-8 w-8 hover:bg-accent/80 bg-blue-500"
+              onClick={(e) => {
+                console.log('🔘 Botão clicado!');
+                handleMenuClick(e);
+              }}
             >
               <MoreVertical className="h-4 w-4" />
             </Button>
