@@ -97,7 +97,7 @@ export function ConversationListItem({
                 {contactName}
               </span>
             </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <div className="flex flex-col items-end gap-1">
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                   {timestamp.toLocaleTimeString("pt-BR", {
@@ -116,9 +116,9 @@ export function ConversationListItem({
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="h-8 w-8 flex-shrink-0 hover:bg-accent opacity-100 ml-1 z-10"
+                    className="h-8 w-8 flex-shrink-0 hover:bg-accent/80 relative z-20"
                   >
-                    <MoreVertical className="h-4 w-4 text-foreground" />
+                    <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent 
