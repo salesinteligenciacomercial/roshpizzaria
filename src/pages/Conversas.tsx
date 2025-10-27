@@ -794,7 +794,7 @@ function Conversas() {
               messages: [{
                 id: novaConversa.id,
                 content: novaConversa.mensagem,
-                sender: 'contact',
+                sender: novaConversa.status === 'Enviada' ? 'user' : 'contact', // Mapear corretamente baseado no status
                 timestamp: new Date(novaConversa.created_at),
                 delivered: true,
                 type: novaConversa.tipo_mensagem === 'audio' ? 'audio' : novaConversa.tipo_mensagem === 'image' ? 'image' : 'text',

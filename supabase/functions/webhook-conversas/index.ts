@@ -17,7 +17,8 @@ const webhookPayloadSchema = z.object({
   nome_contato: z.string().max(100).nullable().optional(),
   arquivo_nome: z.string().max(255).nullable().optional(),
   company_id: z.string().uuid().optional(),
-  replied_to_message: z.string().nullable().optional()
+  replied_to_message: z.string().nullable().optional(),
+  status: z.string().optional().default('Recebida') // Status da mensagem
 });
 
 // Verify webhook signature for security
@@ -65,6 +66,12 @@ function transformEvolutionPayload(body: any) {
   
   // Extrair número (remover @s.whatsapp.net ou @g.us para grupos)
   const remoteJid = data.key.remoteJid;
+  
+  // DETECTAR SE A MENSAGEM FOI ENVIADA PELO USUÁRIO (fromMe) OU RECEBIDA
+  const fromMe = data.key.fromMe === true;
+  const status = fromMe ? 'Enviada' : 'Recebida';
+  
+  console.log(`📱 Mensagem ${status} - fromMe: ${fromMe}`);
   
   // IGNORAR mensagens de grupos, status e números inválidos
   if (remoteJid.includes('@g.us') || remoteJid.includes('@broadcast') || remoteJid.includes('status@')) {
@@ -162,7 +169,7 @@ function transformEvolutionPayload(body: any) {
     tipo_mensagem = 'text';
   }
   
-  // Retornar com número NORMALIZADO
+  // Retornar com número NORMALIZADO e STATUS correto (Enviada ou Recebida)
   return {
     numero, // JÁ NORMALIZADO (apenas números, com 55)
     mensagem,
@@ -171,7 +178,8 @@ function transformEvolutionPayload(body: any) {
     midia_url,
     nome_contato: data.pushName || 'Desconhecido',
     arquivo_nome,
-    replied_to_message
+    replied_to_message,
+    status // 'Enviada' se fromMe=true, 'Recebida' se fromMe=false
   };
 }
 
@@ -377,7 +385,7 @@ serve(async (req) => {
       }
     }
 
-    // Salvar conversa no Supabase com telefone normalizado
+    // Salvar conversa no Supabase com telefone normalizado e STATUS correto
     const { data, error } = await supabase
       .from('conversas')
       .insert([{
@@ -385,7 +393,7 @@ serve(async (req) => {
         telefone_formatado: numeroLimpo, // CRITICAL: Sempre salvar versão normalizada
         mensagem: validatedData.mensagem,
         origem: validatedData.origem,
-        status: 'Recebida',
+        status: validatedData.status, // Usar status detectado (Enviada ou Recebida)
         tipo_mensagem: validatedData.tipo_mensagem,
         midia_url: validatedData.midia_url,
         nome_contato: validatedData.nome_contato,
