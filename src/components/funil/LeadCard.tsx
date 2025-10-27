@@ -48,7 +48,11 @@ export function LeadCard({ lead, onDelete, onLeadMoved }: LeadCardProps) {
   } : undefined;
 
   const abrirConversa = () => {
-    navigate('/conversas', { state: { leadId: lead.id } });
+    if (lead.telefone) {
+      navigate('/conversas', { state: { leadId: lead.id } });
+    } else {
+      console.warn('Lead sem telefone:', lead.nome);
+    }
   };
 
   return (
