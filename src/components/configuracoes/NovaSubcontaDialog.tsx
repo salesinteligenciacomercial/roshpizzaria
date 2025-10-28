@@ -41,6 +41,8 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
     setLoading(true);
 
     try {
+      const adminEmail = isTestAccount ? "admin@ceusia.app" : formData.email;
+
       const companyData = {
         name: isTestAccount ? "Empresa Teste CEUSIA" : formData.name,
         cnpj: isTestAccount ? "00.000.000/0001-00" : formData.cnpj,
@@ -73,7 +75,6 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
 
       // 2. Gerar senha automática forte
       const generatedPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10).toUpperCase() + "!@#123";
-      const adminEmail = isTestAccount ? "admin@ceusia.app" : formData.email;
 
       console.log("👤 [NOVA SUBCONTA] Criando usuário admin:", adminEmail);
       
@@ -93,6 +94,17 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
         console.error("❌ [NOVA SUBCONTA] Erro ao criar usuário:", authError);
         // Remover empresa se falhar
         await supabase.from("companies").delete().eq("id", company.id);
+        
+        // Mensagem de erro específica para email já existente
+        if (authError.message?.includes("already registered") || authError.code === "user_already_exists") {
+          toast({
+            title: "❌ Email já cadastrado",
+            description: `O email "${adminEmail}" já está em uso. Use um email diferente para o administrador (ex: admin@${formData.name.toLowerCase().replace(/\s+/g, '')}.com.br)`,
+            variant: "destructive",
+            duration: 8000,
+          });
+          throw new Error(`Email já cadastrado: ${adminEmail}`);
+        }
         throw authError;
       }
 
@@ -340,7 +352,11 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       required
+                      placeholder="admin@empresa.com.br"
                     />
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      ⚠️ Este email não pode estar cadastrado no sistema
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="telefone">Telefone *</Label>
