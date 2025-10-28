@@ -35,30 +35,49 @@ export function WhatsAppQRCode() {
   const loadConnections = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('👤 Usuário não autenticado');
+        return;
+      }
 
-      const { data: userRole } = await supabase
+      const { data: userRole, error: roleError } = await supabase
         .from('user_roles')
         .select('company_id')
         .eq('user_id', user.id)
         .single();
 
-      if (!userRole?.company_id) return;
+      if (roleError) {
+        console.error('❌ Erro ao buscar user_role:', roleError);
+        return;
+      }
 
-      const { data } = await supabase
+      if (!userRole?.company_id) {
+        console.log('⚠️ Company ID não encontrado para o usuário');
+        return;
+      }
+
+      console.log('✅ Company ID encontrado:', userRole.company_id);
+
+      const { data, error: connError } = await supabase
         .from('whatsapp_connections')
         .select('*')
         .eq('company_id', userRole.company_id)
         .order('created_at', { ascending: false });
 
+      if (connError) {
+        console.error('❌ Erro ao carregar conexões:', connError);
+        return;
+      }
+
       if (data) {
+        console.log('📱 Conexões carregadas:', data.length);
         setConnections(data);
         if (!selectedConnection && data.length > 0) {
           setSelectedConnection(data[0]);
         }
       }
     } catch (error) {
-      console.error('Erro ao carregar conexões:', error);
+      console.error('❌ Erro geral ao carregar conexões:', error);
     }
   };
 
@@ -78,16 +97,33 @@ export function WhatsAppQRCode() {
     setLoading(true);
 
     try {
+      console.log('🚀 Iniciando criação de instância:', instanceName);
+      
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado");
+      if (!user) {
+        console.error('❌ Usuário não autenticado');
+        throw new Error("Usuário não autenticado");
+      }
 
-      const { data: userRole } = await supabase
+      console.log('👤 Usuário autenticado:', user.id);
+
+      const { data: userRole, error: roleError } = await supabase
         .from('user_roles')
         .select('company_id')
         .eq('user_id', user.id)
         .single();
 
-      if (!userRole?.company_id) throw new Error("Empresa não encontrada");
+      if (roleError) {
+        console.error('❌ Erro ao buscar role:', roleError);
+        throw new Error("Erro ao buscar informações da empresa. Verifique se você está associado a uma empresa.");
+      }
+
+      if (!userRole?.company_id) {
+        console.error('❌ Company ID não encontrado');
+        throw new Error("Você não está associado a nenhuma empresa. Entre em contato com o administrador.");
+      }
+
+      console.log('🏢 Company ID encontrado:', userRole.company_id);
 
       // Verificar se já existe instância com este nome nesta empresa
       const { data: existingConn } = await supabase
