@@ -88,58 +88,26 @@ export function UsuariosSubcontaDialog({ company, open, onOpenChange }: Usuarios
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
       console.log("➕ [USUÁRIOS] Adicionando novo usuário:", formData.email);
-      
-      // Gerar senha forte automática
-      const tempPassword = Math.random().toString(36).slice(-8) + "Aa1!";
-      
-      // Criar usuário de autenticação
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: tempPassword,
-        options: {
-          data: {
-            full_name: formData.full_name,
-          },
-          emailRedirectTo: `${window.location.origin}/`,
+
+      const { data, error } = await supabase.functions.invoke('criar-usuario-subconta', {
+        body: {
+          companyId: company.id,
+          email: formData.email,
+          full_name: formData.full_name,
+          role: formData.role,
         },
       });
 
-      if (authError) {
-        console.error("❌ [USUÁRIOS] Erro ao criar auth:", authError);
-        throw authError;
-      }
-      
-      if (!authData.user) {
-        console.error("❌ [USUÁRIOS] Usuário não retornado");
-        throw new Error("Falha ao criar usuário");
+      if (error) {
+        throw error;
       }
 
-      console.log("✅ [USUÁRIOS] Auth criado:", authData.user.id);
-
-      // Criar role do usuário
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert([
-          {
-            user_id: authData.user.id,
-            company_id: company.id,
-            role: formData.role as any,
-          },
-        ]);
-
-      if (roleError) {
-        console.error("❌ [USUÁRIOS] Erro ao criar role:", roleError);
-        throw roleError;
-      }
-
-      console.log("✅ [USUÁRIOS] Role criada com sucesso");
-
+      console.log("✅ [USUÁRIOS] Criado com sucesso:", data);
       toast({
         title: "Usuário adicionado",
-        description: "O usuário foi adicionado com sucesso. Um e-mail de confirmação foi enviado.",
+        description: "Usuário criado com sucesso e vinculado à empresa.",
       });
 
       setShowAddForm(false);

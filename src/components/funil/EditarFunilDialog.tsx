@@ -19,6 +19,7 @@ interface Etapa {
   posicao: number;
   cor: string;
   funil_id: string;
+  status?: 'normal' | 'final';
 }
 
 const CORES_PADRAO = [
@@ -53,19 +54,39 @@ export function EditarFunilDialog({ funilId, funilNome, onFunilUpdated }: Editar
   };
 
   const adicionarEtapa = () => {
+    // Encontra a última posição antes das etapas finais
+    const ultimaPosicao = Math.max(...etapas
+      .filter(e => e.status !== 'final')
+      .map(e => e.posicao), -1);
+
     const novaEtapa: Etapa = {
       id: `temp-${Date.now()}`,
-      nome: `Etapa ${etapas.length + 1}`,
-      posicao: etapas.length,
+      nome: `Etapa ${etapas.length - 1}`,
+      posicao: ultimaPosicao + 1,
       cor: CORES_PADRAO[etapas.length % CORES_PADRAO.length],
       funil_id: funilId,
+      status: 'normal'
     };
-    setEtapas([...etapas, novaEtapa]);
+
+    // Insere a nova etapa antes das etapas finais
+    const novasEtapas = [
+      ...etapas.filter(e => e.status !== 'final'),
+      novaEtapa,
+      ...etapas.filter(e => e.status === 'final')
+    ];
+
+    setEtapas(novasEtapas);
   };
 
   const removerEtapa = async (etapa: Etapa) => {
-    if (etapas.length <= 1) {
-      toast.error("O funil precisa ter pelo menos uma etapa");
+    if (etapa.status === 'final') {
+      toast.error("Não é possível remover as etapas Ganho e Perdido");
+      return;
+    }
+
+    const etapasNormais = etapas.filter(e => e.status !== 'final');
+    if (etapasNormais.length <= 1) {
+      toast.error("O funil precisa ter pelo menos uma etapa além de Ganho e Perdido");
       return;
     }
 
@@ -109,11 +130,10 @@ export function EditarFunilDialog({ funilId, funilNome, onFunilUpdated }: Editar
       await carregarEtapas();
     } else {
       // Apenas remover localmente se for temporária
-      const novasEtapas = etapas
-        .filter(e => e.id !== etapa.id)
-        .map((e, index) => ({ ...e, posicao: index }));
-      
-      setEtapas(novasEtapas);
+      setEtapas([
+        ...etapas.filter(e => e.id !== etapa.id && e.status !== 'final'),
+        ...etapas.filter(e => e.status === 'final')
+      ]);
     }
   };
 

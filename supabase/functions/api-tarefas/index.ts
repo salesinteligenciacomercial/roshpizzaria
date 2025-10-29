@@ -28,7 +28,12 @@ const createTaskSchema = z.object({
   column_id: z.string().uuid('ID de coluna inválido').optional(),
   board_id: z.string().uuid('ID de board inválido').optional(),
   due_date: z.string().datetime().optional(),
-  priority: z.enum(['baixa', 'media', 'alta', 'urgente']).optional()
+  priority: z.enum(['baixa', 'media', 'alta', 'urgente']).optional(),
+  tags: z.array(z.string()).optional(),
+  checklist: z.array(z.object({ id: z.string().optional(), text: z.string(), done: z.boolean() })).optional(),
+  comments: z.array(z.object({ id: z.string().optional(), text: z.string(), author_id: z.string().uuid().optional(), created_at: z.string().optional() })).optional(),
+  attachments: z.array(z.object({ name: z.string(), url: z.string().url() })).optional(),
+  responsaveis: z.array(z.string().uuid()).optional()
 });
 
 const moveTaskSchema = z.object({
@@ -47,7 +52,12 @@ const editTaskSchema = z.object({
   priority: z.enum(['baixa', 'media', 'alta', 'urgente']).optional(),
   due_date: z.string().datetime().optional(),
   assignee_id: z.string().uuid('ID de responsável inválido').optional(),
-  lead_id: z.string().uuid('ID de lead inválido').optional()
+  lead_id: z.string().uuid('ID de lead inválido').optional(),
+  tags: z.array(z.string()).optional(),
+  checklist: z.array(z.object({ id: z.string().optional(), text: z.string(), done: z.boolean() })).optional(),
+  comments: z.array(z.object({ id: z.string().optional(), text: z.string(), author_id: z.string().uuid().optional(), created_at: z.string().optional() })).optional(),
+  attachments: z.array(z.object({ name: z.string(), url: z.string().url() })).optional(),
+  responsaveis: z.array(z.string().uuid()).optional()
 });
 
 const editBoardSchema = z.object({
@@ -175,7 +185,12 @@ serve(async (req) => {
             priority: validatedData.priority || 'media',
             status: 'pendente',
             owner_id: user.id,
-            company_id: companyId
+            company_id: companyId,
+            tags: validatedData.tags || [],
+            checklist: validatedData.checklist || [],
+            comments: validatedData.comments || [],
+            attachments: validatedData.attachments || [],
+            responsaveis: validatedData.responsaveis || []
           }])
           .select()
           .single();
@@ -247,6 +262,11 @@ serve(async (req) => {
             due_date: validatedData.due_date,
             assignee_id: validatedData.assignee_id,
             lead_id: validatedData.lead_id,
+            tags: validatedData.tags,
+            checklist: validatedData.checklist,
+            comments: validatedData.comments,
+            attachments: validatedData.attachments,
+            responsaveis: validatedData.responsaveis,
           })
           .eq("id", validatedData.task_id)
           .select()

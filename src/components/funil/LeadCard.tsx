@@ -1,11 +1,16 @@
+import React, { useEffect, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag } from "lucide-react";
+import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare } from "lucide-react";
+import { AgendaModal } from "@/components/agenda/AgendaModal";
+import { TarefaModal } from "@/components/tarefas/TarefaModal";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
+import { EditarLeadDialog } from "./EditarLeadDialog";
 import { MoverLeadFunilDialog } from "./MoverLeadFunilDialog";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 
 interface LeadCardProps {
   lead: {
@@ -26,6 +31,53 @@ interface LeadCardProps {
 
 export function LeadCard({ lead, onDelete, onLeadMoved }: LeadCardProps) {
   const navigate = useNavigate();
+  const [agendaModalOpen, setAgendaModalOpen] = useState(false);
+  const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
+  const [proximoCompromisso, setProximoCompromisso] = useState<string | null>(null);
+  const [proximaTarefa, setProximaTarefa] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (lead.id) {
+      carregarProximasAtividades();
+    }
+  }, [lead.id]);
+
+  const carregarProximasAtividades = async () => {
+    try {
+      // Carregar próximo compromisso
+      const { data: compromissos } = await supabase
+        .from("compromissos")
+        .select("tipo_servico, data_hora_inicio")
+        .eq("lead_id", lead.id)
+        .gte("data_hora_inicio", new Date().toISOString())
+        .order("data_hora_inicio")
+        .limit(1);
+
+      if (compromissos?.[0]) {
+        const titulo = compromissos[0].tipo_servico || 'Compromisso';
+        setProximoCompromisso(
+          `${titulo} - ${new Date(compromissos[0].data_hora_inicio).toLocaleDateString()}`
+        );
+      }
+
+      // Carregar próxima tarefa
+      const { data: tarefas } = await supabase
+        .from("tasks")
+        .select("title, due_date")
+        .eq("lead_id", lead.id)
+        .eq("status", "pendente")
+        .order("due_date")
+        .limit(1);
+
+      if (tarefas?.[0]) {
+        setProximaTarefa(
+          `${tarefas[0].title} - ${new Date(tarefas[0].due_date).toLocaleDateString()}`
+        );
+      }
+    } catch (error) {
+      console.error("Erro ao carregar atividades:", error);
+    }
+  };
   
   const {
     attributes,
@@ -41,13 +93,26 @@ export function LeadCard({ lead, onDelete, onLeadMoved }: LeadCardProps) {
     }
   });
 
+  // Desabilita o drag quando estiver clicando em botões
+  const modifiedListeners = {
+    ...listeners,
+    onMouseDown: (e: React.MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('button, input, select')) {
+        listeners?.onMouseDown?.(e);
+      }
+    }
+  };
+
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
     opacity: isDragging ? 0.5 : 1,
     cursor: isDragging ? 'grabbing' : 'grab',
   } : undefined;
 
-  const abrirConversa = () => {
+  const abrirConversa = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
     if (lead.telefone) {
       navigate('/conversas', { state: { leadId: lead.id } });
     } else {
@@ -60,14 +125,14 @@ export function LeadCard({ lead, onDelete, onLeadMoved }: LeadCardProps) {
       ref={setNodeRef}
       style={style}
       {...attributes}
-      {...listeners}
+      onClick={(e) => e.stopPropagation()} // Impede propagação de cliques
       className="group relative p-4 mb-3 cursor-grab active:cursor-grabbing border-0 shadow-card hover:shadow-lg transition-all duration-300 bg-card overflow-hidden"
     >
-      <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
       
       <div className="relative space-y-3">
         <div className="flex justify-between items-start gap-2">
-          <div className="flex items-start gap-2 flex-1">
+          <div className="flex items-start gap-2 flex-1" {...(listeners as any)}>
             <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
               <User className="h-4 w-4 text-primary" />
             </div>
@@ -85,28 +150,105 @@ export function LeadCard({ lead, onDelete, onLeadMoved }: LeadCardProps) {
               )}
             </div>
           </div>
-          <div className="flex gap-1">
-            <MoverLeadFunilDialog
-              leadId={lead.id}
-              leadNome={lead.nome}
-              funilAtualId={lead.funil_id}
-              etapaAtualId={lead.etapa_id}
-              onLeadMoved={() => onLeadMoved?.()}
-            />
-            <LeadActionsDialog lead={{ id: lead.id, name: lead.nome, telefone: lead.telefone, email: lead.email }} />
+          <div 
+            className="flex gap-1"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div onClick={(e) => e.stopPropagation()}>
+              <MoverLeadFunilDialog
+                leadId={lead.id}
+                leadNome={lead.nome}
+                funilAtualId={lead.funil_id}
+                etapaAtualId={lead.etapa_id}
+                onLeadMoved={() => onLeadMoved?.()}
+              />
+            </div>
+            <div onClick={(e) => e.stopPropagation()}>
+              <EditarLeadDialog lead={lead} onLeadUpdated={onLeadMoved || (() => {})} />
+            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setAgendaModalOpen(true);
+                    }}
+                  >
+                    <Calendar className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Próximo compromisso:</p>
+                  <p className="font-medium">{proximoCompromisso || "Nenhum agendado"}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setTarefaModalOpen(true);
+                    }}
+                  >
+                    <CheckSquare className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Próxima tarefa:</p>
+                  <p className="font-medium">{proximaTarefa || "Nenhuma pendente"}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
               onClick={(e) => {
+                e.preventDefault();
                 e.stopPropagation();
-                onDelete(lead.id);
+                if (confirm("Tem certeza que deseja excluir este lead?")) {
+                  onDelete(lead.id);
+                }
               }}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         </div>
+
+        <AgendaModal
+          open={agendaModalOpen}
+          onOpenChange={setAgendaModalOpen}
+          lead={lead}
+          onAgendamentoCriado={() => {
+            carregarProximasAtividades();
+            onLeadMoved?.();
+          }}
+        />
+
+        <TarefaModal
+          open={tarefaModalOpen}
+          onOpenChange={setTarefaModalOpen}
+          lead={lead}
+          onTarefaCriada={() => {
+            carregarProximasAtividades();
+            onLeadMoved?.();
+          }}
+        />
 
         {lead.company && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-2 py-1.5 rounded-md">
@@ -121,19 +263,22 @@ export function LeadCard({ lead, onDelete, onLeadMoved }: LeadCardProps) {
               <Phone className="h-3 w-3" />
               <span>{lead.telefone}</span>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-success hover:text-success hover:bg-success/10 transition-all"
-              onClick={(e) => {
-                e.stopPropagation();
-                abrirConversa();
-              }}
-              title="Abrir Conversa"
-            >
-              <MessageCircle className="h-3.5 w-3.5 mr-1" />
-              <span className="text-xs font-medium">Conversa</span>
-            </Button>
+            <div onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-success hover:text-success hover:bg-success/10 transition-all"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  abrirConversa(e);
+                }}
+                title="Ver histórico de conversas"
+              >
+                <MessageCircle className="h-3.5 w-3.5 mr-1" />
+                <span className="text-xs font-medium">Ver Conversas</span>
+              </Button>
+            </div>
           </div>
         )}
 

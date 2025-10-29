@@ -38,6 +38,7 @@ interface Etapa {
   nome: string;
   funil_id: string;
   cor: string;
+  status?: 'normal' | 'final';
 }
 
 export function MoverLeadFunilDialog({ 
@@ -151,11 +152,18 @@ export function MoverLeadFunilDialog({
 
     try {
       console.log("🔄 Movendo lead:", { leadId, selectedFunil, selectedEtapa });
+      // Determina o status do lead baseado na etapa selecionada
+      const etapaSelecionada = etapas.find(e => e.id === selectedEtapa);
+      const novoStatus = etapaSelecionada?.status === 'final'
+        ? etapaSelecionada.nome.toLowerCase()
+        : 'ativo';
+
       const { error } = await supabase
         .from("leads")
         .update({
           funil_id: selectedFunil,
           etapa_id: selectedEtapa,
+          status: novoStatus,
         })
         .eq("id", leadId);
 

@@ -207,7 +207,7 @@ function Conversas() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [scheduledMessages, setScheduledMessages] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [showInfoPanel, setShowInfoPanel] = useState(true);
+  const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>('idle');
   const [leadVinculado, setLeadVinculado] = useState<any>(null);
@@ -217,6 +217,8 @@ function Conversas() {
   const [userCompanyId, setUserCompanyId] = useState<string | null>(null); // Company ID do usuário
   const [userName, setUserName] = useState<string>(""); // Nome do usuário logado
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const selectedConvRef = useRef<Conversation | null>(null);
+  const userCompanyIdRef = useRef<string | null>(null);
   const location = useLocation();
   
   // Estados para modais de visualização
@@ -224,6 +226,15 @@ function Conversas() {
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<{ url: string; name?: string } | null>(null);
   const [transcrevendo, setTranscrevendo] = useState<string | null>(null);
+
+  // Manter referência atualizada da conversa selecionada para uso em handlers de realtime
+  useEffect(() => {
+    selectedConvRef.current = selectedConv;
+  }, [selectedConv]);
+
+  useEffect(() => {
+    userCompanyIdRef.current = userCompanyId;
+  }, [userCompanyId]);
 
   // Form states
   const [newQuickTitle, setNewQuickTitle] = useState("");
@@ -245,6 +256,14 @@ function Conversas() {
   const [newValor, setNewValor] = useState("");
   const [newAnotacoes, setNewAnotacoes] = useState("");
   
+  // Usuários da empresa (para Transferir Atendimento / Responsáveis)
+  const [companyUsers, setCompanyUsers] = useState<{ id: string; name: string }[]>([]);
+  // Filas de atendimento
+  const [queues, setQueues] = useState<any[]>([]);
+  // Fila selecionada e seus membros
+  const [selectedQueueId, setSelectedQueueId] = useState<string>("");
+  const [queueMembers, setQueueMembers] = useState<{ id: string; name: string }[]>([]);
+  
   // Estados para tarefas do lead
   const [leadTasks, setLeadTasks] = useState<any[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -259,12 +278,270 @@ function Conversas() {
   const [etapasFiltradas, setEtapasFiltradas] = useState<any[]>([]);
 
   const funnelStages = ["Novo", "Qualificado", "Em Negociação", "Fechado", "Perdido"];
-  const usuarios = ["Você", "Ana Costa", "Pedro Lima", "Julia Santos", "Carlos Mendes"];
 
   // Carregar funis e etapas ao montar o componente
   useEffect(() => {
     carregarFunisEEtapas();
   }, []);
+
+  // Carregar usuários da empresa e assinar atualizações quando o painel estiver aberto
+  useEffect(() => {
+    if (!showInfoPanel) return;
+    let channel: any;
+
+    const loadCompanyUsers = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        // Buscar company_id do usuário atual
+        const { data: userRole } = await supabase
+          .from('user_roles')
+          .select('company_id')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+
+        if (!userRole?.company_id) return;
+
+        // Buscar todos os usuários (ids) da empresa
+        const { data: userRoles } = await supabase
+          .from('user_roles')
+          .select('user_id')
+          .eq('company_id', userRole.company_id);
+
+        const ids = (userRoles || []).map((ur: any) => ur.user_id);
+        if (ids.length === 0) {
+          setCompanyUsers([]);
+          return;
+        }
+
+        // Buscar perfis para nomes
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', ids);
+
+        const users = (profiles || []).map(p => ({ id: p.id, name: (p.full_name || p.email) as string })).filter(u => !!u.name);
+        setCompanyUsers(users);
+      } catch (e) {
+        console.error('Erro ao carregar usuários da empresa:', e);
+      }
+    };
+
+    loadCompanyUsers();
+
+    // Assinatura realtime: alterações em user_roles da empresa → recarregar lista
+    channel = supabase
+      .channel(`company-users-realtime`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_roles' },
+        () => loadCompanyUsers()
+      )
+      .subscribe();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [showInfoPanel]);
+
+  // Assinar compromissos (agenda) em tempo real quando o painel estiver aberto
+  useEffect(() => {
+    if (!showInfoPanel || !leadVinculado?.id) return;
+
+    const channel = supabase
+      .channel(`compromissos-${leadVinculado.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'compromissos', filter: `lead_id=eq.${leadVinculado.id}` },
+        () => {
+          // Recarregar reuniões do lead
+          loadMeetings();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [showInfoPanel, leadVinculado?.id]);
+
+  // Carregar filas da empresa e assinar realtime quando o painel estiver aberto
+  useEffect(() => {
+    if (!showInfoPanel) return;
+    let channel: any;
+
+    const loadQueues = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const { data: userRole } = await supabase
+          .from('user_roles')
+          .select('company_id')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+        if (!userRole?.company_id) return;
+
+        const { data } = await supabase
+          .from('support_queues')
+          .select('*')
+          .eq('company_id', userRole.company_id)
+          .eq('is_active', true)
+          .order('name', { ascending: true });
+        setQueues(data || []);
+      } catch (e) {
+        console.error('Erro ao carregar filas:', e);
+      }
+    };
+
+    loadQueues();
+
+    channel = supabase
+      .channel('support-queues-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_queues' }, () => loadQueues())
+      .subscribe();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [showInfoPanel]);
+
+  // Carregar membros da fila selecionada e assinar realtime
+  useEffect(() => {
+    if (!showInfoPanel || !selectedQueueId) return;
+    let channel: any;
+
+    const loadQueueMembers = async () => {
+      try {
+        // Buscar membros (user_id) da fila
+        const { data: members } = await supabase
+          .from('support_queue_members')
+          .select('user_id')
+          .eq('queue_id', selectedQueueId);
+
+        const ids = (members || []).map((m: any) => m.user_id);
+        if (ids.length === 0) {
+          setQueueMembers([]);
+          return;
+        }
+
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', ids);
+
+        const users = (profiles || []).map(p => ({ id: p.id, name: (p.full_name || p.email) as string })).filter(u => !!u.name);
+        setQueueMembers(users);
+      } catch (e) {
+        console.error('Erro ao carregar membros da fila:', e);
+      }
+    };
+
+    loadQueueMembers();
+
+    channel = supabase
+      .channel(`queue-members-${selectedQueueId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_queue_members', filter: `queue_id=eq.${selectedQueueId}` }, () => loadQueueMembers())
+      .subscribe();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [showInfoPanel, selectedQueueId]);
+
+  // Assinar atribuição da conversa atual (responsável/fila) para refletir transferências em tempo real
+  useEffect(() => {
+    if (!showInfoPanel || !selectedConv || !userCompanyId) return;
+
+    const telefone = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
+    const channel = supabase
+      .channel(`conv-assign-${telefone}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'conversation_assignments', filter: `telefone_formatado=eq.${telefone}` },
+        async () => {
+          // Buscar assignment atual
+          const { data } = await supabase
+            .from('conversation_assignments')
+            .select('*')
+            .eq('company_id', userCompanyId)
+            .eq('telefone_formatado', telefone)
+            .maybeSingle();
+
+          if (!data) return;
+
+          // Se houver fila, mostrar "Fila: <nome>", se houver usuário, mostrar o nome do usuário
+          if (data.queue_id) {
+            const q = queues.find(q => q.id === data.queue_id);
+            if (q) {
+              setSelectedConv(prev => prev ? { ...prev, responsavel: `Fila: ${q.name}` } : prev);
+            }
+          } else if (data.assigned_user_id) {
+            // Buscar nome do usuário
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('full_name, email')
+              .eq('id', data.assigned_user_id)
+              .maybeSingle();
+            const display = profile?.full_name || profile?.email || 'Agente';
+            setSelectedConv(prev => prev ? { ...prev, responsavel: display } : prev);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [showInfoPanel, selectedConv?.id, userCompanyId, queues]);
+
+  const assignConversationToUser = async (userId: string, displayName: string) => {
+    if (!selectedConv || !userCompanyId) return;
+    const telefone = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
+    try {
+      await supabase
+        .from('conversation_assignments')
+        .upsert({
+          company_id: userCompanyId,
+          telefone_formatado: telefone,
+          assigned_user_id: userId,
+          queue_id: null,
+        }, { onConflict: 'company_id,telefone_formatado' });
+
+      // Atualizar localmente
+      setSelectedConv({ ...selectedConv, responsavel: displayName });
+      setConversations(prev => prev.map(c => c.id === selectedConv.id ? { ...c, responsavel: displayName } : c));
+      toast.success(`Atendimento transferido para ${displayName}`);
+    } catch (e) {
+      console.error('Erro ao atribuir conversa ao usuário:', e);
+      toast.error('Erro ao transferir atendimento');
+    }
+  };
+
+  const assignConversationToQueue = async (queueId: string, queueName: string) => {
+    if (!selectedConv || !userCompanyId) return;
+    const telefone = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
+    try {
+      await supabase
+        .from('conversation_assignments')
+        .upsert({
+          company_id: userCompanyId,
+          telefone_formatado: telefone,
+          queue_id: queueId,
+          assigned_user_id: null,
+        }, { onConflict: 'company_id,telefone_formatado' });
+
+      // Atualizar localmente
+      const label = `Fila: ${queueName}`;
+      setSelectedConv({ ...selectedConv, responsavel: label });
+      setConversations(prev => prev.map(c => c.id === selectedConv.id ? { ...c, responsavel: label } : c));
+      toast.success(`Atendimento enviado para a fila ${queueName}`);
+    } catch (e) {
+      console.error('Erro ao atribuir conversa à fila:', e);
+      toast.error('Erro ao transferir para fila');
+    }
+  };
 
   // Filtrar etapas quando funil é selecionado
   useEffect(() => {
@@ -826,6 +1103,10 @@ function Conversas() {
             
             // Atualizar ou adicionar conversa na lista
             let conversaAtualizada: Conversation | null = null;
+            const isOpen = !!(selectedConvRef.current && (
+              selectedConvRef.current.id === telefoneNormalizado ||
+              selectedConvRef.current.phoneNumber === telefoneNormalizado
+            ));
             
             setConversations(prev => {
               // Buscar conversa existente usando telefone normalizado
@@ -861,7 +1142,7 @@ function Conversas() {
                     contactName: nomeAtualizado, // Usar nome atualizado
                     messages: [...conversaExistente.messages, ...novaConvFormatted.messages],
                     lastMessage: novaConvFormatted.lastMessage,
-                    unread: conversaExistente.unread + 1,
+                    unread: isOpen ? 0 : (conversaExistente.unread + 1),
                     avatarUrl: novoNomeValido ? novaConvFormatted.avatarUrl : conversaExistente.avatarUrl, // Atualizar avatar se nome foi atualizado
                   };
                   
@@ -891,16 +1172,25 @@ function Conversas() {
             });
             
             // CRÍTICO: Se a conversa recebida é a que está aberta, atualizar selectedConv IMEDIATAMENTE
-            if (selectedConv && conversaAtualizada && 
-                (selectedConv.id === telefoneNormalizado || selectedConv.phoneNumber === telefoneNormalizado)) {
-              
+            if (isOpen && conversaAtualizada) {
               console.log('🔄 Atualizando conversa selecionada com nova mensagem em tempo real');
-              
               setSelectedConv(conversaAtualizada);
+              // Marcar a mensagem recebida como lida imediatamente no Supabase
+              try {
+                if (novaConversa.status === 'Recebida' && userCompanyIdRef.current) {
+                  await supabase
+                    .from('conversas')
+                    .update({ status: 'Lida' })
+                    .eq('id', novaConversa.id)
+                    .eq('company_id', userCompanyIdRef.current);
+                }
+              } catch (e) {
+                console.error('Erro ao marcar mensagem como lida (realtime):', e);
+              }
             }
             
-            // Notificar APENAS se for mensagem RECEBIDA do cliente (não quando o CRM envia)
-            if (novaConversa.status === 'Recebida' && novaConversa.origem === 'WhatsApp') {
+            // Notificar APENAS se for mensagem RECEBIDA do cliente (não quando o CRM envia) e a conversa não estiver aberta
+            if (!isOpen && novaConversa.status === 'Recebida' && novaConversa.origem === 'WhatsApp') {
               toast.custom((t) => (
                 <div className="bg-card border border-border rounded-lg shadow-lg p-4 max-w-md animate-slide-in-right">
                   <div className="flex items-start gap-3">
@@ -2796,11 +3086,13 @@ function Conversas() {
     if (!novoNome || novoNome.trim() === "") return;
 
     try {
-      // Atualizar no Supabase
+      // Atualizar no Supabase (usar telefone_formatado + company_id)
+      const numeroNormalizado = (conv.phoneNumber || conv.id || '').replace(/[^0-9]/g, '');
       const { error } = await supabase
         .from('conversas')
         .update({ nome_contato: novoNome.trim() })
-        .eq('numero', conv.phoneNumber || conv.id);
+        .eq('telefone_formatado', numeroNormalizado)
+        .eq('company_id', userCompanyId);
 
       if (error) throw error;
 
@@ -2870,11 +3162,13 @@ function Conversas() {
     if (!confirmar) return;
 
     try {
-      // Deletar no Supabase
+      // Deletar no Supabase (usar telefone_formatado + company_id)
+      const numeroNormalizado = (conv.phoneNumber || conv.id || '').replace(/[^0-9]/g, '');
       const { error } = await supabase
         .from('conversas')
         .delete()
-        .eq('numero', conv.phoneNumber || conv.id);
+        .eq('telefone_formatado', numeroNormalizado)
+        .eq('company_id', userCompanyId);
 
       if (error) throw error;
 
@@ -3036,7 +3330,7 @@ function Conversas() {
               onEditName={() => handleEditName(conv.id)}
               onCreateLead={() => handleCreateLead(conv.id)}
               onDeleteConversation={() => handleDeleteConversation(conv.id)}
-              onClick={() => {
+              onClick={async () => {
                 console.log('🔍 Conversa selecionada:', conv.id, 'Mensagens:', conv.messages.length);
                 
                 // Marcar mensagens como lidas e visualizadas
@@ -3059,6 +3353,19 @@ function Conversas() {
                   c.id === conv.id ? updatedConv : c
                 );
                 saveConversations(updated);
+                
+                // Persistir no Supabase: marcar mensagens recebidas como 'Lida'
+                try {
+                  const numeroNormalizado = (conv.phoneNumber || conv.id || '').replace(/[^0-9]/g, '');
+                  await supabase
+                    .from('conversas')
+                    .update({ status: 'Lida' })
+                    .eq('telefone_formatado', numeroNormalizado)
+                    .eq('company_id', userCompanyId)
+                    .eq('status', 'Recebida');
+                } catch (err) {
+                  console.error('Erro ao marcar mensagens como lidas no Supabase:', err);
+                }
                 
                 // Mostrar toast de visualizado
                 if (conv.unread > 0) {
@@ -4227,20 +4534,75 @@ function Conversas() {
                             <DialogHeader>
                               <DialogTitle>Transferir Atendimento</DialogTitle>
                             </DialogHeader>
-                            <div className="space-y-2">
-                              {usuarios.filter(u => u !== selectedConv.responsavel).map((user) => (
+                            <div className="space-y-3">
+                              {/* Filas */}
+                              {queues.length > 0 && (
+                                <div className="space-y-2">
+                                  <h4 className="text-sm font-medium">Filas</h4>
+                                  {queues.map((q) => (
+                                    <Button
+                                      key={q.id}
+                                      variant="outline"
+                                      className="w-full justify-start"
+                                      onClick={() => assignConversationToQueue(q.id, q.name)}
+                                    >
+                                      📥 {q.name}
+                                    </Button>
+                                  ))}
+                                  {/* Selecionar fila para ver membros */}
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">Ver membros da fila:</span>
+                                    <Select value={selectedQueueId} onValueChange={setSelectedQueueId}>
+                                      <SelectTrigger className="h-8">
+                                        <SelectValue placeholder="Selecione uma fila" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {queues.map((q) => (
+                                          <SelectItem key={`sel-${q.id}`} value={q.id}>{q.name}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Agentes */}
+                              <div className="space-y-2">
+                                <h4 className="text-sm font-medium">Agentes</h4>
+                                {companyUsers
+                                  .filter(u => u.name !== selectedConv.responsavel)
+                                  .map((user) => (
                                 <Button 
-                                  key={user}
+                                  key={user.id}
                                   variant="outline" 
                                   className="w-full justify-start"
-                                  onClick={() => {
-                                    setNewResponsavel(user);
-                                    updateResponsavel();
-                                  }}
+                                  onClick={() => assignConversationToUser(user.id, user.name)}
                                 >
-                                  {user}
+                                  {user.name}
                                 </Button>
-                              ))}
+                                ))}
+                              </div>
+
+                              {/* Membros da fila selecionada */}
+                              {selectedQueueId && (
+                                <div className="space-y-2">
+                                  <h4 className="text-sm font-medium">Membros da Fila</h4>
+                                  {queueMembers.length === 0 ? (
+                                    <p className="text-xs text-muted-foreground">Nenhum membro na fila selecionada.</p>
+                                  ) : (
+                                    queueMembers.map((m) => (
+                                      <Button
+                                        key={`m-${m.id}`}
+                                        variant="outline"
+                                        className="w-full justify-start"
+                                        onClick={() => assignConversationToUser(m.id, m.name)}
+                                      >
+                                        👤 {m.name}
+                                      </Button>
+                                    ))
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </DialogContent>
                         </Dialog>

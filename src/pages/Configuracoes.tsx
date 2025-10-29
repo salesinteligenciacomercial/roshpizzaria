@@ -16,13 +16,16 @@ import {
   UserPlus,
   Trash2,
   Building2,
-  Shield
+  Shield,
+  Pencil,
+  Plus
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { WhatsAppQRCode } from "@/components/configuracoes/WhatsAppQRCode";
 import { SubcontasManager } from "@/components/configuracoes/SubcontasManager";
 import { supabase } from "@/integrations/supabase/client";
+import { FilaDialog } from "@/components/configuracoes/FilaDialog";
 
 interface Colaborador {
   id: string;
@@ -71,6 +74,55 @@ export default function Configuracoes() {
   };
   
   // Estados para Fila de Atendimento
+  const [filas, setFilas] = useState<any[]>([]);
+  const [filasLoading, setFilasLoading] = useState<boolean>(false);
+  const [filaDialogOpen, setFilaDialogOpen] = useState<boolean>(false);
+  const [editingFila, setEditingFila] = useState<any | null>(null);
+
+  const carregarFilas = async () => {
+    try {
+      setFilasLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data, error } = await supabase
+        .from('filas_atendimento')
+        .select('*')
+        .order('prioridade', { ascending: true });
+      if (error) throw error;
+      setFilas(data || []);
+    } catch (e) {
+      console.error('Erro ao carregar filas:', e);
+    } finally {
+      setFilasLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarFilas();
+  }, []);
+
+  const abrirNovaFila = () => {
+    setEditingFila(null);
+    setFilaDialogOpen(true);
+  };
+
+  const abrirEditarFila = (fila: any) => {
+    setEditingFila(fila);
+    setFilaDialogOpen(true);
+  };
+
+  const removerFila = async (id: string) => {
+    try {
+      const { error } = await supabase.from('filas_atendimento').delete().eq('id', id);
+      if (error) throw error;
+      await carregarFilas();
+      toast({ title: 'Fila removida' });
+    } catch (e) {
+      console.error('Erro ao remover fila:', e);
+      toast({ variant: 'destructive', title: 'Erro ao remover fila' });
+    }
+  };
+
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([
     {
       id: "1",
@@ -212,6 +264,69 @@ export default function Configuracoes() {
         )}
 
         <TabsContent value="fila" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Filas de Atendimento</CardTitle>
+                  <CardDescription>Gerencie as filas disponíveis no atendimento</CardDescription>
+                </div>
+                <Button onClick={abrirNovaFila}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nova Fila
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {filasLoading && (
+                  <div className="text-sm text-muted-foreground">Carregando filas...</div>
+                )}
+                {!filasLoading && filas.length === 0 && (
+                  <div className="text-sm text-muted-foreground">Nenhuma fila cadastrada.</div>
+                )}
+                {!filasLoading && filas.map((fila) => (
+                  <div key={fila.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <h4 className="font-semibold">{fila.nome}</h4>
+                        {fila.ativa ? (
+                          <Badge>Ativa</Badge>
+                        ) : (
+                          <Badge variant="secondary">Inativa</Badge>
+                        )}
+                        <Badge variant="outline">Prioridade {fila.prioridade ?? 0}</Badge>
+                      </div>
+                      {fila.descricao && (
+                        <p className="text-sm text-muted-foreground mt-1">{fila.descricao}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="icon" onClick={() => abrirEditarFila(fila)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => removerFila(fila.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <FilaDialog
+            open={filaDialogOpen}
+            onOpenChange={setFilaDialogOpen}
+            initialData={editingFila}
+            onSaved={carregarFilas}
+          />
+
           <Card>
             <CardHeader>
               <CardTitle>Adicionar Colaborador</CardTitle>
@@ -586,3 +701,5 @@ export default function Configuracoes() {
     </div>
   );
 }
+
+

@@ -16,6 +16,7 @@ interface Etapa {
   nome: string;
   posicao: number;
   cor: string;
+  status?: 'normal' | 'final';
 }
 
 const CORES_PADRAO = [
@@ -33,29 +34,58 @@ export function NovoFunilDialog({ onFunilCreated }: NovoFunilDialogProps) {
   const [loading, setLoading] = useState(false);
   const [nomeFunil, setNomeFunil] = useState("");
   const [etapas, setEtapas] = useState<Etapa[]>([
-    { id: "1", nome: "Prospecção", posicao: 0, cor: "#ef4444" },
-    { id: "2", nome: "Contato Realizado", posicao: 1, cor: "#f97316" },
-    { id: "3", nome: "Proposta Enviada", posicao: 2, cor: "#eab308" },
-    { id: "4", nome: "Negociação", posicao: 3, cor: "#3b82f6" },
-    { id: "5", nome: "Fechado", posicao: 4, cor: "#22c55e" },
+    { id: "1", nome: "Novo Lead", posicao: 0, cor: "#ef4444", status: 'normal' },
+    { id: "2", nome: "Contato Realizado", posicao: 1, cor: "#f97316", status: 'normal' },
+    { id: "3", nome: "Proposta Enviada", posicao: 2, cor: "#eab308", status: 'normal' },
+    { id: "4", nome: "Negociação", posicao: 3, cor: "#3b82f6", status: 'normal' },
+    { id: "5", nome: "Ganho", posicao: 99, cor: "#22c55e", status: 'final' },
+    { id: "6", nome: "Perdido", posicao: 100, cor: "#ef4444", status: 'final' },
   ]);
 
   const adicionarEtapa = () => {
+    // Encontra a última posição antes das etapas finais
+    const ultimaPosicao = Math.max(...etapas
+      .filter(e => e.status !== 'final')
+      .map(e => e.posicao), -1);
+
     const novaEtapa: Etapa = {
       id: Date.now().toString(),
-      nome: `Etapa ${etapas.length + 1}`,
-      posicao: etapas.length,
+      nome: `Etapa ${etapas.length - 1}`,
+      posicao: ultimaPosicao + 1,
       cor: CORES_PADRAO[etapas.length % CORES_PADRAO.length],
+      status: 'normal'
     };
-    setEtapas([...etapas, novaEtapa]);
+
+    // Insere a nova etapa antes das etapas finais
+    const novasEtapas = [
+      ...etapas.filter(e => e.status !== 'final'),
+      novaEtapa,
+      ...etapas.filter(e => e.status === 'final')
+    ];
+
+    setEtapas(novasEtapas);
   };
 
   const removerEtapa = (id: string) => {
-    if (etapas.length <= 1) {
-      toast.error("O funil precisa ter pelo menos uma etapa");
+    const etapa = etapas.find(e => e.id === id);
+    
+    if (!etapa) return;
+
+    if (etapa.status === 'final') {
+      toast.error("Não é possível remover as etapas Ganho e Perdido");
       return;
     }
-    setEtapas(etapas.filter(e => e.id !== id));
+
+    const etapasNormais = etapas.filter(e => e.status !== 'final');
+    if (etapasNormais.length <= 1) {
+      toast.error("O funil precisa ter pelo menos uma etapa além de Ganho e Perdido");
+      return;
+    }
+
+    setEtapas([
+      ...etapas.filter(e => e.id !== id && e.status !== 'final'),
+      ...etapas.filter(e => e.status === 'final')
+    ]);
   };
 
   const atualizarNomeEtapa = (id: string, novoNome: string) => {
@@ -127,11 +157,12 @@ export function NovoFunilDialog({ onFunilCreated }: NovoFunilDialogProps) {
       toast.success("Funil criado com sucesso!");
       setNomeFunil("");
       setEtapas([
-        { id: "1", nome: "Prospecção", posicao: 0, cor: "#ef4444" },
-        { id: "2", nome: "Contato Realizado", posicao: 1, cor: "#f97316" },
-        { id: "3", nome: "Proposta Enviada", posicao: 2, cor: "#eab308" },
-        { id: "4", nome: "Negociação", posicao: 3, cor: "#3b82f6" },
-        { id: "5", nome: "Fechado", posicao: 4, cor: "#22c55e" },
+        { id: "1", nome: "Novo Lead", posicao: 0, cor: "#ef4444", status: 'normal' },
+        { id: "2", nome: "Contato Realizado", posicao: 1, cor: "#f97316", status: 'normal' },
+        { id: "3", nome: "Proposta Enviada", posicao: 2, cor: "#eab308", status: 'normal' },
+        { id: "4", nome: "Negociação", posicao: 3, cor: "#3b82f6", status: 'normal' },
+        { id: "5", nome: "Ganho", posicao: 99, cor: "#22c55e", status: 'final' },
+        { id: "6", nome: "Perdido", posicao: 100, cor: "#ef4444", status: 'final' },
       ]);
       setOpen(false);
       onFunilCreated();
