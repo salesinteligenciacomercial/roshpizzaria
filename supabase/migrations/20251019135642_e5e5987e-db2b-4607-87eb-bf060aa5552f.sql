@@ -14,15 +14,27 @@ CREATE TABLE public.profiles (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Políticas RLS para profiles
-CREATE POLICY "Users can view own profile"
+CREATE POLICY "Users can view own profile and company profiles"
   ON public.profiles
   FOR SELECT
-  USING (auth.uid() = id);
+  USING (
+    auth.uid() = id OR
+    public.has_role(auth.uid(), 'super_admin'::app_role) OR
+    public.user_belongs_to_company_from_user_id(auth.uid(), id)
+  );
 
 CREATE POLICY "Users can update own profile"
   ON public.profiles
   FOR UPDATE
   USING (auth.uid() = id);
+
+CREATE POLICY "Admins can manage profiles"
+  ON public.profiles
+  FOR ALL
+  USING (
+    public.has_role(auth.uid(), 'super_admin'::app_role) OR
+    public.user_belongs_to_company_from_user_id(auth.uid(), id)
+  );
 
 -- Função para criar perfil automaticamente ao registrar
 CREATE OR REPLACE FUNCTION public.handle_new_user()

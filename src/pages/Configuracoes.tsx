@@ -3,36 +3,40 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-  Key, 
-  Webhook, 
-  Users, 
-  Upload, 
+import {
+  Key,
+  Webhook,
+  Users,
+  Upload,
   Bot,
   MessageSquare,
   Mic,
   UserPlus,
   Trash2,
   Building2,
-  Shield,
   Pencil,
-  Plus
+  Plus,
+  UserCog
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { WhatsAppQRCode } from "@/components/configuracoes/WhatsAppQRCode";
 import { SubcontasManager } from "@/components/configuracoes/SubcontasManager";
+import { UsuariosSubcontaDialog } from "@/components/configuracoes/UsuariosSubcontaDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { FilaDialog } from "@/components/configuracoes/FilaDialog";
+import { FilaColaboradoresDialog } from "@/components/configuracoes/FilaColaboradoresDialog";
 
 interface Colaborador {
-  id: string;
+  id: string; // user_roles.id
+  userId?: string; // profiles.id
   nome: string;
   email: string;
-  setor: string;
-  funcao: string;
+  setor?: string;
+  funcao?: string;
   atendimentosAtivos: number;
   capacidadeMaxima: number;
   status: "disponivel" | "ocupado" | "ausente";
@@ -43,14 +47,20 @@ export default function Configuracoes() {
   const [openaiKey, setOpenaiKey] = useState("");
   const [audimaToken, setAudimaToken] = useState("");
   const [elevenlabsKey, setElevenlabsKey] = useState("");
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isMasterAccount, setIsMasterAccount] = useState(false);
+  const [userRoles, setUserRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentCompany, setCurrentCompany] = useState<any | null>(null);
+  const [manageUsersOpen, setManageUsersOpen] = useState(false);
+  const [latestAnnouncement, setLatestAnnouncement] = useState<any | null>(null);
+  
+  const hasRole = (role: string) => userRoles.includes(role);
 
   useEffect(() => {
-    checkUserRole();
+    checkAccessAndRoles();
   }, []);
 
-  const checkUserRole = async () => {
+  const checkAccessAndRoles = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -59,35 +69,109 @@ export default function Configuracoes() {
         return;
       }
 
+      // Buscar todas as associações do usuário (pode pertencer a múltiplas empresas)
       const { data: roles } = await supabase
         .from('user_roles')
-        .select('role')
+        .select('role, company_id, created_at')
         .eq('user_id', user.id);
 
-      const hasSuperAdmin = roles?.some(r => r.role === 'super_admin');
-      setIsSuperAdmin(hasSuperAdmin || false);
+      const roleList = (roles || []).map(r => r.role).filter(Boolean);
+      setUserRoles(Array.from(new Set(roleList)));
+
+      const companyIds = Array.from(new Set((roles || []).map(r => r.company_id).filter(Boolean)));
+      if (companyIds.length > 0) {
+        const { data: companies } = await (supabase as any)
+          .from('companies')
+          .select('id, name, plan, is_master_account')
+          .in('id', companyIds as any);
+
+        const anyMaster = (companies || []).some((c: any) => c.is_master_account);
+        setIsMasterAccount(anyMaster);
+
+        // Empresa atual padrão: prioriza master; senão, usa a mais recente do user_roles
+        const latestRole = (roles || []).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+        const preferred = (companies || []).find((c: any) => c.is_master_account) || (companies || []).find((c: any) => c.id === latestRole?.company_id) || null;
+        setCurrentCompany(preferred || null);
+      } else {
+        setIsMasterAccount(false);
+        setCurrentCompany(null);
+      }
     } catch (error) {
       console.error('Erro ao verificar role:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Carregar último aviso publicado (geral ou por empresa)
+  useEffect(() => {
+    const loadAnnouncement = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        // company_id pode ser definido após checkAccessAndRoles; aguardamos currentCompany
+        const companyId = currentCompany?.id;
+        let query = (supabase as any)
+          .from('announcements')
+          .select('*')
+          .eq('published', true)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (companyId) {
+          // Buscar primeiro por avisos da empresa e gerais (company_id is null)
+          query = (supabase as any)
+            .from('announcements')
+            .select('*')
+            .eq('published', true)
+            .or(`company_id.is.null,company_id.eq.${companyId}`)
+            .order('created_at', { ascending: false })
+            .limit(1);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        setLatestAnnouncement((data && data.length > 0) ? data[0] : null);
+      } catch (e) {
+        console.error('Erro ao carregar avisos:', e);
+      }
+    };
+    loadAnnouncement();
+  }, [currentCompany?.id]);
   
   // Estados para Fila de Atendimento
   const [filas, setFilas] = useState<any[]>([]);
   const [filasLoading, setFilasLoading] = useState<boolean>(false);
   const [filaDialogOpen, setFilaDialogOpen] = useState<boolean>(false);
   const [editingFila, setEditingFila] = useState<any | null>(null);
+  const [colaboradoresDialogOpen, setColaboradoresDialogOpen] = useState<boolean>(false);
+  const [filaSelecionada, setFilaSelecionada] = useState<any | null>(null);
 
   const carregarFilas = async () => {
     try {
       setFilasLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data, error } = await supabase
+
+      // Buscar company_id do usuário
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!userRole?.company_id) {
+        console.warn('Usuário não associado a empresa');
+        setFilas([]);
+        return;
+      }
+
+      const { data, error } = await (supabase as any)
         .from('filas_atendimento')
         .select('*')
+        .eq('company_id', userRole.company_id)
         .order('prioridade', { ascending: true });
+
       if (error) throw error;
       setFilas(data || []);
     } catch (e) {
@@ -101,6 +185,10 @@ export default function Configuracoes() {
     carregarFilas();
   }, []);
 
+  useEffect(() => {
+    carregarColaboradores();
+  }, [currentCompany?.id]);
+
   const abrirNovaFila = () => {
     setEditingFila(null);
     setFilaDialogOpen(true);
@@ -111,9 +199,14 @@ export default function Configuracoes() {
     setFilaDialogOpen(true);
   };
 
+  const abrirGerenciarColaboradores = (fila: any) => {
+    setFilaSelecionada(fila);
+    setColaboradoresDialogOpen(true);
+  };
+
   const removerFila = async (id: string) => {
     try {
-      const { error } = await supabase.from('filas_atendimento').delete().eq('id', id);
+      const { error } = await (supabase as any).from('filas_atendimento').delete().eq('id', id);
       if (error) throw error;
       await carregarFilas();
       toast({ title: 'Fila removida' });
@@ -123,28 +216,7 @@ export default function Configuracoes() {
     }
   };
 
-  const [colaboradores, setColaboradores] = useState<Colaborador[]>([
-    {
-      id: "1",
-      nome: "Ana Costa",
-      email: "ana@example.com",
-      setor: "Atendimento",
-      funcao: "Atendente",
-      atendimentosAtivos: 5,
-      capacidadeMaxima: 10,
-      status: "disponivel",
-    },
-    {
-      id: "2",
-      nome: "Pedro Lima",
-      email: "pedro@example.com",
-      setor: "Vendas",
-      funcao: "Vendedor",
-      atendimentosAtivos: 8,
-      capacidadeMaxima: 10,
-      status: "ocupado",
-    },
-  ]);
+  const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [novoColaborador, setNovoColaborador] = useState({
     nome: "",
     email: "",
@@ -153,6 +225,37 @@ export default function Configuracoes() {
     capacidadeMaxima: 10,
   });
 
+  const carregarColaboradores = async () => {
+    try {
+      const companyId = currentCompany?.id;
+      if (!companyId) return;
+      const { data: userRoles, error } = await supabase
+        .from('user_roles')
+        .select(`
+          id,
+          user_id,
+          role,
+          profiles:profiles!user_roles_user_id_fkey(full_name,email)
+        `)
+        .eq('company_id', companyId);
+      if (error) throw error;
+      const mapped: Colaborador[] = (userRoles || []).map((u: any) => ({
+        id: u.id,
+        userId: u.user_id,
+        nome: u.profiles?.full_name || u.profiles?.email || 'Usuário',
+        email: u.profiles?.email || '',
+        setor: undefined,
+        funcao: u.role,
+        atendimentosAtivos: 0,
+        capacidadeMaxima: 10,
+        status: "disponivel",
+      }));
+      setColaboradores(mapped);
+    } catch (e) {
+      console.error('Erro ao carregar colaboradores:', e);
+    }
+  };
+
   const handleSaveToken = (integration: string) => {
     toast({
       title: "Token salvo",
@@ -160,46 +263,45 @@ export default function Configuracoes() {
     });
   };
 
-  const adicionarColaborador = () => {
-    if (!novoColaborador.nome || !novoColaborador.email || !novoColaborador.setor) {
+  const adicionarColaborador = async () => {
+    if (!novoColaborador.nome || !novoColaborador.email) {
       toast({
         variant: "destructive",
         title: "Erro",
-        description: "Preencha todos os campos obrigatórios",
+        description: "Preencha nome e e-mail do usuário",
       });
       return;
     }
-
-    const novo: Colaborador = {
-      id: Date.now().toString(),
-      nome: novoColaborador.nome,
+    try {
+      if (!currentCompany?.id) throw new Error('Empresa não encontrada');
+      const { error } = await supabase.functions.invoke('criar-usuario-subconta', {
+        body: {
+          companyId: currentCompany.id,
       email: novoColaborador.email,
-      setor: novoColaborador.setor,
-      funcao: novoColaborador.funcao,
-      atendimentosAtivos: 0,
-      capacidadeMaxima: novoColaborador.capacidadeMaxima,
-      status: "disponivel",
-    };
-
-    setColaboradores([...colaboradores, novo]);
-    setNovoColaborador({
-      nome: "",
-      email: "",
-      setor: "",
-      funcao: "",
-      capacidadeMaxima: 10,
-    });
-    toast({
-      title: "Sucesso",
-      description: "Colaborador adicionado com sucesso!",
-    });
+          full_name: novoColaborador.nome,
+          role: 'user',
+        },
+      });
+      if (error) throw error;
+      setNovoColaborador({ nome: "", email: "", setor: "", funcao: "", capacidadeMaxima: 10 });
+      toast({ title: "Usuário criado", description: "Usuário vinculado à empresa." });
+      await carregarColaboradores();
+    } catch (e: any) {
+      console.error('Erro ao criar usuário:', e);
+      toast({ variant: 'destructive', title: 'Erro ao criar usuário', description: e.message });
+    }
   };
 
-  const removerColaborador = (id: string) => {
-    setColaboradores(colaboradores.filter((c) => c.id !== id));
-    toast({
-      title: "Colaborador removido",
-    });
+  const removerColaborador = async (id: string) => {
+    try {
+      const { error } = await supabase.from('user_roles').delete().eq('id', id);
+      if (error) throw error;
+      await carregarColaboradores();
+      toast({ title: 'Colaborador removido' });
+    } catch (e: any) {
+      console.error('Erro ao remover colaborador:', e);
+      toast({ variant: 'destructive', title: 'Erro ao remover colaborador', description: e.message });
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -228,42 +330,11 @@ export default function Configuracoes() {
     );
   }
 
-  const defaultTab = isSuperAdmin ? "subcontas" : "fila";
+  const defaultTab = isMasterAccount ? "subcontas" : "team";
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Configurações</h1>
-        <p className="text-muted-foreground">
-          Gerencie integrações, tokens e configurações do sistema
-        </p>
-      </div>
-
-      <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className={`grid w-full ${isSuperAdmin ? 'grid-cols-6' : 'grid-cols-5'}`}>
-          {isSuperAdmin && (
-            <TabsTrigger value="subcontas">
-              <Building2 className="mr-2 h-4 w-4" />
-              Subcontas
-            </TabsTrigger>
-          )}
-          <TabsTrigger value="fila">Fila de Atendimento</TabsTrigger>
-          <TabsTrigger value="integrations">Integrações</TabsTrigger>
-          <TabsTrigger value="tokens">Tokens de IA</TabsTrigger>
-          <TabsTrigger value="permissoes">
-            <Shield className="mr-2 h-4 w-4" />
-            Permissões
-          </TabsTrigger>
-          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
-        </TabsList>
-
-        {isSuperAdmin && (
-          <TabsContent value="subcontas">
-            <SubcontasManager />
-          </TabsContent>
-        )}
-
-        <TabsContent value="fila" className="space-y-4">
+  // Seções unificadas da aba Equipe & Permissões
+  const FilasSection = () => (
+    <>
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -302,6 +373,14 @@ export default function Configuracoes() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => abrirGerenciarColaboradores(fila)}
+                        title="Gerenciar colaboradores"
+                      >
+                        <UserCog className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => abrirEditarFila(fila)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -327,6 +406,16 @@ export default function Configuracoes() {
             onSaved={carregarFilas}
           />
 
+          <FilaColaboradoresDialog
+            open={colaboradoresDialogOpen}
+            onOpenChange={setColaboradoresDialogOpen}
+            fila={filaSelecionada}
+          />
+    </>
+  );
+
+  const ColaboradoresSection = () => (
+    <>
           <Card>
             <CardHeader>
               <CardTitle>Adicionar Colaborador</CardTitle>
@@ -479,9 +568,160 @@ export default function Configuracoes() {
               </div>
             </CardContent>
           </Card>
+    </>
+  );
+
+  const PermissoesSection = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Permissões e Perfis</CardTitle>
+        <CardDescription>
+          Configure permissões por perfil de usuário
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            As permissões são gerenciadas através dos perfis de usuário:
+          </p>
+          <div className="grid gap-4">
+            <div className="rounded-md border p-4">
+              <h4 className="font-medium mb-2">Super Admin</h4>
+              <p className="text-sm text-muted-foreground">
+                Acesso total ao sistema, incluindo gestão de subcontas
+              </p>
+            </div>
+            <div className="rounded-md border p-4">
+              <h4 className="font-medium mb-2">Administrador</h4>
+              <p className="text-sm text-muted-foreground">
+                Acesso total à sua empresa e gestão de usuários
+              </p>
+            </div>
+            <div className="rounded-md border p-4">
+              <h4 className="font-medium mb-2">Gestor</h4>
+              <p className="text-sm text-muted-foreground">
+                Acesso a relatórios, leads, funis e conversas
+              </p>
+            </div>
+            <div className="rounded-md border p-4">
+              <h4 className="font-medium mb-2">Vendedor</h4>
+              <p className="text-sm text-muted-foreground">
+                Acesso a leads, conversas e tarefas
+              </p>
+            </div>
+            <div className="rounded-md border p-4">
+              <h4 className="font-medium mb-2">Suporte</h4>
+              <p className="text-sm text-muted-foreground">
+                Acesso a conversas e agenda
+              </p>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const EquipeConfigSection = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Configurações de Equipe</CardTitle>
+        <CardDescription>Preferências e regras de distribuição</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Atribuição automática de leads por fila</Label>
+            <Select value="auto">
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Ativar</SelectItem>
+                <SelectItem value="manual">Desativar</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Relatórios de produtividade</Label>
+            <Select value="habilitado">
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="habilitado">Habilitar</SelectItem>
+                <SelectItem value="desabilitado">Desabilitar</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const UsuariosEquipeSection = () => (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Usuários do CRM</CardTitle>
+            <CardDescription>Gerencie usuários e perfis desta empresa</CardDescription>
+          </div>
+          <Button onClick={() => setManageUsersOpen(true)}>Gerenciar Usuários</Button>
+        </div>
+      </CardHeader>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Configurações</h1>
+        <p className="text-muted-foreground">
+          Gerencie integrações, tokens e configurações do sistema
+        </p>
+      </div>
+
+      {latestAnnouncement && (
+        <Alert className={latestAnnouncement.critical ? "border-destructive bg-destructive/10" : ""}>
+          <AlertDescription className="space-y-1">
+            <p className="font-medium">{latestAnnouncement.title}</p>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{latestAnnouncement.body}</p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Tabs defaultValue={defaultTab} className="w-full">
+        <TabsList className={`grid w-full ${isMasterAccount ? 'grid-cols-5' : 'grid-cols-4'}`}>
+          {isMasterAccount && (
+            <TabsTrigger value="subcontas">
+              <Building2 className="mr-2 h-4 w-4" />
+              Subcontas
+            </TabsTrigger>
+          )}
+          <TabsTrigger value="team">Equipe & Permissões</TabsTrigger>
+          <TabsTrigger value="channels">Canais & Integrações</TabsTrigger>
+          <TabsTrigger value="ia">IA & Automação</TabsTrigger>
+          <TabsTrigger value="webhooks_api">Webhooks & APIs</TabsTrigger>
+        </TabsList>
+
+        {isMasterAccount && (
+          <TabsContent value="subcontas">
+            <SubcontasManager />
+          </TabsContent>
+        )}
+
+        <TabsContent value="team" className="space-y-4">
+          {/* Usuários do CRM (todas as empresas podem gerenciar seus usuários) */}
+          {currentCompany && <UsuariosEquipeSection />}
+          {/* Filas de Atendimento e Colaboradores - disponíveis para todos */}
+          <FilasSection />
+          <ColaboradoresSection />
+          {/* Permissões e Configurações de Equipe - reservado a administradores */}
+          {(hasRole('admin') || hasRole('company_admin')) && <PermissoesSection />}
+          {(hasRole('admin') || hasRole('company_admin')) && <EquipeConfigSection />}
         </TabsContent>
 
-        <TabsContent value="integrations" className="space-y-4">
+        <TabsContent value="channels" className="space-y-4">
           <WhatsAppQRCode />
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -540,7 +780,7 @@ export default function Configuracoes() {
           </div>
         </TabsContent>
 
-        <TabsContent value="tokens" className="space-y-4">
+        <TabsContent value="ia" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -623,57 +863,7 @@ export default function Configuracoes() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="permissoes">
-          <Card>
-            <CardHeader>
-              <CardTitle>Permissões e Perfis</CardTitle>
-              <CardDescription>
-                Configure permissões por perfil de usuário
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  As permissões são gerenciadas através dos perfis de usuário:
-                </p>
-                <div className="grid gap-4">
-                  <div className="rounded-md border p-4">
-                    <h4 className="font-medium mb-2">Super Admin</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Acesso total ao sistema, incluindo gestão de subcontas
-                    </p>
-                  </div>
-                  <div className="rounded-md border p-4">
-                    <h4 className="font-medium mb-2">Administrador</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Acesso total à sua empresa e gestão de usuários
-                    </p>
-                  </div>
-                  <div className="rounded-md border p-4">
-                    <h4 className="font-medium mb-2">Gestor</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Acesso a relatórios, leads, funis e conversas
-                    </p>
-                  </div>
-                  <div className="rounded-md border p-4">
-                    <h4 className="font-medium mb-2">Vendedor</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Acesso a leads, conversas e tarefas
-                    </p>
-                  </div>
-                  <div className="rounded-md border p-4">
-                    <h4 className="font-medium mb-2">Suporte</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Acesso a conversas e agenda
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="webhooks" className="space-y-4">
+        <TabsContent value="webhooks_api" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -698,6 +888,14 @@ export default function Configuracoes() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {currentCompany && (
+        <UsuariosSubcontaDialog
+          company={{ id: currentCompany.id, name: currentCompany.name }}
+          open={manageUsersOpen}
+          onOpenChange={setManageUsersOpen}
+        />
+      )}
     </div>
   );
 }

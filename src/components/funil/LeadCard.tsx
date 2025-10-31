@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, memo, useCallback } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare } from "lucide-react";
+import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp } from "lucide-react";
 import { AgendaModal } from "@/components/agenda/AgendaModal";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { EditarLeadDialog } from "./EditarLeadDialog";
 import { MoverLeadFunilDialog } from "./MoverLeadFunilDialog";
+import { LeadComments } from "./LeadComments";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -27,22 +28,18 @@ interface LeadCardProps {
   };
   onDelete: (leadId: string) => void;
   onLeadMoved?: () => void;
+  isDragging?: boolean;
 }
 
-export function LeadCard({ lead, onDelete, onLeadMoved }: LeadCardProps) {
+export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, isDragging: externalIsDragging }: LeadCardProps) {
   const navigate = useNavigate();
   const [agendaModalOpen, setAgendaModalOpen] = useState(false);
   const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
   const [proximoCompromisso, setProximoCompromisso] = useState<string | null>(null);
   const [proximaTarefa, setProximaTarefa] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  useEffect(() => {
-    if (lead.id) {
-      carregarProximasAtividades();
-    }
-  }, [lead.id]);
-
-  const carregarProximasAtividades = async () => {
+  const carregarProximasAtividades = useCallback(async () => {
     try {
       // Carregar próximo compromisso
       const { data: compromissos } = await supabase
@@ -77,14 +74,20 @@ export function LeadCard({ lead, onDelete, onLeadMoved }: LeadCardProps) {
     } catch (error) {
       console.error("Erro ao carregar atividades:", error);
     }
-  };
-  
+  }, [lead.id]);
+
+  useEffect(() => {
+    if (lead.id) {
+      carregarProximasAtividades();
+    }
+  }, [lead.id, carregarProximasAtividades]);
+
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
-    isDragging,
+    isDragging: internalIsDragging,
   } = useDraggable({
     id: lead.id,
     data: {
@@ -92,6 +95,8 @@ export function LeadCard({ lead, onDelete, onLeadMoved }: LeadCardProps) {
       lead: lead
     }
   });
+
+  const isDragging = externalIsDragging || internalIsDragging;
 
   // Desabilita o drag quando estiver clicando em botões
   const modifiedListeners = {
@@ -104,35 +109,65 @@ export function LeadCard({ lead, onDelete, onLeadMoved }: LeadCardProps) {
   };
 
   const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-    opacity: isDragging ? 0.5 : 1,
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0) ${isDragging ? 'rotate(3deg) scale(1.05)' : 'rotate(0deg) scale(1)'}`,
+    opacity: isDragging ? 0.8 : 1,
     cursor: isDragging ? 'grabbing' : 'grab',
-  } : undefined;
+    transition: isDragging ? 'none' : 'all 200ms ease',
+    zIndex: isDragging ? 1000 : 'auto',
+    boxShadow: isDragging ? '0 20px 50px rgba(0,0,0,0.3)' : undefined,
+  } : {
+    cursor: 'grab',
+    transition: 'all 200ms ease',
+  };
 
-  const abrirConversa = (e: React.MouseEvent) => {
+  const abrirConversa = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (lead.telefone) {
       navigate('/conversas', { state: { leadId: lead.id } });
     } else {
       console.warn('Lead sem telefone:', lead.nome);
     }
-  };
+  }, [lead.telefone, lead.id, lead.nome, navigate]);
+
+  const handleDelete = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (confirm("Tem certeza que deseja excluir este lead?")) {
+      onDelete(lead.id);
+    }
+  }, [lead.id, onDelete]);
+
+  const handleAgendaModal = useCallback(() => {
+    setAgendaModalOpen(true);
+  }, []);
+
+  const handleTarefaModal = useCallback(() => {
+    setTarefaModalOpen(true);
+  }, []);
 
   return (
     <Card
       ref={setNodeRef}
       style={style}
       {...attributes}
-      onClick={(e) => e.stopPropagation()} // Impede propagação de cliques
-      className="group relative p-4 mb-3 cursor-grab active:cursor-grabbing border-0 shadow-card hover:shadow-lg transition-all duration-300 bg-card overflow-hidden"
+      onClick={(e) => {
+        if (!isDragging) {
+          e.stopPropagation();
+          setIsExpanded(!isExpanded);
+        }
+      }}
+      className={`group relative p-4 mb-3 cursor-grab active:cursor-grabbing border-0 shadow-card hover:shadow-lg transition-all duration-300 bg-card overflow-hidden ${
+        isDragging ? 'shadow-2xl scale-105 z-50 ring-2 ring-primary/50 bg-gradient-to-br from-card to-primary/5' : ''
+      }`}
     >
       <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-      
+
       <div className="relative space-y-3">
+        {/* Header sempre visível */}
         <div className="flex justify-between items-start gap-2">
-          <div className="flex items-start gap-2 flex-1" {...(listeners as any)}>
+          <div className="flex items-start gap-2 flex-1" {...(modifiedListeners as any)}>
             <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
               <User className="h-4 w-4 text-primary" />
             </div>
@@ -150,161 +185,188 @@ export function LeadCard({ lead, onDelete, onLeadMoved }: LeadCardProps) {
               )}
             </div>
           </div>
-          <div 
-            className="flex gap-1"
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div onClick={(e) => e.stopPropagation()}>
-              <MoverLeadFunilDialog
-                leadId={lead.id}
-                leadNome={lead.nome}
-                funilAtualId={lead.funil_id}
-                etapaAtualId={lead.etapa_id}
-                onLeadMoved={() => onLeadMoved?.()}
-              />
-            </div>
-            <div onClick={(e) => e.stopPropagation()}>
-              <EditarLeadDialog lead={lead} onLeadUpdated={onLeadMoved || (() => {})} />
-            </div>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setAgendaModalOpen(true);
-                    }}
-                  >
-                    <Calendar className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Próximo compromisso:</p>
-                  <p className="font-medium">{proximoCompromisso || "Nenhum agendado"}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setTarefaModalOpen(true);
-                    }}
-                  >
-                    <CheckSquare className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Próxima tarefa:</p>
-                  <p className="font-medium">{proximaTarefa || "Nenhuma pendente"}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
+          {/* Botão de expandir/colapsar */}
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
-              size="icon"
-              className="h-8 w-8 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+              size="sm"
               onClick={(e) => {
-                e.preventDefault();
                 e.stopPropagation();
-                if (confirm("Tem certeza que deseja excluir este lead?")) {
-                  onDelete(lead.id);
-                }
+                setIsExpanded(!isExpanded);
               }}
+              className="h-8 w-8 p-0"
             >
-              <Trash2 className="h-4 w-4" />
+              {isExpanded ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
             </Button>
           </div>
         </div>
 
-        <AgendaModal
-          open={agendaModalOpen}
-          onOpenChange={setAgendaModalOpen}
-          lead={lead}
-          onAgendamentoCriado={() => {
-            carregarProximasAtividades();
-            onLeadMoved?.();
-          }}
-        />
+        {/* Conteúdo expandido */}
+        {isExpanded && (
+          <div className="space-y-3 border-t pt-3" onClick={(e) => e.stopPropagation()}>
+            <div
+              className="flex gap-1"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div onClick={(e) => e.stopPropagation()}>
+                <MoverLeadFunilDialog
+                  leadId={lead.id}
+                  leadNome={lead.nome}
+                  funilAtualId={lead.funil_id}
+                  etapaAtualId={lead.etapa_id}
+                  onLeadMoved={() => onLeadMoved?.()}
+                />
+              </div>
+              <div onClick={(e) => e.stopPropagation()}>
+                <EditarLeadDialog lead={lead} onLeadUpdated={onLeadMoved || (() => {})} />
+              </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleAgendaModal}
+                    >
+                      <Calendar className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Próximo compromisso:</p>
+                    <p className="font-medium">{proximoCompromisso || "Nenhum agendado"}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
 
-        <TarefaModal
-          open={tarefaModalOpen}
-          onOpenChange={setTarefaModalOpen}
-          lead={lead}
-          onTarefaCriada={() => {
-            carregarProximasAtividades();
-            onLeadMoved?.();
-          }}
-        />
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleTarefaModal}
+                    >
+                      <CheckSquare className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Próxima tarefa:</p>
+                    <p className="font-medium">{proximaTarefa || "Nenhuma pendente"}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
 
-        {lead.company && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-2 py-1.5 rounded-md">
-            <Building2 className="h-3 w-3" />
-            <span>{lead.company}</span>
-          </div>
-        )}
-
-        {lead.telefone && (
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Phone className="h-3 w-3" />
-              <span>{lead.telefone}</span>
-            </div>
-            <div onClick={(e) => e.stopPropagation()}>
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-success hover:text-success hover:bg-success/10 transition-all"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  abrirConversa(e);
-                }}
-                title="Ver histórico de conversas"
+                size="icon"
+                className="h-8 w-8 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                onClick={handleDelete}
               >
-                <MessageCircle className="h-3.5 w-3.5 mr-1" />
-                <span className="text-xs font-medium">Ver Conversas</span>
+                <Trash2 className="h-4 w-4" />
               </Button>
             </div>
-          </div>
-        )}
 
-        {lead.email && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 px-2 py-1.5 rounded-md">
-            <Mail className="h-3 w-3" />
-            <span className="truncate">{lead.email}</span>
-          </div>
-        )}
+            <AgendaModal
+              open={agendaModalOpen}
+              onOpenChange={setAgendaModalOpen}
+              lead={lead}
+              onAgendamentoCriado={() => {
+                carregarProximasAtividades();
+                onLeadMoved?.();
+              }}
+            />
 
-        {lead.value !== undefined && lead.value > 0 && (
-          <div className="flex items-center justify-between pt-2 border-t border-border/50">
-            <span className="text-xs text-muted-foreground font-medium">Valor Estimado</span>
-            <Badge className="font-semibold bg-gradient-success text-success-foreground shadow-sm">
-              R$ {lead.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </Badge>
-          </div>
-        )}
+            <TarefaModal
+              open={tarefaModalOpen}
+              onOpenChange={setTarefaModalOpen}
+              lead={lead}
+              onTarefaCriada={() => {
+                carregarProximasAtividades();
+                onLeadMoved?.();
+              }}
+            />
 
-        {lead.source && (
-          <Badge variant="outline" className="text-xs font-medium border-primary/20 text-primary">
-            <Tag className="h-3 w-3 mr-1" />
-            {lead.source}
-          </Badge>
+            {lead.company && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-2 py-1.5 rounded-md">
+                <Building2 className="h-3 w-3" />
+                <span>{lead.company}</span>
+              </div>
+            )}
+
+            {lead.telefone && (
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Phone className="h-3 w-3" />
+                  <span>{lead.telefone}</span>
+                </div>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-success hover:text-success hover:bg-success/10 transition-all"
+                    onClick={abrirConversa}
+                    title="Ver histórico de conversas"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5 mr-1" />
+                    <span className="text-xs font-medium">Ver Conversas</span>
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {lead.email && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 px-2 py-1.5 rounded-md">
+                <Mail className="h-3 w-3" />
+                <span className="truncate">{lead.email}</span>
+              </div>
+            )}
+
+            {lead.value !== undefined && lead.value > 0 && (
+              <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                <span className="text-xs text-muted-foreground font-medium">Valor Estimado</span>
+                <Badge className="font-semibold bg-gradient-success text-success-foreground shadow-sm">
+                  R$ {lead.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </Badge>
+              </div>
+            )}
+
+            {lead.source && (
+              <Badge variant="outline" className="text-xs font-medium border-primary/20 text-primary">
+                <Tag className="h-3 w-3 mr-1" />
+                {lead.source}
+              </Badge>
+            )}
+
+            <LeadComments
+              leadId={lead.id}
+              onCommentAdded={() => onLeadMoved?.()}
+            />
+          </div>
         )}
       </div>
     </Card>
   );
-}
+}, (prevProps, nextProps) => {
+  // 🎯 Otimização: comparação customizada para evitar re-renders desnecessários
+  return (
+    prevProps.lead.id === nextProps.lead.id &&
+    prevProps.lead.nome === nextProps.lead.nome &&
+    prevProps.lead.telefone === nextProps.lead.telefone &&
+    prevProps.lead.email === nextProps.lead.email &&
+    prevProps.lead.value === nextProps.lead.value &&
+    prevProps.lead.company === nextProps.lead.company &&
+    prevProps.lead.source === nextProps.lead.source &&
+    prevProps.lead.funil_id === nextProps.lead.funil_id &&
+    prevProps.lead.etapa_id === nextProps.lead.etapa_id &&
+    prevProps.isDragging === nextProps.isDragging &&
+    JSON.stringify(prevProps.lead.tags) === JSON.stringify(nextProps.lead.tags)
+  );
+});

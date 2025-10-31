@@ -1,0 +1,38 @@
+name: Announce Release
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build announcement body from commits
+        id: build
+        run: |
+          echo "Gerando corpo do anúncio a partir dos commits recentes..."
+          COMMITS=$(git log -n 10 --pretty=format:'- %s' | sed ':a;N;$!ba;s/\n/\\n/g')
+          TITLE="Atualizações implantadas no CEUSIA CRM"
+          BODY="Foram implantadas novas alterações no CRM.\n\nPrincipais commits recentes:\n${COMMITS}\n\nAções recomendadas:\n- Publicar a última versão no Lovable (Share → Publish).\n- Conferir secrets no Lovable Cloud: EVOLUTION_API_URL, EVOLUTION_INSTANCE, EVOLUTION_API_KEY.\n- Verificar webhook em /functions/v1/webhook-conversas.\n- Recarregar o app (Ctrl+F5)."
+          echo "title=${TITLE}" >> $GITHUB_OUTPUT
+          echo "body=${BODY}" >> $GITHUB_OUTPUT
+
+      - name: Announce via Supabase Function
+        env:
+          ANNOUNCE_KEY: ${{ secrets.ANNOUNCE_KEY }}
+          ANNOUNCE_URL: ${{ secrets.ANNOUNCE_URL }}
+        run: |
+          if [ -z "$ANNOUNCE_KEY" ] || [ -z "$ANNOUNCE_URL" ]; then
+            echo "ANNOUNCE_KEY ou ANNOUNCE_URL não configurados como secrets do repositório. Pulando anúncio."
+            exit 0
+          fi
+          JSON=$(jq -n --arg t "${{ steps.build.outputs.title }}" --arg b "${{ steps.build.outputs.body }}" '{title:$t, body:$b, critical:true, published:true}')
+          echo "$JSON" | curl -sS -X POST "$ANNOUNCE_URL" \
+            -H "x-announce-key: $ANNOUNCE_KEY" \
+            -H "Content-Type: application/json" \
+            -d @-
+

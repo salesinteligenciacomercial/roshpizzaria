@@ -8,12 +8,11 @@ import { toast } from "sonner";
 
 interface Recommendation {
   id: string;
-  recommendation_type: string;
-  recommendation_text: string;
-  priority: string;
-  status: string;
-  created_at: string;
+  recommendation_type: string; // 'product' | 'service' | 'timing' | 'followup' | 'risk'
   recommendation_data: any;
+  confidence_score?: number;
+  status: 'pending' | 'applied' | 'dismissed';
+  created_at: string;
 }
 
 export function RecomendacoesIA() {
@@ -42,7 +41,7 @@ export function RecomendacoesIA() {
 
   const loadRecommendations = async () => {
     const { data, error } = await supabase
-      .from('ia_recommendations')
+      .from('recommendation_engine')
       .select('*')
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
@@ -58,9 +57,9 @@ export function RecomendacoesIA() {
 
   const handleRecommendation = async (id: string, action: 'accepted' | 'rejected') => {
     const { error } = await supabase
-      .from('ia_recommendations')
+      .from('recommendation_engine')
       .update({
-        status: action,
+        status: action === 'accepted' ? 'applied' : 'dismissed',
         applied_at: new Date().toISOString()
       })
       .eq('id', id);
@@ -109,6 +108,23 @@ export function RecomendacoesIA() {
     );
   }
 
+  const getTextFromRecommendation = (rec: Recommendation) => {
+    const data = rec.recommendation_data || {};
+    switch (rec.recommendation_type) {
+      case 'timing':
+        return data.message || `Enviar em ${data.suggestedHour || 'horário ideal'}`;
+      case 'followup':
+        return data.message || 'Realizar follow-up baseado em inatividade';
+      case 'risk':
+        return data.message || 'Risco de perda detectado — agir rapidamente';
+      case 'product':
+      case 'service':
+        return data.message || `Sugerir ${data.item || 'oferta personalizada'}`;
+      default:
+        return data.message || 'Recomendação gerada pela IA';
+    }
+  };
+
   return (
     <div className="space-y-4">
       {recommendations.map((rec) => {
@@ -123,11 +139,11 @@ export function RecomendacoesIA() {
                     <Icon className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <CardTitle className="text-lg">{rec.recommendation_text}</CardTitle>
+                    <CardTitle className="text-lg">{getTextFromRecommendation(rec)}</CardTitle>
                     <div className="flex gap-2 mt-2">
-                      <Badge className={getPriorityColor(rec.priority)}>
-                        {rec.priority === 'high' ? 'Alta' : rec.priority === 'medium' ? 'Média' : 'Baixa'}
-                      </Badge>
+                      {typeof rec.confidence_score === 'number' && (
+                        <Badge variant="outline">Confiança {Math.round((rec.confidence_score || 0) * 100)}%</Badge>
+                      )}
                       <Badge variant="outline">
                         {rec.recommendation_type === 'timing' ? 'Momento Ideal' :
                          rec.recommendation_type === 'message' ? 'Mensagem' :

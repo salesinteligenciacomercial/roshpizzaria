@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bot, Sparkles, TrendingUp, Target, Workflow, BarChart3, Send, Brain, Lightbulb } from "lucide-react";
+import { Bot, Sparkles, TrendingUp, Target, Workflow, BarChart3, Send, Brain, Lightbulb, BookOpen } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FluxoAutomacaoBuilder } from "@/components/fluxos/FluxoAutomacaoBuilder";
 import { IAAgentCard } from "@/components/ia/IAAgentCard";
@@ -7,17 +7,44 @@ import { PainelInsights } from "@/components/ia/PainelInsights";
 import { DisparoEmMassa } from "@/components/campanhas/DisparoEmMassa";
 import { TreinamentoIA } from "@/components/ia/TreinamentoIA";
 import { RecomendacoesIA } from "@/components/ia/RecomendacoesIA";
-import { useState } from "react";
+import { BaseConhecimentoIA } from "@/components/ia/BaseConhecimentoIA";
+import { useEffect, useState } from "react";
+import { useAIAgents } from "@/hooks/useAIAgents";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function IA() {
-  const [agentStates, setAgentStates] = useState({
-    atendimento: true,
-    vendedora: true,
-    suporte: false,
-  });
+  const [agentStates, setAgentStates] = useState({ atendimento: true, vendedora: true, suporte: false });
+  const { getAgentConfigs, updateAgentConfig } = useAIAgents();
 
-  const handleAgentToggle = (id: string, active: boolean) => {
+  useEffect(() => {
+    const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .single();
+      if (!userRole?.company_id) return;
+      const configs = await getAgentConfigs(userRole.company_id);
+      const state = { atendimento: true, vendedora: true, suporte: false } as any;
+      configs.forEach((c: any) => { state[c.agent_type] = !!c.enabled; });
+      setAgentStates(state);
+    };
+    load();
+  }, [getAgentConfigs]);
+
+  const handleAgentToggle = async (id: string, active: boolean) => {
     setAgentStates(prev => ({ ...prev, [id]: active }));
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: userRole } = await supabase
+      .from('user_roles')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .single();
+    if (!userRole?.company_id) return;
+    await updateAgentConfig(userRole.company_id, id, { enabled: active });
   };
 
   const aiAgents = [
@@ -74,10 +101,14 @@ export default function IA() {
       </div>
 
       <Tabs defaultValue="agentes" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="agentes" className="gap-2">
             <Bot className="h-4 w-4" />
             Agentes
+          </TabsTrigger>
+          <TabsTrigger value="conhecimento" className="gap-2">
+            <BookOpen className="h-4 w-4" />
+            Conhecimento
           </TabsTrigger>
           <TabsTrigger value="treinamento" className="gap-2">
             <Brain className="h-4 w-4" />
@@ -157,6 +188,10 @@ export default function IA() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="conhecimento" className="space-y-6 mt-6">
+          <BaseConhecimentoIA />
         </TabsContent>
 
         <TabsContent value="fluxos" className="space-y-4 mt-6">

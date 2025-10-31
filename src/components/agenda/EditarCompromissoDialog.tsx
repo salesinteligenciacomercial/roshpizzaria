@@ -61,7 +61,7 @@ export function EditarCompromissoDialog({
   const [leads, setLeads] = useState<Lead[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   
-  const [leadId, setLeadId] = useState(compromisso.lead_id || "");
+  const [leadId, setLeadId] = useState(compromisso.lead_id || "none");
   const [data, setData] = useState<Date>(parseISO(compromisso.data_hora_inicio));
   const [horaInicio, setHoraInicio] = useState(
     format(parseISO(compromisso.data_hora_inicio), "HH:mm")
@@ -83,7 +83,7 @@ export function EditarCompromissoDialog({
   }, [open, compromisso]);
 
   const resetForm = () => {
-    setLeadId(compromisso.lead_id || "");
+    setLeadId(compromisso.lead_id || "none");
     setData(parseISO(compromisso.data_hora_inicio));
     setHoraInicio(format(parseISO(compromisso.data_hora_inicio), "HH:mm"));
     setHoraFim(format(parseISO(compromisso.data_hora_fim), "HH:mm"));
@@ -167,7 +167,7 @@ export function EditarCompromissoDialog({
       const { error } = await supabase
         .from("compromissos")
         .update({
-          lead_id: leadId || null,
+          lead_id: leadId === 'none' ? null : leadId,
           data_hora_inicio: dataHoraInicio.toISOString(),
           data_hora_fim: dataHoraFim.toISOString(),
           tipo_servico: tipoServico.trim(),
@@ -212,7 +212,7 @@ export function EditarCompromissoDialog({
                 <SelectValue placeholder="Selecione um cliente" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Nenhum</SelectItem>
+                <SelectItem value="none">Nenhum</SelectItem>
                 {leads.map((lead) => (
                   <SelectItem key={lead.id} value={lead.id}>
                     {lead.name} {lead.phone && `(${lead.phone})`}

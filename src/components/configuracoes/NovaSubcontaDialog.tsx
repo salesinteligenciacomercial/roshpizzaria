@@ -41,6 +41,49 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
     setLoading(true);
 
     try {
+      // Verificar se usuário tem permissão para criar subcontas
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("Usuário não autenticado");
+      }
+
+      // Buscar informações da empresa do usuário
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id, role')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!userRole?.company_id) {
+        throw new Error("Empresa não encontrada");
+      }
+
+      // Verificar se a empresa é master
+      const { data: currentCompany } = await supabase
+        .from('companies')
+        .select('is_master_account, plan')
+        .eq('id', userRole.company_id)
+        .single();
+
+      if (!currentCompany?.is_master_account) {
+        throw new Error("Apenas contas centrais podem criar subcontas");
+      }
+
+      // Verificar limites por plano
+      const { data: existingSubcompanies } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('parent_company_id', userRole.company_id);
+
+      const currentCount = existingSubcompanies?.length || 0;
+      const maxAllowed = currentCompany.plan === 'free' ? 0 :
+                        currentCompany.plan === 'basic' ? 3 :
+                        currentCompany.plan === 'premium' ? 10 : 0;
+
+      if (currentCount >= maxAllowed) {
+        throw new Error(`Limite de subcontas atingido para o plano ${currentCompany.plan}. Máximo: ${maxAllowed}`);
+      }
+
       const adminEmail = isTestAccount ? "admin@ceusia.app" : formData.email;
 
       const companyData = {
@@ -50,6 +93,8 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
         status: "active",
         max_users: isTestAccount ? 50 : formData.max_users,
         max_leads: isTestAccount ? 10000 : formData.max_leads,
+        parent_company_id: userRole.company_id, // Define a hierarquia
+        is_master_account: false, // Subcontas nunca são master
         settings: {
           email: isTestAccount ? "teste@ceusia.app" : formData.email,
           telefone: isTestAccount ? "(00) 0000-0000" : formData.telefone,

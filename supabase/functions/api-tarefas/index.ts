@@ -102,15 +102,22 @@ serve(async (req) => {
     }
 
     // Get user's company_id
-    const { data: userRole } = await supabase
+    const { data: userRole, error: userRoleError } = await supabase
       .from('user_roles')
-      .select('company_id')
+      .select('company_id, role')
       .eq('user_id', user.id)
       .single();
 
-    if (!userRole?.company_id) {
+    console.log('User role lookup:', { userId: user.id, userRole, error: userRoleError });
+
+    if (userRoleError || !userRole?.company_id) {
+      console.error('User role error:', userRoleError);
       return new Response(
-        JSON.stringify({ error: "Você não tem permissão para esta ação", code: "FORBIDDEN" }),
+        JSON.stringify({
+          error: "Você não tem permissão para esta ação. Verifique se está associado a uma empresa.",
+          code: "FORBIDDEN",
+          details: userRoleError?.message
+        }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -172,6 +179,16 @@ serve(async (req) => {
 
       case "criar_tarefa": {
         const validatedData = createTaskSchema.parse(data);
+        console.log('Creating task with data:', {
+          title: validatedData.title,
+          assignee_id: validatedData.assignee_id,
+          lead_id: validatedData.lead_id,
+          column_id: validatedData.column_id,
+          board_id: validatedData.board_id,
+          owner_id: user.id,
+          company_id: companyId
+        });
+
         const { data: task, error } = await supabase
           .from("tasks")
           .insert([{
@@ -197,11 +214,23 @@ serve(async (req) => {
 
         if (error) {
           console.error("Error creating task:", error);
+          console.error("Error details:", {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          });
           return new Response(
-            JSON.stringify({ error: "Erro ao criar tarefa", code: "DATABASE_ERROR" }),
+            JSON.stringify({
+              error: "Erro ao criar tarefa",
+              code: "DATABASE_ERROR",
+              details: error.message
+            }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+
+        console.log('Task created successfully:', task);
 
         return new Response(JSON.stringify({ success: true, data: task }), {
           status: 200,

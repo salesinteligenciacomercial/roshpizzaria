@@ -18,6 +18,7 @@ import {
   Filter
 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export function DisparoEmMassa() {
   const [campanhaOpen, setCampanhaOpen] = useState(false);
@@ -29,6 +30,8 @@ export function DisparoEmMassa() {
     segmentacao: "todos",
     agendamento: "",
     arquivo: null as File | null,
+    abTesting: false,
+    varianteB: ""
   });
 
   const campanhasRecentes = [
@@ -71,8 +74,77 @@ export function DisparoEmMassa() {
     setLoading(true);
 
     try {
-      // Simular envio
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Descobrir company_id
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user?.id)
+        .single();
+
+      const companyId = userRole?.company_id;
+
+      // Salvar configuração de campanha
+      const campaignConfig = {
+        company_id: companyId,
+        name: formData.nome || 'Campanha sem nome',
+        description: 'Campanha disparo em massa',
+        segment_criteria: { type: formData.segmentacao },
+        message_templates: formData.abTesting ? { A: formData.mensagem, B: formData.varianteB || formData.mensagem } : { A: formData.mensagem },
+        schedule_config: formData.agendamento ? { datetime: formData.agendamento } : { immediate: true },
+        ab_testing_enabled: formData.abTesting,
+        ab_variants: formData.abTesting ? ['A', 'B'] : ['A'],
+        enabled: true
+      };
+      const { data: campaign } = await supabase
+        .from('campaign_configs')
+        .insert(campaignConfig)
+        .select()
+        .single();
+
+      // Buscar leads conforme segmentação
+      let leadsQuery = supabase.from('leads').select('id, name, phone').eq('company_id', companyId);
+      switch (formData.segmentacao) {
+        case 'etapa_novo':
+          leadsQuery = leadsQuery.eq('stage', 'Novo');
+          break;
+        case 'etapa_qualificado':
+          leadsQuery = leadsQuery.eq('stage', 'qualified');
+          break;
+        case 'tag_cliente':
+          leadsQuery = leadsQuery.contains('tags', ['cliente']);
+          break;
+        case 'tag_interesse':
+          leadsQuery = leadsQuery.contains('tags', ['interesse']);
+          break;
+        case 'sem_resposta':
+          // Ex.: sem resposta há 7 dias usando campo last_interaction_at
+          leadsQuery = leadsQuery.lte('last_interaction_at', new Date(Date.now() - 7*24*60*60*1000).toISOString());
+          break;
+      }
+      const { data: leads } = await leadsQuery.limit(500);
+
+      // Enviar imediatamente (ou agendar via outra função). Aqui enviamos síncrono para até 500.
+      const recipients = leads || [];
+      for (let i = 0; i < recipients.length; i++) {
+        const lead = recipients[i];
+        const variant = formData.abTesting && i % 2 === 1 ? 'B' : 'A';
+        const message = (campaign?.message_templates as any)[variant] || formData.mensagem;
+
+        // Enviar via Edge Function de WhatsApp
+        await supabase.functions.invoke('enviar-whatsapp', {
+          body: { numero: lead.phone, mensagem: message, company_id: companyId }
+        });
+
+        // Registrar log
+        await supabase.from('campaign_logs').insert({
+          campaign_id: campaign?.id,
+          company_id: companyId,
+          lead_id: lead.id,
+          message_sent: message,
+          variant_used: variant
+        });
+      }
       
       toast.success(`Campanha ${formData.agendamento ? 'agendada' : 'enviada'} com sucesso!`);
       setCampanhaOpen(false);
@@ -85,6 +157,8 @@ export function DisparoEmMassa() {
         segmentacao: "todos",
         agendamento: "",
         arquivo: null,
+        abTesting: false,
+        varianteB: ""
       });
     } catch (error: any) {
       toast.error("Erro ao enviar campanha");
@@ -184,6 +258,29 @@ export function DisparoEmMassa() {
                   <span>Use variáveis: {'{nome}'}, {'{empresa}'}, {'{valor}'}</span>
                   <span>{formData.mensagem.length}/4096 caracteres</span>
                 </div>
+              </div>
+
+              {/* A/B Testing */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Ativar A/B Testing</Label>
+                  <input
+                    type="checkbox"
+                    checked={formData.abTesting}
+                    onChange={(e) => setFormData({ ...formData, abTesting: e.target.checked })}
+                  />
+                </div>
+                {formData.abTesting && (
+                  <div className="space-y-2">
+                    <Label>Mensagem Variante B</Label>
+                    <Textarea
+                      placeholder="Opcional: mensagem alternativa para 50% dos destinos"
+                      value={formData.varianteB}
+                      onChange={(e) => setFormData({ ...formData, varianteB: e.target.value })}
+                      rows={4}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">

@@ -1,9 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity } from "lucide-react";
+import { TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity, BarChart3, Trophy, XCircle, Download, Share2, Filter } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
 interface Stats {
   totalLeads: number;
@@ -14,6 +17,21 @@ interface Stats {
   compromissos: number;
   tarefas: number;
   mensagensIA: number;
+}
+
+interface ReportFilters {
+  period: string;
+  startDate?: string;
+  endDate?: string;
+  responsible?: string;
+  channel?: string;
+}
+
+interface LeadReportStats {
+  totalGanhos: number;
+  totalPerdidos: number;
+  valorTotalGanhos: number;
+  taxaConversao: number;
 }
 
 export default function Dashboard() {
@@ -30,9 +48,26 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [etapas, setEtapas] = useState<any[]>([]);
 
+  // Novos estados para relatórios
+  const [reportFilters, setReportFilters] = useState<ReportFilters>({
+    period: 'all'
+  });
+  const [reportStats, setReportStats] = useState<LeadReportStats>({
+    totalGanhos: 0,
+    totalPerdidos: 0,
+    valorTotalGanhos: 0,
+    taxaConversao: 0
+  });
+  const [reportLoading, setReportLoading] = useState(false);
+
   useEffect(() => {
     fetchStats();
+    fetchReportStats();
   }, []);
+
+  useEffect(() => {
+    fetchReportStats();
+  }, [reportFilters]);
 
   const fetchStats = async () => {
     try {
@@ -89,6 +124,71 @@ export default function Dashboard() {
       console.error("Erro ao carregar estatísticas:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchReportStats = async () => {
+    try {
+      setReportLoading(true);
+
+      // Base query com filtros
+      let queryGanhos = supabase.from("leads").select("value, created_at").eq("status", "ganho");
+      let queryPerdidos = supabase.from("leads").select("id, created_at").eq("status", "perdido");
+
+      // Aplicar filtros de período
+      if (reportFilters.period !== 'all') {
+        const now = new Date();
+        let startDate: Date;
+
+        switch (reportFilters.period) {
+          case 'today':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            break;
+          case 'week':
+            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case 'month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+          case 'quarter':
+            const quarterStart = Math.floor(now.getMonth() / 3) * 3;
+            startDate = new Date(now.getFullYear(), quarterStart, 1);
+            break;
+          case 'year':
+            startDate = new Date(now.getFullYear(), 0, 1);
+            break;
+          default:
+            startDate = new Date(0);
+        }
+
+        queryGanhos = queryGanhos.gte('created_at', startDate.toISOString());
+        queryPerdidos = queryPerdidos.gte('created_at', startDate.toISOString());
+      }
+
+      const { data: leadsGanhos, error: errorGanhos } = await queryGanhos;
+      const { data: leadsPerdidos, error: errorPerdidos } = await queryPerdidos;
+
+      if (errorGanhos || errorPerdidos) {
+        throw new Error("Erro ao carregar estatísticas de relatório");
+      }
+
+      const valorTotal = leadsGanhos?.reduce((acc, lead) => acc + (lead.value || 0), 0) || 0;
+      const totalGanhos = leadsGanhos?.length || 0;
+      const totalPerdidos = leadsPerdidos?.length || 0;
+      const taxaConversao = totalGanhos + totalPerdidos > 0
+        ? (totalGanhos / (totalGanhos + totalPerdidos)) * 100
+        : 0;
+
+      setReportStats({
+        totalGanhos,
+        totalPerdidos,
+        valorTotalGanhos: valorTotal,
+        taxaConversao: Math.round(taxaConversao * 10) / 10
+      });
+    } catch (error) {
+      console.error("Erro ao carregar estatísticas de relatório:", error);
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -166,19 +266,32 @@ export default function Dashboard() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="space-y-2">
         <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-          Dashboard Gerencial
+          Analytics & Dashboard
         </h1>
-        <p className="text-muted-foreground text-lg">Visão completa do seu CRM em tempo real</p>
+        <p className="text-muted-foreground text-lg">Visão completa e análises detalhadas do seu CRM</p>
       </div>
 
-      <Tabs defaultValue="vendas" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="vendas">Vendas</TabsTrigger>
-          <TabsTrigger value="operacional">Operacional</TabsTrigger>
-          <TabsTrigger value="ia">Inteligência Artificial</TabsTrigger>
+      <Tabs defaultValue="dashboard" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="dashboard" className="gap-2">
+            <Activity className="h-4 w-4" />
+            Dashboard
+          </TabsTrigger>
+          <TabsTrigger value="relatorios" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Relatórios
+          </TabsTrigger>
+          <TabsTrigger value="insights" className="gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Insights
+          </TabsTrigger>
+          <TabsTrigger value="export" className="gap-2">
+            <Download className="h-4 w-4" />
+            Export
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="vendas" className="space-y-6">
+        <TabsContent value="dashboard" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {statCards.map((stat, index) => (
               <Card 
@@ -283,6 +396,267 @@ export default function Dashboard() {
                     <p className="text-sm text-muted-foreground">Atendimento, Vendas e Suporte</p>
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="relatorios" className="space-y-6">
+          {/* Filtros de Relatório */}
+          <Card className="border-0 shadow-card">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Filter className="h-5 w-5" />
+                    Filtros de Relatório
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Selecione o período para análise detalhada
+                  </p>
+                </div>
+                <Button
+                  onClick={() => fetchReportStats()}
+                  disabled={reportLoading}
+                  variant="outline"
+                  size="sm"
+                >
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  Atualizar
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-4 items-end">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Período</label>
+                  <Select
+                    value={reportFilters.period}
+                    onValueChange={(value) => setReportFilters(prev => ({ ...prev, period: value }))}
+                  >
+                    <SelectTrigger className="w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todo o período</SelectItem>
+                      <SelectItem value="today">Hoje</SelectItem>
+                      <SelectItem value="week">Última semana</SelectItem>
+                      <SelectItem value="month">Último mês</SelectItem>
+                      <SelectItem value="quarter">Último trimestre</SelectItem>
+                      <SelectItem value="year">Último ano</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Cards de Relatórios */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <Card className="border-0 shadow-card group relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 to-green-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                  Leads Ganhos
+                </CardTitle>
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300">
+                  <Trophy className="h-5 w-5 text-green-600" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative">
+                {reportLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-green-600 border-t-transparent" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-3xl font-bold text-green-600">{reportStats.totalGanhos}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      R$ {reportStats.valorTotalGanhos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-card group relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 to-red-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                  Leads Perdidos
+                </CardTitle>
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300">
+                  <XCircle className="h-5 w-5 text-red-600" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative">
+                {reportLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-3xl font-bold text-red-600">{reportStats.totalPerdidos}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Taxa conversão: {reportStats.taxaConversao}%
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-card group relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                  Performance Geral
+                </CardTitle>
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300">
+                  <BarChart3 className="h-5 w-5 text-blue-600" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative">
+                {reportLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-3xl font-bold text-blue-600">
+                      {reportStats.totalGanhos + reportStats.totalPerdidos}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Total de leads processados
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-card group relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-purple-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                  Ticket Médio
+                </CardTitle>
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300">
+                  <DollarSign className="h-5 w-5 text-purple-600" />
+                </div>
+              </CardHeader>
+              <CardContent className="relative">
+                {reportLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-3xl font-bold text-purple-600">
+                      R$ {reportStats.totalGanhos > 0
+                        ? (reportStats.valorTotalGanhos / reportStats.totalGanhos).toLocaleString('pt-BR', {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 0
+                          })
+                        : '0'}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Por lead convertido
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Relatórios Avançados */}
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card className="border-0 shadow-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  Análise de Conversão por Canal
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">WhatsApp</span>
+                    <Badge variant="secondary">Em breve</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Instagram</span>
+                    <Badge variant="secondary">Em breve</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Facebook</span>
+                    <Badge variant="secondary">Em breve</Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  Performance por Vendedor
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                  <p className="text-sm">Relatórios detalhados em desenvolvimento</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="insights" className="space-y-6">
+          <Card className="border-0 shadow-card">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Insights Avançados
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Análises preditivas e recomendações inteligentes
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-12 text-muted-foreground">
+                <TrendingUp className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                <h3 className="font-semibold mb-2">Insights Avançados</h3>
+                <p className="text-sm">Análises preditivas e recomendações estarão disponíveis em breve</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="export" className="space-y-6">
+          <Card className="border-0 shadow-card">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Download className="h-5 w-5 text-primary" />
+                Export & Compartilhar
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Exporte relatórios e compartilhe insights
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <Button variant="outline" className="h-20 flex-col gap-2">
+                  <Download className="h-6 w-6" />
+                  <span>Exportar PDF</span>
+                </Button>
+                <Button variant="outline" className="h-20 flex-col gap-2">
+                  <Share2 className="h-6 w-6" />
+                  <span>Compartilhar</span>
+                </Button>
+              </div>
+              <div className="text-center py-8 text-muted-foreground">
+                <Download className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">Funcionalidades de export em desenvolvimento</p>
               </div>
             </CardContent>
           </Card>

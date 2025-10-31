@@ -34,6 +34,8 @@ import { EditarInformacoesLeadDialog } from "@/components/conversas/EditarInform
 import { ResponsaveisManager } from "@/components/conversas/ResponsaveisManager";
 import { formatPhoneNumber, safeFormatPhoneNumber } from "@/utils/phoneFormatter";
 import { useLeadsSync } from "@/hooks/useLeadsSync";
+import { useGlobalSync } from "@/hooks/useGlobalSync";
+import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
 
 interface Message {
   id: string;
@@ -45,6 +47,7 @@ interface Message {
   read?: boolean;
   mediaUrl?: string;
   fileName?: string;
+  mimeType?: string;
   transcricao?: string;
   reaction?: string;
   replyTo?: string;
@@ -216,6 +219,19 @@ function Conversas() {
   const [leadsVinculados, setLeadsVinculados] = useState<Record<string, string>>({}); // conversationId -> leadId
   const [userCompanyId, setUserCompanyId] = useState<string | null>(null); // Company ID do usuário
   const [userName, setUserName] = useState<string>(""); // Nome do usuário logado
+  const [companyMetrics, setCompanyMetrics] = useState<{
+    totalConversas: number;
+    conversasAtivas: number;
+    mensagensHoje: number;
+    whatsappConnections: number;
+    whatsappConnected: number;
+  }>({
+    totalConversas: 0,
+    conversasAtivas: 0,
+    mensagensHoje: 0,
+    whatsappConnections: 0,
+    whatsappConnected: 0,
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedConvRef = useRef<Conversation | null>(null);
   const userCompanyIdRef = useRef<string | null>(null);
@@ -234,6 +250,76 @@ function Conversas() {
 
   useEffect(() => {
     userCompanyIdRef.current = userCompanyId;
+  }, [userCompanyId]);
+
+  // Sistema de eventos globais para comunicação entre módulos
+  const { emitGlobalEvent } = useGlobalSync({
+    callbacks: {
+      // Receber eventos de outros módulos
+      onLeadUpdated: (data) => {
+        console.log('🌍 [Conversas] Lead atualizado via evento global:', data);
+        // Atualizar lead vinculado se for o mesmo
+        if (leadVinculado && leadVinculado.id === data.id) {
+          setLeadVinculado(data);
+        }
+        // Atualizar conversa correspondente se existir
+        setConversations(prev => prev.map(conv => {
+          const phoneMatch = conv.phoneNumber === data.phone || conv.phoneNumber === data.telefone;
+          if (phoneMatch) {
+            return {
+              ...conv,
+              contactName: data.name || conv.contactName,
+              tags: data.tags?.length ? data.tags : conv.tags,
+              funnelStage: data.stage || conv.funnelStage,
+              produto: data.servico || conv.produto,
+              valor: data.value ? `R$ ${Number(data.value).toLocaleString('pt-BR')}` : conv.valor,
+              anotacoes: data.notes || conv.anotacoes,
+            };
+          }
+          return conv;
+        }));
+      },
+      onTaskCreated: (data) => {
+        console.log('🌍 [Conversas] Nova tarefa criada, verificar se vinculada ao lead:', data);
+        // Se uma tarefa foi criada vinculada ao lead atual, podemos mostrar notificação
+        if (leadVinculado && data.lead_id === leadVinculado.id) {
+          // Opcional: mostrar indicador de tarefa criada
+        }
+      },
+      onMeetingScheduled: (data) => {
+        console.log('🌍 [Conversas] Reunião agendada, verificar se vinculada ao lead:', data);
+        // Se uma reunião foi agendada vinculada ao lead atual, podemos mostrar notificação
+        if (leadVinculado && data.lead_id === leadVinculado.id) {
+          // Opcional: mostrar indicador de reunião agendada
+        }
+      },
+      onFunnelStageChanged: (data) => {
+        console.log('🌍 [Conversas] Lead movido no funil:', data);
+        // Atualizar conversa se o lead mudou de etapa
+        setConversations(prev => prev.map(conv => {
+          if (leadVinculado && leadVinculado.id === data.leadId) {
+            return {
+              ...conv,
+              funnelStage: data.newStage
+            };
+          }
+          return conv;
+        }));
+      }
+    },
+    showNotifications: false
+  });
+
+  // Sistema de workflows automatizados
+  useWorkflowAutomation({
+    showNotifications: true
+  });
+
+  // Carregar métricas quando a empresa for identificada
+  useEffect(() => {
+    if (userCompanyId) {
+      loadCompanyMetrics();
+    }
   }, [userCompanyId]);
 
   // Form states
@@ -690,6 +776,50 @@ function Conversas() {
 
   // Integrar sincronização de leads em tempo real
   useLeadsSync({
+    onInsert: (newLead) => {
+      try {
+        // Vincular automaticamente quando um lead novo é criado em outro módulo
+        const matchSelected = selectedConv && (
+          selectedConv.phoneNumber === newLead.phone ||
+          selectedConv.phoneNumber === newLead.telefone ||
+          selectedConv.id === newLead.phone ||
+          selectedConv.id === newLead.telefone
+        );
+
+        // Atualizar lista de conversas por telefone correspondente
+        setConversations(prev => prev.map(conv => {
+          const phoneMatch = conv.phoneNumber === newLead.phone ||
+                             conv.phoneNumber === newLead.telefone ||
+                             conv.id === newLead.phone ||
+                             conv.id === newLead.telefone;
+          if (phoneMatch) {
+            return {
+              ...conv,
+              contactName: newLead.name || conv.contactName,
+              tags: Array.isArray(newLead.tags) && newLead.tags.length ? newLead.tags : conv.tags,
+              funnelStage: newLead.stage || conv.funnelStage,
+              produto: newLead.servico || conv.produto,
+              valor: newLead.value ? `R$ ${Number(newLead.value).toLocaleString('pt-BR')}` : conv.valor,
+              anotacoes: newLead.notes || conv.anotacoes,
+            };
+          }
+          return conv;
+        }));
+
+        if (matchSelected) {
+          setLeadVinculado(newLead);
+          setMostrarBotaoCriarLead(false);
+          setLeadsVinculados(prev => ({
+            ...prev,
+            [selectedConv!.id]: newLead.id
+          }));
+          setSyncStatus('synced');
+        }
+      } catch (e) {
+        console.error('❌ [Conversas] Erro no onInsert de useLeadsSync:', e);
+        setSyncStatus('error');
+      }
+    },
     onUpdate: (updatedLead) => {
       console.log('📡 [Conversas] Lead atualizado via sync:', updatedLead);
       
@@ -755,8 +885,68 @@ function Conversas() {
         }
       }
     },
-    showNotifications: false // Não mostrar notificações automáticas
+    showNotifications: false, // Não mostrar notificações automáticas
+    companyId: userCompanyId // 🔒 ISOLAMENTO: Apenas leads da empresa atual
   });
+
+  // Carregar métricas da empresa
+  const loadCompanyMetrics = async () => {
+    if (!userCompanyId) return;
+
+    try {
+      console.log('📊 Carregando métricas da empresa:', userCompanyId);
+
+      // Buscar conversas da empresa
+      const { data: conversas, error: convError } = await supabase
+        .from('conversas')
+        .select('id, status, created_at')
+        .eq('company_id', userCompanyId);
+
+      if (convError) throw convError;
+
+      // Buscar conexões WhatsApp da empresa
+      const { data: whatsappConnections, error: whatsappError } = await supabase
+        .from('whatsapp_connections')
+        .select('id, status')
+        .eq('company_id', userCompanyId);
+
+      if (whatsappError) throw whatsappError;
+
+      // Calcular métricas
+      const totalConversas = conversas?.length || 0;
+      const conversasAtivas = conversas?.filter(c => c.status !== 'resolved').length || 0;
+
+      // Mensagens de hoje (aproximado - conversas criadas hoje)
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      const mensagensHoje = conversas?.filter(c => {
+        const createdDate = new Date(c.created_at);
+        createdDate.setHours(0, 0, 0, 0);
+        return createdDate.getTime() === hoje.getTime();
+      }).length || 0;
+
+      const whatsappConnectionsCount = whatsappConnections?.length || 0;
+      const whatsappConnectedCount = whatsappConnections?.filter(c => c.status === 'connected').length || 0;
+
+      setCompanyMetrics({
+        totalConversas,
+        conversasAtivas,
+        mensagensHoje,
+        whatsappConnections: whatsappConnectionsCount,
+        whatsappConnected: whatsappConnectedCount,
+      });
+
+      console.log('✅ Métricas carregadas:', {
+        totalConversas,
+        conversasAtivas,
+        mensagensHoje,
+        whatsappConnections: whatsappConnectionsCount,
+        whatsappConnected: whatsappConnectedCount,
+      });
+    } catch (error) {
+      console.error('❌ Erro ao carregar métricas:', error);
+    }
+  };
 
   // Carregar e sincronizar lembretes em tempo real
   useEffect(() => {
@@ -858,10 +1048,11 @@ function Conversas() {
           // Formatar o telefone removendo caracteres especiais
           const phoneFormatted = leadPhone.replace(/\D/g, '');
           
-          // Buscar conversa existente no Supabase
+          // Buscar conversa existente no Supabase (ISOLADO POR EMPRESA)
           const { data: conversasData } = await supabase
             .from('conversas')
             .select('*')
+            .eq('company_id', userCompanyId)
             .eq('telefone_formatado', phoneFormatted)
             .order('created_at', { ascending: false });
           
@@ -1040,7 +1231,16 @@ function Conversas() {
             // Processar apenas a nova mensagem, sem recarregar tudo
           if (payload.eventType === 'INSERT' && payload.new) {
             const novaConversa = payload.new;
-            
+
+            // 🔒 SEGURANÇA: Filtrar apenas mensagens da empresa atual
+            if (!novaConversa.company_id || novaConversa.company_id !== userCompanyIdRef.current) {
+              console.log('🚫 Mensagem realtime ignorada - empresa diferente:', {
+                msgCompanyId: novaConversa.company_id,
+                userCompanyId: userCompanyIdRef.current
+              });
+              return; // Ignorar mensagens de outras empresas
+            }
+
             // Normalizar telefone para encontrar conversa correta
             const telefoneNormalizado = novaConversa.telefone_formatado || novaConversa.numero.replace(/[^0-9]/g, '');
             
@@ -1577,6 +1777,9 @@ function Conversas() {
           
           return merged;
         });
+
+        // Atualizar métricas da empresa após carregar conversas
+        loadCompanyMetrics();
       }
     } catch (error) {
       console.error('Erro ao carregar conversas:', error);
@@ -1873,7 +2076,7 @@ function Conversas() {
     toast.success(forEveryone ? "Mensagem excluída para todos" : "Mensagem excluída para você");
   };
 
-  const handleReact = (messageId: string, emoji: string) => {
+  const handleReact = async (messageId: string, emoji: string) => {
     if (!selectedConv) return;
     
     console.log('🎭 Reação adicionada:', emoji, 'Mensagem:', messageId);
@@ -1895,7 +2098,45 @@ function Conversas() {
       )
     });
     
-    toast.success(`Reação ${emoji} adicionada com sucesso!`);
+    // Enviar reação para o cliente com referência à mensagem
+    try {
+      const targetMsg = selectedConv.messages.find(m => m.id === messageId);
+      const { data, error } = await enviarWhatsApp({
+        numero: selectedConv.id,
+        tipo_mensagem: 'reaction',
+        reaction: { emoji, messageId },
+        mensagem: `Reagiu com ${emoji} à mensagem: "${targetMsg?.content || ''}"`,
+        quoted: targetMsg ? {
+          key: { id: messageId },
+          message: { conversation: targetMsg.content || '' }
+        } : undefined,
+      });
+      if (error) {
+        console.error('Erro ao enviar reação:', error);
+      } else {
+        // Persistir no histórico como texto informativo
+        const { data: userRole } = await supabase
+          .from('user_roles')
+          .select('company_id')
+          .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+          .single();
+        await supabase.from('conversas').insert([{
+          numero: selectedConv.id,
+          telefone_formatado: selectedConv.phoneNumber || selectedConv.id.replace(/[^0-9]/g, ''),
+          mensagem: `Reagiu com ${emoji} à mensagem: "${targetMsg?.content || ''}"`,
+          origem: selectedConv.channel === 'whatsapp' ? 'WhatsApp' : 
+                  selectedConv.channel === 'instagram' ? 'Instagram' : 'Facebook',
+          status: 'Enviada',
+          tipo_mensagem: 'text',
+          nome_contato: selectedConv.contactName,
+          company_id: userRole?.company_id,
+        }]);
+      }
+    } catch (err) {
+      console.error('Erro ao processar reação:', err);
+    }
+    
+    toast.success(`Reação ${emoji} enviada!`);
   };
 
   const handleSendMedia = async (file: File, caption: string, type: string) => {
@@ -1927,17 +2168,14 @@ function Conversas() {
       });
 
       // Enviar via edge function (mais seguro)
-      const { data, error } = await supabase.functions.invoke('enviar-whatsapp', {
-        body: {
-          numero: selectedConv.id,
-          mensagem: caption || tipoMensagem[type],
-          tipo_mensagem: type,
-          mediaBase64: base64,
-          fileName: file.name,
-          mimeType: file.type,
-          caption: caption || '',
-          company_id: userCompanyId // IMPORTANTE: Adicionar company_id
-        }
+      const { data, error } = await enviarWhatsApp({
+        numero: selectedConv.id,
+        mensagem: caption || tipoMensagem[type],
+        tipo_mensagem: type,
+        mediaBase64: base64,
+        fileName: file.name,
+        mimeType: file.type,
+        caption: caption || '',
       });
 
       if (error) {
@@ -1956,6 +2194,7 @@ function Conversas() {
         read: false,
         mediaUrl: URL.createObjectURL(file),
         fileName: file.name,
+        mimeType: file.type,
         sentBy: userName || "Você", // Adicionar quem enviou
       };
 
@@ -2029,17 +2268,14 @@ function Conversas() {
       });
 
       // Enviar via edge function (mais seguro)
-      const { data, error } = await supabase.functions.invoke('enviar-whatsapp', {
-        body: {
-          numero: selectedConv.id,
-          mensagem: 'Áudio enviado',
-          tipo_mensagem: 'audio',
-          mediaBase64: base64,
-          fileName: 'audio.ogg',
-          mimeType: 'audio/ogg; codecs=opus',
-          caption: '',
-          company_id: userCompanyId // IMPORTANTE: Adicionar company_id
-        }
+      const { data, error } = await enviarWhatsApp({
+        numero: selectedConv.id,
+        mensagem: 'Áudio enviado',
+        tipo_mensagem: 'audio',
+        mediaBase64: base64,
+        fileName: 'audio.ogg',
+        mimeType: 'audio/ogg; codecs=opus',
+        caption: '',
       });
 
       if (error) {
@@ -2171,13 +2407,11 @@ function Conversas() {
     
     // Enviar mensagem via Evolution API
     try {
-      const { data, error } = await supabase.functions.invoke('enviar-whatsapp', {
-        body: {
-          numero: selectedConv.id,
-          ...mensagemParaEnviar,
-          tipo_mensagem: type,
-          company_id: userCompanyId
-        }
+      const { data, error } = await enviarWhatsApp({
+        numero: selectedConv.id,
+        ...mensagemParaEnviar,
+        quotedMessageId: replyingTo || undefined,
+        tipo_mensagem: type,
       });
 
       if (error) {
@@ -2317,9 +2551,14 @@ function Conversas() {
       return;
     }
     
+    // Garantir lead automaticamente
     if (!leadVinculado?.id) {
-      toast.error("Vincule um lead primeiro");
-      return;
+      const lead = await findOrCreateLead(selectedConv);
+      if (!lead) {
+        toast.error("Não foi possível vincular o lead automaticamente");
+        return;
+      }
+      setLeadVinculado(lead);
     }
 
     try {
@@ -2339,7 +2578,7 @@ function Conversas() {
       const { data: compromisso, error: compromissoError } = await supabase
         .from('compromissos')
         .insert({
-          lead_id: leadVinculado.id,
+          lead_id: (leadVinculado?.id || (await findOrCreateLead(selectedConv))?.id) as string,
           usuario_responsavel_id: user.id,
           owner_id: user.id,
           company_id: companyId,
@@ -2525,9 +2764,14 @@ function Conversas() {
       return;
     }
     
+    // Garantir lead automaticamente
     if (!leadVinculado?.id) {
-      toast.error("Vincule um lead primeiro");
-      return;
+      const lead = await findOrCreateLead(selectedConv);
+      if (!lead) {
+        toast.error("Não foi possível vincular o lead automaticamente");
+        return;
+      }
+      setLeadVinculado(lead);
     }
 
     try {
@@ -2548,7 +2792,7 @@ function Conversas() {
       const { error } = await supabase
         .from('compromissos')
         .insert({
-          lead_id: leadVinculado.id,
+          lead_id: (leadVinculado?.id || (await findOrCreateLead(selectedConv))?.id) as string,
           usuario_responsavel_id: user.id,
           owner_id: user.id,
           company_id: companyId,
@@ -2745,9 +2989,14 @@ function Conversas() {
       return;
     }
 
+    // Garantir lead automaticamente
     if (!leadVinculado?.id) {
-      toast.error("Nenhum lead vinculado. Crie um lead primeiro.");
-      return;
+      const lead = await findOrCreateLead(selectedConv);
+      if (!lead) {
+        toast.error("Não foi possível vincular o lead automaticamente");
+        return;
+      }
+      setLeadVinculado(lead);
     }
 
     try {
@@ -2774,7 +3023,7 @@ function Conversas() {
         priority: newTaskPriority,
         due_date: newTaskDueDate || null,
         status: 'pendente',
-        lead_id: leadVinculado.id,
+        lead_id: (leadVinculado?.id || (await findOrCreateLead(selectedConv))?.id) as string,
         company_id: userRole.company_id,
         owner_id: session.user.id,
       };
@@ -3204,6 +3453,97 @@ function Conversas() {
     .filter((conv) => filter === "all" || conv.status === filter)
     .filter((conv) => conv.contactName.toLowerCase().includes(searchTerm.toLowerCase()));
 
+
+  const openConversationWithContact = (name: string, phone: string) => {
+    const digits = (phone || '').replace(/\D/g, '');
+    const normalized = digits.startsWith('55') ? digits : (digits.length >= 10 && digits.length <= 13 ? `55${digits}` : digits);
+    const existente = conversations.find(c => c.id === normalized || c.phoneNumber === normalized);
+    if (existente) {
+      setSelectedConv(existente);
+      toast.success('Conversa aberta');
+      return;
+    }
+    const novaConversa: Conversation = {
+      id: normalized || phone || Date.now().toString(),
+      contactName: name || 'Contato',
+      channel: 'whatsapp',
+      status: 'waiting',
+      lastMessage: 'Nova conversa',
+      unread: 0,
+      messages: [],
+      tags: [],
+      phoneNumber: normalized || phone,
+    };
+    const updated = [novaConversa, ...conversations];
+    setConversations(updated);
+    setSelectedConv(novaConversa);
+    saveConversations(updated);
+    toast.success(`Conversa com ${name} criada`);
+  };
+
+  // Utilitário: garantir company_id e enviar via Edge Function
+  const getCompanyId = async (): Promise<string | null> => {
+    if (userCompanyId) return userCompanyId;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return null;
+    const { data: userRole } = await supabase
+      .from('user_roles')
+      .select('company_id')
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+    if (userRole?.company_id) setUserCompanyId(userRole.company_id);
+    return userRole?.company_id || null;
+  };
+
+  const enviarWhatsApp = async (body: any) => {
+    const companyId = await getCompanyId();
+    return await supabase.functions.invoke('enviar-whatsapp', { body: { company_id: companyId, ...body } });
+  };
+
+  const finalizarAtendimento = async (mensagem: string) => {
+    if (!selectedConv) return;
+    try {
+      // Enviar mensagem de finalização
+      const { error } = await enviarWhatsApp({
+        numero: selectedConv.id,
+        mensagem,
+        tipo_mensagem: 'text',
+      });
+      if (error) {
+        console.error('Erro ao enviar mensagem de finalização:', error);
+      }
+
+      // Persistir no histórico
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .single();
+
+      await supabase.from('conversas').insert([{
+        numero: selectedConv.id,
+        telefone_formatado: selectedConv.phoneNumber || selectedConv.id.replace(/[^0-9]/g, ''),
+        mensagem,
+        origem: selectedConv.channel === 'whatsapp' ? 'WhatsApp' : selectedConv.channel === 'instagram' ? 'Instagram' : 'Facebook',
+        status: 'Enviada',
+        tipo_mensagem: 'text',
+        nome_contato: selectedConv.contactName,
+        company_id: userRole?.company_id,
+      }]);
+
+      // Atualizar estados para resolvido
+      const updatedConv: Conversation = { ...selectedConv, status: 'resolved', lastMessage: mensagem };
+      const updatedList = conversations.map(c => c.id === selectedConv.id ? updatedConv : c);
+      saveConversations(updatedList);
+      setConversations(updatedList);
+      setSelectedConv(updatedConv);
+      toast.success('Atendimento finalizado e mensagem enviada');
+    } catch (e) {
+      console.error('❌ Erro ao finalizar atendimento:', e);
+      toast.error('Erro ao finalizar atendimento');
+    }
+  };
+
   return (
     <div className="h-screen bg-background flex overflow-hidden">
       {/* Sidebar esquerda - tema cinza claro */}
@@ -3213,10 +3553,6 @@ function Conversas() {
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-semibold text-foreground">Conversas</h1>
             <div className="flex gap-2 items-center">
-              <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
-                <MessageSquare className="h-3 w-3 mr-1" />
-                {conversations.length} conversas
-              </Badge>
               <NovaConversaDialog
                 onNovaConversa={(nome, numero) => {
                   // Verificar se já existe conversa com esse número
@@ -3264,7 +3600,7 @@ function Conversas() {
               </Button>
             </div>
           </div>
-          
+
           {/* Search */}
           <div className="relative mb-4">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -3397,6 +3733,7 @@ function Conversas() {
               verificandoLead={verificandoLead}
               mostrarBotaoCriarLead={mostrarBotaoCriarLead}
               onCriarLead={criarLeadManualmente}
+              onFinalizeAtendimento={finalizarAtendimento}
             />
 
             <div className="flex flex-1 overflow-hidden">
@@ -3430,6 +3767,7 @@ function Conversas() {
                           onEdit={handleEdit}
                           onDelete={handleDelete}
                           onReact={handleReact}
+                          onOpenContactConversation={openConversationWithContact}
                         />
                       ))
                     )}
@@ -4149,7 +4487,6 @@ function Conversas() {
                                 <Button 
                                   onClick={addReminder} 
                                   className="w-full"
-                                  disabled={!leadVinculado}
                                 >
                                   Criar Lembrete
                                 </Button>
@@ -4286,7 +4623,6 @@ function Conversas() {
                                 <Button 
                                   onClick={scheduleMeeting} 
                                   className="w-full"
-                                  disabled={!leadVinculado}
                                 >
                                   Agendar Reunião
                                 </Button>

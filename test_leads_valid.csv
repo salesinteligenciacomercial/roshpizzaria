@@ -1,0 +1,14 @@
+nome,email,telefone,cpf,empresa,origem,valor,status,servico,segmentacao,tags,observacoes
+João Silva,joao.silva@email.com,11987654321,12345678900,Tech Solutions LTDA,WhatsApp,15000,novo,Consultoria TI,B2B,vip;urgente,Cliente muito interessado em consultoria
+Maria Santos,maria.santos@empresa.com.br,21976543210,98765432100,Inovação Digital,Instagram,8500,qualificado,Software Personalizado,B2C,premium,Precisa de proposta até sexta-feira
+Pedro Costa,pedro.costa@gmail.com,11912345678,11122233344,StartupXYZ,Indicação,25000,negociacao,Desenvolvimento Web,B2B,projeto_grande,Reunião agendada para terça
+Ana Oliveira,ana.oliveira@outlook.com,85988776655,55566677788,Marketing Pro,LinkedIn,5000,novo,Social Media,B2B,marketing;social,Contato inicial muito positivo
+Carlos Mendes,carlos.mendes@hotmail.com,11998877665,99988877766,E-commerce Brasil,Google Ads,12000,em_contato,E-commerce,B2C,ecommerce;loja_virtual,Já teve experiência com outras agências
+Juliana Pereira,juliana.pereira@company.com,21987654322,33344455566,Consultoria ABC,Site,18000,qualificado,Auditoria Digital,B2B,auditoria;consultoria,Orçamento aprovado pela diretoria
+Roberto Alves,roberto.alves@tech.com,11976543221,77788899900,DevOps Solutions,WhatsApp,30000,ganho,Infraestrutura Cloud,B2B,cloud;devops;fechado,Contrato assinado - iniciar em 15 dias
+Fernanda Lima,fernanda.lima@startup.io,85912345679,22233344455,FintechNova,Evento,20000,perdido,Sistema Financeiro,B2C,fintech;perdido,Optou por concorrente - preço
+Gabriel Santos,gabriel.santos@digital.com.br,11965432198,66677788899,Agência Digital 360,Facebook,7500,novo,Branding,B2B,design;branding,Interessado em rebranding completo
+Patricia Ribeiro,patricia.ribeiro@solutions.com,21954321987,44455566677,Solutions Corp,Telefone,16000,qualificado,Automação de Marketing,B2B,automacao;marketing,Demonstração agendada para quinta
+
+
+

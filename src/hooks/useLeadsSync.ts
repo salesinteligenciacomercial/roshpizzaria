@@ -61,8 +61,9 @@ export const useLeadsSync = ({
   onInsert,
   onUpdate,
   onDelete,
-  showNotifications = true
-}: UseLeadsSyncOptions = {}) => {
+  showNotifications = true,
+  companyId // 🔒 ISOLAMENTO: company_id obrigatório para isolamento
+}: UseLeadsSyncOptions & { companyId?: string } = {}) => {
   const handlersRef = useRef({ onInsert, onUpdate, onDelete, showNotifications });
   
   // Atualizar referências sem causar re-subscrição
@@ -72,9 +73,21 @@ export const useLeadsSync = ({
   
   const handleChange = useCallback((payload: any) => {
     console.log('📡 [useLeadsSync] Mudança detectada:', payload);
-    
+
     const { eventType, new: newRecord, old: oldRecord } = payload;
     const handlers = handlersRef.current;
+
+    // 🔒 SEGURANÇA: Filtrar apenas leads da empresa atual
+    if (companyId) {
+      const recordCompanyId = newRecord?.company_id || oldRecord?.company_id;
+      if (recordCompanyId !== companyId) {
+        console.log('🚫 [useLeadsSync] Lead ignorado - empresa diferente:', {
+          recordCompanyId,
+          userCompanyId: companyId
+        });
+        return; // Ignorar leads de outras empresas
+      }
+    }
     
     switch (eventType) {
       case 'INSERT':

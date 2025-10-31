@@ -149,8 +149,10 @@ export function MediaUpload({ onSendMedia }: MediaUploadProps) {
                   variant="outline"
                   className="h-24 flex-col gap-2"
                   onClick={() => {
-                    fileInputRef.current?.click();
-                    fileInputRef.current?.setAttribute('accept', 'image/*');
+                    if (fileInputRef.current) {
+                      fileInputRef.current.setAttribute('accept', 'image/*');
+                      fileInputRef.current.click();
+                    }
                   }}
                 >
                   <ImageIcon className="h-6 w-6 text-blue-500" />
@@ -161,8 +163,10 @@ export function MediaUpload({ onSendMedia }: MediaUploadProps) {
                   variant="outline"
                   className="h-24 flex-col gap-2"
                   onClick={() => {
-                    fileInputRef.current?.click();
-                    fileInputRef.current?.setAttribute('accept', 'video/*');
+                    if (fileInputRef.current) {
+                      fileInputRef.current.setAttribute('accept', 'video/*');
+                      fileInputRef.current.click();
+                    }
                   }}
                 >
                   <Video className="h-6 w-6 text-purple-500" />
@@ -173,8 +177,10 @@ export function MediaUpload({ onSendMedia }: MediaUploadProps) {
                   variant="outline"
                   className="h-24 flex-col gap-2"
                   onClick={() => {
-                    fileInputRef.current?.click();
-                    fileInputRef.current?.setAttribute('accept', 'audio/*');
+                    if (fileInputRef.current) {
+                      fileInputRef.current.setAttribute('accept', 'audio/*');
+                      fileInputRef.current.click();
+                    }
                   }}
                 >
                   <Mic className="h-6 w-6 text-green-500" />
@@ -185,8 +191,10 @@ export function MediaUpload({ onSendMedia }: MediaUploadProps) {
                   variant="outline"
                   className="h-24 flex-col gap-2"
                   onClick={() => {
-                    fileInputRef.current?.click();
-                    fileInputRef.current?.setAttribute('accept', '.pdf,.doc,.docx,.xls,.xlsx');
+                    if (fileInputRef.current) {
+                      fileInputRef.current.setAttribute('accept', '.pdf,.doc,.docx,.xls,.xlsx');
+                      fileInputRef.current.click();
+                    }
                   }}
                 >
                   <File className="h-6 w-6 text-red-500" />

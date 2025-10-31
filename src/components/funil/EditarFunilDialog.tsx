@@ -231,11 +231,10 @@ export function EditarFunilDialog({ funilId, funilNome, onFunilUpdated }: Editar
       // 1. Atualizar nome do funil
       const { error: funilError } = await supabase
         .from("funis")
-        .update({ 
+        .update({
           nome: nomeFunil
         })
-        .eq("id", funilId)
-        .eq("owner_id", session.user.id);
+        .eq("id", funilId);
 
       if (funilError) {
         console.error("❌ Erro ao atualizar nome do funil:", funilError);

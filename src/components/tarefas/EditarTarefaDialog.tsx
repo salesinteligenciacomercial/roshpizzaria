@@ -52,8 +52,8 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
   const [dueDate, setDueDate] = useState(
     task.due_date ? new Date(task.due_date).toISOString().split("T")[0] : ""
   );
-  const [assigneeId, setAssigneeId] = useState(task.assignee_id || "");
-  const [leadId, setLeadId] = useState(task.lead_id || "");
+  const [assigneeId, setAssigneeId] = useState(task.assignee_id || "none");
+  const [leadId, setLeadId] = useState(task.lead_id || "none");
   const [users, setUsers] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -72,8 +72,8 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
       setDescription(task.description || "");
       setPriority(task.priority);
       setDueDate(task.due_date ? new Date(task.due_date).toISOString().split("T")[0] : "");
-      setAssigneeId(task.assignee_id || "");
-      setLeadId(task.lead_id || "");
+      setAssigneeId(task.assignee_id || "none");
+      setLeadId(task.lead_id || "none");
       setChecklist(task.checklist || []);
       setTags(task.tags || []);
       setComments(task.comments || []);
@@ -138,8 +138,8 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
             description: description.trim(),
             priority,
             due_date: dueDateIso,
-            assignee_id: assigneeId || null,
-            lead_id: leadId || null,
+            assignee_id: assigneeId === 'none' ? null : assigneeId,
+            lead_id: leadId === 'none' ? null : leadId,
             checklist,
             tags,
             comments,
@@ -159,7 +159,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
       setErrors({});
       try {
         if (dueDateIso) {
-          await upsertCompromissoParaTarefa({ id: task.id, title: title.trim(), due_date: dueDateIso, assignee_id: assigneeId || null });
+          await upsertCompromissoParaTarefa({ id: task.id, title: title.trim(), due_date: dueDateIso, assignee_id: assigneeId === 'none' ? null : assigneeId });
         }
       } catch {}
       onTaskUpdated();
@@ -391,7 +391,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
                 <SelectValue placeholder="Selecione um responsável" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Nenhum</SelectItem>
+                <SelectItem value="none">Nenhum</SelectItem>
                 {users.map((user) => (
                   <SelectItem key={user.id} value={user.id}>
                     {user.full_name}
@@ -408,7 +408,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
                 <SelectValue placeholder="Selecione um lead" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Nenhum</SelectItem>
+                <SelectItem value="none">Nenhum</SelectItem>
                 {leads.map((lead) => (
                   <SelectItem key={lead.id} value={lead.id}>
                     {lead.name}

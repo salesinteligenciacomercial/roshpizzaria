@@ -25,6 +25,9 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useLeadsSync } from "@/hooks/useLeadsSync";
+import { useGlobalSync } from "@/hooks/useGlobalSync";
+import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { EditarCompromissoDialog } from "@/components/agenda/EditarCompromissoDialog";
@@ -40,6 +43,8 @@ interface Lembrete {
   created_at: string;
   destinatario?: string;
   telefone_responsavel?: string;
+  tentativas?: number;
+  proxima_tentativa?: string;
   compromisso?: {
     data_hora_inicio: string;
     tipo_servico: string;
@@ -84,7 +89,99 @@ export default function Agenda() {
   const [configuracoesOpen, setConfiguracoesOpen] = useState(false);
   const [lembretes, setLembretes] = useState<Lembrete[]>([]);
   const [activeTab, setActiveTab] = useState<string>("agenda");
-  
+  const [filtroStatusLembrete, setFiltroStatusLembrete] = useState<string>("all");
+  const [filtroCanalLembrete, setFiltroCanalLembrete] = useState<string>("all");
+
+  // Sistema de eventos globais para comunicação entre módulos
+  const { emitGlobalEvent } = useGlobalSync({
+    callbacks: {
+      // Receber eventos de outros módulos
+      onLeadUpdated: (data) => {
+        console.log('🌍 [Agenda] Lead atualizado via evento global:', data);
+        // Atualizar compromissos relacionados ao lead
+        setCompromissos(prev => prev.map(comp => {
+          if (comp.lead_id === data.id) {
+            return {
+              ...comp,
+              lead: {
+                ...comp.lead,
+                name: data.name,
+                phone: data.phone
+              }
+            };
+          }
+          return comp;
+        }));
+      },
+      onTaskCreated: (data) => {
+        console.log('🌍 [Agenda] Nova tarefa criada, verificar se afeta agenda:', data);
+        // Se uma tarefa foi criada, pode afetar disponibilidade
+      },
+      onMeetingScheduled: (data) => {
+        console.log('🌍 [Agenda] Reunião agendada via evento global:', data);
+        // Adicionar reunião à lista se for relevante
+        // Isso pode vir de outros módulos criando reuniões
+      },
+      onFunnelStageChanged: (data) => {
+        console.log('🌍 [Agenda] Lead movido no funil, verificar compromissos:', data);
+        // Atualizar compromissos relacionados ao lead que mudou de etapa
+      }
+    },
+    showNotifications: false
+  });
+
+  // Sistema de workflows automatizados
+  useWorkflowAutomation({
+    showNotifications: true
+  });
+
+  // Integrar sincronização de leads em tempo real
+  useLeadsSync({
+    onInsert: (newLead) => {
+      console.log('📡 [Agenda] Novo lead adicionado via sync:', newLead);
+      setLeads(prev => [newLead, ...prev]);
+    },
+    onUpdate: (updatedLead, oldLead) => {
+      console.log('📡 [Agenda] Lead atualizado via sync:', updatedLead);
+      setLeads(prev => prev.map(lead => {
+        if (lead.id === updatedLead.id) {
+          return updatedLead;
+        }
+        return lead;
+      }));
+      // Atualizar compromissos relacionados
+      setCompromissos(prev => prev.map(comp => {
+        if (comp.lead_id === updatedLead.id) {
+          return {
+            ...comp,
+            lead: {
+              ...comp.lead,
+              name: updatedLead.name,
+              phone: updatedLead.phone
+            }
+          };
+        }
+        return comp;
+      }));
+    },
+    onDelete: (deletedLead) => {
+      console.log('📡 [Agenda] Lead removido via sync:', deletedLead);
+      setLeads(prev => prev.filter(lead => lead.id !== deletedLead.id));
+      // Limpar referências em compromissos
+      setCompromissos(prev => prev.map(comp => {
+        if (comp.lead_id === deletedLead.id) {
+          return {
+            ...comp,
+            lead_id: null,
+            lead: undefined
+          };
+        }
+        return comp;
+      }));
+    },
+    showNotifications: false
+  });
+
   // Form states para novo compromisso
   const [formData, setFormData] = useState({
     lead_id: "",
@@ -231,23 +328,54 @@ export default function Agenda() {
           .eq('id', user?.id)
           .single();
 
+        // Obter company_id do usuário
+        const { data: userRole } = await supabase
+          .from('user_roles')
+          .select('company_id')
+          .eq('user_id', user?.id)
+          .single();
+
+        // Calcular data de envio do lembrete
+        const dataEnvio = new Date(dataHoraInicio);
+        dataEnvio.setHours(dataEnvio.getHours() - parseInt(formData.horas_antecedencia));
+
         const leadSelecionado = leads.find(l => l.id === formData.lead_id);
-        
+
         await supabase.from('lembretes').insert({
           compromisso_id: compromisso.id,
           canal: 'whatsapp',
           horas_antecedencia: parseInt(formData.horas_antecedencia),
           mensagem: `Olá! Lembramos do seu compromisso agendado para ${format(dataHoraInicio, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.`,
           status_envio: 'pendente',
+          data_envio: dataEnvio.toISOString(),
           destinatario: formData.destinatario_lembrete,
           telefone_responsavel: profile?.full_name || user?.email,
+          company_id: userRole?.company_id,
         });
       }
 
       toast.success("Compromisso criado com sucesso!");
+
+      // Emitir evento global para sincronização
+      if (compromisso) {
+        emitGlobalEvent({
+          type: 'meeting-scheduled',
+          data: {
+            ...compromisso,
+            lead_id: formData.lead_id,
+            title: formData.tipo_servico,
+            date: dataHoraInicio.toISOString(),
+            duration: (dataHoraFim.getTime() - dataHoraInicio.getTime()) / (1000 * 60), // duração em minutos
+            status: 'scheduled',
+            description: formData.observacoes
+          },
+          source: 'Agenda'
+        });
+      }
+
       setNovoCompromissoOpen(false);
       limparFormulario();
-      carregarCompromissos();
+      // Realtime já atualizará a lista; evitar recarga completa
     } catch (error) {
       console.error('Erro ao criar compromisso:', error);
       toast.error("Erro ao criar compromisso");
@@ -263,7 +391,8 @@ export default function Agenda() {
 
       if (error) throw error;
       toast.success("Status atualizado!");
-      carregarCompromissos();
+      // Atualização otimista; realtime confirmará
+      setCompromissos(prev => prev.map(c => c.id === id ? { ...c, status: novoStatus } : c));
     } catch (error) {
       console.error('Erro ao atualizar status:', error);
       toast.error("Erro ao atualizar status");
@@ -286,7 +415,8 @@ export default function Agenda() {
 
       if (error) throw error;
       toast.success("Compromisso deletado com sucesso!");
-      carregarCompromissos();
+      // Atualização otimista; realtime confirmará
+      setCompromissos(prev => prev.filter(c => c.id !== id));
     } catch (error) {
       console.error('Erro ao deletar compromisso:', error);
       toast.error("Erro ao deletar compromisso");
@@ -332,11 +462,42 @@ export default function Agenda() {
     return badges[status] || badges.agendado;
   };
 
+  const reenviarLembrete = async (lembreteId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('enviar-lembretes', {
+        body: { lembrete_id: lembreteId, force: true }
+      });
+
+      if (error) throw error;
+
+      toast.success("Lembrete reenviado com sucesso!");
+      carregarLembretes();
+    } catch (error) {
+      console.error('Erro ao reenviar lembrete:', error);
+      toast.error("Erro ao reenviar lembrete");
+    }
+  };
+
+  const lembretesFiltrados = lembretes.filter((lembrete) => {
+    if (filtroStatusLembrete !== "all" && lembrete.status_envio !== filtroStatusLembrete) return false;
+    if (filtroCanalLembrete !== "all" && lembrete.canal !== filtroCanalLembrete) return false;
+    return true;
+  });
+
   const estatisticas = {
     total: compromissosDoMes.length,
     agendados: compromissosDoMes.filter(c => c.status === 'agendado').length,
     concluidos: compromissosDoMes.filter(c => c.status === 'concluido').length,
     cancelados: compromissosDoMes.filter(c => c.status === 'cancelado').length,
+  };
+
+  const estatisticasLembretes = {
+    total: lembretes.length,
+    enviados: lembretes.filter(l => l.status_envio === 'enviado').length,
+    pendentes: lembretes.filter(l => l.status_envio === 'pendente').length,
+    erro: lembretes.filter(l => l.status_envio === 'erro').length,
+    retry: lembretes.filter(l => l.status_envio === 'retry').length,
+    taxaSucesso: lembretes.length > 0 ? Math.round((lembretes.filter(l => l.status_envio === 'enviado').length / lembretes.length) * 100) : 0,
   };
 
   return (
@@ -541,7 +702,7 @@ export default function Agenda() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-foreground">{estatisticas.total}</div>
-            <p className="text-xs text-muted-foreground">Total do mês</p>
+            <p className="text-xs text-muted-foreground">Compromissos do mês</p>
           </CardContent>
         </Card>
         <Card>
@@ -560,6 +721,46 @@ export default function Agenda() {
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-red-600">{estatisticas.cancelados}</div>
             <p className="text-xs text-muted-foreground">Cancelados</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Estatísticas de Lembretes */}
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-foreground">{estatisticasLembretes.total}</div>
+            <p className="text-xs text-muted-foreground">Total de lembretes</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-green-600">{estatisticasLembretes.enviados}</div>
+            <p className="text-xs text-muted-foreground">Enviados</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-yellow-600">{estatisticasLembretes.pendentes}</div>
+            <p className="text-xs text-muted-foreground">Pendentes</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-orange-600">{estatisticasLembretes.retry}</div>
+            <p className="text-xs text-muted-foreground">Em retry</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-red-600">{estatisticasLembretes.erro}</div>
+            <p className="text-xs text-muted-foreground">Com erro</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-blue-600">{estatisticasLembretes.taxaSucesso}%</div>
+            <p className="text-xs text-muted-foreground">Taxa de sucesso</p>
           </CardContent>
         </Card>
       </div>
@@ -821,17 +1022,48 @@ export default function Agenda() {
                 <Bell className="h-5 w-5" />
                 Histórico de Lembretes
               </CardTitle>
+              <div className="flex gap-4">
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select value={filtroStatusLembrete} onValueChange={setFiltroStatusLembrete}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="pendente">Pendente</SelectItem>
+                      <SelectItem value="enviado">Enviado</SelectItem>
+                      <SelectItem value="erro">Erro</SelectItem>
+                      <SelectItem value="retry">Retry</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Canal</Label>
+                  <Select value={filtroCanalLembrete} onValueChange={setFiltroCanalLembrete}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                      <SelectItem value="email">E-mail</SelectItem>
+                      <SelectItem value="push">Push</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <ScrollArea className="h-[600px]">
-                {lembretes.length === 0 ? (
+                {lembretesFiltrados.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <Bell className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>Nenhum lembrete criado</p>
+                    <p>{lembretes.length === 0 ? "Nenhum lembrete criado" : "Nenhum lembrete encontrado com os filtros aplicados"}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {lembretes.map((lembrete) => (
+                    {lembretesFiltrados.map((lembrete) => (
                       <Card key={lembrete.id} className={`border-l-4 ${
                         lembrete.status_envio === 'enviado' ? 'border-l-green-500' :
                         lembrete.status_envio === 'pendente' ? 'border-l-yellow-500' :
@@ -839,7 +1071,7 @@ export default function Agenda() {
                       }`}>
                         <CardContent className="pt-4">
                           <div className="space-y-2">
-                            <div className="flex justify-between items-start">
+                                <div className="flex justify-between items-start">
                               <div className="space-y-1 flex-1">
                                 <div className="flex items-center gap-2">
                                   <span className="font-medium">
@@ -848,12 +1080,24 @@ export default function Agenda() {
                                   <Badge variant={
                                     lembrete.status_envio === 'enviado' ? 'default' :
                                     lembrete.status_envio === 'pendente' ? 'secondary' :
+                                    lembrete.status_envio === 'retry' ? 'outline' :
                                     'destructive'
                                   }>
                                     {lembrete.status_envio === 'enviado' ? '✓ Enviado' :
                                      lembrete.status_envio === 'pendente' ? '⏳ Pendente' :
+                                     lembrete.status_envio === 'retry' ? '🔄 Retry' :
                                      '✗ Erro'}
                                   </Badge>
+                                  {(lembrete.status_envio === 'erro' || lembrete.status_envio === 'retry') && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => reenviarLembrete(lembrete.id)}
+                                      className="h-6 px-2 text-xs"
+                                    >
+                                      Reenviar
+                                    </Button>
+                                  )}
                                 </div>
                                 {lembrete.compromisso?.lead && (
                                   <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -881,6 +1125,16 @@ export default function Agenda() {
                                 <p className="text-sm text-muted-foreground">
                                   <strong>Antecedência:</strong> {lembrete.horas_antecedencia}h
                                 </p>
+                                {lembrete.tentativas && lembrete.tentativas > 0 && (
+                                  <p className="text-sm text-muted-foreground">
+                                    <strong>Tentativas:</strong> {lembrete.tentativas}/3
+                                  </p>
+                                )}
+                                {lembrete.proxima_tentativa && lembrete.status_envio === 'retry' && (
+                                  <p className="text-sm text-orange-600">
+                                    <strong>Próxima tentativa:</strong> {format(parseISO(lembrete.proxima_tentativa), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                                  </p>
+                                )}
                                 {lembrete.data_envio && (
                                   <p className="text-xs text-muted-foreground">
                                     {lembrete.status_envio === 'enviado' ? 'Enviado em: ' : 'Última tentativa: '}

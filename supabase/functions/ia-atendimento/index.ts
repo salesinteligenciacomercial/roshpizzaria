@@ -11,7 +11,8 @@ serve(async (req) => {
   }
 
   try {
-    const { conversationId, message, leadData } = await req.json();
+    const startTime = Date.now();
+    const { conversationId, message, leadData, companyId } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -122,6 +123,34 @@ Responda à mensagem do cliente de forma natural e inclua no final da resposta a
 
     console.log('✅ IA Atendimento - Resposta gerada:', { action, response: cleanResponse.substring(0, 50) });
 
+    // Registrar log de execução e métricas
+    try {
+      const execTime = Date.now() - startTime;
+      await fetch(`${Deno.env.get('SUPABASE_URL')}/rest/v1/ia_execution_logs`, {
+        method: 'POST',
+        headers: {
+          'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          company_id: leadData?.company_id || companyId,
+          agent_type: 'atendimento',
+          conversation_id: conversationId,
+          lead_id: leadData?.id,
+          input_message: message,
+          output_response: cleanResponse,
+          execution_time_ms: execTime,
+          success: true,
+          action_taken: action || 'RESPONDER',
+          confidence_score: 0.8,
+          model_version: 'google/gemini-2.5-flash'
+        })
+      });
+    } catch (e) {
+      console.log('Erro ao registrar ia_execution_logs:', e);
+    }
+
     return new Response(
       JSON.stringify({ 
         response: cleanResponse,
@@ -136,6 +165,23 @@ Responda à mensagem do cliente de forma natural e inclua no final da resposta a
 
   } catch (error: any) {
     console.error('❌ Erro na função ia-atendimento:', error);
+    // Registrar falha
+    try {
+      await fetch(`${Deno.env.get('SUPABASE_URL')}/rest/v1/ia_execution_logs`, {
+        method: 'POST',
+        headers: {
+          'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          company_id: (await req.json())?.companyId || null,
+          agent_type: 'atendimento',
+          success: false,
+          error_message: error.message || 'Erro ao processar IA',
+        })
+      });
+    } catch (_e) {}
     return new Response(
       JSON.stringify({ error: error.message || 'Erro ao processar IA de atendimento' }),
       { 

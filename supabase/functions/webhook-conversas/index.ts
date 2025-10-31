@@ -183,6 +183,78 @@ function transformEvolutionPayload(body: any) {
   };
 }
 
+// ==============================
+// Roteamento Automático
+// ==============================
+async function autoRouteConversation(params: {
+  supabase: ReturnType<typeof createClient>,
+  companyId: string,
+  numeroLimpo: string,
+  conversaId: string,
+}) {
+  const { supabase, companyId, numeroLimpo, conversaId } = params;
+
+  // 1) Escolher fila ativa com menor prioridade
+  const { data: fila } = await supabase
+    .from('filas_atendimento')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('ativa', true)
+    .order('prioridade', { ascending: true })
+    .limit(1)
+    .single();
+
+  if (!fila) {
+    console.log('ℹ️ Nenhuma fila ativa encontrada para company:', companyId);
+    return; // sem fila -> sem roteamento
+  }
+
+  // 2) Encontrar colaborador com menor carga dentro da fila
+  const { data: colaboradores } = await supabase
+    .from('fila_colaboradores')
+    .select('id, user_id, capacidade_maxima, atendimentos_ativos, status')
+    .eq('fila_id', fila.id)
+    .order('atendimentos_ativos', { ascending: true });
+
+  if (!colaboradores || colaboradores.length === 0) {
+    console.log('ℹ️ Fila sem colaboradores:', fila.id);
+    return;
+  }
+
+  const disponivel = colaboradores.find(c =>
+    c.status === 'disponivel' && (c.atendimentos_ativos ?? 0) < (c.capacidade_maxima ?? 0)
+  ) || colaboradores[0];
+
+  if (!disponivel) {
+    console.log('ℹ️ Nenhum colaborador disponível na fila:', fila.id);
+    return;
+  }
+
+  // 3) Atualizar conversa com atribuição
+  await supabase
+    .from('conversas')
+    .update({ assigned_user_id: disponivel.user_id, fila_id: fila.id })
+    .eq('id', conversaId);
+
+  // 4) Upsert assignment por telefone + empresa (para futuras mensagens)
+  await supabase
+    .from('conversation_assignments')
+    .upsert({
+      company_id: companyId,
+      telefone_formatado: numeroLimpo,
+      assigned_user_id: disponivel.user_id,
+      fila_id: fila.id,
+    }, { onConflict: 'company_id,telefone_formatado' });
+
+  // 5) Incrementar carga do colaborador
+  await supabase
+    .from('fila_colaboradores')
+    .update({ atendimentos_ativos: (disponivel.atendimentos_ativos ?? 0) + 1 })
+    .eq('id', disponivel.id);
+
+  console.log('✅ Conversa roteada para user', disponivel.user_id, 'na fila', fila.id);
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -427,6 +499,18 @@ serve(async (req) => {
     }
 
     console.log('✅ Conversa salva com sucesso');
+
+    // ROTEAMENTO AUTOMÁTICO: tentar atribuir conversa a um colaborador disponível
+    try {
+      await autoRouteConversation({
+        supabase,
+        companyId: companyId!,
+        numeroLimpo,
+        conversaId: data.id,
+      });
+    } catch (routeError) {
+      console.warn('⚠️ Falha ao rotear automaticamente:', routeError);
+    }
 
     return new Response(
       JSON.stringify({

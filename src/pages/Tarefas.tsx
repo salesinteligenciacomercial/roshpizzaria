@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import React, { useState, useEffect, type ReactNode, useMemo, useCallback } from "react";
 import { DndContext, DragEndEvent, closestCorners, useDroppable, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { Plus, Settings } from "lucide-react";
@@ -18,6 +18,9 @@ import { toast } from "sonner";
 import { TarefasProvider } from "@/context/TarefasContext";
 import { TarefaCalendar } from "@/components/tarefas/TarefaCalendar";
 import { Button as UIButton } from "@/components/ui/button";
+import { useLeadsSync } from "@/hooks/useLeadsSync";
+import { useGlobalSync } from "@/hooks/useGlobalSync";
+import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
 
 interface Task {
   id: string;
@@ -47,17 +50,21 @@ interface Board {
   descricao?: string;
 }
 
-function DroppableColumnContainer({ columnId, children }: { columnId: string; children: ReactNode }) {
+const DroppableColumnContainer = React.memo(function DroppableColumnContainer({ columnId, children }: { columnId: string; children: ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({
     id: columnId,
     data: { type: 'column', columnId },
   });
   return (
-    <div ref={setNodeRef} className={`bg-secondary/20 p-4 rounded-b-lg min-h-[500px] ${isOver ? 'bg-primary/10 border-2 border-primary border-dashed' : ''}`}>
+    <div
+      ref={setNodeRef}
+      data-column-id={columnId}
+      className={`bg-secondary/20 p-4 rounded-b-lg min-h-[500px] ${isOver ? 'bg-primary/10 border-2 border-primary border-dashed' : ''}`}
+    >
       {children}
     </div>
   );
-}
+});
 
 export default function Tarefas() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -68,18 +75,142 @@ export default function Tarefas() {
   const [novoBoardNome, setNovoBoardNome] = useState("");
   const [dialogNovoBoard, setDialogNovoBoard] = useState(false);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"board" | "calendar">("board");
+  const [viewMode, setViewMode] = useState<"board" | "calendar" | "dashboard">("board");
   const [searchText, setSearchText] = useState<string>("");
   const [allUsers, setAllUsers] = useState<{ id: string; full_name: string }[]>([]);
   const [filterAssignee, setFilterAssignee] = useState<string>("");
   const [filterPriority, setFilterPriority] = useState<string>("");
   const [filterTag, setFilterTag] = useState<string>("");
+  const [tasksPerColumn, setTasksPerColumn] = useState<Record<string, number>>({});
+  const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
+
+  const TASKS_PER_PAGE = 10;
+
+  const columnsFiltradas = useMemo(() =>
+    columns.filter((column) => column.board_id === selectedBoard),
+    [columns, selectedBoard]
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
     })
   );
+
+  // Integrar sincronização de leads em tempo real
+  useLeadsSync({
+    onInsert: (newLead) => {
+      console.log('📡 [Tarefas] Novo lead adicionado via sync:', newLead);
+      // Atualizar tarefas relacionadas ao lead se necessário
+      setTasks(prev => prev.map(task => {
+        if (task.lead_id === newLead.id) {
+          return {
+            ...task,
+            lead_name: newLead.name || task.lead_name
+          };
+        }
+        return task;
+      }));
+    },
+    onUpdate: (updatedLead, oldLead) => {
+      console.log('📡 [Tarefas] Lead atualizado via sync:', updatedLead);
+      // Atualizar tarefas relacionadas ao lead
+      setTasks(prev => prev.map(task => {
+        if (task.lead_id === updatedLead.id) {
+          return {
+            ...task,
+            lead_name: updatedLead.name || task.lead_name
+          };
+        }
+        return task;
+      }));
+    },
+    onDelete: (deletedLead) => {
+      console.log('📡 [Tarefas] Lead removido via sync:', deletedLead);
+      // Limpar referências a leads deletados
+      setTasks(prev => prev.map(task => {
+        if (task.lead_id === deletedLead.id) {
+          return {
+            ...task,
+            lead_id: null,
+            lead_name: undefined
+          };
+        }
+        return task;
+      }));
+    },
+    showNotifications: false // Desabilitar notificações para evitar duplicação
+  });
+
+  // Sistema de eventos globais para comunicação entre módulos
+  const { emitGlobalEvent } = useGlobalSync({
+    callbacks: {
+      // Receber eventos de outros módulos
+      onLeadUpdated: (data) => {
+        console.log('🌍 [Tarefas] Lead atualizado via evento global:', data);
+        // Atualizar tarefas relacionadas ao lead
+        setTasks(prev => prev.map(task => {
+          if (task.lead_id === data.id) {
+            return {
+              ...task,
+              lead_name: data.name || task.lead_name
+            };
+          }
+          return task;
+        }));
+      },
+      onTaskCreated: (data) => {
+        console.log('🌍 [Tarefas] Nova tarefa criada via evento global:', data);
+        // Se a tarefa foi criada em outro módulo, recarregar dados
+        carregarDados();
+      },
+      onTaskUpdated: (data) => {
+        console.log('🌍 [Tarefas] Tarefa atualizada via evento global:', data);
+        // Atualizar tarefa específica
+        setTasks(prev => prev.map(task => {
+          if (task.id === data.id) {
+            return {
+              ...task,
+              ...data,
+              lead_name: data.lead?.name || task.lead_name,
+              assignee_name: data.assignee?.full_name || task.assignee_name
+            };
+          }
+          return task;
+        }));
+      },
+      onTaskDeleted: (data) => {
+        console.log('🌍 [Tarefas] Tarefa removida via evento global:', data);
+        setTasks(prev => prev.filter(task => task.id !== data.id));
+      },
+      onMeetingScheduled: (data) => {
+        console.log('🌍 [Tarefas] Reunião agendada, verificar se afeta tarefas:', data);
+        // Se uma reunião foi agendada, pode criar tarefa de follow-up automaticamente
+        if (data.lead_id) {
+          // Opcional: lógica para criar tarefa relacionada
+        }
+      },
+      onFunnelStageChanged: (data) => {
+        console.log('🌍 [Tarefas] Lead movido no funil, verificar tarefas relacionadas:', data);
+        // Atualizar tarefas relacionadas ao lead que mudou de etapa
+        setTasks(prev => prev.map(task => {
+          if (task.lead_id === data.leadId) {
+            return {
+              ...task,
+              lead_name: data.leadName || task.lead_name
+            };
+          }
+          return task;
+        }));
+      }
+    },
+    showNotifications: false
+  });
+
+  // Sistema de workflows automatizados
+  useWorkflowAutomation({
+    showNotifications: true
+  });
 
   useEffect(() => {
     carregarDados();
@@ -137,6 +268,55 @@ export default function Tarefas() {
       supabase.removeChannel(boardsChannel);
     };
   }, []);
+
+  // Atalhos de teclado
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      // Só executar atalhos se não estiver digitando em um input
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      switch (event.key.toLowerCase()) {
+        case 'n':
+          // Nova tarefa - abre o primeiro dialog de nova tarefa
+          event.preventDefault();
+          if (selectedBoard && columnsFiltradas.length > 0) {
+            const firstColumnButton = document.querySelector(
+              `[data-column-id="${columnsFiltradas[0].id}"] button[data-role="nova-tarefa-btn"]`
+            );
+            if (firstColumnButton instanceof HTMLButtonElement) {
+              firstColumnButton.click();
+            }
+          }
+          break;
+        case 'b':
+          // Alternar para board view
+          event.preventDefault();
+          setViewMode('board');
+          break;
+        case 'c':
+          // Alternar para calendar view
+          event.preventDefault();
+          setViewMode('calendar');
+          break;
+        case 'd':
+          // Alternar para dashboard view
+          event.preventDefault();
+          setViewMode('dashboard');
+          break;
+        case 'escape':
+          // Fechar dialogs abertos
+          event.preventDefault();
+          setDialogNovoBoard(false);
+          // Outros dialogs podem ser fechados aqui se necessário
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => document.removeEventListener('keydown', handleKeyPress);
+  }, [selectedBoard, columnsFiltradas]);
 
   const carregarDados = async () => {
     try {
@@ -222,21 +402,36 @@ export default function Tarefas() {
       });
 
       toast.success("Tarefa movida!");
-      await carregarDados();
+
+      // Emitir evento global para sincronização
+      const movedTask = tasks.find(t => t.id === taskId);
+      if (movedTask) {
+        emitGlobalEvent({
+          type: 'task-updated',
+          data: {
+            ...movedTask,
+            column_id: newColumnId,
+            status: columns.find(c => c.id === newColumnId)?.nome.toLowerCase() || 'unknown'
+          },
+          source: 'Tarefas'
+        });
+      }
+      // Realtime (tasks channel) confirmará a atualização; evitar recarga completa
     } catch (error) {
       toast.error("Erro ao mover tarefa");
+      // Reverter para estado consistente via recarga somente em erro
       carregarDados();
     }
     setActiveTaskId(null);
   };
 
-  const handleDragStart = (event: any) => {
+  const handleDragStart = useCallback((event: any) => {
     setActiveTaskId(event.active?.id ?? null);
-  };
+  }, []);
 
-  const handleDragCancel = () => setActiveTaskId(null);
+  const handleDragCancel = useCallback(() => setActiveTaskId(null), []);
 
-  const criarNovoBoard = async () => {
+  const criarNovoBoard = useCallback(async () => {
     if (!novoBoardNome.trim()) return;
 
     try {
@@ -267,28 +462,92 @@ export default function Tarefas() {
       toast.success("Quadro criado com colunas padrão!");
       setNovoBoardNome("");
       setDialogNovoBoard(false);
-      carregarDados();
+      // Realtime em task_boards/task_columns recarregará dados
     } catch (error) {
       toast.error("Erro ao criar quadro");
     }
-  };
+  }, [novoBoardNome]);
 
-  const columnsFiltradas = columns.filter((column) => column.board_id === selectedBoard);
-  const matchesSearch = (t: Task) => {
+  // Função para carregar mais tarefas de uma coluna específica
+  const loadMoreTasks = useCallback(async (columnId: string) => {
+    const currentCount = tasksPerColumn[columnId] || TASKS_PER_PAGE;
+    const newCount = currentCount + TASKS_PER_PAGE;
+
+    setLoadingMore(prev => ({ ...prev, [columnId]: true }));
+
+    try {
+      // Simular carregamento adicional (na implementação real, faria uma query paginada)
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simular delay de rede
+
+      setTasksPerColumn(prev => ({
+        ...prev,
+        [columnId]: newCount
+      }));
+    } catch (error) {
+      console.error('Erro ao carregar mais tarefas:', error);
+      toast.error('Erro ao carregar mais tarefas');
+    } finally {
+      setLoadingMore(prev => ({ ...prev, [columnId]: false }));
+    }
+  }, [tasksPerColumn, TASKS_PER_PAGE]);
+
+  const matchesSearch = useCallback((t: Task) => {
     if (!searchText.trim()) return true;
     const q = searchText.toLowerCase();
     return (
       (t.title || "").toLowerCase().includes(q) ||
       (t.description || "").toLowerCase().includes(q)
     );
-  };
+  }, [searchText]);
 
-  const matchesFilters = (t: any) => {
+  const matchesFilters = useCallback((t: any) => {
     if (filterAssignee && !(t.assignee_id === filterAssignee || (t.responsaveis || []).includes(filterAssignee))) return false;
     if (filterPriority && t.priority !== filterPriority) return false;
     if (filterTag && !(Array.isArray(t.tags) && t.tags.includes(filterTag))) return false;
     return true;
-  };
+  }, [filterAssignee, filterPriority, filterTag]);
+
+  // Métricas de produtividade
+  const productivityMetrics = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const thisWeek = new Date(today);
+    thisWeek.setDate(today.getDate() - today.getDay());
+
+    const tasksInBoard = tasks.filter(t => t.board_id === selectedBoard);
+    const completedTasks = tasksInBoard.filter(t => {
+      // Considerar tarefa concluída se estiver em coluna com nome contendo "conclu" ou similar
+      const column = columns.find(c => c.id === t.column_id);
+      return column?.nome?.toLowerCase().includes('conclu') ||
+             column?.nome?.toLowerCase().includes('feito') ||
+             column?.nome?.toLowerCase().includes('done');
+    });
+
+    const overdueTasks = tasksInBoard.filter(t => {
+      if (!t.due_date) return false;
+      const dueDate = new Date(t.due_date);
+      return dueDate < now && !completedTasks.some(ct => ct.id === t.id);
+    });
+
+    const todayCompleted = completedTasks.filter(t => {
+      // Simplificar: considerar como concluído hoje se foi atualizado recentemente
+      // Na implementação real, seria melhor ter um campo updated_at
+      return true; // Placeholder
+    });
+
+    const totalTimeSpent = tasksInBoard.reduce((total, task) => total + (task.tempo_gasto || 0), 0);
+    const avgTimePerTask = completedTasks.length > 0 ? totalTimeSpent / completedTasks.length : 0;
+
+    return {
+      totalTasks: tasksInBoard.length,
+      completedTasks: completedTasks.length,
+      overdueTasks: overdueTasks.length,
+      todayCompleted: todayCompleted.length,
+      totalTimeSpent,
+      avgTimePerTask,
+      completionRate: tasksInBoard.length > 0 ? (completedTasks.length / tasksInBoard.length) * 100 : 0
+    };
+  }, [tasks, columns, selectedBoard]);
 
   if (loading) return <div className="flex items-center justify-center h-screen"><p>Carregando...</p></div>;
 
@@ -299,6 +558,12 @@ export default function Tarefas() {
         <div>
           <h1 className="text-3xl font-bold">Tarefas (Trello Style)</h1>
           <p className="text-muted-foreground">Gerencie suas tarefas em quadros Kanban</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            💡 Atalhos: <kbd className="px-1 py-0.5 bg-muted rounded text-xs">N</kbd> Nova tarefa •
+            <kbd className="px-1 py-0.5 bg-muted rounded text-xs">B</kbd> Quadro •
+            <kbd className="px-1 py-0.5 bg-muted rounded text-xs">C</kbd> Calendário •
+            <kbd className="px-1 py-0.5 bg-muted rounded text-xs">D</kbd> Dashboard
+          </p>
         </div>
         <div className="flex gap-2 items-center">
           <div className="flex items-center gap-1 rounded-md border p-1">
@@ -315,6 +580,13 @@ export default function Tarefas() {
               onClick={() => setViewMode('calendar')}
             >
               📅 Calendário
+            </UIButton>
+            <UIButton
+              variant={viewMode === 'dashboard' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('dashboard')}
+            >
+              📊 Dashboard
             </UIButton>
           </div>
           <Input
@@ -395,6 +667,98 @@ export default function Tarefas() {
 
       {viewMode === 'calendar' ? (
         <TarefaCalendar />
+      ) : viewMode === 'dashboard' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Total de Tarefas */}
+          <div className="bg-card p-6 rounded-lg border shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total de Tarefas</p>
+                <p className="text-2xl font-bold">{productivityMetrics.totalTasks}</p>
+              </div>
+              <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
+                📋
+              </div>
+            </div>
+          </div>
+
+          {/* Tarefas Concluídas */}
+          <div className="bg-card p-6 rounded-lg border shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Concluídas</p>
+                <p className="text-2xl font-bold text-green-600">{productivityMetrics.completedTasks}</p>
+                <p className="text-xs text-muted-foreground">
+                  {productivityMetrics.completionRate.toFixed(1)}% do total
+                </p>
+              </div>
+              <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
+                ✅
+              </div>
+            </div>
+          </div>
+
+          {/* Tarefas Atrasadas */}
+          <div className="bg-card p-6 rounded-lg border shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Atrasadas</p>
+                <p className="text-2xl font-bold text-red-600">{productivityMetrics.overdueTasks}</p>
+                <p className="text-xs text-muted-foreground">
+                  Precisam atenção
+                </p>
+              </div>
+              <div className="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center">
+                ⚠️
+              </div>
+            </div>
+          </div>
+
+          {/* Tempo Total Gasto */}
+          <div className="bg-card p-6 rounded-lg border shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Tempo Total</p>
+                <p className="text-2xl font-bold">{Math.floor(productivityMetrics.totalTimeSpent / 60)}h {productivityMetrics.totalTimeSpent % 60}m</p>
+                <p className="text-xs text-muted-foreground">
+                  Média: {Math.floor(productivityMetrics.avgTimePerTask / 60)}h {Math.floor(productivityMetrics.avgTimePerTask % 60)}m/tarefa
+                </p>
+              </div>
+              <div className="h-8 w-8 bg-purple-100 rounded-full flex items-center justify-center">
+                ⏱️
+              </div>
+            </div>
+          </div>
+
+          {/* Gráfico de Progresso por Coluna */}
+          <div className="bg-card p-6 rounded-lg border shadow-sm md:col-span-2 lg:col-span-4">
+            <h3 className="text-lg font-semibold mb-4">Distribuição por Coluna</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {columnsFiltradas.map((column) => {
+                const tasksInColumn = tasks.filter(t => t.column_id === column.id).length;
+                const percentage = productivityMetrics.totalTasks > 0 ? (tasksInColumn / productivityMetrics.totalTasks) * 100 : 0;
+
+                return (
+                  <div key={column.id} className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium">{column.nome}</span>
+                      <span className="text-muted-foreground">{tasksInColumn}</span>
+                    </div>
+                    <div className="w-full bg-secondary rounded-full h-2">
+                      <div
+                        className="h-2 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${percentage}%`,
+                          backgroundColor: column.cor
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       ) : boards.length === 0 ? (
         <div className="text-center py-12">
           <Button onClick={() => setDialogNovoBoard(true)}>
@@ -451,19 +815,63 @@ export default function Tarefas() {
                       boardId={selectedBoard} 
                       onTaskCreated={carregarDados} 
                     />
-                    {tasks.filter(t => t.column_id === column.id && matchesSearch(t) && matchesFilters(t)).map((task) => (
-                      <TaskCard 
-                        key={task.id} 
-                        task={task}
-                        onDelete={async (id) => {
-                          await supabase.functions.invoke("api-tarefas", { 
-                            body: { action: "deletar_tarefa", data: { task_id: id } } 
-                          });
-                          carregarDados();
-                        }}
-                        onUpdate={carregarDados}
-                      />
-                    ))}
+                    {tasks
+                      .filter(t => t.column_id === column.id && matchesSearch(t) && matchesFilters(t))
+                      .slice(0, tasksPerColumn[column.id] || TASKS_PER_PAGE)
+                      .map((task) => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          onDelete={async (id) => {
+                            const taskToDelete = tasks.find(t => t.id === id);
+                            await supabase.functions.invoke("api-tarefas", {
+                              body: { action: "deletar_tarefa", data: { task_id: id } }
+                            });
+
+                            // Emitir evento global para sincronização
+                            if (taskToDelete) {
+                              emitGlobalEvent({
+                                type: 'task-deleted',
+                                data: taskToDelete,
+                                source: 'Tarefas'
+                              });
+                            }
+                            // Realtime removerá a tarefa; evitar recarga completa
+                          }}
+                          onUpdate={carregarDados}
+                        />
+                      ))}
+
+                    {/* Botão Carregar Mais */}
+                    {(() => {
+                      const totalTasksInColumn = tasks.filter(t => t.column_id === column.id && matchesSearch(t) && matchesFilters(t)).length;
+                      const visibleTasks = tasksPerColumn[column.id] || TASKS_PER_PAGE;
+                      const hasMoreTasks = totalTasksInColumn > visibleTasks;
+
+                      if (hasMoreTasks) {
+                        return (
+                          <div className="text-center py-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => loadMoreTasks(column.id)}
+                              disabled={loadingMore[column.id]}
+                              className="text-xs"
+                            >
+                              {loadingMore[column.id] ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-3 w-3 border-b border-current mr-2"></div>
+                                  Carregando...
+                                </>
+                              ) : (
+                                `Carregar mais tarefas (${totalTasksInColumn - visibleTasks} restantes)`
+                              )}
+                            </Button>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </DroppableColumnContainer>
                 </SortableContext>
               </div>

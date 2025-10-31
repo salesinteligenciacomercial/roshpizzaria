@@ -65,15 +65,22 @@ serve(async (req) => {
     }
 
     // Get user's company_id
-    const { data: userRole } = await supabase
+    const { data: userRole, error: userRoleError } = await supabase
       .from('user_roles')
-      .select('company_id')
+      .select('company_id, role')
       .eq('user_id', user.id)
       .single();
 
-    if (!userRole?.company_id) {
+    console.log('User role lookup:', { userId: user.id, userRole, error: userRoleError });
+
+    if (userRoleError || !userRole?.company_id) {
+      console.error('User role error:', userRoleError);
       return new Response(
-        JSON.stringify({ error: "Você não tem permissão para esta ação", code: "FORBIDDEN" }), 
+        JSON.stringify({
+          error: "Você não tem permissão para esta ação. Verifique se está associado a uma empresa.",
+          code: "FORBIDDEN",
+          details: userRoleError?.message
+        }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -178,6 +185,13 @@ serve(async (req) => {
           throw error;
         }
 
+        console.log('Creating funil with data:', {
+          nome: validatedData.nome,
+          descricao: validatedData.descricao,
+          owner_id: user.id,
+          company_id: companyId
+        });
+
         const { data: funil, error } = await supabase
           .from("funis")
           .insert([{ nome: validatedData.nome, descricao: validatedData.descricao, owner_id: user.id, company_id: companyId }])
@@ -186,11 +200,23 @@ serve(async (req) => {
 
         if (error) {
           console.error("Error creating funil:", error);
+          console.error("Error details:", {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          });
           return new Response(
-            JSON.stringify({ error: "Erro ao criar funil", code: "DATABASE_ERROR" }),
+            JSON.stringify({
+              error: "Erro ao criar funil",
+              code: "DATABASE_ERROR",
+              details: error.message
+            }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+
+        console.log('Funil created successfully:', funil);
 
         return new Response(
           JSON.stringify({ success: true, data: funil }),

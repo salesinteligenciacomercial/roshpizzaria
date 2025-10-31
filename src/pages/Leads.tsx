@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2 } from "lucide-react";
+import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
@@ -15,6 +15,8 @@ import { ImportarLeadsDialog } from "@/components/funil/ImportarLeadsDialog";
 import { formatPhoneNumber } from "@/utils/phoneFormatter";
 import { useNavigate } from "react-router-dom";
 import { useLeadsSync } from "@/hooks/useLeadsSync";
+import { useGlobalSync } from "@/hooks/useGlobalSync";
+import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
 
 interface Lead {
   id: string;
@@ -39,12 +41,67 @@ export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50; // Carregar 50 leads por vez
+  const MAX_TOTAL_LEADS = 1000; // Limite máximo para evitar problemas de performance
   const { toast } = useToast();
   const navigate = useNavigate();
+  const observerRef = useRef<HTMLDivElement>(null);
 
   const abrirConversa = (leadId: string, leadName: string) => {
     navigate('/conversas', { state: { leadId } });
   };
+
+  // Sistema de eventos globais para comunicação entre módulos
+  const { emitGlobalEvent } = useGlobalSync({
+    callbacks: {
+      // Receber eventos de outros módulos
+      onLeadUpdated: (data) => {
+        console.log('🌍 [Leads] Lead atualizado via evento global:', data);
+        setLeads(prev => prev.map(lead => {
+          if (lead.id === data.id) {
+            return { ...lead, ...data };
+          }
+          return lead;
+        }));
+      },
+      onTaskCreated: (data) => {
+        console.log('🌍 [Leads] Nova tarefa criada, verificar se vinculada ao lead:', data);
+        // Se uma tarefa foi criada vinculada a um lead, podemos atualizar o status
+        if (data.lead_id) {
+          // Opcional: marcar lead como tendo tarefas ativas
+        }
+      },
+      onMeetingScheduled: (data) => {
+        console.log('🌍 [Leads] Reunião agendada, verificar se vinculada ao lead:', data);
+        // Se uma reunião foi agendada vinculada a um lead, podemos atualizar o status
+        if (data.lead_id) {
+          // Opcional: marcar lead como tendo reunião agendada
+        }
+      },
+      onFunnelStageChanged: (data) => {
+        console.log('🌍 [Leads] Lead movido no funil:', data);
+        // Atualizar lead com nova etapa
+        setLeads(prev => prev.map(lead => {
+          if (lead.id === data.leadId) {
+            return {
+              ...lead,
+              stage: data.newStage
+            };
+          }
+          return lead;
+        }));
+      }
+    },
+    showNotifications: false
+  });
+
+  // Sistema de workflows automatizados
+  useWorkflowAutomation({
+    showNotifications: true
+  });
 
   // Integrar sincronização de leads em tempo real
   useLeadsSync({
@@ -73,34 +130,138 @@ export default function Leads() {
     filterLeads();
   }, [searchTerm, selectedStatus, selectedTag, leads]);
 
-  const carregarLeads = async () => {
-    const { data, error } = await supabase
-      .from("leads")
-      .select("*")
-      .order("created_at", { ascending: false });
+  const carregarLeads = async (reset = false) => {
+    if (loading) return;
 
-    if (error) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao carregar leads",
-        description: error.message,
-      });
-    } else {
-      setLeads(data || []);
+    setLoading(true);
+    try {
+      const currentPage = reset ? 0 : page;
+      const from = currentPage * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      // Verificar se já atingiu o limite máximo
+      if (!reset && leads.length >= MAX_TOTAL_LEADS) {
+        setHasMore(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Erro ao carregar leads",
+          description: error.message,
+        });
+        return;
+      }
+
+      if (reset) {
+        setLeads(data || []);
+        setPage(0);
+        setHasMore((data || []).length === PAGE_SIZE);
+      } else {
+        const newLeads = data || [];
+        const combinedLeads = [...leads, ...newLeads];
+
+        // Limitar ao máximo total para performance
+        const limitedLeads = combinedLeads.slice(0, MAX_TOTAL_LEADS);
+
+        setLeads(limitedLeads);
+        setPage(prev => prev + 1);
+
+        // Parar de carregar se atingiu o limite ou não há mais dados
+        setHasMore(newLeads.length === PAGE_SIZE && limitedLeads.length < MAX_TOTAL_LEADS);
+      }
+    } finally {
+      setLoading(false);
     }
   };
+
+  const resetAndLoadLeads = useCallback(async () => {
+    setPage(0);
+    setHasMore(true);
+    await carregarLeads(true);
+  }, []);
+
+  // Intersection Observer para carregamento infinito
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const target = entries[0];
+        if (target.isIntersecting && hasMore && !loading) {
+          carregarLeads();
+        }
+      },
+      {
+        threshold: 0.1,
+        rootMargin: '100px'
+      }
+    );
+
+    if (observerRef.current) {
+      observer.observe(observerRef.current);
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observer.unobserve(observerRef.current);
+      }
+    };
+  }, [hasMore, loading]);
+
+  // Reset quando filtros mudam
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      resetAndLoadLeads();
+    }, 300); // Debounce de 300ms para busca
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, selectedStatus, selectedTag, resetAndLoadLeads]);
 
   const filterLeads = () => {
     let filtered = leads;
 
     if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      const searchTrimmed = searchTerm.trim();
+
       filtered = filtered.filter(
-        (lead) =>
-          lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          lead.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          lead.phone?.includes(searchTerm) ||
-          lead.telefone?.includes(searchTerm) ||
-          lead.company?.toLowerCase().includes(searchTerm.toLowerCase())
+        (lead) => {
+          // Busca textual normal
+          const textMatch =
+            lead.name.toLowerCase().includes(searchLower) ||
+            lead.email?.toLowerCase().includes(searchLower) ||
+            lead.phone?.includes(searchTerm) ||
+            lead.telefone?.includes(searchTerm) ||
+            lead.company?.toLowerCase().includes(searchLower) ||
+            lead.cpf?.includes(searchTerm) ||
+            lead.source?.toLowerCase().includes(searchLower) ||
+            lead.value.toString().includes(searchTerm) ||
+            new Date(lead.created_at).toLocaleDateString('pt-BR').includes(searchTerm) ||
+            lead.notes?.toLowerCase().includes(searchLower);
+
+          // Busca por valor com operadores (> < =)
+          const valueMatch = (() => {
+            if (!searchTrimmed.match(/^[<>=]\d+(\.\d+)?$/)) return false;
+
+            const operator = searchTrimmed[0];
+            const value = parseFloat(searchTrimmed.slice(1));
+
+            switch (operator) {
+              case '>': return lead.value > value;
+              case '<': return lead.value < value;
+              case '=': return lead.value === value;
+              default: return false;
+            }
+          })();
+
+          return textMatch || valueMatch;
+        }
       );
     }
 
@@ -109,7 +270,7 @@ export default function Leads() {
     }
 
     if (selectedTag) {
-      filtered = filtered.filter((lead) => 
+      filtered = filtered.filter((lead) =>
         lead.tags?.includes(selectedTag)
       );
     }
@@ -129,6 +290,89 @@ export default function Leads() {
     return colors[status] || "bg-gray-500";
   };
 
+  const exportarLeads = () => {
+    try {
+      if (filteredLeads.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "Nenhum lead para exportar",
+          description: "Aplique filtros ou adicione leads antes de exportar.",
+        });
+        return;
+      }
+
+      // Headers do CSV
+      const headers = [
+        "Nome",
+        "Email",
+        "Telefone",
+        "CPF",
+        "Empresa",
+        "Origem",
+        "Status",
+        "Valor",
+        "Tags",
+        "Observações",
+        "Data de Criação"
+      ];
+
+      // Converter leads para linhas CSV
+      const csvRows = filteredLeads.map(lead => [
+        lead.name,
+        lead.email || "",
+        formatPhoneNumber(lead.phone || lead.telefone || ""),
+        lead.cpf || "",
+        lead.company || "",
+        lead.source || "",
+        lead.status,
+        lead.value.toString(),
+        lead.tags ? lead.tags.join(";") : "",
+        lead.notes || "",
+        new Date(lead.created_at).toLocaleDateString('pt-BR')
+      ]);
+
+      // Criar conteúdo CSV
+      const csvContent = [
+        headers.join(","),
+        ...csvRows.map(row =>
+          row.map(field => {
+            // Escapar campos que contenham vírgulas ou aspas
+            if (field.includes(",") || field.includes('"') || field.includes("\n")) {
+              return `"${field.replace(/"/g, '""')}"`;
+            }
+            return field;
+          }).join(",")
+        )
+      ].join("\n");
+
+      // Criar e baixar arquivo
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+
+      link.setAttribute("href", url);
+      link.setAttribute("download", `leads_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = "hidden";
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Exportação concluída",
+        description: `${filteredLeads.length} leads exportados com sucesso.`,
+      });
+
+    } catch (error) {
+      console.error("Erro ao exportar leads:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro na exportação",
+        description: "Não foi possível exportar os leads. Tente novamente.",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -139,10 +383,14 @@ export default function Leads() {
           </p>
         </div>
         <div className="flex gap-2">
-          <TagsManager 
+          <TagsManager
             onTagSelected={setSelectedTag}
             selectedTag={selectedTag}
           />
+          <Button variant="outline" onClick={exportarLeads}>
+            <Download className="mr-2 h-4 w-4" />
+            Exportar
+          </Button>
           <ImportarLeadsDialog onLeadsImported={carregarLeads} />
           <NovoLeadDialog onLeadCreated={carregarLeads} />
         </div>
@@ -153,7 +401,7 @@ export default function Leads() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome, email, telefone ou empresa..."
+              placeholder="Buscar por nome, email, telefone, empresa, CPF, origem, valor (>1000, <500), data ou observações..."
               className="pl-10"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -290,13 +538,38 @@ export default function Leads() {
         ))}
       </div>
 
-      {filteredLeads.length === 0 && (
+      {filteredLeads.length === 0 && !loading && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <p className="text-muted-foreground">Nenhum lead encontrado</p>
           </CardContent>
         </Card>
       )}
+
+      {/* Indicador de carregamento e observer para scroll infinito */}
+      <div ref={observerRef} className="flex justify-center py-4">
+        {loading && (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+            Carregando leads...
+          </div>
+        )}
+        {!loading && hasMore && leads.length > 0 && (
+          <div className="text-muted-foreground text-sm">
+            Role para baixo para carregar mais leads
+          </div>
+        )}
+        {!hasMore && leads.length >= MAX_TOTAL_LEADS && (
+          <div className="text-muted-foreground text-sm">
+            {leads.length} leads carregados (limite atingido para performance)
+          </div>
+        )}
+        {!hasMore && leads.length > 0 && leads.length < MAX_TOTAL_LEADS && (
+          <div className="text-muted-foreground text-sm">
+            Todos os {leads.length} leads foram carregados
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,30 @@
+67ec257 2025-10-29 08:49 chore(build): specify Node engines >=20 for Lovable
+9ec8dc4 2025-10-29 08:39 chore: trigger lovable deploy
+513637a 2025-10-29 00:29 chore: sincronizar alterações do Cursor para Lovable
+b9f1cb8 2025-10-28 11:36 Fix: Instance name "company not found" error
+a504726 2025-10-28 11:25 Fix subaccount creation error
+e58aa5e 2025-10-28 11:21 feat: Enable sub-account creation and WhatsApp integration
+e68e770 2025-10-27 22:55 Fix: Improve lead moving functionality
+3fc4a63 2025-10-27 21:05 Fix: Update lead card buttons
+6e30670 2025-10-27 20:58 Fix: 3 dots button not visible
+e166aa0 2025-10-27 20:54 Fix: Make 3-dots button visible
+57fced8 2025-10-27 20:48 Fix: Update contact name in conversations view
+6b52a0a 2025-10-27 20:40 Fix: Make menu button visible
+763f395 2025-10-27 20:35 Fix: Ensure menu button is visible
+0112cb6 2025-10-27 20:25 Fix: Re-verify button visibility
+24b3afc 2025-10-27 20:22 Fix: Conversation list item bugs
+352b140 2025-10-27 20:03 Fix profile picture and real-time message loading
+c6b9c8d 2025-10-27 19:53 Fix: Synchronize WhatsApp and CRM message history
+97c9f55 2025-10-27 19:34 Fix: Resolve bugs and synchronization issues
+1e09e28 2025-10-27 18:03 Fix: Synchronize WhatsApp messages in conversations
+5ba5590 2025-10-26 02:13 Add tag segmentation to leads
+33fa7f5 2025-10-26 02:11 Fix: Correct WhatsApp conversation redirection
+73c766a 2025-10-26 01:59 Fix: Synchronize meeting scheduling with agenda
+bd22e8b 2025-10-26 01:54 Fix: Corrigir erro na criação de lembretes
+f1d77dd 2025-10-26 01:51 Fix: Synchronize reminders in popup
+e74c196 2025-10-26 01:48 Refactor reminder functionality
+3e42e97 2025-10-26 01:42 Add cron job for scheduled messages
+9391d61 2025-10-26 01:37 Add message scheduling functionality
+d026725 2025-10-26 01:29 Refactor quick message creation
+76bdc57 2025-10-26 01:27 feat: Add tasks menu to lead popup
+e88f1ac 2025-10-26 01:24 Add categories to quick messages

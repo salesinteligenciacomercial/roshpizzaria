@@ -91,13 +91,13 @@ export function ConversationListItem({
       onClick={onClick}
     >
       {/* Botão de menu - MOVIDO PARA FORA DO FLEX */}
-      <div className="absolute top-2 right-2 z-50 bg-red-500">
+  <div className="absolute top-2 right-2 z-50">
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild onClick={handleMenuClick}>
             <Button 
               variant="ghost" 
               size="icon" 
-              className="h-8 w-8 hover:bg-accent/80 bg-blue-500"
+              className="h-8 w-8 hover:bg-accent"
               onClick={(e) => {
                 console.log('🔘 Botão clicado!');
                 handleMenuClick(e);

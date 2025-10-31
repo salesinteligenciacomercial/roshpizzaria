@@ -1,0 +1,20 @@
+[33m67ec257[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m chore(build): specify Node engines >=20 for Lovable
+[33m9ec8dc4[m chore: trigger lovable deploy
+[33m513637a[m chore: sincronizar alterações do Cursor para Lovable
+[33mb9f1cb8[m Fix: Instance name "company not found" error
+[33ma504726[m Fix subaccount creation error
+[33me58aa5e[m feat: Enable sub-account creation and WhatsApp integration
+[33me68e770[m Fix: Improve lead moving functionality
+[33m3fc4a63[m Fix: Update lead card buttons
+[33m6e30670[m Fix: 3 dots button not visible
+[33me166aa0[m Fix: Make 3-dots button visible
+[33m57fced8[m Fix: Update contact name in conversations view
+[33m6b52a0a[m Fix: Make menu button visible
+[33m763f395[m Fix: Ensure menu button is visible
+[33m0112cb6[m Fix: Re-verify button visibility
+[33m24b3afc[m Fix: Conversation list item bugs
+[33m352b140[m Fix profile picture and real-time message loading
+[33mc6b9c8d[m Fix: Synchronize WhatsApp and CRM message history
+[33m97c9f55[m Fix: Resolve bugs and synchronization issues
+[33m1e09e28[m Fix: Synchronize WhatsApp messages in conversations
+[33m5ba5590[m Add tag segmentation to leads

@@ -1,9 +1,9 @@
-import { Bell, Search, Building2, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Bell, Building2, PanelLeftClose, PanelLeft, MessageSquare, Instagram, Zap, Clock, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
 interface HeaderProps {
@@ -15,6 +15,37 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
   const [userName, setUserName] = useState("Usuário");
   const [companyName, setCompanyName] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const location = useLocation();
+
+  // Métricas rápidas para página de Conversas
+  const conversationsMetrics = useMemo(() => {
+    try {
+      const raw = localStorage.getItem("continuum_conversations");
+      const list = raw ? JSON.parse(raw) : [];
+      const totalConversas = Array.isArray(list) ? list.length : 0;
+      const ativas = Array.isArray(list) ? list.filter((c: any) => c.status !== 'resolved').length : 0;
+      const whatsapp = Array.isArray(list) ? list.filter((c: any) => c.channel === 'whatsapp').length : 0;
+      const instagram = Array.isArray(list) ? list.filter((c: any) => c.channel === 'instagram').length : 0;
+      const telegram = Array.isArray(list) ? list.filter((c: any) => c.channel === 'telegram').length : 0;
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      let mensagensHoje = 0;
+      if (Array.isArray(list)) {
+        for (const conv of list) {
+          const msgs = Array.isArray(conv.messages) ? conv.messages : [];
+          for (const m of msgs) {
+            const ts = m?.timestamp ? new Date(m.timestamp) : null;
+            if (ts && ts >= today && ts < tomorrow) mensagensHoje++;
+          }
+        }
+      }
+      return { totalConversas, ativas, mensagensHoje, whatsapp, instagram, telegram };
+    } catch {
+      return { totalConversas: 0, ativas: 0, mensagensHoje: 0, whatsapp: 0, instagram: 0, telegram: 0 };
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     fetchUserData();
@@ -73,16 +104,31 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
           )}
         </Button>
 
-        {/* Search */}
-        <div className="flex-1 max-w-xl">
-          <div className="relative group">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground group-hover:text-primary transition-colors" />
-            <Input
-              placeholder="Buscar leads, conversas, tarefas..."
-              className="pl-9 border-border/40 bg-muted/30 hover:bg-muted/50 focus:bg-background transition-colors"
-            />
+        {/* Cards de métricas (apenas em Conversas) */}
+        {location.pathname?.toLowerCase().includes("conversas") && (
+          <div className="hidden lg:flex items-center gap-2 flex-1 overflow-x-auto">
+            <div className="px-3 py-2 border rounded-lg bg-muted/20 whitespace-nowrap flex items-center gap-2 text-sm">
+              <MessageSquare className="h-4 w-4" /> {conversationsMetrics.totalConversas} Conversas
+            </div>
+            <div className="px-3 py-2 border rounded-lg bg-muted/20 whitespace-nowrap flex items-center gap-2 text-sm">
+              <Users className="h-4 w-4" /> {conversationsMetrics.ativas} Ativas
+            </div>
+            <div className="px-3 py-2 border rounded-lg bg-muted/20 whitespace-nowrap flex items-center gap-2 text-sm">
+              <Clock className="h-4 w-4" /> {conversationsMetrics.mensagensHoje} Hoje
+            </div>
+            <div className="px-3 py-2 border rounded-lg bg-muted/20 whitespace-nowrap flex items-center gap-2 text-sm">
+              <MessageSquare className="h-4 w-4 text-[#25D366]" /> {conversationsMetrics.whatsapp} WhatsApp
+            </div>
+            <div className="px-3 py-2 border rounded-lg bg-muted/20 whitespace-nowrap flex items-center gap-2 text-sm">
+              <Instagram className="h-4 w-4 text-pink-500" /> {conversationsMetrics.instagram} Instagram
+            </div>
+            <div className="px-3 py-2 border rounded-lg bg-muted/20 whitespace-nowrap flex items-center gap-2 text-sm">
+              <Zap className="h-4 w-4" /> {conversationsMetrics.telegram} Telegram
           </div>
         </div>
+        )}
+
+        {/* Removido: busca global no topo */}
 
         {/* Actions */}
         <div className="flex items-center gap-3">

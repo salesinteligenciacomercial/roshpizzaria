@@ -1,0 +1,14 @@
+nome,email,telefone,cpf,empresa,origem,valor,status,tags,observacoes
+João Silva,joao@email.com,11987654321,12345678900,Tech Solutions,WhatsApp,1000,novo,vip,Válido
+,maria@invalido,999,abc,Empresa Teste,Instagram,abc,novo,premium,Erro: Nome vazio + telefone curto + valor inválido
+Pedro Costa,email_sem_arroba,11912345678,11122233344,StartupXYZ,Indicação,5000,novo,teste,Erro: Email inválido
+Ana Oliveira,ana@email.com,85988776655,55566677788,Marketing Pro,LinkedIn,-500,novo,marketing,Erro: Valor negativo
+Carlos Mendes,carlos@email.com,,99988877766,E-commerce Brasil,Google Ads,2000,novo,ecommerce,Válido: Sem telefone (opcional)
+Juliana Pereira,juliana@company.com,21987654322,33344455566,Consultoria ABC,Site,3000,novo,auditoria,Válido
+,contato@email.com,11976543221,77788899900,DevOps Solutions,WhatsApp,4000,novo,cloud,Erro: Nome vazio (obrigatório)
+Fernanda Lima,email.invalido.sem.dominio,12345,22233344455,FintechNova,Evento,5000,novo,fintech,Erro: Email inválido + telefone muito curto
+Gabriel Santos,gabriel@digital.com.br,11965432198,66677788899,Agência Digital,Facebook,-100,novo,design,Erro: Valor negativo
+Patricia Ribeiro,patricia@solutions.com,21954321987,44455566677,Solutions Corp,Telefone,6000,novo,automacao,Válido
+
+
+

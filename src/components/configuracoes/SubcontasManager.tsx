@@ -35,6 +35,10 @@ export function SubcontasManager() {
   const [showNovaDialog, setShowNovaDialog] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [managingUsers, setManagingUsers] = useState<Company | null>(null);
+  const [isMasterAccount, setIsMasterAccount] = useState(false);
+  const [currentCompanyId, setCurrentCompanyId] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<string>("free");
+  const [subcompaniesLimit, setSubcompaniesLimit] = useState(0);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -45,20 +49,67 @@ export function SubcontasManager() {
     try {
       setLoading(true);
       console.log("🏢 [SUBCONTAS] Carregando empresas...");
-      
-      const { data, error } = await supabase
-        .from("companies")
-        .select("*")
-        .order("created_at", { ascending: false });
+
+      // Primeiro, verificar se o usuário atual é de uma conta master
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.warn("Usuário não autenticado");
+        setLoading(false);
+        return;
+      }
+
+      const { data: rolesList } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id);
+
+      const companyIds = Array.from(new Set((rolesList || []).map((r: any) => r.company_id).filter(Boolean)));
+      if (companyIds.length === 0) {
+        console.warn("Usuário não associado a empresa");
+        setLoading(false);
+        return;
+      }
+
+      // Buscar as empresas e priorizar a master, se existir
+      const { data: companiesSet } = await supabase
+        .from('companies')
+        .select('id, is_master_account, plan')
+        .in('id', companyIds as any);
+
+      const masterCompany = (companiesSet || []).find((c: any) => c.is_master_account);
+      const effectiveCompany = masterCompany || (companiesSet || [])[0];
+
+      setCurrentCompanyId(effectiveCompany?.id || null);
+      setIsMasterAccount(!!effectiveCompany?.is_master_account);
+      setCurrentPlan(effectiveCompany?.plan || "free");
+
+      // Calcular limite de subcontas baseado no plano
+      const limit = currentCompany?.plan === 'free' ? 0 :
+                   currentCompany?.plan === 'basic' ? 3 :
+                   currentCompany?.plan === 'premium' ? 10 : 0;
+      setSubcompaniesLimit(limit);
+
+      // Carregar empresas baseado na hierarquia
+      let query = supabase.from("companies").select("*");
+
+      if (isMasterAccount && currentCompanyId) {
+        // Conta master vê a própria e suas subcontas
+        query = query.or(`id.eq.${currentCompanyId},parent_company_id.eq.${currentCompanyId}`);
+      } else {
+        // Conta não-master só vê a própria empresa
+        query = query.eq('id', currentCompanyId);
+      }
+
+      const { data, error } = await query.order("created_at", { ascending: false });
 
       if (error) {
         console.error("❌ [SUBCONTAS] Erro ao carregar:", error);
         throw error;
       }
-      
+
       console.log("✅ [SUBCONTAS] Empresas carregadas:", data?.length || 0);
       console.log("📊 [SUBCONTAS] Dados:", data);
-      
+
       setCompanies(data || []);
     } catch (error: any) {
       console.error("❌ [SUBCONTAS] Erro completo:", error);
@@ -158,13 +209,18 @@ export function SubcontasManager() {
                 Gestão de Subcontas (Multi-tenant)
               </CardTitle>
               <CardDescription>
-                Crie e gerencie empresas com isolamento completo de dados, WhatsApp e usuários
+                {isMasterAccount
+                  ? `Crie e gerencie empresas com isolamento completo de dados, WhatsApp e usuários. Plano ${currentPlan}: ${companies.filter(c => c.id !== currentCompanyId).length}/${subcompaniesLimit} subcontas`
+                  : "Visualize informações da sua empresa. Apenas contas centrais podem criar subcontas."
+                }
               </CardDescription>
             </div>
-            <Button onClick={() => setShowNovaDialog(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nova Subconta
-            </Button>
+            {isMasterAccount && (
+              <Button onClick={() => setShowNovaDialog(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nova Subconta
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>

@@ -92,16 +92,20 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
         return;
       }
 
-      // Buscar company_id do usuário
-      const { data: userRole } = await supabase
+      // Buscar company_id do usuário com tratamento de erro explícito
+      const { data: userRole, error: roleError } = await supabase
         .from("user_roles")
         .select("company_id")
         .eq("user_id", session.user.id)
-        .single();
+        .maybeSingle();
+
+      if (roleError) {
+        toast.error("Não foi possível verificar sua empresa. Tente novamente ou contate o suporte.");
+        return;
+      }
 
       if (!userRole?.company_id) {
-        toast.error("Empresa não encontrada");
-        setLoading(false);
+        toast.error("Sua conta não está vinculada a uma empresa. Solicite configuração ao administrador.");
         return;
       }
 

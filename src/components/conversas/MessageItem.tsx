@@ -29,6 +29,7 @@ interface Message {
   read?: boolean;
   mediaUrl?: string;
   fileName?: string;
+  mimeType?: string;
   transcricao?: string;
   reaction?: string;
   replyTo?: string;
@@ -51,7 +52,8 @@ interface MessageItemProps {
   onReply: (messageId: string) => void;
   onEdit: (messageId: string, newContent: string) => void;
   onDelete: (messageId: string, forEveryone: boolean) => void;
-  onReact: (messageId: string, emoji: string) => void;
+  onReact: (messageId: string, emoji: string) => void | Promise<void>;
+  onOpenContactConversation?: (name: string, phone: string) => void;
 }
 
 export function MessageItem({
@@ -66,6 +68,7 @@ export function MessageItem({
   onEdit,
   onDelete,
   onReact,
+  onOpenContactConversation,
 }: MessageItemProps) {
   const [showActions, setShowActions] = useState(false);
   const [dragStart, setDragStart] = useState<number | null>(null);
@@ -95,6 +98,16 @@ export function MessageItem({
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     const element = e.currentTarget as HTMLElement;
+    const endX = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientX : null;
+    let diff = 0;
+    if (dragStart !== null && endX !== null) {
+      diff = endX - dragStart;
+    }
+    // Trigger reply if swipe passes threshold in the expected direction
+    const threshold = 60;
+    if ((message.sender === "contact" && diff > threshold) || (message.sender === "user" && diff < -threshold)) {
+      onReply(message.id);
+    }
     element.style.transform = '';
     element.style.transition = 'transform 0.2s ease';
     setDragStart(null);
@@ -237,6 +250,14 @@ export function MessageItem({
                     >
                       <Download className="h-3 w-3" />
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onPdfClick?.(message.mediaUrl!, message.fileName || 'documento.pdf')}
+                    >
+                      <FileText className="h-3 w-3 mr-2" />
+                      Abrir no visor
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -265,6 +286,14 @@ export function MessageItem({
                     >
                       <Download className="h-3 w-3" />
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onPdfClick?.(message.mediaUrl!, message.fileName || 'documento.pdf')}
+                    >
+                      <FileText className="h-3 w-3 mr-2" />
+                      Abrir no visor
+                    </Button>
                   </div>
                 </div>
               )}
@@ -279,7 +308,7 @@ export function MessageItem({
                 className="rounded-lg max-w-full h-auto"
                 style={{ maxHeight: '400px', maxWidth: '300px' }}
               >
-                <source src={message.mediaUrl} />
+                <source src={message.mediaUrl} type={message.mimeType || 'video/mp4'} />
               </video>
             </div>
           )}
@@ -287,7 +316,10 @@ export function MessageItem({
           {/* Contact Message */}
           {message.type === "contact" && message.contactData && (
             <div className="space-y-2 min-w-[200px]">
-              <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+              <div 
+                className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg cursor-pointer hover:bg-muted/50"
+                onClick={() => onOpenContactConversation?.(message.contactData!.name, message.contactData!.phone)}
+              >
                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                   <UserIcon className="h-5 w-5 text-primary" />
                 </div>
@@ -317,6 +349,14 @@ END:VCARD`;
               >
                 <Download className="h-3 w-3 mr-2" />
                 Salvar Contato
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onOpenContactConversation?.(message.contactData!.name, message.contactData!.phone)}
+                className="w-full"
+              >
+                Conversar
               </Button>
             </div>
           )}

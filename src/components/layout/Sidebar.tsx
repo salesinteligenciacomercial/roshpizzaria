@@ -5,7 +5,6 @@ import {
   MessageSquare, 
   Calendar, 
   Bot, 
-  BarChart3,
   Settings,
   LogOut
 } from "lucide-react";
@@ -17,14 +16,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useEffect, useState } from "react";
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Analytics", href: "/analytics", icon: LayoutDashboard },
   { name: "Leads", href: "/leads", icon: Users },
   { name: "Funil de Vendas", href: "/kanban", icon: LayoutDashboard },
   { name: "Conversas", href: "/conversas", icon: MessageSquare },
   { name: "Agenda", href: "/agenda", icon: Calendar },
   { name: "Tarefas", href: "/tarefas", icon: Calendar },
   { name: "Fluxos e Automação", href: "/ia", icon: Bot },
-  { name: "Relatórios", href: "/relatorios", icon: BarChart3 },
   { name: "Configurações", href: "/configuracoes", icon: Settings },
 ];
 

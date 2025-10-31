@@ -31,6 +31,7 @@ interface EditarLeadDialogProps {
 export function EditarLeadDialog({ lead, onLeadUpdated }: EditarLeadDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(false);
   const [funis, setFunis] = useState<any[]>([]);
   const [etapas, setEtapas] = useState<any[]>([]);
   const [etapasFiltradas, setEtapasFiltradas] = useState<any[]>([]);
@@ -49,6 +50,23 @@ export function EditarLeadDialog({ lead, onLeadUpdated }: EditarLeadDialogProps)
   });
   const [newTag, setNewTag] = useState("");
 
+  // Reset form data when lead changes
+  useEffect(() => {
+    setFormData({
+      nome: lead.nome || "",
+      telefone: lead.telefone || "",
+      email: lead.email || "",
+      cpf: lead.cpf || "",
+      valor: lead.value?.toString() || "",
+      company: lead.company || "",
+      source: lead.source || "",
+      notes: lead.notes || "",
+      funil_id: lead.funil_id || "",
+      etapa_id: lead.etapa_id || "",
+      tags: lead.tags || []
+    });
+  }, [lead]);
+
   useEffect(() => {
     if (open) {
       carregarDados();
@@ -66,11 +84,22 @@ export function EditarLeadDialog({ lead, onLeadUpdated }: EditarLeadDialogProps)
   }, [formData.funil_id, etapas]);
 
   const carregarDados = async () => {
-    const { data: funisData } = await supabase.from("funis").select("*").order("criado_em");
-    const { data: etapasData } = await supabase.from("etapas").select("*").order("posicao");
-    
-    setFunis(funisData || []);
-    setEtapas(etapasData || []);
+    try {
+      setInitialLoading(true);
+      const { data: funisData, error: funisError } = await supabase.from("funis").select("*").order("criado_em");
+      const { data: etapasData, error: etapasError } = await supabase.from("etapas").select("*").order("posicao");
+
+      if (funisError) throw funisError;
+      if (etapasError) throw etapasError;
+
+      setFunis(funisData || []);
+      setEtapas(etapasData || []);
+    } catch (error) {
+      console.error("Erro ao carregar dados do funil:", error);
+      toast.error("Erro ao carregar dados do funil");
+    } finally {
+      setInitialLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -160,7 +189,15 @@ export function EditarLeadDialog({ lead, onLeadUpdated }: EditarLeadDialogProps)
         <DialogHeader>
           <DialogTitle>Editar Lead</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {initialLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
+              <p className="text-muted-foreground">Carregando dados...</p>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="funil">Funil *</Label>
             <Select 
@@ -351,7 +388,8 @@ export function EditarLeadDialog({ lead, onLeadUpdated }: EditarLeadDialogProps)
               {loading ? "Salvando..." : "Salvar Alterações"}
             </Button>
           </div>
-        </form>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
