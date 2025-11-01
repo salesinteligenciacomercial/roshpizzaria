@@ -84,13 +84,12 @@ export function EditarEtapaDialog({ etapaId, nomeAtual, corAtual, onEtapaUpdated
         }
       }
 
-      const { error } = await supabase
-        .from("etapas")
-        .update({
-          nome: nomeFormatado,
-          cor,
-        })
-        .eq("id", etapaId);
+      const { error } = await supabase.rpc("update_etapa", {
+        p_etapa_id: etapaId,
+        p_nome: nomeFormatado,
+        p_cor: cor,
+        p_posicao: null,
+      });
 
       if (error) throw error;
 

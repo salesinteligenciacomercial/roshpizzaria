@@ -229,13 +229,10 @@ export function EditarFunilDialog({ funilId, funilNome, onFunilUpdated }: Editar
       console.log("Etapas a processar:", etapas);
 
       // 1. Atualizar nome do funil
-      const { error: funilError } = await supabase
-        .from("funis")
-        .update({ 
-          nome: nomeFunil
-        })
-        .eq("id", funilId)
-        .eq("owner_id", session.user.id);
+      const { error: funilError } = await supabase.rpc("update_funil_nome", {
+        p_funil_id: funilId,
+        p_nome: nomeFunil,
+      });
 
       if (funilError) {
         console.error("❌ Erro ao atualizar nome do funil:", funilError);
@@ -271,15 +268,12 @@ export function EditarFunilDialog({ funilId, funilNome, onFunilUpdated }: Editar
         } else {
           console.log(`🔄 Atualizando etapa ${i + 1}: "${etapa.nome}"`);
           
-          const { error: updateError } = await supabase
-            .from("etapas")
-            .update({
-              nome: etapa.nome,
-              posicao: i,
-              cor: etapa.cor
-            })
-            .eq("id", etapa.id)
-            .eq("funil_id", funilId);
+          const { error: updateError } = await supabase.rpc("update_etapa", {
+            p_etapa_id: etapa.id,
+            p_nome: etapa.nome,
+            p_cor: etapa.cor,
+            p_posicao: i,
+          });
           
           if (updateError) {
             console.error("❌ Erro ao atualizar etapa:", updateError);

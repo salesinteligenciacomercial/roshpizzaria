@@ -1411,6 +1411,19 @@ export type Database = {
         Args: { p_funil_id: string; p_order: string[] }
         Returns: undefined
       }
+      update_etapa: {
+        Args: {
+          p_cor: string
+          p_etapa_id: string
+          p_nome: string
+          p_posicao: number
+        }
+        Returns: undefined
+      }
+      update_funil_nome: {
+        Args: { p_funil_id: string; p_nome: string }
+        Returns: undefined
+      }
       user_belongs_to_company: {
         Args: { _company_id: string; _user_id: string }
         Returns: boolean
