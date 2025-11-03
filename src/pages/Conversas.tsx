@@ -4544,10 +4544,7 @@ function Conversas() {
     }
   };
 
-  const filteredConversations = conversations
-    .filter((conv) => filter === "all" || conv.status === filter)
-    .filter((conv) => conv.contactName.toLowerCase().includes(searchTerm.toLowerCase()));
-
+  // ✅ REMOVIDO: Declaração duplicada de filteredConversations (já existe na linha 459 com useMemo)
 
   const openConversationWithContact = (name: string, phone: string) => {
     const digits = (phone || '').replace(/\D/g, '');
