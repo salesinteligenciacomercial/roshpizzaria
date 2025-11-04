@@ -13,6 +13,7 @@ import Agenda from "./pages/Agenda";
 import Tarefas from "./pages/Tarefas";
 import IA from "./pages/IA";
 import Configuracoes from "./pages/Configuracoes";
+import Relatorios from "./pages/Relatorios";
 import { MainLayout } from "./components/layout/MainLayout";
 import NotFound from "./pages/NotFound";
 import { Component, ErrorInfo, ReactNode } from 'react';
@@ -57,15 +58,21 @@ const App = () => (
           <Toaster />
           <Sonner />
           <Routes>
-            <Route path="*" element={
-              <div className="min-h-screen flex items-center justify-center bg-background">
-                <div className="text-center space-y-4">
-                  <h1 className="text-4xl font-bold text-foreground">Teste Básico: Página Carregando!</h1>
-                  <p className="text-muted-foreground">Se você vê isso, o render funciona. O problema era em componentes específicos.</p>
-                  <Button onClick={() => console.log('Botão clicado!')}>Testar Console</Button>
-                </div>
-              </div>
-            } />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/" element={<MainLayout />}>
+              <Route index element={<Navigate to="/kanban" replace />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="leads" element={<Leads />} />
+              <Route path="kanban" element={<Kanban />} />
+              <Route path="tarefas" element={<Tarefas />} />
+              <Route path="agenda" element={<Agenda />} />
+              <Route path="analytics" element={<Analytics />} />
+              <Route path="conversas" element={<Conversas />} />
+              <Route path="ia" element={<IA />} />
+              <Route path="relatorios" element={<Relatorios />} />
+              <Route path="configuracoes" element={<Configuracoes />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </ErrorBoundary>
       </TooltipProvider>
