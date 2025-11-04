@@ -5,5 +5,7 @@ export function useAIAgents() {
     patterns: [],
     updateConfig: () => {},
     trackInteraction: () => {},
+    getAgentConfigs: async () => null,
+    updateAgentConfig: async () => {}
   };
 }

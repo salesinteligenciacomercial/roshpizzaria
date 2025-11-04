@@ -130,20 +130,9 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     setLocalComments(updated);
     setNewComment("");
 
-    try {
-      const { supabase } = await import("@/integrations/supabase/client");
-      const { error } = await supabase
-        .from('tasks')
-        .update({ comments: updated })
-        .eq('id', task.id);
-      if (error) throw error;
-      onUpdate();
-      toast.success("Comentário adicionado");
-    } catch (e) {
-      console.error("Erro ao adicionar comentário:", e);
-      setLocalComments(task.comments || []);
-      toast.error("Não foi possível adicionar o comentário");
-    }
+    // NOTA: Campo 'comments' não existe na tabela tasks
+    // Comentários serão mantidos apenas localmente
+    toast.success("Comentário adicionado (apenas localmente)");
   }, [newComment, localComments, task.id, task.description, onUpdate]);
 
   const formatTime = useCallback((seconds: number) => {
@@ -197,15 +186,9 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       const updatedAttachments = [...attachments, newAttachment];
       setAttachments(updatedAttachments);
 
-      const { error: updateError } = await supabase
-        .from('tasks')
-        .update({ attachments: updatedAttachments })
-        .eq('id', task.id);
-
-      if (updateError) throw updateError;
-
-      onUpdate();
-      toast.success("Arquivo anexado com sucesso!");
+      // NOTA: Campo 'attachments' não existe na tabela tasks
+      // Anexos não serão persistidos no banco
+      toast.success("Arquivo anexado (apenas localmente)!");
     } catch (error) {
       console.error("Erro ao fazer upload:", error);
       setAttachments(task.attachments || []);
@@ -230,17 +213,11 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       const updatedAttachments = [...attachments, newAttachment];
       setAttachments(updatedAttachments);
 
-      const { error } = await supabase
-        .from('tasks')
-        .update({ attachments: updatedAttachments })
-        .eq('id', task.id);
-
-      if (error) throw error;
-
-      onUpdate();
+      // NOTA: Campo 'attachments' não existe na tabela tasks
+      // Anexos serão mantidos apenas localmente
       setAttachmentUrl("");
       setShowAttachmentDialog(false);
-      toast.success("Link adicionado com sucesso!");
+      toast.success("Link adicionado (apenas localmente)!");
     } catch (error) {
       console.error("Erro ao adicionar link:", error);
       toast.error("Erro ao adicionar link");
@@ -248,26 +225,13 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
   }, [attachmentUrl, attachments, task.id, onUpdate]);
 
   const removeAttachment = useCallback(async (index: number) => {
-    try {
-      const { supabase } = await import("@/integrations/supabase/client");
-
-      const updatedAttachments = attachments.filter((_, i) => i !== index);
-      setAttachments(updatedAttachments);
-
-      const { error } = await supabase
-        .from('tasks')
-        .update({ attachments: updatedAttachments })
-        .eq('id', task.id);
-
-      if (error) throw error;
-
-      onUpdate();
-      toast.success("Anexo removido!");
-    } catch (error) {
-      console.error("Erro ao remover anexo:", error);
-      toast.error("Erro ao remover anexo");
-    }
-  }, [attachments, task.id, onUpdate]);
+    const updatedAttachments = attachments.filter((_, i) => i !== index);
+    setAttachments(updatedAttachments);
+    
+    // NOTA: Campo 'attachments' não existe na tabela tasks
+    // Anexos não serão persistidos no banco
+    toast.success("Anexo removido (apenas localmente)!");
+  }, [attachments]);
 
   const {
     attributes,

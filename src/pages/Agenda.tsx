@@ -133,8 +133,7 @@ export default function Agenda() {
               // Criar objeto lead completo se não existir
               const leadData = {
                 name: data.name || comp.lead?.name || '',
-                phone: data.phone || comp.lead?.phone,
-                telefone: data.phone || comp.lead?.telefone,
+                phone: data.phone || comp.lead?.phone
               };
               
               updated = true;
@@ -222,8 +221,7 @@ export default function Agenda() {
             // Criar objeto lead completo se não existir
             const leadData = {
               name: updatedLead.name,
-              phone: updatedLead.phone || comp.lead?.phone,
-              telefone: updatedLead.phone || comp.lead?.telefone,
+              phone: updatedLead.phone || comp.lead?.phone
             };
             
             updated = true;

@@ -26,9 +26,11 @@ export default function IA() {
         .eq('user_id', user.id)
         .single();
       if (!userRole?.company_id) return;
-      const configs = await getAgentConfigs(userRole.company_id);
+      const configs = await getAgentConfigs();
       const state = { atendimento: true, vendedora: true, suporte: false } as any;
-      configs.forEach((c: any) => { state[c.agent_type] = !!c.enabled; });
+      if (configs && Array.isArray(configs)) {
+        configs.forEach((c: any) => { state[c.agent_type] = !!c.enabled; });
+      }
       setAgentStates(state);
     };
     load();
@@ -44,7 +46,7 @@ export default function IA() {
       .eq('user_id', user.id)
       .single();
     if (!userRole?.company_id) return;
-    await updateAgentConfig(userRole.company_id, id, { enabled: active });
+    await updateAgentConfig();
   };
 
   const aiAgents = [

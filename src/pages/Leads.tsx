@@ -40,6 +40,7 @@ interface Lead {
   phone: string | null;
   telefone?: string | null;
   company: string | null;
+  company_id?: string | null;
   source: string | null;
   status: string;
   stage: string;
@@ -1412,7 +1413,11 @@ export default function Leads() {
               title: "Compromisso criado",
               description: "O compromisso foi agendado com sucesso.",
             });
-            emitGlobalEvent('onMeetingScheduled', { lead_id: leadParaAgenda.id });
+            emitGlobalEvent({
+              type: 'meeting-scheduled',
+              data: { lead_id: leadParaAgenda.id },
+              source: 'Leads'
+            });
             carregarLeads(true);
           }}
         />
@@ -1432,7 +1437,11 @@ export default function Leads() {
               title: "Tarefa criada",
               description: "A tarefa foi criada com sucesso.",
             });
-            emitGlobalEvent('onTaskCreated', { lead_id: leadParaTarefa.id });
+            emitGlobalEvent({
+              type: 'task-created',
+              data: { lead_id: leadParaTarefa.id },
+              source: 'Leads'
+            });
             carregarLeads(true);
           }}
         />
