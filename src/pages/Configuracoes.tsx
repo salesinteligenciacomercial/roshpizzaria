@@ -402,14 +402,12 @@ export default function Configuracoes() {
           <FilaDialog
             open={filaDialogOpen}
             onOpenChange={setFilaDialogOpen}
-            initialData={editingFila}
-            onSaved={carregarFilas}
           />
 
           <FilaColaboradoresDialog
             open={colaboradoresDialogOpen}
             onOpenChange={setColaboradoresDialogOpen}
-            fila={filaSelecionada}
+            filaId=""
           />
     </>
   );

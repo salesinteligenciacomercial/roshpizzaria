@@ -43,7 +43,7 @@ const REALTIME_RESTORED_TOAST_ID = 'realtime-reconnected';
 interface Message {
   id: string;
   content: string;
-  type: "text" | "image" | "audio" | "pdf" | "video" | "contact" | "document";
+  type: "text" | "image" | "audio" | "pdf" | "video" | "contact";
   sender: "user" | "contact";
   timestamp: Date;
   delivered: boolean;
@@ -1906,9 +1906,6 @@ function Conversas() {
                       .eq('company_id', userCompanyIdRef.current)
                       .then(() => {
                         console.log('✅ Mensagem marcada como lida');
-                      })
-                      .catch((e) => {
-                        console.error('Erro ao marcar mensagem como lida (realtime):', e);
                       });
                   }
                 }
@@ -2413,7 +2410,7 @@ function Conversas() {
               return {
                 id: m.id,
                 content: msgContent,
-                type: msgType as "text" | "image" | "audio" | "pdf" | "video" | "document" | "contact",
+                type: msgType as "text" | "image" | "audio" | "pdf" | "video" | "contact",
                 sender: m.status === 'Enviada' ? 'user' : 'contact' as "user" | "contact",
                 timestamp: new Date(m.created_at),
                 delivered: true,
@@ -4986,7 +4983,17 @@ function Conversas() {
                     </div>
                   )}
                   <div className="flex items-center gap-2">
-                    <MediaUpload onSendMedia={handleSendMedia} />
+                    <MediaUpload onFileSelected={(file) => {
+                      // Determinar o tipo baseado no mime type
+                      const mimeType = file.type;
+                      let type = "text";
+                      if (mimeType.startsWith("image/")) type = "image";
+                      else if (mimeType.startsWith("video/")) type = "video";
+                      else if (mimeType.startsWith("audio/")) type = "audio";
+                      else if (mimeType === "application/pdf") type = "pdf";
+                      
+                      handleSendMedia(file, "", type);
+                    }} />
                     <Input
                       placeholder="Escreva sua mensagem..."
                       value={messageInput}

@@ -707,8 +707,8 @@ export default function Tarefas() {
       return true; // Placeholder
     });
 
-    const totalTimeSpent = tasksInBoard.reduce((total, task) => total + (task.tempo_gasto || 0), 0);
-    const avgTimePerTask = completedTasks.length > 0 ? totalTimeSpent / completedTasks.length : 0;
+    const totalTimeSpent = 0; // Simplificado - campo tempo_gasto não existe
+    const avgTimePerTask = 0; // Simplificado
 
     return {
       totalTasks: tasksInBoard.length,

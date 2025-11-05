@@ -119,16 +119,16 @@ export const useLeadsSync = ({
   onUpdate,
   onDelete,
   showNotifications = true,
-  companyId // 🔒 ISOLAMENTO: company_id obrigatório para isolamento
+  companyId
 }: UseLeadsSyncOptions & { companyId?: string } = {}) => {
-  const handlersRef = useRef({ onInsert, onUpdate, onDelete, showNotifications });
+  const handlersRef = useRef({ onInsert, onUpdate, onDelete, showNotifications, companyId });
   const [connectionStatus, setConnectionStatus] = useState<RealtimeStatus>(globalConnectionStatus);
   const debounceTimeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
   
   // Atualizar referências sem causar re-subscrição
   useEffect(() => {
-    handlersRef.current = { onInsert, onUpdate, onDelete, showNotifications };
-  }, [onInsert, onUpdate, onDelete, showNotifications]);
+    handlersRef.current = { onInsert, onUpdate, onDelete, showNotifications, companyId };
+  }, [onInsert, onUpdate, onDelete, showNotifications, companyId]);
 
   // Listener para status global de conexão
   useEffect(() => {
@@ -165,12 +165,13 @@ export const useLeadsSync = ({
       }
 
       // 🔒 SEGURANÇA: Filtrar apenas leads da empresa atual
-      if (companyId) {
+      const currentCompanyId = handlers.companyId;
+      if (currentCompanyId) {
         const recordCompanyId = newRecord?.company_id || oldRecord?.company_id;
-        if (recordCompanyId !== companyId) {
+        if (recordCompanyId !== currentCompanyId) {
           console.log('🚫 [useLeadsSync] Lead ignorado - empresa diferente:', {
             recordCompanyId,
-            userCompanyId: companyId,
+            userCompanyId: currentCompanyId,
             leadId: newRecord?.id || oldRecord?.id
           });
           return; // Ignorar leads de outras empresas
@@ -208,13 +209,13 @@ export const useLeadsSync = ({
           console.log('✅ [useLeadsSync] DELETE processado:', oldRecord.id);
           break;
           
-        default:
-          console.warn('⚠️ [useLeadsSync] Evento desconhecido:', eventType);
-      }
-    } catch (error) {
-      console.error('❌ [useLeadsSync] Erro ao processar mudança:', error, payload);
+      default:
+        console.warn('⚠️ [useLeadsSync] Evento desconhecido:', eventType);
     }
-  }, [companyId]);
+  } catch (error) {
+    console.error('❌ [useLeadsSync] Erro ao processar mudança:', error, payload);
+  }
+}, []);
 
   // Handler com debounce para evitar spam de atualizações
   const handleChange = useCallback((payload: any) => {

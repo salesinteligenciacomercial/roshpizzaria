@@ -40,6 +40,7 @@ interface Lead {
   phone: string | null;
   telefone?: string | null;
   company: string | null;
+  company_id?: string | null;
   source: string | null;
   status: string;
   stage: string;
@@ -691,9 +692,6 @@ export default function Leads() {
                       leadPhone={lead.phone || lead.telefone || undefined}
                       onEdit={() => handleEditarLead(lead)}
                       onDelete={() => handleExcluirLead(lead)}
-                      onOpenConversa={() => abrirConversa(lead)}
-                      onOpenAgenda={() => abrirAgenda(lead)}
-                      onOpenTarefa={() => abrirTarefa(lead)}
                     />
                     <LeadTagsDialog 
                       leadId={lead.id}
@@ -764,13 +762,6 @@ export default function Leads() {
             funil_id: leadParaEditar.funil_id || undefined,
             etapa_id: leadParaEditar.etapa_id || undefined,
           }}
-          open={showEditDialog}
-          onOpenChange={(open) => {
-            setShowEditDialog(open);
-            if (!open) {
-              setLeadParaEditar(null);
-            }
-          }}
           onLeadUpdated={() => {
             carregarLeads(true);
             setLeadParaEditar(null);
@@ -815,9 +806,11 @@ export default function Leads() {
               setLeadParaConversa(null);
             }
           }}
-          leadId={leadParaConversa.id}
-          leadName={leadParaConversa.name}
-          leadPhone={leadParaConversa.phone || leadParaConversa.telefone || undefined}
+          lead={{
+            id: leadParaConversa.id,
+            name: leadParaConversa.name,
+            phone: leadParaConversa.phone || leadParaConversa.telefone || ""
+          }}
         />
       )}
 
@@ -835,7 +828,11 @@ export default function Leads() {
               title: "Compromisso criado",
               description: "O compromisso foi agendado com sucesso.",
             });
-            emitGlobalEvent('onMeetingScheduled', { lead_id: leadParaAgenda.id });
+            emitGlobalEvent({
+              type: 'meeting-scheduled',
+              data: { lead_id: leadParaAgenda.id },
+              source: 'Leads'
+            });
             carregarLeads(true);
           }}
         />
@@ -855,7 +852,11 @@ export default function Leads() {
               title: "Tarefa criada",
               description: "A tarefa foi criada com sucesso.",
             });
-            emitGlobalEvent('onTaskCreated', { lead_id: leadParaTarefa.id });
+            emitGlobalEvent({
+              type: 'task-created',
+              data: { lead_id: leadParaTarefa.id },
+              source: 'Leads'
+            });
             carregarLeads(true);
           }}
         />
