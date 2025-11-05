@@ -37,9 +37,6 @@ import { useLeadsSync } from "@/hooks/useLeadsSync";
 import { useGlobalSync } from "@/hooks/useGlobalSync";
 import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
 
-// ID único para deduplicar o toast de reconexão
-const REALTIME_RESTORED_TOAST_ID = 'realtime-reconnected';
-
 interface Message {
   id: string;
   content: string;
@@ -79,6 +76,7 @@ interface Conversation {
   anotacoes?: string;
   avatarUrl?: string;
   phoneNumber?: string;
+  isGroup?: boolean;
 }
 
 interface QuickMessage {
@@ -205,7 +203,7 @@ const initialConversations: Conversation[] = [
 function Conversas() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
-  const [filter, setFilter] = useState<"all" | "waiting" | "answered" | "resolved">("all");
+  const [filter, setFilter] = useState<"all" | "waiting" | "answered" | "resolved" | "group">("all");
   const [searchTerm, setSearchTerm] = useState("");
   // MELHORIA: Estado para busca debounced (otimização de performance)
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -272,8 +270,8 @@ function Conversas() {
   const realtimeChannelRef = useRef<any>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastUpdateTimeRef = useRef<number>(0);
-  const hasShownReconnectToastRef = useRef<boolean>(false);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isReconnectingRef = useRef<boolean>(false);
 
   // MELHORIA: Função auxiliar para chamar Edge Functions com retry, timeout e fallback
   const callEdgeFunctionWithRetry = async <T = any>(
@@ -312,18 +310,34 @@ function Conversas() {
         // Race entre função e timeout
         const result = await Promise.race([functionPromise, timeoutPromise]);
 
-        // Validar resposta
-        if (!result || !result.data) {
-          throw new Error('Resposta inválida da edge function');
+        // Verificar erro primeiro (para não mascarar com "Resposta inválida")
+        if (result && (result as any).error) {
+          const err = (result as any).error as any;
+          // Tentar extrair o JSON de erro retornado pela Edge Function
+          try {
+            const resp = err?.context?.response as Response | undefined;
+            if (resp) {
+              const contentType = resp.headers?.get?.('content-type') || '';
+              if (contentType.includes('application/json')) {
+                const details = await (resp as any).json();
+                const code = details?.code || details?.error || resp.status;
+                throw new Error(String(code));
+              } else {
+                const text = await (resp as any).text();
+                throw new Error(text || (err?.message || 'Erro na edge function'));
+              }
+            }
+          } catch {}
+          throw new Error(err?.message || 'Erro na edge function');
         }
 
-        // Verificar se há erro na resposta
-        if (result.error) {
-          throw new Error(result.error.message || 'Erro na edge function');
+        // Validar resposta (aceitar sucesso sem body)
+        if (!result) {
+          throw new Error('Sem resposta da edge function');
         }
 
         console.log(`✅ [EDGE-FUNCTION] ${functionName} executada com sucesso (tentativa ${attempt})`);
-        return result.data as T;
+        return (result as any).data as T;
 
       } catch (error: any) {
         lastError = error;
@@ -388,18 +402,24 @@ function Conversas() {
   };
 
   // MELHORIA: Wrapper específico para enviar-whatsapp com fallback de erro claro
-  const sendWhatsAppWithRetry = async (body: {
-    number: string;
-    message?: string;
-    media?: any;
-    audio?: any;
-    reaction?: any;
-    replyTo?: string;
-    company_id: string;
-  }): Promise<{ success: boolean; error?: string }> => {
+  const sendWhatsAppWithRetry = async (body: any): Promise<{ success: boolean; error?: string }> => {
+    // Mapear para o schema esperado pela Edge Function
+    const payload = {
+      numero: body?.numero ?? body?.number,
+      mensagem: body?.mensagem ?? body?.message,
+      mediaUrl: body?.mediaUrl,
+      mediaBase64: body?.mediaBase64,
+      fileName: body?.fileName,
+      mimeType: body?.mimeType,
+      caption: body?.caption,
+      tipo_mensagem: body?.tipo_mensagem,
+      quoted: body?.quoted,
+      company_id: body?.company_id,
+    };
+
     return await callEdgeFunctionWithRetry<{ success: boolean; error?: string }>(
       'enviar-whatsapp',
-      body,
+      payload,
       {
         maxRetries: 3,
         timeout: 10000,
@@ -464,8 +484,11 @@ function Conversas() {
     let filtered = conversations.slice(0, conversationsLimit); // Limitar quantidade inicial
 
     // Aplicar filtro de status
-    if (filter !== "all") {
+    if (filter !== "all" && filter !== "group") {
       filtered = filtered.filter((conv) => conv.status === filter);
+    }
+    if (filter === "group") {
+      filtered = filtered.filter((conv) => conv.isGroup === true);
     }
 
     // Aplicar busca debounced (mais agressivo)
@@ -611,6 +634,27 @@ function Conversas() {
 
   useEffect(() => {
     userCompanyIdRef.current = userCompanyId;
+  }, [userCompanyId]);
+
+  // Assinatura realtime para novas mensagens (conversas) da empresa
+  useEffect(() => {
+    if (!userCompanyId) return;
+
+    const channel = supabase
+      .channel(`conversas-company-${userCompanyId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'conversas', filter: `company_id=eq.${userCompanyId}` },
+        () => {
+          // Recarregar a lista de conversas ao chegar nova mensagem
+          loadSupabaseConversations();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [userCompanyId]);
 
   // Sistema de eventos globais para comunicação entre módulos
@@ -1467,6 +1511,7 @@ function Conversas() {
                   status: msg.status === 'Enviada' ? 'answered' : 'waiting',
                   lastMessage: msg.mensagem || '',
                   unread: 0,
+                  isGroup: Boolean((msg as any)?.is_group) || /@g\.us$/.test(String(msg.numero || '')),
                   messages: [],
                   tags: leadData.tags || [],
                   funnelStage: leadData.stage,
@@ -1616,20 +1661,23 @@ function Conversas() {
           return false;
         }
 
-        // Validar campos obrigatórios
-        if (!data.id || !data.numero) {
+        // Validar campos obrigatórios mínimos (aceitar numero OU telefone_formatado)
+        if (!data.id || (!data.numero && !data.telefone_formatado)) {
           console.warn('⚠️ [REALTIME] Dados inválidos: faltam campos obrigatórios', {
             id: data.id,
-            numero: data.numero
+            numero: data.numero,
+            telefone_formatado: data.telefone_formatado
           });
           return false;
         }
 
         // Validar número de telefone brasileiro (12 ou 13 dígitos)
-        const numeroLimpo = String(data.numero || '').replace(/[^0-9]/g, '');
+        const numeroBruto = data.telefone_formatado || data.numero || '';
+        const numeroLimpo = String(numeroBruto).replace(/[^0-9]/g, '');
         if (numeroLimpo.length < 12 || numeroLimpo.length > 13) {
           console.warn('⚠️ [REALTIME] Número de telefone inválido:', {
             numero: data.numero,
+            telefone_formatado: data.telefone_formatado,
             numeroLimpo,
             tamanho: numeroLimpo.length
           });
@@ -1646,11 +1694,7 @@ function Conversas() {
           return false;
         }
 
-        // Validar company_id existe
-        if (!data.company_id) {
-          console.warn('⚠️ [REALTIME] Dados inválidos: falta company_id', data);
-          return false;
-        }
+        // company_id pode não vir de integrações externas; não bloquear validação
 
         return true;
       } catch (error) {
@@ -1680,10 +1724,15 @@ function Conversas() {
 
     // MELHORIA: Função para reconectar automaticamente
     const reconnectRealtime = async (attempt: number = 1, maxAttempts: number = 5) => {
+      if (isReconnectingRef.current) {
+        return;
+      }
+      isReconnectingRef.current = true;
       if (attempt > maxAttempts) {
         console.error('❌ [REALTIME] Máximo de tentativas de reconexão atingido');
         setRealtimeConnectionStatus('error');
         toast.error('Erro ao conectar com servidor em tempo real');
+        isReconnectingRef.current = false;
         return;
       }
 
@@ -1706,12 +1755,11 @@ function Conversas() {
           console.log(`✅ [REALTIME] Reconectado com sucesso na tentativa ${attempt}`);
           setRealtimeConnectionStatus('connected');
           setRealtimeReconnectAttempts(0);
-          if (!hasShownReconnectToastRef.current) {
-            toast.success('Conexão em tempo real restaurada', { id: REALTIME_RESTORED_TOAST_ID, duration: 2500 });
-            hasShownReconnectToastRef.current = true;
-          }
+          toast.success('Conexão em tempo real restaurada');
+          isReconnectingRef.current = false;
         } catch (error) {
           console.error(`❌ [REALTIME] Erro ao reconectar (tentativa ${attempt}):`, error);
+          isReconnectingRef.current = false;
           reconnectRealtime(attempt + 1, maxAttempts);
         }
       }, delay);
@@ -1743,13 +1791,13 @@ function Conversas() {
             if (payload.eventType === 'INSERT' && payload.new) {
               const novaConversa = payload.new;
 
-              // 🔒 SEGURANÇA: Filtrar apenas mensagens da empresa atual
-              if (!novaConversa.company_id || novaConversa.company_id !== userCompanyIdRef.current) {
+              // 🔒 SEGURANÇA: Filtrar por empresa quando informado; permitir sem company_id (integração externa)
+              if (novaConversa.company_id && novaConversa.company_id !== userCompanyIdRef.current) {
                 console.log('🚫 [REALTIME] Mensagem ignorada - empresa diferente:', {
                   msgCompanyId: novaConversa.company_id,
                   userCompanyId: userCompanyIdRef.current
                 });
-                return; // Ignorar mensagens de outras empresas
+                return;
               }
 
               // MELHORIA: Usar debounce para evitar spam de atualizações
@@ -1800,6 +1848,7 @@ function Conversas() {
                   avatarUrl: profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(nomeValido)}&background=10b981&color=fff`,
                   channel: 'whatsapp' as const,
                   status: 'waiting' as const,
+                  isGroup: Boolean((novaConversa as any)?.is_group) || /@g\.us$/.test(String(novaConversa.numero || '')),
                   messages: [{
                     id: novaConversa.id,
                     content: novaConversa.mensagem,
@@ -1898,12 +1947,11 @@ function Conversas() {
                   console.log('🔄 Atualizando conversa selecionada com nova mensagem em tempo real');
                   setSelectedConv(conversaAtualizada);
                   // Marcar a mensagem recebida como lida imediatamente no Supabase
-                  if (novaConversa.status === 'Recebida' && userCompanyIdRef.current) {
+                  if (novaConversa.status === 'Recebida') {
                     supabase
                       .from('conversas')
                       .update({ status: 'Lida' })
                       .eq('id', novaConversa.id)
-                      .eq('company_id', userCompanyIdRef.current)
                       .then(() => {
                         console.log('✅ Mensagem marcada como lida');
                       });
@@ -1993,9 +2041,9 @@ function Conversas() {
             if (payload.eventType === 'UPDATE' && payload.new) {
               const conversaAtualizada = payload.new;
 
-              // 🔒 SEGURANÇA: Filtrar apenas mensagens da empresa atual
-              if (!conversaAtualizada.company_id || conversaAtualizada.company_id !== userCompanyIdRef.current) {
-                return; // Ignorar mensagens de outras empresas
+              // 🔒 SEGURANÇA: Filtrar por empresa quando informado; permitir sem company_id
+              if (conversaAtualizada.company_id && conversaAtualizada.company_id !== userCompanyIdRef.current) {
+                return;
               }
 
               // MELHORIA: Usar debounce para evitar spam de atualizações
@@ -2097,18 +2145,20 @@ function Conversas() {
           console.log('✅ [REALTIME] Canal conectado com sucesso');
           setRealtimeConnectionStatus('connected');
           setRealtimeReconnectAttempts(0);
+          // Se havia timeout pendente, limpar; também liberar flag de reconexão
+          if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+          }
+          isReconnectingRef.current = false;
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ [REALTIME] Erro no canal - tentando reconectar...');
           setRealtimeConnectionStatus('error');   
-          toast.dismiss(REALTIME_RESTORED_TOAST_ID);
-          hasShownReconnectToastRef.current = false;
-          reconnectRealtime();
+          if (!isReconnectingRef.current) reconnectRealtime();
         } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
           console.warn('⚠️ [REALTIME] Canal desconectado - tentando reconectar...');
           setRealtimeConnectionStatus('disconnected');                                              
-          toast.dismiss(REALTIME_RESTORED_TOAST_ID);
-          hasShownReconnectToastRef.current = false;
-          reconnectRealtime();
+          if (!isReconnectingRef.current) reconnectRealtime();
         }
       });
 
@@ -2160,6 +2210,16 @@ function Conversas() {
       });
     };
   }, []);
+
+  // Fallback: polling quando realtime não estiver conectado
+  useEffect(() => {
+    if (realtimeConnectionStatus === 'connected') return;
+    const intervalId = setInterval(() => {
+      console.log('⏱️ [FALLBACK] Polling de conversas por desconexão do realtime');
+      loadSupabaseConversations();
+    }, 10000);
+    return () => clearInterval(intervalId);
+  }, [realtimeConnectionStatus]);
 
   useEffect(() => {
     scrollToBottom();
@@ -2236,7 +2296,7 @@ function Conversas() {
       const { data, error } = await supabase
         .from('conversas')
         .select('*')
-        .eq('company_id', userRole.company_id)
+        .or(`company_id.eq.${userRole.company_id},company_id.is.null`)
         .order('created_at', { ascending: false })
         .limit(conversationsLimit); // Usar limite configurável
 
@@ -2912,15 +2972,13 @@ function Conversas() {
       )
     });
     
-    // Enviar mensagem editada via WhatsApp
+    // Enviar mensagem editada via WhatsApp (com retry)
     try {
-      const { error } = await supabase.functions.invoke('enviar-whatsapp', {
-        body: {
-          numero: selectedConv.id,
-          mensagem: `✏️ *[Mensagem editada]*\n\n${newContent}`,
-          tipo_mensagem: 'text',
-          company_id: userCompanyId
-        }
+      const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
+      const { error } = await enviarWhatsApp({
+        numero: numeroNormalizado,
+        mensagem: `✏️ *[Mensagem editada]*\n\n${newContent}`,
+        tipo_mensagem: 'text'
       });
 
       if (error) {
@@ -3043,8 +3101,9 @@ function Conversas() {
       });
 
       // Enviar via edge function (mais seguro)
+      const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
       const { data, error } = await enviarWhatsApp({
-        numero: selectedConv.id,
+        numero: numeroNormalizado,
         mensagem: caption || tipoMensagem[type],
         tipo_mensagem: type,
         mediaBase64: base64,
@@ -3099,8 +3158,8 @@ function Conversas() {
         .single();
 
       await supabase.from('conversas').insert([{
-        numero: selectedConv.id,
-        telefone_formatado: selectedConv.phoneNumber || selectedConv.id.replace(/[^0-9]/g, ''), // Normalizar
+        numero: numeroNormalizado,
+        telefone_formatado: numeroNormalizado,
         mensagem: caption || tipoMensagem[type],
         origem: 'WhatsApp',
         status: 'Enviada',
@@ -3143,8 +3202,9 @@ function Conversas() {
       });
 
       // Enviar via edge function (mais seguro)
+      const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
       const { data, error } = await enviarWhatsApp({
-        numero: selectedConv.id,
+        numero: numeroNormalizado,
         mensagem: 'Áudio enviado',
         tipo_mensagem: 'audio',
         mediaBase64: base64,
@@ -3197,8 +3257,8 @@ function Conversas() {
         .single();
 
       await supabase.from('conversas').insert([{
-        numero: selectedConv.id,
-        telefone_formatado: selectedConv.phoneNumber || selectedConv.id.replace(/[^0-9]/g, ''), // Normalizar
+        numero: numeroNormalizado,
+        telefone_formatado: numeroNormalizado,
         mensagem: 'Áudio enviado',
         origem: 'WhatsApp',
         status: 'Enviada',
@@ -3282,8 +3342,9 @@ function Conversas() {
     
     // Enviar mensagem via Evolution API
     try {
+      const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
       const { data, error } = await enviarWhatsApp({
-        numero: selectedConv.id,
+        numero: numeroNormalizado,
         ...mensagemParaEnviar,
         quotedMessageId: replyingTo || undefined,
         tipo_mensagem: type,
@@ -3310,8 +3371,8 @@ function Conversas() {
       // Salvar no Supabase após sucesso
       const repliedMessage = replyingTo ? selectedConv.messages.find(m => m.id === replyingTo)?.content : null;
       const { error: dbError } = await supabase.from('conversas').insert([{
-        numero: selectedConv.id,
-        telefone_formatado: selectedConv.phoneNumber || selectedConv.id.replace(/[^0-9]/g, ''), // Normalizar
+        numero: numeroNormalizado,
+        telefone_formatado: numeroNormalizado,
         mensagem: messageContent,
         origem: selectedConv.channel === 'whatsapp' ? 'WhatsApp' : 
                 selectedConv.channel === 'instagram' ? 'Instagram' : 'Facebook',
@@ -4597,7 +4658,12 @@ function Conversas() {
 
   const enviarWhatsApp = async (body: any) => {
     const companyId = await getCompanyId();
-    return await supabase.functions.invoke('enviar-whatsapp', { body: { company_id: companyId, ...body } });
+    // Usar wrapper com retry/timeout e retornar no formato compatível (data/error)
+    const result = await sendWhatsAppWithRetry({ company_id: companyId, ...body });
+    if (result && result.success) {
+      return { data: result, error: null } as const;
+    }
+    return { data: result, error: { message: result?.error || 'Falha ao enviar mensagem' } } as const;
   };
 
   // Normaliza número para envio no WhatsApp (BR): remove não-dígitos e garante prefixo 55
@@ -4665,7 +4731,7 @@ function Conversas() {
             <div className="flex gap-2 items-center">
               {/* MELHORIA: Indicador visual de status de conexão realtime */}
               <div 
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs"
+                className="flex items-center px-2 py-1 rounded-md"
                 title={
                   realtimeConnectionStatus === 'connected' 
                     ? 'Conectado ao servidor em tempo real' 
@@ -4677,27 +4743,13 @@ function Conversas() {
                 }
               >
                 {realtimeConnectionStatus === 'connected' ? (
-                  <>
-                    <Wifi className="h-3.5 w-3.5 text-green-500" />
-                    <span className="text-green-600 dark:text-green-400 hidden sm:inline">Conectado</span>
-                  </>
+                  <Wifi className="h-4 w-4 text-green-500" />
                 ) : realtimeConnectionStatus === 'connecting' ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 text-yellow-500 animate-spin" />
-                    <span className="text-yellow-600 dark:text-yellow-400 hidden sm:inline">
-                      Conectando{realtimeReconnectAttempts > 0 ? ` (${realtimeReconnectAttempts})` : ''}
-                    </span>
-                  </>
+                  <Loader2 className="h-4 w-4 text-yellow-500 animate-spin" />
                 ) : realtimeConnectionStatus === 'error' ? (
-                  <>
-                    <WifiOff className="h-3.5 w-3.5 text-red-500" />
-                    <span className="text-red-600 dark:text-red-400 hidden sm:inline">Erro</span>
-                  </>
+                  <WifiOff className="h-4 w-4 text-red-500" />
                 ) : (
-                  <>
-                    <WifiOff className="h-3.5 w-3.5 text-gray-400" />
-                    <span className="text-gray-500 hidden sm:inline">Desconectado</span>
-                  </>
+                  <WifiOff className="h-4 w-4 text-gray-400" />
                 )}
               </div>
               <NovaConversaDialog
@@ -4733,17 +4785,17 @@ function Conversas() {
                 }}
               />
               <Button 
-                size="sm" 
+                size="icon" 
                 variant="outline"
                 onClick={() => {
                   console.log('🔄 Botão Recarregar clicado');
                   loadSupabaseConversations();
                   toast.success('Recarregando conversas...');
                 }}
-                className="gap-2"
+                className="gap-0"
+                aria-label="Recarregar"
               >
                 <RefreshCw className="h-4 w-4" />
-                Recarregar
               </Button>
             </div>
           </div>
@@ -4788,6 +4840,13 @@ function Conversas() {
               onClick={() => setFilter("resolved")}
             >
               Resolvidos
+            </Button>
+            <Button
+              variant={filter === "group" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setFilter("group")}
+            >
+              Grupos
             </Button>
           </div>
         </div>

@@ -23,23 +23,23 @@ export function MediaUpload({ onFileSelected }: MediaUploadProps) {
 
   return (
     <div className="relative">
-      <input
-        type="file"
+              <input
+                type="file"
         id="media-upload"
-        className="hidden"
+                className="hidden"
         onChange={handleFileChange}
         accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
         disabled={uploading}
-      />
-      <Button
+              />
+                <Button
         type="button"
         variant="ghost"
-        size="icon"
+                  size="icon"
         onClick={() => document.getElementById('media-upload')?.click()}
-        disabled={uploading}
+                  disabled={uploading}
       >
         <Paperclip className="h-4 w-4" />
-      </Button>
-    </div>
+                </Button>
+              </div>
   );
 }

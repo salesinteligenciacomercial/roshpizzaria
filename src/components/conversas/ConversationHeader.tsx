@@ -137,7 +137,7 @@ import { toast } from "sonner";
                  </h2>
                  {getSyncStatusBadge()}
                </div>
-              <div className="flex items-center gap-2 text-xs">
+               <div className="flex items-center gap-2 text-xs">
                  <div className="flex items-center gap-1.5 text-muted-foreground">
                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                    <span className="capitalize font-medium">{channel}</span>
@@ -167,22 +167,27 @@ import { toast } from "sonner";
                    </Button>
                  )}
                </div>
-              {/* Linha de ações do lead (esquerda, logo abaixo da linha de status/horas) */}
-              <div className="flex items-center gap-2 pt-1">
+             </div>
+           </div>
+           {/* Ações */}
+           <div className="flex items-center gap-1">
+            {/* Menu de três pontos: editar, salvar, excluir */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" title="Ações do lead">
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
                 {leadVinculado ? (
                   <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs"
-                      onClick={() => setEditLeadOpen(true)}
-                    >
+                    <DropdownMenuItem onClick={() => setEditLeadOpen(true)}>
+                      <Edit className="h-4 w-4 mr-2" />
                       Editar lead
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
                       onClick={async () => {
                         try {
                           const id = leadVinculado.id;
@@ -200,24 +205,18 @@ import { toast } from "sonner";
                         }
                       }}
                     >
-                      Excluir
-                    </Button>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Excluir lead
+                    </DropdownMenuItem>
                   </>
                 ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-xs"
-                    onClick={onCriarLead}
-                  >
-                    Salvar contato
-                  </Button>
+                  <DropdownMenuItem onClick={onCriarLead}>
+                    <Save className="h-4 w-4 mr-2" />
+                    Salvar lead no CRM
+                  </DropdownMenuItem>
                 )}
-              </div>
-             </div>
-           </div>
-           {/* Ações */}
-           <div className="flex items-center gap-1">
+              </DropdownMenuContent>
+            </DropdownMenu>
              {onFinalizeAtendimento && (
                <Dialog open={finalizeOpen} onOpenChange={setFinalizeOpen}>
                  <DialogTrigger asChild>

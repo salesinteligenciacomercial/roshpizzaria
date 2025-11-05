@@ -368,7 +368,7 @@ function MessageItemComponent({
               )}
             </div>
           )}
-          
+
           {/* Video Message */}
           {message.type === "video" && message.mediaUrl && (
             <div className="space-y-2">
