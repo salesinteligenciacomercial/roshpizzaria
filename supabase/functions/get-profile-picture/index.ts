@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { number } = await req.json();
+    const { number, company_id } = await req.json();
 
     if (!number) {
       console.error('❌ Número não fornecido');
@@ -23,32 +23,72 @@ serve(async (req) => {
     }
 
     const evolutionUrl = Deno.env.get('EVOLUTION_API_URL');
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
-    const evolutionInstance = Deno.env.get('EVOLUTION_INSTANCE');
+    const globalApiKey = Deno.env.get('EVOLUTION_API_KEY');
+    const defaultInstance = Deno.env.get('EVOLUTION_INSTANCE');
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    if (!evolutionUrl || !evolutionApiKey || !evolutionInstance) {
-      console.error('❌ Variáveis de ambiente da Evolution API não configuradas');
+    if (!evolutionUrl) {
+      console.error('❌ EVOLUTION_API_URL não configurado');
       return new Response(
         JSON.stringify({ error: 'Configuração da API não encontrada' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('🔍 Buscando foto de perfil para:', number);
+    // Resolver instância e API key por empresa, se fornecida
+    let instanceName: string | null = defaultInstance || null;
+    let instanceApiKey: string | null = globalApiKey || null;
+    let instanceApiUrl: string | null = null;
 
-    // Endpoint correto da Evolution API v2
-    const url = `${evolutionUrl}/chat/fetchProfilePictureUrl/${evolutionInstance}`;
-    
+    if (company_id && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const { data: conn } = await supabase
+          .from('whatsapp_connections')
+          .select('instance_name, evolution_api_key, evolution_api_url')
+          .eq('company_id', company_id)
+          .eq('status', 'connected')
+          .maybeSingle();
+        if (conn?.instance_name) instanceName = conn.instance_name;
+        if (conn?.evolution_api_key) instanceApiKey = conn.evolution_api_key;
+        if (conn?.evolution_api_url) instanceApiUrl = conn.evolution_api_url;
+      } catch (e) {
+        console.warn('⚠️ Falha ao resolver instância por company_id:', e);
+      }
+    }
+
+    if (!instanceName) {
+      console.error('❌ EVOLUTION_INSTANCE não configurado e company_id sem instância');
+      return new Response(
+        JSON.stringify({ error: 'Instância não configurada' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!instanceApiKey) {
+      console.error('❌ Nenhuma API key disponível (instância/global)');
+      return new Response(
+        JSON.stringify({ error: 'API key ausente' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('🔍 Buscando foto de perfil para:', number, 'instância:', instanceName);
+
+    // Endpoint Evolution API v2
+    const url = `${instanceApiUrl || evolutionUrl}/chat/fetchProfilePictureUrl/${instanceName}`;
     console.log('📡 Chamando Evolution API:', url);
 
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': evolutionApiKey,
+        'apikey': instanceApiKey,
       },
       body: JSON.stringify({ 
-        number: number.replace(/\D/g, '') // Remove caracteres não numéricos
+        number: String(number).replace(/\D/g, '') // Remove caracteres não numéricos
       }),
     });
 
@@ -57,15 +97,12 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ Erro da Evolution API:', response.status, errorText);
-      
-      // Se o perfil não foi encontrado, retornar null ao invés de erro
       if (response.status === 404) {
         return new Response(
           JSON.stringify({ profilePictureUrl: null }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      
       return new Response(
         JSON.stringify({ 
           error: 'Erro ao buscar foto de perfil',

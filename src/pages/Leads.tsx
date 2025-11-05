@@ -75,7 +75,6 @@ export default function Leads() {
   const [showTarefaDialog, setShowTarefaDialog] = useState(false);
   const [leadAvatars, setLeadAvatars] = useState<Record<string, string>>({});
   const PAGE_SIZE = 50; // Carregar 50 leads por vez
-  const MAX_TOTAL_LEADS = 1000; // Limite máximo para evitar problemas de performance
   const { toast } = useToast();
   const navigate = useNavigate();
   const observerRef = useRef<HTMLDivElement>(null);
@@ -180,11 +179,7 @@ export default function Leads() {
       const from = currentPage * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      // Verificar se já atingiu o limite máximo
-      if (!reset && leads.length >= MAX_TOTAL_LEADS) {
-        setHasMore(false);
-        return;
-      }
+      // Validação removida - não há limite máximo
 
       const { data, error } = await supabase
         .from("leads")
@@ -209,14 +204,11 @@ export default function Leads() {
         const newLeads = data || [];
         const combinedLeads = [...leads, ...newLeads];
 
-        // Limitar ao máximo total para performance
-        const limitedLeads = combinedLeads.slice(0, MAX_TOTAL_LEADS);
-
-        setLeads(limitedLeads);
+        setLeads(combinedLeads);
         setPage(prev => prev + 1);
 
-        // Parar de carregar se atingiu o limite ou não há mais dados
-        setHasMore(newLeads.length === PAGE_SIZE && limitedLeads.length < MAX_TOTAL_LEADS);
+        // Parar de carregar se não há mais dados
+        setHasMore(newLeads.length === PAGE_SIZE);
       }
     } finally {
       setLoading(false);
@@ -464,9 +456,26 @@ export default function Leads() {
       // Normalizar número (remover caracteres não numéricos)
       const telefoneNormalizado = telefone.replace(/\D/g, "");
       
+      // Descobrir company_id: preferir do lead, senão resolver do usuário atual
+      let companyIdParaAvatar: string | null = lead.company_id || null;
+      if (!companyIdParaAvatar) {
+        try {
+          const { data: auth } = await supabase.auth.getUser();
+          const userId = auth?.user?.id;
+          if (userId) {
+            const { data: role } = await supabase
+              .from('user_roles')
+              .select('company_id')
+              .eq('user_id', userId)
+              .maybeSingle();
+            if (role?.company_id) companyIdParaAvatar = role.company_id;
+          }
+        } catch {}
+      }
+      
       // Tentar buscar foto via edge function
       const { data, error } = await supabase.functions.invoke('get-profile-picture', {
-        body: { number: telefoneNormalizado }
+        body: { number: telefoneNormalizado, company_id: companyIdParaAvatar }
       });
 
       if (!error && data?.profilePictureUrl) {
@@ -692,6 +701,9 @@ export default function Leads() {
                       leadPhone={lead.phone || lead.telefone || undefined}
                       onEdit={() => handleEditarLead(lead)}
                       onDelete={() => handleExcluirLead(lead)}
+                      onOpenConversa={() => abrirConversa(lead)}
+                      onOpenAgenda={() => abrirAgenda(lead)}
+                      onOpenTarefa={() => abrirTarefa(lead)}
                     />
                     <LeadTagsDialog 
                       leadId={lead.id}
@@ -733,12 +745,7 @@ export default function Leads() {
             Role para baixo para carregar mais leads
           </div>
         )}
-        {!hasMore && leads.length >= MAX_TOTAL_LEADS && (
-          <div className="text-muted-foreground text-sm">
-            {leads.length} leads carregados (limite atingido para performance)
-          </div>
-        )}
-        {!hasMore && leads.length > 0 && leads.length < MAX_TOTAL_LEADS && (
+        {!hasMore && leads.length > 0 && (
           <div className="text-muted-foreground text-sm">
             Todos os {leads.length} leads foram carregados
           </div>
@@ -748,6 +755,13 @@ export default function Leads() {
       {/* Dialog de Editar Lead */}
       {leadParaEditar && (
         <EditarLeadDialog
+          open={showEditDialog}
+          onOpenChange={(open) => {
+            setShowEditDialog(open);
+            if (!open) {
+              setLeadParaEditar(null);
+            }
+          }}
           lead={{
             id: leadParaEditar.id,
             nome: leadParaEditar.name,
@@ -763,7 +777,9 @@ export default function Leads() {
             etapa_id: leadParaEditar.etapa_id || undefined,
           }}
           onLeadUpdated={() => {
-            carregarLeads(true);
+            // Recarregar leads após editar
+            console.log('🔄 [Leads] Recarregando leads após editar');
+            resetAndLoadLeads();
             setLeadParaEditar(null);
             setShowEditDialog(false);
           }}
@@ -806,11 +822,9 @@ export default function Leads() {
               setLeadParaConversa(null);
             }
           }}
-          lead={{
-            id: leadParaConversa.id,
-            name: leadParaConversa.name,
-            phone: leadParaConversa.phone || leadParaConversa.telefone || ""
-          }}
+          leadId={leadParaConversa.id}
+          leadName={leadParaConversa.name || "Lead sem nome"}
+          leadPhone={leadParaConversa.phone || leadParaConversa.telefone || undefined}
         />
       )}
 

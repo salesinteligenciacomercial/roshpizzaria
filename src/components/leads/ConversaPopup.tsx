@@ -70,7 +70,12 @@ export function ConversaPopup({
   const [scheduledDatetime, setScheduledDatetime] = useState("");
   const [scheduledList, setScheduledList] = useState<any[]>([]);
   const [editLeadOpen, setEditLeadOpen] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Cache simples de avatar por sessão do componente
+  const avatarCacheRef = useRef<Map<string, string>>(new Map());
+  const inflightAvatarRef = useRef<Map<string, Promise<string | undefined>>>(new Map());
 
   // Global events para sincronizar com Leads/Conversas
   const { emitGlobalEvent } = useGlobalSync({ showNotifications: false });
@@ -108,6 +113,40 @@ export function ConversaPopup({
     if (n.length >= 8 && n.length <= 13) return n.startsWith("55") ? n : "55" + n;
     // Último recurso: prefixar 55
     return "55" + n;
+  };
+
+  const getAvatarWithCache = async (number: string, companyId: string | null, nameForPlaceholder: string): Promise<string | undefined> => {
+    if (!number) return undefined;
+    if (/@g\.us$/.test(String(number))) {
+      return `https://ui-avatars.com/api/?name=${encodeURIComponent(nameForPlaceholder || 'Grupo')}&background=10b981&color=fff`;
+    }
+    const normalized = normalizePhoneBR(number)!;
+    const key = `${companyId || 'no-company'}:${normalized}`;
+    const cached = avatarCacheRef.current.get(key);
+    if (cached) return cached;
+    const inflight = inflightAvatarRef.current.get(key);
+    if (inflight) return await inflight;
+
+    const promise = (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('get-profile-picture', {
+          body: { number: normalized, company_id: companyId }
+        });
+        const url = (!error && data?.profilePictureUrl)
+          ? data.profilePictureUrl
+          : `https://ui-avatars.com/api/?name=${encodeURIComponent(nameForPlaceholder || normalized)}&background=10b981&color=fff`;
+        avatarCacheRef.current.set(key, url);
+        inflightAvatarRef.current.delete(key);
+        return url;
+      } catch {
+        const url = `https://ui-avatars.com/api/?name=${encodeURIComponent(nameForPlaceholder || normalized)}&background=10b981&color=fff`;
+        avatarCacheRef.current.set(key, url);
+        inflightAvatarRef.current.delete(key);
+        return url;
+      }
+    })();
+    inflightAvatarRef.current.set(key, promise);
+    return await promise;
   };
 
   // Carregar mensagens agendadas
@@ -301,10 +340,23 @@ export function ConversaPopup({
       carregarMensagens();
       carregarMensagensAgendadas();
       carregarLead();
+      // Buscar foto de perfil via Edge Function (com cache)
+      (async () => {
+        try {
+          const numero = normalizePhoneBR(leadPhone || "");
+          const companyId = await getCompanyId();
+          if (!numero) return;
+          const url = await getAvatarWithCache(numero, companyId, leadName);
+          setAvatarUrl(url || undefined);
+        } catch {
+          setAvatarUrl(undefined);
+        }
+      })();
     } else {
       setMessages([]);
       setMessageInput("");
       setLeadVinculado(null);
+      setAvatarUrl(undefined);
     }
   }, [open, leadPhone, leadId]);
 
@@ -609,9 +661,9 @@ export function ConversaPopup({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Avatar className="h-12 w-12">
-                <AvatarImage src={leadVinculado?.avatar_url} />
+                <AvatarImage src={avatarUrl || leadVinculado?.avatar_url} />
                 <AvatarFallback>
-                  {leadName.charAt(0).toUpperCase()}
+                  {(leadName && leadName.length > 0) ? leadName.charAt(0).toUpperCase() : "?"}
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-col">
@@ -899,7 +951,7 @@ export function ConversaPopup({
           </UIDialogHeader>
           <div className="grid gap-2">
             {[
-              `Olá ${leadName.split(' ')[0]}, tudo bem? Posso ajudar?`,
+              `Olá ${leadName && leadName.split(' ').length > 0 ? leadName.split(' ')[0] : 'cliente'}, tudo bem? Posso ajudar?`,
               'Estamos com uma condição especial hoje, posso te explicar?',
               'Consegue me enviar um áudio ou uma foto para entender melhor?'
             ].map((msg) => (

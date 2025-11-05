@@ -7,9 +7,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-signature',
 };
 
-// Input validation schemas - more permissive for webhook compatibility
+// Input validation schemas - mais permissivo e com grupos
 const webhookPayloadSchema = z.object({
-  numero: z.string().min(10, 'Número muito curto').max(100, 'Número muito longo'), // Suporta grupos do WhatsApp
+  // Aceita dígitos (contato) ou JIDs completos (contato @s.whatsapp.net / grupo @g.us)
+  numero: z.string(),
   mensagem: z.string().min(1).max(4096, 'Mensagem muito longa'),
   origem: z.string().default('WhatsApp'),
   tipo_mensagem: z.string().default('text'),
@@ -18,7 +19,9 @@ const webhookPayloadSchema = z.object({
   arquivo_nome: z.string().max(255).nullable().optional(),
   company_id: z.string().uuid().optional(),
   replied_to_message: z.string().nullable().optional(),
-  status: z.string().optional().default('Recebida') // Status da mensagem
+  status: z.string().optional().default('Recebida'), // Status da mensagem
+  is_group: z.boolean().optional(),
+  fromMe: z.boolean().optional(),
 });
 
 // Verify webhook signature for security
@@ -64,37 +67,30 @@ function isEvolutionAPIPayload(body: any): boolean {
 function transformEvolutionPayload(body: any) {
   const data = body.data;
   
-  // Extrair número (remover @s.whatsapp.net ou @g.us para grupos)
-  const remoteJid = data.key.remoteJid;
+  // Extrair JID remoto (contato ou grupo)
+  const remoteJid = data.key.remoteJid as string;
   
   // DETECTAR SE A MENSAGEM FOI ENVIADA PELO USUÁRIO (fromMe) OU RECEBIDA
   const fromMe = data.key.fromMe === true;
   const status = fromMe ? 'Enviada' : 'Recebida';
   
   console.log(`📱 Mensagem ${status} - fromMe: ${fromMe}`);
-  
-  // IGNORAR mensagens de grupos, status e números inválidos
-  if (remoteJid.includes('@g.us') || remoteJid.includes('@broadcast') || remoteJid.includes('status@')) {
-    throw new Error('IGNORE: Mensagem de grupo/status/broadcast não será salva');
+
+  // Ignorar apenas status/broadcast
+  if (remoteJid.includes('@broadcast') || remoteJid.includes('status@')) {
+    throw new Error('IGNORE: Mensagem de status/broadcast não será salva');
   }
+
+  const isGroup = /@g\.us$/.test(remoteJid);
   
-  // Limpar número e normalizar
-  let numero = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '');
-  
-  // Remover caracteres especiais
-  numero = numero.replace(/[^0-9]/g, '');
-  
-  // VALIDAR se é número brasileiro válido
-  // Números brasileiros: 55 + DDD (2 dígitos) + número (8 ou 9 dígitos) = 12 ou 13 dígitos
-  if (!numero.startsWith('55')) {
-    // Se não começar com 55, adicionar
-    numero = '55' + numero;
-  }
-  
-  // Validar comprimento
-  if (numero.length < 12 || numero.length > 13) {
-    console.warn('⚠️ Número com tamanho inválido:', numero, 'Original:', remoteJid);
-    throw new Error(`IGNORE: Número inválido (${numero.length} dígitos): ${numero}`);
+  // Determinar campo numero a retornar: JID completo para grupos, número normalizado para contatos
+  let numero: string;
+  if (isGroup) {
+    numero = remoteJid; // usar JID completo para grupos
+  } else {
+    // contato: limpar e normalizar
+    const cleaned = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '').replace(/[^0-9]/g, '');
+    numero = cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
   }
   
   // Extrair mensagem e tipo
@@ -169,9 +165,9 @@ function transformEvolutionPayload(body: any) {
     tipo_mensagem = 'text';
   }
   
-  // Retornar com número NORMALIZADO e STATUS correto (Enviada ou Recebida)
+  // Retornar com campos e STATUS (Enviada ou Recebida)
   return {
-    numero, // JÁ NORMALIZADO (apenas números, com 55)
+    numero,
     mensagem,
     origem: 'WhatsApp',
     tipo_mensagem,
@@ -179,7 +175,9 @@ function transformEvolutionPayload(body: any) {
     nome_contato: data.pushName || 'Desconhecido',
     arquivo_nome,
     replied_to_message,
-    status // 'Enviada' se fromMe=true, 'Recebida' se fromMe=false
+    status, // 'Enviada' se fromMe=true, 'Recebida' se fromMe=false
+    is_group: isGroup,
+    fromMe,
   };
 }
 
@@ -270,7 +268,7 @@ serve(async (req) => {
     // Extrair nome da instância da URL (ex: ?instance=DO2)
     const url = new URL(req.url);
     const instanceName = url.searchParams.get('instance');
-    
+
     if (instanceName) {
       console.log('📡 Instância identificada:', instanceName);
     } else {
@@ -388,21 +386,25 @@ serve(async (req) => {
       }
     }
 
-    // Limpar e normalizar número (remover caracteres especiais e garantir formato consistente)
-    const numeroLimpo = validatedData.numero.replace(/[^0-9]/g, '');
-    console.log('🔍 Número normalizado:', numeroLimpo);
-    
-    // VALIDAR número brasileiro (12 ou 13 dígitos)
-    if (numeroLimpo.length < 12 || numeroLimpo.length > 13) {
-      console.warn('⚠️ Número inválido após limpeza:', numeroLimpo, 'Tamanho:', numeroLimpo.length);
-      return new Response(
-        JSON.stringify({ success: true, message: 'Número inválido ignorado' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Determinar se é grupo e normalizar número apenas para contatos
+    const isGroup = validatedData.is_group === true || /@g\.us$/.test(validatedData.numero);
+    const numeroLimpo = isGroup ? null : validatedData.numero.replace(/[^0-9]/g, '');
+    if (!isGroup) {
+      console.log('🔍 Número normalizado (contato):', numeroLimpo);
+      // VALIDAR número brasileiro (12 ou 13 dígitos)
+      if (!numeroLimpo || numeroLimpo.length < 12 || numeroLimpo.length > 13) {
+        console.warn('⚠️ Número inválido após limpeza:', numeroLimpo, 'Tamanho:', numeroLimpo?.length);
+        return new Response(
+          JSON.stringify({ success: true, message: 'Número inválido ignorado' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      console.log('👥 Mensagem de grupo detectada. JID:', validatedData.numero);
     }
 
     // Se temos company_id, buscar lead apenas nessa company
-    if (companyId) {
+    if (companyId && !isGroup && numeroLimpo) {
       const { data: existingLead } = await supabase
         .from('leads')
         .select('id, company_id')
@@ -415,7 +417,7 @@ serve(async (req) => {
         leadId = existingLead.id;
         console.log('📌 Lead encontrado na company:', { leadId, companyId });
       }
-    } else {
+    } else if (!isGroup && numeroLimpo) {
       // Se não temos company, tentar encontrar lead em qualquer company
       const { data: existingLead } = await supabase
         .from('leads')
@@ -431,30 +433,16 @@ serve(async (req) => {
       }
     }
 
-    // Se ainda não encontrou company, buscar a primeira company ativa
+    // Se ainda não encontrou company, não prosseguir para evitar mix multi-tenant
     if (!companyId) {
-      console.warn('⚠️ Company não identificada - buscando company ativa');
-      
-      const { data: activeCompany } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('status', 'active')
-        .limit(1)
-        .single();
-      
-      if (activeCompany) {
-        companyId = activeCompany.id;
-        console.log('📌 Usando company ativa do sistema:', companyId);
-      } else {
-        console.error('❌ Nenhuma company ativa encontrada');
-        return new Response(
-          JSON.stringify({ 
-            error: 'Sistema não configurado - nenhuma empresa ativa',
-            code: 'NO_ACTIVE_COMPANY'
-          }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+      console.error('❌ Company não identificada para payload');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Empresa não identificada para a mensagem',
+          code: 'COMPANY_NOT_RESOLVED'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Salvar conversa no Supabase com telefone normalizado e STATUS correto
@@ -462,7 +450,7 @@ serve(async (req) => {
       .from('conversas')
       .insert([{
         numero: validatedData.numero,
-        telefone_formatado: numeroLimpo, // CRITICAL: Sempre salvar versão normalizada
+        telefone_formatado: isGroup ? null : numeroLimpo, // Grupos: null
         mensagem: validatedData.mensagem,
         origem: validatedData.origem,
         status: validatedData.status, // Usar status detectado (Enviada ou Recebida)
@@ -473,6 +461,8 @@ serve(async (req) => {
         company_id: companyId,
         lead_id: leadId,
         replied_to_message: validatedData.replied_to_message || null,
+        is_group: isGroup,
+        fromMe: validatedData.fromMe === true,
       }])
       .select()
       .single();

@@ -25,19 +25,12 @@ export function WhatsAppQRCode() {
   const [statusMap, setStatusMap] = useState<Record<string, string>>({});
   const [logsByConnection, setLogsByConnection] = useState<Record<string, { ts: string; message: string }[]>>({});
   const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({});
+  const [editApiKeyMap, setEditApiKeyMap] = useState<Record<string, string>>({});
+  const [editApiUrlMap, setEditApiUrlMap] = useState<Record<string, string>>({});
+  const [savingMap, setSavingMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     loadConnections();
-
-    // Health check automático a cada 30 segundos
-    const healthCheckInterval = setInterval(() => {
-      performHealthChecks();
-    }, 30000);
-
-    // Recarregar conexões a cada 15 segundos
-    const reloadInterval = setInterval(() => {
-      loadConnections();
-    }, 15000);
 
     // Assinar atualizações em tempo real da tabela
     let unsubscribe: (() => void) | null = null;
@@ -83,11 +76,16 @@ export function WhatsAppQRCode() {
     })();
 
     return () => {
-      clearInterval(healthCheckInterval);
-      clearInterval(reloadInterval);
       if (unsubscribe) unsubscribe();
     };
   }, []);
+
+  // Ocultar criador assim que existir qualquer conexão
+  useEffect(() => {
+    if (connections.length > 0 && showNewInstance) {
+      setShowNewInstance(false);
+    }
+  }, [connections.length]);
 
   const performHealthChecks = async () => {
     try {
@@ -323,6 +321,18 @@ export function WhatsAppQRCode() {
 
       console.log('🏢 Company ID encontrado:', userRole.company_id, 'Role:', userRole.role);
 
+      // Regra: permitir apenas 1 instância (qualquer status) por company
+      const { data: existingRows } = await supabase
+        .from('whatsapp_connections')
+        .select('id')
+        .eq('company_id', userRole.company_id)
+        .limit(1);
+      if (existingRows && existingRows.length > 0) {
+        toast.error('Apenas 1 instância por CRM. Remova a atual para conectar outra.');
+        setLoading(false);
+        return;
+      }
+
       // Verificar se já existe instância com este nome nesta empresa
       const { data: existingConn } = await supabase
         .from('whatsapp_connections')
@@ -507,6 +517,39 @@ export function WhatsAppQRCode() {
     }
   };
 
+  const handleSaveApi = async (conn: any) => {
+    const newKey = (((editApiKeyMap[conn.id] ?? conn.evolution_api_key)) || '').trim();
+    const newUrl = (((editApiUrlMap[conn.id] ?? conn.evolution_api_url)) || '').trim();
+    if (!newKey || !newUrl) {
+      toast.error('Preencha URL e API Key');
+      return;
+    }
+    setSavingMap(prev => ({ ...prev, [conn.id]: true }));
+    try {
+      const { error } = await supabase
+        .from('whatsapp_connections')
+        .update({
+          evolution_api_key: newKey,
+          evolution_api_url: newUrl,
+          status: 'connected',
+          last_connected_at: new Date().toISOString()
+        })
+        .eq('id', conn.id);
+      if (error) throw error;
+      toast.success('API Key salva e conexão marcada como conectada');
+      appendLog(conn.id, 'API Key/URL atualizadas');
+      // Tentar configurar webhook
+      const ok = await configureWebhook(conn.instance_name, newUrl, newKey);
+      if (ok) toast.success('Webhook configurado com sucesso');
+      loadConnections();
+    } catch (e: any) {
+      console.error('❌ Erro ao salvar API Key/URL:', e);
+      toast.error(e.message || 'Erro ao salvar API Key');
+    } finally {
+      setSavingMap(prev => ({ ...prev, [conn.id]: false }));
+    }
+  };
+
   const getStatusBadge = (status: string, lastHealthCheck?: string) => {
     const now = new Date();
     const lastCheck = lastHealthCheck ? new Date(lastHealthCheck) : null;
@@ -551,21 +594,12 @@ export function WhatsAppQRCode() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => performHealthChecks()}>Atualizar Status</Button>
-            <Button variant="outline" size="sm" onClick={async () => {
-              // Testar todas em paralelo
-              await Promise.all(connections.map((c) => testConnection(c)));
-            }}>Testar Todas</Button>
-            <Button variant="outline" size="sm" onClick={async () => {
-              const toRemove = connections.filter((c) => c.status === 'disconnected');
-              for (const c of toRemove) {
-                await deleteConnection(c.id);
-              }
-            }}>Remover Desconectadas</Button>
-            <Button onClick={() => setShowNewInstance(true)} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Nova Instância
-            </Button>
+            {connections.length === 0 ? (
+              <Button onClick={() => setShowNewInstance(true)} size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Conectar WhatsApp
+              </Button>
+            ) : null}
           </div>
         </div>
       </CardHeader>
@@ -578,11 +612,11 @@ export function WhatsAppQRCode() {
             <span>Desconectadas: {connections.filter(c => c.status === 'disconnected').length}</span>
           </div>
         )}
-        {showNewInstance && (
+        {showNewInstance && connections.length === 0 && (
           <div className="p-4 border rounded-lg space-y-4 bg-muted/50">
             <Alert className="bg-success/10 border-success">
               <AlertDescription className="text-xs">
-                <strong>✅ Sistema Multi-tenant Configurado:</strong> Cada subconta terá acesso isolado com WhatsApp exclusivo, leads separados e usuários independentes.
+                <strong>✅ Regra:</strong> Cada CRM/empresa pode ter apenas <strong>1</strong> instância ativa do WhatsApp.
               </AlertDescription>
             </Alert>
 
@@ -662,7 +696,7 @@ export function WhatsAppQRCode() {
 
         <ScrollArea className="h-[400px]">
           <div className="space-y-3">
-            {connections.map((conn) => (
+            {connections.slice(0, 1).map((conn) => (
               <div key={conn.id} className="p-4 border rounded-lg space-y-2 hover:bg-muted/50 transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -679,21 +713,47 @@ export function WhatsAppQRCode() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => testConnection(conn)}
-                      disabled={testingConnection === conn.id}
-                    >
-                      {testingConnection === conn.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <CheckCircle className="h-4 w-4 text-success" />
-                      )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
                       onClick={() => deleteConnection(conn.id)}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Configuração de API URL e KEY */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
+                  <div>
+                    <Label className="text-xs">Evolution API URL</Label>
+                    <Input
+                      placeholder="https://sua-api"
+                      value={editApiUrlMap[conn.id] ?? conn.evolution_api_url ?? ''}
+                      onChange={(e) => setEditApiUrlMap(prev => ({ ...prev, [conn.id]: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Evolution API Key</Label>
+                    <Input
+                      type="password"
+                      placeholder="••••••••••"
+                      value={editApiKeyMap[conn.id] ?? conn.evolution_api_key ?? ''}
+                      onChange={(e) => setEditApiKeyMap(prev => ({ ...prev, [conn.id]: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <Button onClick={() => handleSaveApi(conn)} disabled={!!savingMap[conn.id]} className="flex-1">
+                      {savingMap[conn.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar API key'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        const key = (((editApiKeyMap[conn.id] ?? conn.evolution_api_key)) || '').trim();
+                        const url = (((editApiUrlMap[conn.id] ?? conn.evolution_api_url)) || '').trim();
+                        if (!key || !url) { toast.error('Preencha URL e API Key'); return; }
+                        const ok = await configureWebhook(conn.instance_name, url, key);
+                        if (ok) toast.success('Webhook configurado'); else toast.error('Falha ao configurar webhook');
+                      }}
+                    >
+                      Configurar Webhook
                     </Button>
                   </div>
                 </div>
@@ -746,7 +806,7 @@ export function WhatsAppQRCode() {
               <div className="text-center py-8 text-muted-foreground">
                 <QrCode className="h-12 w-12 mx-auto mb-2 opacity-20" />
                 <p>Nenhuma instância configurada</p>
-                <p className="text-sm">Clique em "Nova Instância" para começar</p>
+                <p className="text-sm">Clique em "Conectar WhatsApp" para começar</p>
               </div>
             )}
           </div>
@@ -756,7 +816,7 @@ export function WhatsAppQRCode() {
           <Alert className="bg-success/10 border-success">
             <AlertDescription className="text-xs space-y-2">
               <p>
-                <strong>✅ Isolamento Total por Empresa:</strong> Cada instância WhatsApp criada aqui é exclusiva desta empresa e completamente isolada de outras subcontas.
+                <strong>✅ Regra de licença:</strong> Apenas <strong>1</strong> instância WhatsApp ativa por CRM. Para trocar, desconecte/remova a atual e conecte outra.
               </p>
               <p>
                 <strong>🔍 Teste de Conexão:</strong> Use o botão de verificação (✓) ao lado de cada instância para testar se a Evolution API está respondendo corretamente.

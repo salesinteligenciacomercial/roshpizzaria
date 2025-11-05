@@ -6,34 +6,18 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Process base64 in chunks to prevent memory issues
-function processBase64Chunks(base64String: string, chunkSize = 32768) {
-  const chunks: Uint8Array[] = [];
-  let position = 0;
-  
-  while (position < base64String.length) {
-    const chunk = base64String.slice(position, position + chunkSize);
-    const binaryChunk = atob(chunk);
-    const bytes = new Uint8Array(binaryChunk.length);
-    
-    for (let i = 0; i < binaryChunk.length; i++) {
-      bytes[i] = binaryChunk.charCodeAt(i);
-    }
-    
-    chunks.push(bytes);
-    position += chunkSize;
-  }
+async function fetchAudioAsBlob(audioUrl: string): Promise<Blob> {
+  const res = await fetch(audioUrl);
+  if (!res.ok) throw new Error(`Erro ao baixar áudio: ${res.status} ${res.statusText}`);
+  const arrayBuffer = await res.arrayBuffer();
+  return new Blob([arrayBuffer], { type: 'audio/ogg' });
+}
 
-  const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  return result;
+function base64ToBlob(base64Data: string, contentType = 'audio/ogg'): Blob {
+  const binaryString = atob(base64Data);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+  return new Blob([bytes], { type: contentType });
 }
 
 serve(async (req) => {
@@ -42,50 +26,69 @@ serve(async (req) => {
   }
 
   try {
-    const { audio } = await req.json();
-    
-    if (!audio) {
-      throw new Error('Nenhum áudio fornecido');
+    const { audioUrl, audioBase64 } = await req.json();
+
+    if (!audioUrl && !audioBase64) {
+      return new Response(
+        JSON.stringify({ error: 'Parâmetros inválidos: forneça audioUrl ou audioBase64', status: 'error' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    console.log('Processando áudio para transcrição...');
+    const openaiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openaiKey) {
+      return new Response(
+        JSON.stringify({ error: 'OPENAI_API_KEY ausente', status: 'error' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-    // Process audio in chunks
-    const binaryAudio = processBase64Chunks(audio);
-    
-    // Prepare form data
+    // Preparar Blob do áudio
+    let audioBlob: Blob;
+    if (audioBase64) {
+      audioBlob = base64ToBlob(audioBase64, 'audio/ogg');
+    } else {
+      audioBlob = await fetchAudioAsBlob(audioUrl);
+    }
+
+    // Montar FormData para Whisper
     const formData = new FormData();
-    const blob = new Blob([binaryAudio], { type: 'audio/webm' });
-    formData.append('file', blob, 'audio.webm');
+    formData.append('file', audioBlob, 'audio.ogg');
     formData.append('model', 'whisper-1');
 
-    // Send to OpenAI
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000); // 25s timeout
+
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        'Authorization': `Bearer ${openaiKey}`,
       },
       body: formData,
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Erro da API OpenAI:', errorText);
-      throw new Error(`Erro da API OpenAI: ${errorText}`);
+      return new Response(
+        JSON.stringify({ error: 'Falha na transcrição', details: errorText, status: 'error' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const result = await response.json();
-    console.log('Transcrição concluída:', result.text);
+    const text: string | undefined = result.text;
 
     return new Response(
-      JSON.stringify({ text: result.text }),
+      JSON.stringify({ transcription: text, status: text ? 'completed' : 'error' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error('Erro ao transcrever áudio:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Erro desconhecido' }),
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Erro desconhecido', status: 'error' }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

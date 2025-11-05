@@ -9,6 +9,9 @@ export default defineConfig(({ mode }) => ({
     host: true,
     port: 8080,
     strictPort: false,
+    hmr: {
+      overlay: false,
+    },
     open: false,
   },
   plugins: [

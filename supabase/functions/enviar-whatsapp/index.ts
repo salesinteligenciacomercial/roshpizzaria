@@ -8,9 +8,13 @@ const corsHeaders = {
 
 // Input validation schema
 const enviarWhatsAppSchema = z.object({
-  numero: z.string()
-    .regex(/^[0-9]{10,15}$/, 'Número deve ter entre 10-15 dígitos')
-    .transform(val => val.replace(/[^0-9]/g, '')),
+  // Aceita: somente dígitos (contato) OU JID completo de contato (@s.whatsapp.net) OU JID de grupo (@g.us)
+  numero: z.string().refine((val) => {
+    const isDigits = /^[0-9]{10,15}$/.test(val);
+    const isGroupJid = /@g\.us$/.test(val);
+    const isContactJid = /@s\.whatsapp\.net$/.test(val);
+    return isDigits || isGroupJid || isContactJid;
+  }, 'Informe dígitos (10-15), JID de contato @s.whatsapp.net ou grupo @g.us'),
   mensagem: z.string()
     .min(1, 'Mensagem não pode ser vazia')
     .max(4096, 'Mensagem muito longa')
@@ -29,7 +33,8 @@ const enviarWhatsAppSchema = z.object({
     message: z.object({
       conversation: z.string()
     })
-  }).optional()
+  }).optional(),
+  quotedMessageId: z.string().optional()
 }).refine(data => data.mensagem || data.mediaUrl || data.mediaBase64, {
   message: 'Mensagem, mídia URL ou mídia Base64 é obrigatória'
 });
@@ -70,8 +75,8 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-      console.error("❌ Variáveis de ambiente da Evolution API não configuradas");
+    if (!EVOLUTION_API_URL) {
+      console.error("❌ EVOLUTION_API_URL não configurada");
       return new Response(
         JSON.stringify({ 
           error: "Configuração da Evolution API incompleta",
@@ -83,7 +88,8 @@ serve(async (req) => {
 
     // Buscar instância WhatsApp da company
     let EVOLUTION_INSTANCE: string;
-    let INSTANCE_API_KEY: string = EVOLUTION_API_KEY;
+    let INSTANCE_API_KEY: string | null = null;
+    let INSTANCE_API_URL: string | null = null;
     
     if (validatedData.company_id) {
       console.log("🔍 Buscando instância WhatsApp para company:", validatedData.company_id);
@@ -95,7 +101,7 @@ serve(async (req) => {
       // Buscar conexão WhatsApp ativa da company (incluindo API key)
       const { data: connection, error: connError } = await supabase
         .from('whatsapp_connections')
-        .select('instance_name, whatsapp_number, evolution_api_key')
+        .select('instance_name, whatsapp_number, evolution_api_key, evolution_api_url')
         .eq('company_id', validatedData.company_id)
         .eq('status', 'connected')
         .single();
@@ -112,11 +118,28 @@ serve(async (req) => {
       }
       
       EVOLUTION_INSTANCE = connection.instance_name;
+      // Preferir URL específica da instância, se existir
+      if (connection.evolution_api_url && typeof connection.evolution_api_url === 'string' && connection.evolution_api_url.length > 0) {
+        INSTANCE_API_URL = connection.evolution_api_url;
+        console.log("✅ Usando URL da instância:", INSTANCE_API_URL);
+      }
       
-      // Usar API key da conexão se disponível
+      // Usar API key da conexão se disponível, senão fallback p/ env
       if (connection.evolution_api_key) {
         INSTANCE_API_KEY = connection.evolution_api_key;
-        console.log("✅ Usando API key da instância:", EVOLUTION_INSTANCE);
+        console.log("✅ Usando API key da conexão:", EVOLUTION_INSTANCE);
+      } else if (EVOLUTION_API_KEY) {
+        INSTANCE_API_KEY = EVOLUTION_API_KEY;
+        console.log("⚠️ API key não definida na conexão. Usando EVOLUTION_API_KEY do ambiente");
+      } else {
+        console.error("❌ Nenhuma API key disponível (conexão/ambiente)");
+        return new Response(
+          JSON.stringify({
+            error: "Nenhuma API key disponível para Evolution",
+            code: "NO_API_KEY"
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
       
       console.log("✅ Instância encontrada:", EVOLUTION_INSTANCE, "- Número:", connection.whatsapp_number);
@@ -133,15 +156,31 @@ serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      // Resolver API key do ambiente nesse cenário
+      if (EVOLUTION_API_KEY) {
+        INSTANCE_API_KEY = EVOLUTION_API_KEY;
+      } else {
+        console.error("❌ EVOLUTION_API_KEY não definida no ambiente");
+        return new Response(
+          JSON.stringify({
+            error: "Nenhuma API key disponível para Evolution",
+            code: "NO_API_KEY"
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       console.log("⚠️ Usando instância padrão:", EVOLUTION_INSTANCE);
     }
 
-    // Formatar número no formato correto
-    const numeroFormatado = validatedData.numero.includes("@s.whatsapp.net")
-      ? validatedData.numero
-      : `${validatedData.numero}@s.whatsapp.net`;
+    // Determinar alvo: contato (digits) ou grupo (JID @g.us)
+    const isGroup = /@g\.us$/.test(validatedData.numero);
+    const isContactJid = /@s\.whatsapp\.net$/.test(validatedData.numero);
+    const numberDigits = String(validatedData.numero).replace(/[^0-9]/g, '');
+    const target = isGroup
+      ? { groupId: validatedData.numero }
+      : { number: numberDigits };
 
-    console.log("📞 Número formatado");
+    console.log("🎯 Alvo de envio:", isGroup ? { groupId: target.groupId } : { number: target.number });
 
     let evolutionUrl: string;
     let bodyPayload: any;
@@ -149,7 +188,7 @@ serve(async (req) => {
     // Verificar se é mídia (base64, URL) ou texto
     if (validatedData.mediaBase64) {
       // Enviar mídia via base64
-      evolutionUrl = `${EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
+      evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
       
       // Normalizar tipo de mídia
       let mediaType = validatedData.tipo_mensagem || 'document';
@@ -201,71 +240,98 @@ serve(async (req) => {
       }
       
       bodyPayload = {
-        number: numeroFormatado,
+        ...(isGroup ? { groupId: (target as any).groupId } : { number: (target as any).number }),
         mediatype: mediaType,
         mimetype: mimeType,
         caption: validatedData.caption || validatedData.mensagem || "",
         fileName: validatedData.fileName || 'arquivo',
         media: validatedData.mediaBase64,
+        ...(validatedData.quoted ? { quoted: validatedData.quoted } : {}),
+        ...(validatedData.quotedMessageId ? { quotedMessageId: validatedData.quotedMessageId } : {}),
       };
       console.log(`📸 Enviando mídia base64 (${mediaType})`);
     } else if (validatedData.mediaUrl) {
       // Enviar mídia via URL
-      evolutionUrl = `${EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
+      evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
       bodyPayload = {
-        number: numeroFormatado,
+        ...(isGroup ? { groupId: (target as any).groupId } : { number: (target as any).number }),
         mediaUrl: validatedData.mediaUrl,
         caption: validatedData.mensagem || validatedData.caption || "",
+        ...(validatedData.quoted ? { quoted: validatedData.quoted } : {}),
+        ...(validatedData.quotedMessageId ? { quotedMessageId: validatedData.quotedMessageId } : {}),
       };
       console.log("📸 Enviando mídia via URL");
     } else {
       // Enviar texto
-      evolutionUrl = `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`;
+      evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`;
       bodyPayload = {
-        number: numeroFormatado,
+        ...(isGroup ? { groupId: (target as any).groupId } : { number: (target as any).number }),
         text: validatedData.mensagem,
+        ...(validatedData.quoted ? { quoted: validatedData.quoted } : {}),
+        ...(validatedData.quotedMessageId ? { quotedMessageId: validatedData.quotedMessageId } : {}),
       };
-      
-      // Adicionar mensagem citada se houver
-      if (validatedData.quoted) {
-        bodyPayload.quoted = validatedData.quoted;
-        console.log("💬 Enviando texto com citação");
-      } else {
-        console.log("💬 Enviando texto");
-      }
+      console.log(validatedData.quoted ? "💬 Enviando texto com citação" : "💬 Enviando texto");
     }
 
-    // Enviar para Evolution API
-    const response = await fetch(evolutionUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": INSTANCE_API_KEY,
-      },
-      body: JSON.stringify(bodyPayload),
-    });
+    // Função auxiliar para tentativas com endpoints alternativos (compatibilidade Evolution)
+    const tryPost = async (urls: string[], payload: any) => {
+      let lastError: any = null;
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": INSTANCE_API_KEY,
+            },
+            body: JSON.stringify(payload),
+          });
+          let parsed: any = null;
+          try { parsed = await res.json(); } catch {}
+          if (res.ok) {
+            console.log("✅ Evolution OK:", url, res.status);
+            return { ok: true as const, res, parsed };
+          }
+          console.warn("⚠️ Evolution falhou:", url, res.status, parsed);
+          lastError = { status: res.status, parsed, url };
+        } catch (e) {
+          console.warn("⚠️ Erro ao chamar Evolution:", url, e);
+          lastError = { error: String(e), url };
+        }
+      }
+      return { ok: false as const, lastError };
+    };
 
-    const result = await response.json();
+    // Montar candidatos de URL (ordem por probabilidade)
+    const base = (INSTANCE_API_URL || EVOLUTION_API_URL);
+    const candidates: string[] = [];
+    if (evolutionUrl.includes('/message/sendText/')) {
+      candidates.push(evolutionUrl);
+      // Fallbacks comuns em versões diferentes
+      candidates.push(`${base}/message/sendMessage/${EVOLUTION_INSTANCE}`);
+      candidates.push(`${base}/message/sendText?instanceId=${encodeURIComponent(EVOLUTION_INSTANCE)}`);
+    } else if (evolutionUrl.includes('/message/sendMedia/')) {
+      candidates.push(evolutionUrl);
+      candidates.push(`${base}/message/sendMessage/${EVOLUTION_INSTANCE}`);
+      candidates.push(`${base}/message/sendMedia?instanceId=${encodeURIComponent(EVOLUTION_INSTANCE)}`);
+    } else {
+      candidates.push(evolutionUrl);
+    }
 
-    if (!response.ok) {
-      console.error("❌ Erro Evolution API:", {
-        status: response.status,
-        statusText: response.statusText,
-        url: evolutionUrl,
-        payload: bodyPayload,
-        result: result
-      });
+    const attempt = await tryPost(candidates, bodyPayload);
+    if (!attempt.ok) {
+      console.error("❌ Evolution API falhou em todos os endpoints candidatos:", attempt.lastError);
       return new Response(
         JSON.stringify({
           error: "Falha ao enviar mensagem",
           code: "EXTERNAL_API_ERROR",
-          details: result
+          details: attempt.lastError
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log("✅ Mensagem enviada com sucesso");
+    console.log("✅ Mensagem enviada com sucesso (código)", attempt.res.status);
     
     return new Response(
       JSON.stringify({ 

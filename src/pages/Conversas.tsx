@@ -40,7 +40,7 @@ import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
 interface Message {
   id: string;
   content: string;
-  type: "text" | "image" | "audio" | "pdf" | "video" | "contact";
+  type: "text" | "image" | "audio" | "pdf" | "video" | "contact" | "document";
   sender: "user" | "contact";
   timestamp: Date;
   delivered: boolean;
@@ -213,6 +213,9 @@ function Conversas() {
   const conversationsCacheRef = useRef<Map<string, Conversation>>(new Map()); // Cache de conversas abertas
   const messagesCacheRef = useRef<Map<string, Message[]>>(new Map()); // Cache de mensagens carregadas
   const [messageInput, setMessageInput] = useState("");
+  const avatarCacheRef = useRef<Map<string, string>>(new Map());
+  const inflightAvatarPromisesRef = useRef<Map<string, Promise<string | undefined>>>(new Map());
+  const initialLoadRef = useRef<boolean>(false);
   const [aiMode, setAiMode] = useState<Record<string, boolean>>({});
   const [quickMessages, setQuickMessages] = useState<QuickMessage[]>([]);
   const [quickCategories, setQuickCategories] = useState<QuickMessageCategory[]>([]);
@@ -269,6 +272,7 @@ function Conversas() {
   const [realtimeReconnectAttempts, setRealtimeReconnectAttempts] = useState(0);
   const realtimeChannelRef = useRef<any>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastUpdateTimeRef = useRef<number>(0);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isReconnectingRef = useRef<boolean>(false);
@@ -310,34 +314,18 @@ function Conversas() {
         // Race entre função e timeout
         const result = await Promise.race([functionPromise, timeoutPromise]);
 
-        // Verificar erro primeiro (para não mascarar com "Resposta inválida")
-        if (result && (result as any).error) {
-          const err = (result as any).error as any;
-          // Tentar extrair o JSON de erro retornado pela Edge Function
-          try {
-            const resp = err?.context?.response as Response | undefined;
-            if (resp) {
-              const contentType = resp.headers?.get?.('content-type') || '';
-              if (contentType.includes('application/json')) {
-                const details = await (resp as any).json();
-                const code = details?.code || details?.error || resp.status;
-                throw new Error(String(code));
-              } else {
-                const text = await (resp as any).text();
-                throw new Error(text || (err?.message || 'Erro na edge function'));
-              }
-            }
-          } catch {}
-          throw new Error(err?.message || 'Erro na edge function');
+        // Validar resposta
+        if (!result || !result.data) {
+          throw new Error('Resposta inválida da edge function');
         }
 
-        // Validar resposta (aceitar sucesso sem body)
-        if (!result) {
-          throw new Error('Sem resposta da edge function');
+        // Verificar se há erro na resposta
+        if (result.error) {
+          throw new Error(result.error.message || 'Erro na edge function');
         }
 
         console.log(`✅ [EDGE-FUNCTION] ${functionName} executada com sucesso (tentativa ${attempt})`);
-        return (result as any).data as T;
+        return result.data as T;
 
       } catch (error: any) {
         lastError = error;
@@ -379,66 +367,119 @@ function Conversas() {
     return null;
   };
 
-  // MELHORIA: Wrapper específico para get-profile-picture com fallback de avatar padrão
+  // MELHORIA: Avatar com cache + fallback; ignora grupos (@g.us)
   const getProfilePictureWithFallback = async (number: string, companyId: string, contactName: string): Promise<string | undefined> => {
-    return await callEdgeFunctionWithRetry<{ profilePictureUrl?: string }>(
+    if (!number) return undefined;
+    if (/@g\.us$/.test(String(number))) {
+      // Grupos: usar placeholder
+      return `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'Grupo')}&background=10b981&color=fff`;
+    }
+    const normalized = normalizePhoneForWA(number);
+    const cacheKey = `${companyId || 'no-company'}:${normalized}`;
+    const cached = avatarCacheRef.current.get(cacheKey);
+    if (cached) return cached;
+
+    const inflight = inflightAvatarPromisesRef.current.get(cacheKey);
+    if (inflight) return await inflight;
+
+    const promise = (async () => {
+      const result = await callEdgeFunctionWithRetry<{ profilePictureUrl?: string }>(
       'get-profile-picture',
-      { number, company_id: companyId },
+        { number: normalized, company_id: companyId },
       {
-        maxRetries: 3,
-        timeout: 10000,
+          maxRetries: 2,
+          timeout: 8000,
         fallback: () => {
-          console.log('🔄 [PROFILE-PICTURE] Usando avatar padrão como fallback');
-          // Fallback: usar avatar padrão baseado no nome
           return Promise.resolve({
-            profilePictureUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || number)}&background=10b981&color=fff`
+              profilePictureUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || normalized)}&background=10b981&color=fff`
           });
         },
-        onError: (error, attempt) => {
-          console.error(`❌ [PROFILE-PICTURE] Erro na tentativa ${attempt}:`, error);
+          onError: (error) => {
+            console.error('❌ [PROFILE-PICTURE] In-flight erro:', error);
+          }
         }
-      }
-    ).then(result => result?.profilePictureUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || number)}&background=10b981&color=fff`);
+      );
+      const url = result?.profilePictureUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || normalized)}&background=10b981&color=fff`;
+      avatarCacheRef.current.set(cacheKey, url);
+      inflightAvatarPromisesRef.current.delete(cacheKey);
+      return url;
+    })();
+    inflightAvatarPromisesRef.current.set(cacheKey, promise);
+    return await promise;
   };
 
-  // MELHORIA: Wrapper específico para enviar-whatsapp com fallback de erro claro
-  const sendWhatsAppWithRetry = async (body: any): Promise<{ success: boolean; error?: string }> => {
-    // Mapear para o schema esperado pela Edge Function
-    const payload = {
-      numero: body?.numero ?? body?.number,
-      mensagem: body?.mensagem ?? body?.message,
-      mediaUrl: body?.mediaUrl,
-      mediaBase64: body?.mediaBase64,
-      fileName: body?.fileName,
-      mimeType: body?.mimeType,
-      caption: body?.caption,
-      tipo_mensagem: body?.tipo_mensagem,
-      quoted: body?.quoted,
-      company_id: body?.company_id,
-    };
-
-    return await callEdgeFunctionWithRetry<{ success: boolean; error?: string }>(
-      'enviar-whatsapp',
-      payload,
-      {
-        maxRetries: 3,
-        timeout: 10000,
-        fallback: () => {
-          console.error('❌ [WHATSAPP] Todas as tentativas falharam - mostrando erro ao usuário');
-          toast.error('Erro ao enviar mensagem. Verifique sua conexão e tente novamente.');
-          return Promise.resolve({
-            success: false,
-            error: 'Erro ao enviar mensagem após múltiplas tentativas'
-          });
-        },
-        onError: (error, attempt) => {
-          console.error(`❌ [WHATSAPP] Erro na tentativa ${attempt}:`, {
-            error: error?.message || String(error),
-            body: { ...body, message: body.message?.substring(0, 50) }
-          });
+  // MELHORIA: Wrapper enviar-whatsapp com retries e mapeamento de erros → toast
+  const sendWhatsAppWithRetry = async (body: { company_id: string } & Record<string, any>): Promise<{ success: boolean; errorCode?: string; httpStatus?: number; message?: string; details?: any }> => {
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const res: any = await supabase.functions.invoke('enviar-whatsapp', { body });
+        const data = res?.data;
+        const err = res?.error;
+        // Tratar erros retornados como data
+        if (data && (data.error || data.code) && !data.success) {
+          const code = data.code || data.error || 'UNKNOWN_ERROR';
+          const msg = data.error || data.message || 'Falha no envio';
+          const status = res?.status || undefined;
+          const details = data.details || data;
+          showWhatsAppErrorToast(code, status, details);
+          console.debug('❌ [WHATSAPP] Erro detalhado:', { attempt, status, code, msg: data?.error || data?.message, details });
+          return { success: false, errorCode: code, httpStatus: status, message: msg, details };
         }
+        if (err) {
+          let code: string | undefined;
+          let httpStatus: number | undefined = (err as any)?.status || (err as any)?.context?.status;
+          // Tentar extrair code do message (JSON) ou string
+          const raw = err?.message || '';
+          try {
+            const parsed = JSON.parse(raw);
+            code = parsed?.code || parsed?.error?.code || parsed?.error;
+          } catch {
+            if (/NO_API_KEY/.test(raw)) code = 'NO_API_KEY';
+            else if (/NO_WHATSAPP_CONNECTION/.test(raw)) code = 'NO_WHATSAPP_CONNECTION';
+            else if (/EXTERNAL_API_ERROR/.test(raw)) code = 'EXTERNAL_API_ERROR';
+            else if (/CONFIG_ERROR/.test(raw)) code = 'CONFIG_ERROR';
+          }
+          showWhatsAppErrorToast(code, httpStatus, raw);
+          console.debug('❌ [WHATSAPP] Erro detalhado:', { attempt, httpStatus, code, raw: (err?.message || '').slice(0, 200) });
+          return { success: false, errorCode: code, httpStatus, message: String(raw).slice(0, 200), details: raw };
+        }
+        if (data?.success) return { success: true };
+        // Falha desconhecida
+        toast.error('Falha desconhecida ao enviar mensagem.');
+        return { success: false };
+      } catch (err: any) {
+        console.error(`❌ [WHATSAPP] Exceção na tentativa ${attempt}:`, err);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, Math.min(1000 * Math.pow(2, attempt - 1), 5000)));
+          continue;
+        }
+        toast.error('Erro de rede ao enviar mensagem. Verifique sua conexão.');
+        return { success: false };
       }
-    ) || { success: false, error: 'Erro desconhecido ao enviar mensagem' };
+    }
+    return { success: false };
+  };
+
+  const showWhatsAppErrorToast = (code?: string, httpStatus?: number, details?: any) => {
+    const prefix = code ? `[${code}] ` : '';
+    const description = details ? (typeof details === 'string' ? details.slice(0, 240) : JSON.stringify(details).slice(0, 240)) : undefined;
+    const opts = description ? { description } as any : undefined;
+    if (httpStatus === 401 || httpStatus === 403) {
+      toast.error(`${prefix}Sem autorização. Faça login novamente ou verifique permissões.`, opts);
+    } else if (httpStatus === 404 || code === 'NO_WHATSAPP_CONNECTION') {
+      toast.error(`${prefix}Conexão/instância não encontrada. Verifique suas conexões WhatsApp.`, opts);
+    } else if (httpStatus && httpStatus >= 500) {
+      toast.error(`${prefix}Erro no servidor. Tente novamente em instantes.`, opts);
+    } else if (code === 'NO_API_KEY') {
+      toast.error(`${prefix}API key ausente. Configure EVOLUTION_API_KEY ou a conexão da empresa.`, opts);
+    } else if (code === 'EXTERNAL_API_ERROR') {
+      toast.error(`${prefix}Falha na Evolution API. Verifique instância e payload.`, opts);
+    } else if (code === 'CONFIG_ERROR') {
+      toast.error(`${prefix}Configuração incompleta da Evolution API.`, opts);
+    } else {
+      toast.error(`${prefix}Falha ao enviar. Verifique os dados e tente novamente.`, opts);
+    }
   };
 
   // MELHORIA: Wrapper específico para transcrever-audio com fallback de "transcrição pendente"
@@ -481,7 +522,7 @@ function Conversas() {
 
   // MELHORIA: useMemo para filtros e buscas - otimização de performance
   const filteredConversations = useMemo(() => {
-    let filtered = conversations.slice(0, conversationsLimit); // Limitar quantidade inicial
+    let filtered = conversations;
 
     // Aplicar filtro de status
     if (filter !== "all" && filter !== "group") {
@@ -502,32 +543,22 @@ function Conversas() {
     }
 
     // Ordenar por última mensagem (mais recentes primeiro)
-    return filtered.sort((a, b) => {
+    filtered = filtered.sort((a, b) => {
       const aTime = a.messages?.[a.messages.length - 1]?.timestamp?.getTime() || 0;
       const bTime = b.messages?.[b.messages.length - 1]?.timestamp?.getTime() || 0;
       return bTime - aTime;
     });
+
+    // Limitar quantidade após aplicar filtros
+    return filtered.slice(0, conversationsLimit);
   }, [conversations, filter, debouncedSearchTerm, conversationsLimit]);
 
-  // MELHORIA: useMemo para mensagens limitadas (lazy loading) - otimização de performance
+  // Mensagens exibidas: sempre refletir state atual da conversa selecionada (evitar cache obsoleto)
   const displayedMessages = useMemo(() => {
     if (!selectedConv) return [];
-    
-    // Verificar cache primeiro
-    const cached = messagesCacheRef.current.get(selectedConv.id);
-    if (cached) {
-      return cached.slice(-messagesLimit); // Últimas N mensagens do cache
-    }
-
-    // Se não estiver em cache, usar mensagens da conversa selecionada
     const messages = selectedConv.messages || [];
-    const limitedMessages = messages.slice(-messagesLimit); // Últimas N mensagens
-    
-    // Salvar no cache
-    messagesCacheRef.current.set(selectedConv.id, messages);
-    
-    return limitedMessages;
-  }, [selectedConv, messagesLimit]);
+    return messages.slice(-messagesLimit);
+  }, [selectedConv?.id, selectedConv?.messages, messagesLimit]);
 
   // MELHORIA: Função para carregar mais mensagens (lazy loading)
   const loadMoreMessages = useCallback(async () => {
@@ -1446,9 +1477,12 @@ function Conversas() {
     loadMeetings();
     loadAiMode();
     
-    // Carregar conversas do Supabase imediatamente
+    // Carregar conversas do Supabase imediatamente (evitar duplicado em StrictMode)
+    if (!initialLoadRef.current) {
+      initialLoadRef.current = true;
     console.log('🔄 Carregando conversas iniciais do Supabase...');
     loadSupabaseConversations();
+    }
 
     // Verificar se veio de um lead (via state do navigate)
     const handleLeadRedirect = async () => {
@@ -1671,17 +1705,21 @@ function Conversas() {
           return false;
         }
 
-        // Validar número de telefone brasileiro (12 ou 13 dígitos)
-        const numeroBruto = data.telefone_formatado || data.numero || '';
-        const numeroLimpo = String(numeroBruto).replace(/[^0-9]/g, '');
-        if (numeroLimpo.length < 12 || numeroLimpo.length > 13) {
+        // Validar telefone apenas para CONTATOS (não aplicar a grupos)
+        const isGroup = Boolean((data as any)?.is_group) || /@g\.us$/.test(String(data.numero || ''));
+        if (!isGroup) {
+          const numeroPadrao = data.telefone_formatado || data.numero || '';
+          const numeroE164 = normalizePhoneForWA(numeroPadrao);
+          const somenteDigitos = numeroE164.replace(/[^0-9]/g, '');
+          if (somenteDigitos.length < 12 || somenteDigitos.length > 13) {
           console.warn('⚠️ [REALTIME] Número de telefone inválido:', {
             numero: data.numero,
             telefone_formatado: data.telefone_formatado,
-            numeroLimpo,
-            tamanho: numeroLimpo.length
+              numeroE164,
+              tamanho: somenteDigitos.length
           });
           return false;
+          }
         }
 
         // Validar mensagem não contém variáveis N8n não substituídas
@@ -1728,6 +1766,10 @@ function Conversas() {
         return;
       }
       isReconnectingRef.current = true;
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
       if (attempt > maxAttempts) {
         console.error('❌ [REALTIME] Máximo de tentativas de reconexão atingido');
         setRealtimeConnectionStatus('error');
@@ -1767,16 +1809,27 @@ function Conversas() {
 
     // MELHORIA: Função para configurar canal realtime
     const setupRealtimeChannel = async () => {
+      // Evitar múltiplas assinaturas: sempre remover canal anterior antes de criar
+      if (realtimeChannelRef.current) {
+        try {
+          await supabase.removeChannel(realtimeChannelRef.current);
+        } catch {}
+        realtimeChannelRef.current = null;
+      }
       // Subscrever para atualizações em tempo real (INSERT e UPDATE)
       const channel = supabase
         .channel('conversas_realtime')
       .on(
         'postgres_changes',
-        {
+        (() => {
+          const cid = userCompanyIdRef.current;
+          return {
           event: 'INSERT',
           schema: 'public',
-          table: 'conversas'
-        },
+            table: 'conversas',
+            ...(cid ? { filter: `company_id=eq.${cid}` } : {})
+          } as any;
+        })(),
         async (payload) => {
           try {
             console.log('📩 [REALTIME] Nova mensagem recebida (INSERT):', payload);
@@ -1802,8 +1855,11 @@ function Conversas() {
 
               // MELHORIA: Usar debounce para evitar spam de atualizações
               debouncedUpdate(async () => {
-                // Normalizar telefone para encontrar conversa correta
-                const telefoneNormalizado = novaConversa.telefone_formatado || novaConversa.numero.replace(/[^0-9]/g, '');
+              // Normalizar destino (E.164 para contatos; JID completo para grupos)
+              const isGroup = Boolean((novaConversa as any)?.is_group) || /@g\.us$/.test(String(novaConversa.numero || ''));
+              const telefoneNormalizado = isGroup
+                ? String(novaConversa.numero)
+                : (novaConversa.telefone_formatado || normalizePhoneForWA(novaConversa.numero));
                 
                 console.log('📩 Processando nova mensagem realtime:', {
                   numeroOriginal: novaConversa.numero,
@@ -1817,10 +1873,11 @@ function Conversas() {
                 // Buscar foto de perfil da nova mensagem
                 let profilePic: string | undefined;
                 try {
-                  const { data: picData } = await supabase.functions.invoke('get-profile-picture', {
-                    body: { number: novaConversa.numero, company_id: userCompanyIdRef.current } // Passar company_id para buscar instância dinâmica
-                  });
-                  profilePic = picData?.profilePictureUrl; // Corrigir nome do campo
+                  profilePic = await getProfilePictureWithFallback(
+                    novaConversa.numero,
+                    userCompanyIdRef.current || '',
+                    nomeValido || String(novaConversa.numero)
+                  );
                 } catch (error) {
                   console.error('❌ Erro ao buscar foto:', error);
                 }
@@ -1843,7 +1900,7 @@ function Conversas() {
                 
                 // Converter para formato do componente
                 const novaConvFormatted: Conversation = {
-                  id: telefoneNormalizado, // USAR TELEFONE NORMALIZADO
+                  id: telefoneNormalizado,
                   contactName: nomeValido,
                   avatarUrl: profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(nomeValido)}&background=10b981&color=fff`,
                   channel: 'whatsapp' as const,
@@ -1863,7 +1920,7 @@ function Conversas() {
                     mediaUrl: novaConversa.midia_url,
                     fileName: novaConversa.arquivo_nome || (novaConversa.mensagem?.match(/\[Documento: (.+)\]/)?.[1]),
                     mimeType: novaConversa.midia_url ? (novaConversa.midia_url.match(/data:([^;]+)/)?.[1] || undefined) : undefined,
-                    replyTo: novaConversa.replied_to_message || undefined,
+                    replyTo: undefined,
                   }],
                   lastMessage: novaConversa.mensagem,
                   unread: 1,
@@ -1897,6 +1954,13 @@ function Conversas() {
                     );
                     
                     if (!mensagemJaExiste) {
+                      // Resolver replyTo por conteúdo citado (melhor esforço)
+                      if (novaConversa.replied_to_message) {
+                        const target = conversaExistente.messages.find(msg => msg.content === novaConversa.replied_to_message);
+                        if (target) {
+                          novaConvFormatted.messages[0] = { ...novaConvFormatted.messages[0], replyTo: target.id };
+                        }
+                      }
                       // CORREÇÃO: Se a conversa existente tem apenas o número como nome 
                       // e a nova mensagem traz um nome válido, atualizar o nome
                       const nomeExistenteEhNumero = /^\d+$/.test(conversaExistente.contactName);
@@ -1954,6 +2018,9 @@ function Conversas() {
                       .eq('id', novaConversa.id)
                       .then(() => {
                         console.log('✅ Mensagem marcada como lida');
+                      })
+                      .catch((e) => {
+                        console.error('Erro ao marcar mensagem como lida (realtime):', e);
                       });
                   }
                 }
@@ -2022,11 +2089,15 @@ function Conversas() {
       )
       .on(
         'postgres_changes',
-        {
+        (() => {
+          const cid = userCompanyIdRef.current;
+          return {
           event: 'UPDATE',
           schema: 'public',
-          table: 'conversas'
-        },
+            table: 'conversas',
+            ...(cid ? { filter: `company_id=eq.${cid}` } : {})
+          } as any;
+        })(),
         async (payload) => {
           try {
             console.log('🔄 [REALTIME] Mensagem atualizada (UPDATE):', payload);
@@ -2048,8 +2119,11 @@ function Conversas() {
 
               // MELHORIA: Usar debounce para evitar spam de atualizações
               debouncedUpdate(() => {
-                // Normalizar telefone para encontrar conversa correta
-                const telefoneNormalizado = conversaAtualizada.telefone_formatado || conversaAtualizada.numero.replace(/[^0-9]/g, '');
+                // Normalizar destino (E.164 para contatos; JID completo para grupos)
+                const isGroup = Boolean((conversaAtualizada as any)?.is_group) || /@g\.us$/.test(String(conversaAtualizada.numero || ''));
+                const telefoneNormalizado = isGroup
+                  ? String(conversaAtualizada.numero)
+                  : (conversaAtualizada.telefone_formatado || normalizePhoneForWA(conversaAtualizada.numero));
                 
                 const isOpen = !!(selectedConvRef.current && (
                   selectedConvRef.current.id === telefoneNormalizado ||
@@ -2151,6 +2225,11 @@ function Conversas() {
             reconnectTimeoutRef.current = null;
           }
           isReconnectingRef.current = false;
+          // Cancelar polling de fallback, se ativo
+          if (pollingTimeoutRef.current) {
+            clearTimeout(pollingTimeoutRef.current);
+            pollingTimeoutRef.current = null;
+          }
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ [REALTIME] Erro no canal - tentando reconectar...');
           setRealtimeConnectionStatus('error');   
@@ -2187,6 +2266,10 @@ function Conversas() {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current);
+        pollingTimeoutRef.current = null;
+      }
       if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current);
       }
@@ -2211,14 +2294,27 @@ function Conversas() {
     };
   }, []);
 
-  // Fallback: polling quando realtime não estiver conectado
+  // Fallback: polling com jitter enquanto desconectado
   useEffect(() => {
     if (realtimeConnectionStatus === 'connected') return;
-    const intervalId = setInterval(() => {
-      console.log('⏱️ [FALLBACK] Polling de conversas por desconexão do realtime');
-      loadSupabaseConversations();
-    }, 10000);
-    return () => clearInterval(intervalId);
+    const schedule = () => {
+      const jitter = 8000 + Math.floor(Math.random() * 4000); // 8-12s
+      pollingTimeoutRef.current = setTimeout(async () => {
+        try {
+          console.log('⏱️ [FALLBACK] Polling de conversas (jitter) por desconexão do realtime');
+          await loadSupabaseConversations();
+        } finally {
+          if (realtimeConnectionStatus !== 'connected') schedule();
+        }
+      }, jitter);
+    };
+    schedule();
+    return () => {
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current);
+        pollingTimeoutRef.current = null;
+      }
+    };
   }, [realtimeConnectionStatus]);
 
   useEffect(() => {
@@ -2240,30 +2336,8 @@ function Conversas() {
       console.log('🔄 [SUPABASE] Iniciando carregamento de conversas...');
       
       // Função para buscar foto do perfil via Edge Function (mais seguro)
-      const getProfilePicture = async (numero: string, companyId: string): Promise<string | undefined> => {
-        try {
-          console.log('🔍 Buscando foto de perfil para:', numero);
-          
-          const { data, error } = await supabase.functions.invoke('get-profile-picture', {
-            body: { number: numero, company_id: companyId } // Enviar company_id para buscar instância dinâmica
-          });
-
-          if (error) {
-            console.error('❌ Erro ao buscar foto:', error);
-            return undefined;
-          }
-
-          if (data?.profilePictureUrl) {
-            console.log('✅ Foto de perfil encontrada');
-            return data.profilePictureUrl;
-          }
-          
-          console.log('ℹ️ Nenhuma foto de perfil disponível');
-          return undefined;
-        } catch (error) {
-          console.error('❌ Exceção ao buscar foto do perfil:', error);
-          return undefined;
-        }
+      const getProfilePicture = async (numero: string, companyId: string, contactName?: string): Promise<string | undefined> => {
+        return await getProfilePictureWithFallback(numero, companyId, contactName || numero);
       };
       
       // Buscar company_id do usuário autenticado
@@ -2296,7 +2370,7 @@ function Conversas() {
       const { data, error } = await supabase
         .from('conversas')
         .select('*')
-        .or(`company_id.eq.${userRole.company_id},company_id.is.null`)
+        .eq('company_id', userRole.company_id)
         .order('created_at', { ascending: false })
         .limit(conversationsLimit); // Usar limite configurável
 
@@ -2329,11 +2403,13 @@ function Conversas() {
           !conv.numero || conv.numero === '=' || conv.numero.trim() === '' ||
           !conv.mensagem || conv.mensagem === '[object Object]' || conv.mensagem.trim() === '';
         
-        // VALIDAR se é número brasileiro válido (12 ou 13 dígitos)
+        // Validar destino: aceitar grupos (@g.us) SEM checar tamanho; contatos: exigir 12/13 dígitos
+        const isGroup = Boolean(conv.is_group) || /@g\.us$/.test(String(conv.numero || ''));
         const numeroLimpo = conv.numero?.replace(/[^0-9]/g, '') || '';
-        const isValidBrazilianNumber = numeroLimpo.length === 12 || numeroLimpo.length === 13;
+        const isValidContact = numeroLimpo.length === 12 || numeroLimpo.length === 13;
+        const isValidDestination = isGroup || isValidContact;
         
-        if (hasInvalidVariables || hasInvalidData || !isValidBrazilianNumber) {
+        if (hasInvalidVariables || hasInvalidData || !isValidDestination) {
           console.warn('⚠️ Mensagem inválida ignorada:', {
             numero: conv.numero,
             numeroLimpo,
@@ -2342,7 +2418,7 @@ function Conversas() {
           });
         }
         
-        return !hasInvalidVariables && !hasInvalidData && isValidBrazilianNumber;
+        return !hasInvalidVariables && !hasInvalidData && isValidDestination;
       }) || [];
 
       if (validData && validData.length > 0) {
@@ -2377,18 +2453,20 @@ function Conversas() {
         }
         setLeadsVinculados(leadsMap);
 
-        // Agrupar mensagens por número NORMALIZADO (telefone_formatado)
+        // Agrupar mensagens por destino: E.164 (contatos) ou JID completo (grupos)
         const conversasAgrupadas = validData.reduce((acc: Record<string, any[]>, conv: any) => {
-          // SEMPRE usar telefone_formatado se disponível, senão normalizar
-          const numeroLimpo = conv.numero.replace(/[^0-9]/g, '');
-          const chaveAgrupamento = conv.telefone_formatado || numeroLimpo;
-          
-          // GARANTIR que a chave seja sempre 12 ou 13 dígitos
-          if (chaveAgrupamento.length < 12 || chaveAgrupamento.length > 13) {
+          const isGroup = Boolean(conv.is_group) || /@g\.us$/.test(String(conv.numero || ''));
+          const chaveAgrupamento = isGroup
+            ? String(conv.numero)
+            : (conv.telefone_formatado || normalizePhoneForWA(conv.numero));
+          if (!chaveAgrupamento) return acc;
+          if (!isGroup) {
+            const onlyDigits = String(chaveAgrupamento).replace(/[^0-9]/g, '');
+            if (onlyDigits.length < 12 || onlyDigits.length > 13) {
             console.warn('⚠️ Ignorando conversa com número inválido:', chaveAgrupamento);
             return acc;
           }
-          
+          }
           if (!acc[chaveAgrupamento]) {
             acc[chaveAgrupamento] = [];
           }
@@ -2405,7 +2483,8 @@ function Conversas() {
         });
 
         // Buscar leads vinculados para obter nomes atualizados
-        const telefonesNormalizados = Object.keys(conversasAgrupadas);
+        // Buscar leads apenas para chaves de contato (somente dígitos)
+        const telefonesNormalizados = Object.keys(conversasAgrupadas).filter(k => /^[0-9]{12,13}$/.test(k));
         const { data: leadsVinculados } = await supabase
           .from('leads')
           .select('id, name, phone, telefone')
@@ -2451,8 +2530,10 @@ function Conversas() {
             });
             
             // Buscar foto do perfil usando número original
-            const avatarUrl = await getProfilePicture(numeroOriginal, userRole.company_id);
+            const avatarUrl = await getProfilePicture(numeroOriginal, userRole.company_id, contactName);
+            const isGroupConv = Boolean(ultima.is_group) || /@g\.us$/.test(String(telefoneNormalizado));
             
+            const contentToIdMap = new Map<string, string>();
             const messagensFormatadas = [...mensagens].reverse().map(m => {
               const msgContent = m.mensagem || 'Sem conteúdo';
               let msgType = m.tipo_mensagem || 'text';
@@ -2461,16 +2542,20 @@ function Conversas() {
               if (msgType === 'texto') msgType = 'text';
               if (msgType === 'document') msgType = 'pdf';
               
+              // Calcular replyTo id com base no conteúdo citado (melhor esforço)
+              const repliedText = m.replied_to_message || undefined;
+              const replyToId = repliedText ? contentToIdMap.get(repliedText) : undefined;
+              
               // Extrair nome do arquivo de documentos
               let fileName: string | undefined;
               if (msgType === 'pdf' && msgContent.includes('[Documento:')) {
                 fileName = msgContent.match(/\[Documento: (.+)\]/)?.[1];
               }
               
-              return {
+              const created = {
                 id: m.id,
                 content: msgContent,
-                type: msgType as "text" | "image" | "audio" | "pdf" | "video" | "contact",
+                type: msgType as "text" | "image" | "audio" | "pdf" | "video" | "document" | "contact",
                 sender: m.status === 'Enviada' ? 'user' : 'contact' as "user" | "contact",
                 timestamp: new Date(m.created_at),
                 delivered: true,
@@ -2478,9 +2563,12 @@ function Conversas() {
                 mediaUrl: m.midia_url || undefined,
                 fileName: fileName || m.arquivo_nome || undefined,
                 mimeType: m.midia_url ? (m.midia_url.match(/data:([^;]+)/)?.[1] || undefined) : undefined,
-                replyTo: m.replied_to_message || undefined,
+                replyTo: replyToId,
                 transcricao: m.transcricao || undefined,
-              };
+              } as const;
+              // Atualizar mapa após criar a mensagem para preferir a última ocorrência
+              contentToIdMap.set(msgContent, m.id);
+              return created as unknown as Message;
             });
           
             console.log('📦 Conversa formatada completa:', {
@@ -2505,6 +2593,7 @@ function Conversas() {
               tags: [],
               funnelStage: "Novo",
               avatarUrl: avatarUrl,
+              isGroup: isGroupConv,
             };
           })
         );
@@ -3053,9 +3142,11 @@ function Conversas() {
           .select('company_id')
           .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
           .single();
+        const isGroup = /@g\.us$/.test(String(selectedConv.id));
+        const telefone_formatado = isGroup ? null : normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
         await supabase.from('conversas').insert([{
           numero: selectedConv.id,
-          telefone_formatado: selectedConv.phoneNumber || selectedConv.id.replace(/[^0-9]/g, ''),
+          telefone_formatado,
           mensagem: `Reagiu com ${emoji} à mensagem: "${targetMsg?.content || ''}"`,
           origem: selectedConv.channel === 'whatsapp' ? 'WhatsApp' : 
                   selectedConv.channel === 'instagram' ? 'Instagram' : 'Facebook',
@@ -3100,8 +3191,18 @@ function Conversas() {
         reader.readAsDataURL(file);
       });
 
-      // Enviar via edge function (mais seguro)
+      // Enviar via edge function (retry via wrapper interno)
       const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
+      const quotedPayload = replyingTo && selectedConv.messages.find(m => m.id === replyingTo)
+        ? {
+            quoted: {
+              key: { id: replyingTo },
+              message: { conversation: selectedConv.messages.find(m => m.id === replyingTo)?.content || '' }
+            },
+            quotedMessageId: replyingTo
+          }
+        : {};
+
       const { data, error } = await enviarWhatsApp({
         numero: numeroNormalizado,
         mensagem: caption || tipoMensagem[type],
@@ -3110,6 +3211,7 @@ function Conversas() {
         fileName: file.name,
         mimeType: file.type,
         caption: caption || '',
+        ...quotedPayload,
       });
 
       if (error) {
@@ -3118,8 +3220,32 @@ function Conversas() {
 
       console.log('✅ Mídia enviada com sucesso');
 
+      // Salvar no Supabase e obter ID para manter sincronizado
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .single();
+
+      const { data: inserted, error: dbError } = await supabase.from('conversas').insert([{
+        numero: numeroNormalizado,
+        telefone_formatado: numeroNormalizado,
+        mensagem: caption || tipoMensagem[type],
+        origem: 'WhatsApp',
+        status: 'Enviada',
+        tipo_mensagem: type,
+        nome_contato: selectedConv.contactName,
+        arquivo_nome: file.name,
+        company_id: userRole?.company_id,
+      }]).select('id').single();
+
+      if (dbError) {
+        console.error('❌ Erro ao salvar mensagem no banco:', dbError);
+        toast.error('Erro ao salvar mensagem no histórico');
+      }
+
       const newMessage: Message = {
-        id: Date.now().toString(),
+        id: (inserted?.id || Date.now()).toString(),
         content: caption || tipoMensagem[type] || 'Arquivo enviado',
         type: type as "image" | "audio" | "pdf" | "video",
         sender: "user",
@@ -3150,24 +3276,7 @@ function Conversas() {
         messages: [...selectedConv.messages, newMessage],
       });
 
-      // Salvar no Supabase
-      const { data: userRole } = await supabase
-        .from('user_roles')
-        .select('company_id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-        .single();
-
-      await supabase.from('conversas').insert([{
-        numero: numeroNormalizado,
-        telefone_formatado: numeroNormalizado,
-        mensagem: caption || tipoMensagem[type],
-        origem: 'WhatsApp',
-        status: 'Enviada',
-        tipo_mensagem: type,
-        nome_contato: selectedConv.contactName,
-        arquivo_nome: file.name,
-        company_id: userRole?.company_id,
-      }]);
+      // já salvo acima
 
       setSyncStatus('synced');
       setTimeout(() => setSyncStatus('idle'), 4000);
@@ -3201,8 +3310,17 @@ function Conversas() {
         reader.readAsDataURL(audioBlob);
       });
 
-      // Enviar via edge function (mais seguro)
+      // Enviar via edge function (retry via wrapper interno)
       const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
+      const quotedPayload = replyingTo && selectedConv.messages.find(m => m.id === replyingTo)
+        ? {
+            quoted: {
+              key: { id: replyingTo },
+              message: { conversation: selectedConv.messages.find(m => m.id === replyingTo)?.content || '' }
+            },
+            quotedMessageId: replyingTo
+          }
+        : {};
       const { data, error } = await enviarWhatsApp({
         numero: numeroNormalizado,
         mensagem: 'Áudio enviado',
@@ -3211,6 +3329,7 @@ function Conversas() {
         fileName: 'audio.ogg',
         mimeType: 'audio/ogg; codecs=opus',
         caption: '',
+        ...quotedPayload,
       });
 
       if (error) {
@@ -3219,8 +3338,30 @@ function Conversas() {
 
       console.log('✅ Áudio enviado com sucesso');
 
+      // Salvar no Supabase e obter ID para manter sincronizado
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .single();
+      const { data: inserted, error: dbError } = await supabase.from('conversas').insert([{
+        numero: numeroNormalizado,
+        telefone_formatado: numeroNormalizado,
+        mensagem: 'Áudio enviado',
+        origem: 'WhatsApp',
+        status: 'Enviada',
+        tipo_mensagem: 'audio',
+        nome_contato: selectedConv.contactName,
+        arquivo_nome: 'audio.ogg',
+        company_id: userRole?.company_id,
+      }]).select('id').single();
+      if (dbError) {
+        console.error('❌ Erro ao salvar mensagem no banco:', dbError);
+        toast.error('Erro ao salvar mensagem no histórico');
+      }
+
       const newMessage: Message = {
-        id: Date.now().toString(),
+        id: (inserted?.id || Date.now()).toString(),
         content: "Áudio enviado",
         type: "audio",
         sender: "user",
@@ -3249,24 +3390,12 @@ function Conversas() {
         messages: [...selectedConv.messages, newMessage],
       });
 
-      // Salvar no Supabase
-      const { data: userRole } = await supabase
-        .from('user_roles')
-        .select('company_id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-        .single();
-
-      await supabase.from('conversas').insert([{
-        numero: numeroNormalizado,
-        telefone_formatado: numeroNormalizado,
-        mensagem: 'Áudio enviado',
-        origem: 'WhatsApp',
-        status: 'Enviada',
-        tipo_mensagem: 'audio',
-        nome_contato: selectedConv.contactName,
-        arquivo_nome: 'audio.ogg',
-        company_id: userRole?.company_id,
-      }]);
+      // Iniciar transcrição automática
+      try {
+        await transcreverAudio(newMessage.id, newMessage.mediaUrl!);
+      } catch (e) {
+        console.error('❌ Erro ao iniciar transcrição automática:', e);
+      }
 
       setSyncStatus('synced');
       setTimeout(() => setSyncStatus('idle'), 4000);
@@ -3351,8 +3480,7 @@ function Conversas() {
       });
 
       if (error) {
-        console.error('Erro ao enviar para WhatsApp:', error);
-        toast.error('Erro ao enviar mensagem para WhatsApp');
+        // Wrapper já exibiu o toast de erro específico
         return;
       }
 
@@ -4499,13 +4627,16 @@ function Conversas() {
     if (!novoNome || novoNome.trim() === "") return;
 
     try {
-      // Atualizar no Supabase (usar telefone_formatado + company_id)
-      const numeroNormalizado = (conv.phoneNumber || conv.id || '').replace(/[^0-9]/g, '');
-      const { error } = await supabase
+      // Atualizar no Supabase (contatos: por telefone_formatado; grupos: por numero JID)
+      const isGroup = /@g\.us$/.test(String(conv.id));
+      const numeroNormalizado = isGroup ? null : normalizePhoneForWA(conv.phoneNumber || conv.id);
+      const query = supabase
         .from('conversas')
         .update({ nome_contato: novoNome.trim() })
-        .eq('telefone_formatado', numeroNormalizado)
         .eq('company_id', userCompanyId);
+      const { error } = await (isGroup
+        ? query.eq('numero', conv.id)
+        : query.eq('telefone_formatado', numeroNormalizado!));
 
       if (error) throw error;
 
@@ -4575,13 +4706,16 @@ function Conversas() {
     if (!confirmar) return;
 
     try {
-      // Deletar no Supabase (usar telefone_formatado + company_id)
-      const numeroNormalizado = (conv.phoneNumber || conv.id || '').replace(/[^0-9]/g, '');
-      const { error } = await supabase
+      // Deletar no Supabase (contatos: por telefone_formatado; grupos: por numero JID)
+      const isGroup = /@g\.us$/.test(String(conv.id));
+      const numeroNormalizado = isGroup ? null : normalizePhoneForWA(conv.phoneNumber || conv.id);
+      const base = supabase
         .from('conversas')
         .delete()
-        .eq('telefone_formatado', numeroNormalizado)
         .eq('company_id', userCompanyId);
+      const { error } = await (isGroup
+        ? base.eq('numero', conv.id)
+        : base.eq('telefone_formatado', numeroNormalizado!));
 
       if (error) throw error;
 
@@ -4616,8 +4750,7 @@ function Conversas() {
   // ✅ REMOVIDO: Declaração duplicada de filteredConversations (já existe na linha 459 com useMemo)
 
   const openConversationWithContact = (name: string, phone: string) => {
-    const digits = (phone || '').replace(/\D/g, '');
-    const normalized = digits.startsWith('55') ? digits : (digits.length >= 10 && digits.length <= 13 ? `55${digits}` : digits);
+    const normalized = normalizePhoneForWA(phone);
     const existente = conversations.find(c => c.id === normalized || c.phoneNumber === normalized);
     if (existente) {
       setSelectedConv(existente);
@@ -4659,16 +4792,21 @@ function Conversas() {
   const enviarWhatsApp = async (body: any) => {
     const companyId = await getCompanyId();
     // Usar wrapper com retry/timeout e retornar no formato compatível (data/error)
-    const result = await sendWhatsAppWithRetry({ company_id: companyId, ...body });
+    const result = await sendWhatsAppWithRetry({
+      company_id: companyId,
+      ...body,
+    });
     if (result && result.success) {
       return { data: result, error: null } as const;
     }
     return { data: result, error: { message: result?.error || 'Falha ao enviar mensagem' } } as const;
   };
 
-  // Normaliza número para envio no WhatsApp (BR): remove não-dígitos e garante prefixo 55
+  // Normaliza destino: preserva JID de grupo (@g.us). Para contatos, mantém apenas dígitos com prefixo 55.
   const normalizePhoneForWA = (raw: string | undefined | null): string => {
-    const digits = String(raw || '').replace(/[^0-9]/g, '');
+    const value = String(raw || '');
+    if (/@g\.us$/.test(value)) return value; // grupo
+    const digits = value.replace(/[^0-9]/g, '');
     if (!digits) return '';
     return digits.startsWith('55') ? digits : `55${digits}`;
   };
@@ -4684,8 +4822,7 @@ function Conversas() {
         tipo_mensagem: 'text',
       });
       if (error || !data?.success) {
-        console.error('Erro ao enviar mensagem de finalização:', error || data);
-        toast.error('Falha ao enviar mensagem no WhatsApp');
+        // Wrapper já exibiu o toast de erro específico
         return;
       }
 
@@ -4911,7 +5048,8 @@ function Conversas() {
                 
                 // Persistir no Supabase: marcar mensagens recebidas como 'Lida'
                 try {
-                  const numeroNormalizado = (conv.phoneNumber || conv.id || '').replace(/[^0-9]/g, '');
+                  const isGroup = /@g\.us$/.test(String(conv.id));
+                  const numeroNormalizado = isGroup ? null : normalizePhoneForWA(conv.phoneNumber || conv.id);
                   // CORREÇÃO: Buscar company_id corretamente
                   let companyIdToUse = userCompanyId;
                   
@@ -4929,12 +5067,14 @@ function Conversas() {
                   }
                   
                   if (companyIdToUse) {
-                    await supabase
+                    const base = supabase
                       .from('conversas')
                       .update({ status: 'Lida' })
-                      .eq('telefone_formatado', numeroNormalizado)
                       .eq('company_id', companyIdToUse)
                       .eq('status', 'Recebida');
+                    await (isGroup 
+                      ? base.eq('numero', conv.id)
+                      : base.eq('telefone_formatado', numeroNormalizado!));
                   }
                 } catch (err) {
                   console.error('Erro ao marcar mensagens como lidas no Supabase:', err);
@@ -5042,17 +5182,7 @@ function Conversas() {
                     </div>
                   )}
                   <div className="flex items-center gap-2">
-                    <MediaUpload onFileSelected={(file) => {
-                      // Determinar o tipo baseado no mime type
-                      const mimeType = file.type;
-                      let type = "text";
-                      if (mimeType.startsWith("image/")) type = "image";
-                      else if (mimeType.startsWith("video/")) type = "video";
-                      else if (mimeType.startsWith("audio/")) type = "audio";
-                      else if (mimeType === "application/pdf") type = "pdf";
-                      
-                      handleSendMedia(file, "", type);
-                    }} />
+                    <MediaUpload onSendMedia={handleSendMedia} />
                     <Input
                       placeholder="Escreva sua mensagem..."
                       value={messageInput}

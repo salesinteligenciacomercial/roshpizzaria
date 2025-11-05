@@ -1,6 +1,6 @@
 /*
   CI regression guard: verifies critical features are present to prevent accidental rollbacks.
-  Run with: node scripts/check-regressions.js
+  Run with: node scripts/check-regressions.cjs
 */
 
 const fs = require('fs');
