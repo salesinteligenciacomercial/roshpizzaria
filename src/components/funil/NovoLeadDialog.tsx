@@ -283,10 +283,9 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
               onValueChange={(value) => setFormData({ ...formData, responsavel_id: value })}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Selecione o responsável" />
+                <SelectValue placeholder="Nenhum responsável selecionado" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Nenhum</SelectItem>
                 {responsaveis.map((resp) => (
                   <SelectItem key={resp.id} value={resp.id}>
                     {resp.name}
