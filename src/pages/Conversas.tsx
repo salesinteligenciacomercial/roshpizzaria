@@ -416,10 +416,13 @@ function Conversas() {
 
   // MELHORIA: Wrapper enviar-whatsapp com retries e mapeamento de erros → toast
   const sendWhatsAppWithRetry = async (body: { company_id: string } & Record<string, any>): Promise<{ success: boolean; errorCode?: string; httpStatus?: number; message?: string; details?: any }> => {
+    console.log('📤 [ENVIO] Iniciando envio de mensagem...', { numero: body.numero, company_id: body.company_id });
     const maxRetries = 3;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
+        console.log(`📤 [ENVIO] Tentativa ${attempt}/${maxRetries} - Chamando edge function...`);
         const res: any = await supabase.functions.invoke('enviar-whatsapp', { body });
+        console.log('📤 [ENVIO] Resposta da edge function:', { status: res?.status, hasData: !!res?.data, hasError: !!res?.error });
         const data = res?.data;
         const err = res?.error;
         // Tratar erros retornados como data
@@ -3506,12 +3509,18 @@ function Conversas() {
 
   const handleSendMessage = async (content?: string, type: Message["type"] = "text") => {
     const messageContent = content || messageInput.trim();
-    if (!messageContent || !selectedConv) return;
+    console.log('📝 [handleSendMessage] Iniciando...', { messageContent: messageContent.substring(0, 50), type, selectedConvId: selectedConv?.id });
+    if (!messageContent || !selectedConv) {
+      console.warn('⚠️ [handleSendMessage] Abortado - mensagem vazia ou sem conversa selecionada');
+      return;
+    }
 
     // Validar e formatar número
     try {
       const formattedPhone = formatPhoneNumber(selectedConv.id);
+      console.log('📱 [handleSendMessage] Telefone formatado:', formattedPhone);
     } catch (error: any) {
+      console.error('❌ [handleSendMessage] Erro ao formatar telefone:', error);
       toast.error(error.message);
       return;
     }
@@ -3566,6 +3575,8 @@ function Conversas() {
     // Enviar mensagem via Evolution API
     try {
       const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
+      console.log('📞 [handleSendMessage] Preparando envio...', { numeroNormalizado, tipo_mensagem: type });
+      
       const { data, error } = await enviarWhatsApp({
         numero: numeroNormalizado,
         ...mensagemParaEnviar,
@@ -3573,7 +3584,10 @@ function Conversas() {
         tipo_mensagem: type,
       });
 
+      console.log('📤 [handleSendMessage] Resultado do envio:', { hasData: !!data, hasError: !!error, data, error });
+
       if (error) {
+        console.error('❌ [handleSendMessage] Erro no envio:', error);
         // Wrapper já exibiu o toast de erro específico
         return;
       }
@@ -4884,12 +4898,17 @@ function Conversas() {
   };
 
   const enviarWhatsApp = async (body: any) => {
+    console.log('🔑 [enviarWhatsApp] Obtendo company_id...');
     const companyId = await getCompanyId();
+    console.log('🔑 [enviarWhatsApp] Company ID obtido:', companyId);
+    
     // Usar wrapper com retry/timeout e retornar no formato compatível (data/error)
     const result = await sendWhatsAppWithRetry({
       company_id: companyId,
       ...body,
     });
+    console.log('📤 [enviarWhatsApp] Resultado do retry:', result);
+    
     if (result && result.success) {
       return { data: result, error: null } as const;
     }
