@@ -35,25 +35,22 @@ serve(async (req) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('❌ [CRIAR-USUARIO] Sem autorização');
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+        status: 401, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
 
     const body: CriarUsuarioRequest = await req.json();
-    console.log('📦 [CRIAR-USUARIO] Dados recebidos (completo):', JSON.stringify(body, null, 2));
+    console.log('📦 [CRIAR-USUARIO] Dados recebidos:', JSON.stringify(body, null, 2));
     
     const { companyId, email, full_name, role, parentCompanyId, companyName, cnpj, telefone, responsavel, plan, max_users, max_leads } = body;
-    
-    console.log('📋 [CRIAR-USUARIO] Campos extraídos:', {
-      email,
-      full_name,
-      hasParentCompanyId: !!parentCompanyId,
-      hasCompanyId: !!companyId,
-      companyName,
-      responsavel
-    });
 
     if (!email || !full_name) {
-      return new Response(JSON.stringify({ error: 'Email e nome completo são obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Email e nome completo são obrigatórios' }), { 
+        status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
 
     // Detectar modo de operação
@@ -70,21 +67,17 @@ serve(async (req) => {
     const userRole = role || 'company_admin';
     const allowedRoles = new Set(['company_admin', 'gestor', 'vendedor', 'suporte', 'user']);
     if (!allowedRoles.has(userRole)) {
-      return new Response(JSON.stringify({ error: 'Perfil inválido' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Perfil inválido' }), { 
+        status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
 
     // Validar variáveis de ambiente
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
     const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
-    console.log('🔑 [CRIAR-USUARIO] Variáveis disponíveis:', { 
-      hasUrl: !!SUPABASE_URL, 
-      hasServiceRole: !!SERVICE_ROLE, 
-      hasAnonKey: !!ANON_KEY 
-    });
-
-    if (!SUPABASE_URL || !SERVICE_ROLE || !ANON_KEY) {
+    if (!SUPABASE_URL || !SERVICE_ROLE) {
       console.error('❌ [CRIAR-USUARIO] Configuração incompleta');
       return new Response(
         JSON.stringify({ error: 'Configuração do servidor incompleta' }),
@@ -92,30 +85,40 @@ serve(async (req) => {
       );
     }
 
-    const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE);
-    const supabase = createClient(SUPABASE_URL, ANON_KEY, {
-      global: { headers: { Authorization: authHeader } }
+    // Usar apenas SERVICE_ROLE para todas as operações
+    const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE, {
+      auth: { autoRefreshToken: false, persistSession: false }
     });
 
-    // Verificar permissões do usuário chamador
-    const { data: me, error: meErr } = await supabase.auth.getUser();
-    console.log('👤 [CRIAR-USUARIO] Usuário:', { userId: me?.user?.id, error: meErr });
+    // Extrair JWT token do header
+    const token = authHeader.replace('Bearer ', '');
     
-    if (meErr || !me?.user) {
-      console.error('❌ [CRIAR-USUARIO] Falha ao identificar usuário:', meErr);
-      return new Response(JSON.stringify({ error: 'Falha ao identificar usuário' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // Verificar token e obter usuário
+    const { data: { user: me }, error: meErr } = await supabaseAdmin.auth.getUser(token);
+    console.log('👤 [CRIAR-USUARIO] Usuário identificado:', { userId: me?.id, email: me?.email });
+    
+    if (meErr || !me) {
+      console.error('❌ [CRIAR-USUARIO] Token inválido:', meErr);
+      return new Response(JSON.stringify({ error: 'Token de autenticação inválido' }), { 
+        status: 401, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
 
-    const { data: roles, error: rolesErr } = await supabase
+    // Verificar permissões do usuário
+    const { data: roles, error: rolesErr } = await supabaseAdmin
       .from('user_roles')
       .select('role, company_id')
-      .eq('user_id', me.user.id);
+      .eq('user_id', me.id);
 
-    console.log('🔐 [CRIAR-USUARIO] Roles:', { roles, error: rolesErr });
+    console.log('🔐 [CRIAR-USUARIO] Roles encontradas:', roles);
 
     if (rolesErr) {
-      console.error('❌ [CRIAR-USUARIO] Falha ao validar permissões:', rolesErr);
-      return new Response(JSON.stringify({ error: 'Falha ao validar permissões' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      console.error('❌ [CRIAR-USUARIO] Erro ao buscar roles:', rolesErr);
+      return new Response(JSON.stringify({ error: 'Falha ao validar permissões' }), { 
+        status: 403, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
 
     const isSuperAdmin = roles?.some(r => r.role === 'super_admin') || false;
@@ -126,9 +129,15 @@ serve(async (req) => {
     if (isCreatingSubaccount) {
       // Criar subconta: apenas super_admin pode
       if (!isSuperAdmin) {
-        return new Response(JSON.stringify({ error: 'Apenas Super Admin pode criar subcontas' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        console.error('❌ [CRIAR-USUARIO] Usuário não é super admin');
+        return new Response(JSON.stringify({ error: 'Apenas Super Admin pode criar subcontas' }), { 
+          status: 403, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
       }
 
+      console.log('📝 [CRIAR-USUARIO] Criando nova empresa...');
+      
       // Criar nova empresa
       const { data: newCompany, error: companyErr } = await supabaseAdmin
         .from('companies')
@@ -141,7 +150,7 @@ serve(async (req) => {
           max_users: max_users || 5,
           max_leads: max_leads || 1000,
           status: 'active',
-          created_by: me.user.id,
+          created_by: me.id,
           settings: {
             email,
             telefone: telefone || null,
@@ -152,23 +161,34 @@ serve(async (req) => {
         .single();
 
       if (companyErr || !newCompany) {
-        console.error('❌ Erro ao criar empresa:', companyErr);
-        return new Response(JSON.stringify({ error: 'Erro ao criar subconta' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        console.error('❌ [CRIAR-USUARIO] Erro ao criar empresa:', companyErr);
+        return new Response(JSON.stringify({ 
+          error: 'Erro ao criar subconta',
+          details: companyErr?.message 
+        }), { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
       }
 
       targetCompanyId = newCompany.id;
-      console.log('✅ Subconta criada:', targetCompanyId);
+      console.log('✅ [CRIAR-USUARIO] Empresa criada:', targetCompanyId);
     } else {
       // Criar usuário em empresa existente
       const isCompanyAdminSameCompany = roles?.some(r => r.role === 'company_admin' && r.company_id === companyId) || false;
 
       if (!isSuperAdmin && !isCompanyAdminSameCompany) {
-        return new Response(JSON.stringify({ error: 'Permissão negada' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'Permissão negada para criar usuário nesta empresa' }), { 
+          status: 403, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
       }
 
       targetCompanyId = companyId!;
     }
 
+    console.log('🔐 [CRIAR-USUARIO] Criando usuário de autenticação...');
+    
     // Gerar senha temporária forte
     const tempPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10).toUpperCase() + "!@#123";
 
@@ -181,9 +201,18 @@ serve(async (req) => {
     });
 
     if (createErr || !created?.user) {
-      console.error('❌ Erro ao criar usuário auth:', createErr);
-      return new Response(JSON.stringify({ error: 'Erro ao criar usuário de autenticação' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      console.error('❌ [CRIAR-USUARIO] Erro ao criar usuário auth:', createErr);
+      return new Response(JSON.stringify({ 
+        error: 'Erro ao criar usuário de autenticação',
+        details: createErr?.message 
+      }), { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
+
+    console.log('✅ [CRIAR-USUARIO] Usuário criado:', created.user.id);
+    console.log('🔗 [CRIAR-USUARIO] Vinculando role à empresa...');
 
     // Vincular role à empresa
     const { error: roleErr } = await supabaseAdmin
@@ -191,13 +220,22 @@ serve(async (req) => {
       .insert({ user_id: created.user.id, company_id: targetCompanyId, role: userRole });
 
     if (roleErr) {
-      console.error('❌ Erro ao vincular role:', roleErr);
-      return new Response(JSON.stringify({ error: 'Erro ao vincular perfil do usuário' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      console.error('❌ [CRIAR-USUARIO] Erro ao vincular role:', roleErr);
+      return new Response(JSON.stringify({ 
+        error: 'Erro ao vincular perfil do usuário',
+        details: roleErr.message 
+      }), { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
 
-    // Enviar credenciais por email e WhatsApp
+    console.log('✅ [CRIAR-USUARIO] Role vinculada com sucesso');
+
+    // Opcional: Enviar credenciais por WhatsApp (não bloqueia sucesso)
     if (isCreatingSubaccount && telefone) {
       try {
+        console.log('📤 [CRIAR-USUARIO] Enviando credenciais via WhatsApp...');
         await supabaseAdmin.functions.invoke('enviar-credenciais-subconta', {
           body: {
             nome: responsavel || full_name,
@@ -205,14 +243,16 @@ serve(async (req) => {
             senha: tempPassword,
             telefone,
             nomeConta: companyName,
-            url: SUPABASE_URL.replace('//', '//app.'), // URL da aplicação
+            url: SUPABASE_URL.replace('supabase.co', 'lovableproject.com'),
           }
         });
+        console.log('✅ [CRIAR-USUARIO] Credenciais enviadas');
       } catch (sendErr) {
-        console.warn('⚠️ Erro ao enviar credenciais:', sendErr);
-        // Não falha a operação se envio falhar
+        console.warn('⚠️ [CRIAR-USUARIO] Falha ao enviar credenciais (não crítico):', sendErr);
       }
     }
+
+    console.log('🎉 [CRIAR-USUARIO] Processo concluído com sucesso');
 
     return new Response(
       JSON.stringify({ 
@@ -239,6 +279,3 @@ serve(async (req) => {
     );
   }
 });
-
-
-
