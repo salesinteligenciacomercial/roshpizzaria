@@ -87,9 +87,10 @@ Deno.serve(async (req) => {
 
     console.log('🔄 [DOWNLOAD-MEDIA] Baixando via Evolution API...');
     console.log('📡 [DOWNLOAD-MEDIA] Instância:', whatsappConfig.instance_name);
+    console.log('🔗 [DOWNLOAD-MEDIA] URL da mídia:', message.midia_url);
 
     // Usar Evolution API para baixar mídia criptografada
-    const evolutionUrl = `${whatsappConfig.evolution_api_url}/chat/getBase64FromMediaMessage/${whatsappConfig.instance_name}`;
+    const evolutionUrl = `${whatsappConfig.evolution_api_url}/message/downloadMedia/${whatsappConfig.instance_name}`;
     
     const response = await fetch(evolutionUrl, {
       method: 'POST',
@@ -98,12 +99,7 @@ Deno.serve(async (req) => {
         'apikey': whatsappConfig.evolution_api_key,
       },
       body: JSON.stringify({
-        message: {
-          key: {
-            remoteJid: message.numero,
-            id: messageId,
-          }
-        },
+        url: message.midia_url,
         convertToMp4: message.tipo_mensagem === 'video'
       })
     });
