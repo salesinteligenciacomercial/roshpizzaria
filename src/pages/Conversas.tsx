@@ -30,7 +30,6 @@ import { MessageItem } from "@/components/conversas/MessageItem";
 import { AudioRecorder } from "@/components/conversas/AudioRecorder";
 import { MediaUpload } from "@/components/conversas/MediaUpload";
 import { NovaConversaDialog } from "@/components/conversas/NovaConversaDialog";
-import { EditarInformacoesLeadDialog } from "@/components/conversas/EditarInformacoesLeadDialog";
 import { ResponsaveisManager } from "@/components/conversas/ResponsaveisManager";
 import { AgendaModal } from "@/components/agenda/AgendaModal";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
@@ -5225,17 +5224,6 @@ function Conversas() {
                           </div>
                         )}
                       </div>
-                      
-                      <EditarInformacoesLeadDialog 
-                        leadId={leadsVinculados[selectedConv.id] || leadsVinculados[safeFormatPhoneNumber(selectedConv.id)] || null}
-                        telefone={selectedConv.phoneNumber || selectedConv.id}
-                        nomeContato={selectedConv.contactName}
-                        onLeadUpdated={() => {
-                          // Recarregar dados da conversa após atualização
-                          verificarLeadVinculado(selectedConv);
-                          loadSupabaseConversations();
-                        }}
-                      />
                       {selectedConv.produto && (
                         <p className="text-sm text-muted-foreground mb-1">
                           <strong>Produto:</strong> {selectedConv.produto}

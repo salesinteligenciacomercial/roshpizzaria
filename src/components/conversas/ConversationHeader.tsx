@@ -1,13 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Phone, Video, Info, User, MessageSquare, Instagram, Facebook, FileText, DollarSign, RefreshCw, CheckCircle2, AlertCircle, Loader2, Check, Plus, Flag, MoreVertical, Edit, Save, Trash2 } from "lucide-react";
+import { Phone, Video, Info, User, MessageSquare, Instagram, Facebook, FileText, DollarSign, RefreshCw, CheckCircle2, AlertCircle, Loader2, Check, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader as UIDialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { EditarInformacoesLeadDialog } from "@/components/conversas/EditarInformacoesLeadDialog";
-import { toast } from "sonner";
 
  type SyncStatus = 'synced' | 'syncing' | 'error' | 'idle';
  type OnlineStatus = 'online' | 'offline' | 'unknown';
@@ -50,10 +47,9 @@ import { toast } from "sonner";
    onCriarLead,
    onFinalizeAtendimento,
    onlineStatus = 'unknown',
- }: ConversationHeaderProps) {
+  }: ConversationHeaderProps) {
    const [finalizeOpen, setFinalizeOpen] = useState(false);
    const [finalizeMessage, setFinalizeMessage] = useState("");
-  const [editLeadOpen, setEditLeadOpen] = useState(false);
 
    useEffect(() => {
      const saved = localStorage.getItem("continuum_finalize_template");
@@ -177,54 +173,8 @@ import { toast } from "sonner";
                </div>
              </div>
            </div>
-           {/* Ações */}
-           <div className="flex items-center gap-1">
-            {/* Menu de três pontos: editar, salvar, excluir */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" title="Ações do lead">
-                  <MoreVertical className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                {leadVinculado ? (
-                  <>
-                    <DropdownMenuItem onClick={() => setEditLeadOpen(true)}>
-                      <Edit className="h-4 w-4 mr-2" />
-                      Editar lead
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={async () => {
-                        try {
-                          const id = leadVinculado.id;
-                          if (!id) return;
-                          const { supabase } = await import("@/integrations/supabase/client");
-                          const { error } = await supabase
-                            .from('leads')
-                            .delete()
-                            .eq('id', id);
-                          if (error) throw error;
-                          toast.success('Lead excluído');
-                        } catch (e) {
-                          console.error('Erro ao excluir lead:', e);
-                          toast.error('Erro ao excluir lead');
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Excluir lead
-                    </DropdownMenuItem>
-                  </>
-                ) : (
-                  <DropdownMenuItem onClick={onCriarLead}>
-                    <Save className="h-4 w-4 mr-2" />
-                    Salvar lead no CRM
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* Ações */}
+            <div className="flex items-center gap-1">
              {onFinalizeAtendimento && (
                <Dialog open={finalizeOpen} onOpenChange={setFinalizeOpen}>
                  <DialogTrigger asChild>
@@ -344,21 +294,10 @@ import { toast } from "sonner";
                )}
              </div>
            </div>
-         )}
-       </div>
-      {/* Dialogo de edição de lead controlado pelo menu */}
-      {leadVinculado && (
-        <EditarInformacoesLeadDialog
-          leadId={leadVinculado.id || null}
-          telefone={leadVinculado.telefone || leadVinculado.phone || ''}
-          nomeContato={contactName}
-          onLeadUpdated={() => {
-            toast.success('Lead atualizado');
-          }}
-        />
-      )}
-     </div>
-   );
- }
+          )}
+        </div>
+      </div>
+    );
+  }
 
 
