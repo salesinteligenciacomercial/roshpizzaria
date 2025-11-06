@@ -68,8 +68,8 @@ Deno.serve(async (req) => {
 
     // Buscar configuração da instância WhatsApp
     const { data: whatsappConfig } = await supabase
-      .from('whatsapp_instances')
-      .select('instance_name, api_url, api_key')
+      .from('whatsapp_connections')
+      .select('instance_name, evolution_api_url, evolution_api_key')
       .eq('company_id', message.company_id)
       .eq('status', 'connected')
       .single();
@@ -89,13 +89,13 @@ Deno.serve(async (req) => {
     console.log('📡 [DOWNLOAD-MEDIA] Instância:', whatsappConfig.instance_name);
 
     // Usar Evolution API para baixar mídia criptografada
-    const evolutionUrl = `${whatsappConfig.api_url}/chat/getBase64FromMediaMessage/${whatsappConfig.instance_name}`;
+    const evolutionUrl = `${whatsappConfig.evolution_api_url}/chat/getBase64FromMediaMessage/${whatsappConfig.instance_name}`;
     
     const response = await fetch(evolutionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': whatsappConfig.api_key,
+        'apikey': whatsappConfig.evolution_api_key,
       },
       body: JSON.stringify({
         message: {
