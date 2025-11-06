@@ -99,14 +99,35 @@ export async function syncContactsToDatabase(
   companyId: string
 ): Promise<void> {
   try {
-    const leadsToUpsert = contacts.map((contact) => ({
-      phone: contact.id.replace("@s.whatsapp.net", ""),
-      name: contact.pushName || contact.id.split("@")[0],
-      company_id: companyId,
-      source: "whatsapp",
-      status: "novo",
-      stage: "prospeccao",
-    }));
+    // Filtrar apenas contatos válidos (não grupos)
+    const validContacts = contacts.filter(contact => 
+      contact.id && 
+      !contact.id.includes('@g.us') && // Excluir grupos
+      contact.id.includes('@s.whatsapp.net') // Apenas contatos individuais
+    );
+
+    console.log(`📋 Contatos válidos para sincronizar: ${validContacts.length} de ${contacts.length}`);
+
+    const leadsToUpsert = validContacts.map((contact) => {
+      const phone = contact.id.replace("@s.whatsapp.net", "");
+      const name = contact.pushName && contact.pushName.trim() !== '' 
+        ? contact.pushName 
+        : phone; // Se não tem pushName, usar o telefone mesmo
+
+      return {
+        phone,
+        name,
+        company_id: companyId,
+        source: "whatsapp",
+        status: "novo",
+        stage: "prospeccao",
+      };
+    });
+
+    if (leadsToUpsert.length === 0) {
+      console.log("⚠️ Nenhum contato válido para sincronizar");
+      return;
+    }
 
     const { error } = await supabase
       .from("leads")

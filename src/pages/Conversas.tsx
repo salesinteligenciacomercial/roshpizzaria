@@ -2529,6 +2529,7 @@ function Conversas() {
 
       console.log("🔄 Sincronizando contatos da instância:", instanceName);
       const contacts = await evolutionAPI.getContacts(instanceName);
+      console.log("📱 Contatos recebidos da Evolution API:", contacts.length);
       
       if (contacts.length > 0) {
         await evolutionAPI.syncContactsToDatabase(contacts, companyId);
@@ -2638,13 +2639,26 @@ function Conversas() {
       // 🆕 SINCRONIZAR CONTATOS DO WHATSAPP
       await syncWhatsAppContacts(userRole.company_id);
       
-      // ETAPA 2: Buscar APENAS colunas essenciais (não usar select('*'))
+      // ETAPA 2A: Buscar TODOS os leads/contatos sincronizados do WhatsApp
+      const { data: leadsData, error: leadsError } = await supabase
+        .from('leads')
+        .select('id, phone, name, source')
+        .eq('company_id', userRole.company_id)
+        .eq('source', 'whatsapp')
+        .order('created_at', { ascending: false });
+
+      if (leadsError) {
+        console.error('❌ Erro ao buscar leads:', leadsError);
+      }
+
+      console.log("📋 Total de contatos WhatsApp sincronizados:", leadsData?.length || 0);
+      
+      // ETAPA 2B: Buscar conversas com mensagens
       const { data, error } = await supabase
         .from('conversas')
         .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, updated_at, is_group, midia_url, fromme')
         .eq('company_id', userRole.company_id)
-        .order('created_at', { ascending: false })
-        .limit(20); // REDUZIDO para 20 conversas
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('❌ Erro:', error);
@@ -2664,9 +2678,10 @@ function Conversas() {
         return isValid;
       });
 
+      // ETAPA 3: Agrupar conversas existentes por telefone
+      const conversasAgrupadas = new Map<string, any[]>();
+      
       if (validData && validData.length > 0) {
-        // ETAPA 4: Agrupar conversas por telefone
-        const conversasAgrupadas = new Map<string, any[]>();
         validData.forEach(conv => {
           const isGroup = conv.is_group || /@g\.us$/.test(conv.numero || '');
           const key = isGroup ? conv.numero : (conv.telefone_formatado || conv.numero.replace(/[^0-9]/g, ''));
@@ -2676,52 +2691,86 @@ function Conversas() {
           }
           conversasAgrupadas.get(key)!.push(conv);
         });
-        
-        console.log(`📊 ${conversasAgrupadas.size} conversas agrupadas em ${(performance.now() - startTime).toFixed(0)}ms`);
+      }
+      
+      console.log(`📊 ${conversasAgrupadas.size} conversas com mensagens em ${(performance.now() - startTime).toFixed(0)}ms`);
 
-        // ETAPA 5: Converter para UI (COM placeholders primeiro)
-        const novasConversas: Conversation[] = [];
+      // ETAPA 4: Criar mapa de todos os contatos (leads + conversas)
+      const todosContatos = new Map<string, { name: string; phone: string; leadId?: string }>();
+      
+      // Adicionar todos os leads do WhatsApp
+      (leadsData || []).forEach(lead => {
+        const phoneKey = lead.phone.replace(/[^0-9]/g, '');
+        if (!todosContatos.has(phoneKey)) {
+          todosContatos.set(phoneKey, {
+            name: lead.name,
+            phone: lead.phone,
+            leadId: lead.id
+          });
+        }
+      });
+
+      console.log(`📱 Total de contatos únicos: ${todosContatos.size}`);
+
+      // ETAPA 5: Converter para UI (incluindo contatos sem mensagens)
+      const novasConversas: Conversation[] = [];
         
-        for (const [telefone, mensagens] of conversasAgrupadas.entries()) {
-          const ultima = mensagens[0];
-          const isGroupConv = ultima.is_group || /@g\.us$/.test(telefone);
+        // Processar TODOS os contatos (com ou sem mensagens)
+        for (const [telefone, contatoInfo] of todosContatos.entries()) {
+          const mensagens = conversasAgrupadas.get(telefone) || [];
+          const temMensagens = mensagens.length > 0;
           
-          // Nome do contato - preservar nome editado manualmente se existir no state
+          // Nome do contato: priorizar nome do lead sincronizado
           const conversaExistente = conversations.find(c => c.id === telefone);
           const nomeDoState = conversaExistente?.contactName;
-          const nomeDoBanco = ultima.nome_contato || 
-                             mensagens.find(m => m.nome_contato && m.nome_contato.trim() !== '')?.nome_contato || 
-                             telefone;
           
-          // Se já existe um nome no state E é diferente do telefone, preservar o nome editado
-          const contactName = (nomeDoState && nomeDoState !== telefone) ? nomeDoState : nomeDoBanco;
+          let contactName = contatoInfo.name; // Nome do lead (já vem do WhatsApp via Evolution)
+          
+          // Se tiver mensagens, verificar se tem um nome melhor
+          if (temMensagens) {
+            const ultima = mensagens[0];
+            const nomeDaMensagem = ultima.nome_contato || 
+                                   mensagens.find(m => m.nome_contato && m.nome_contato.trim() !== '')?.nome_contato;
+            
+            // Se tem nome da mensagem e é diferente de telefone, usar
+            if (nomeDaMensagem && nomeDaMensagem !== telefone && nomeDaMensagem.trim() !== '') {
+              contactName = nomeDaMensagem;
+            }
+          }
+          
+          // Se já existe um nome editado no state, preservar
+          if (nomeDoState && nomeDoState !== telefone && nomeDoState !== contactName) {
+            contactName = nomeDoState;
+          }
+          
+          const isGroupConv = false; // Contatos individuais apenas (grupos viriam da conversa)
           
           // Avatar placeholder (será atualizado depois)
-          const avatarUrl = isGroupConv 
-            ? `https://ui-avatars.com/api/?name=Grupo&background=10b981&color=fff`
-            : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`;
+          const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`;
           
-          // Formatar mensagens recentes (primeiras 20 para lista)
-          const messagensFormatadas: Message[] = mensagens.slice(0, 20).reverse().map(m => ({
-            id: m.id || `msg-${Date.now()}-${Math.random()}`,
-            content: m.mensagem || '',
-            type: (m.tipo_mensagem === 'texto' ? 'text' : (m.tipo_mensagem || 'text')) as any,
-            // CORREÇÃO: fromme = true OU status = 'Enviada' = mensagem do usuário
-            sender: ((m.fromme === true || m.status === 'Enviada') ? "user" : "contact") as "user" | "contact",
-            timestamp: new Date(m.created_at || Date.now()),
-            delivered: true,
-            read: m.status !== 'Recebida',
-            mediaUrl: m.midia_url,
-          }));
+          // Formatar mensagens (se houver)
+          const messagensFormatadas: Message[] = temMensagens 
+            ? mensagens.slice(0, 20).reverse().map(m => ({
+                id: m.id || `msg-${Date.now()}-${Math.random()}`,
+                content: m.mensagem || '',
+                type: (m.tipo_mensagem === 'texto' ? 'text' : (m.tipo_mensagem || 'text')) as any,
+                sender: ((m.fromme === true || m.status === 'Enviada') ? "user" : "contact") as "user" | "contact",
+                timestamp: new Date(m.created_at || Date.now()),
+                delivered: true,
+                read: m.status !== 'Recebida',
+                mediaUrl: m.midia_url,
+              }))
+            : [];
 
           novasConversas.push({
             id: telefone,
             contactName,
             channel: "whatsapp",
-            status: "waiting",
-            lastMessage: messagensFormatadas[messagensFormatadas.length - 1]?.content || '',
-            // CORREÇÃO: Só contar mensagens não lidas que são do contato (não fromme e status Recebida)
-            unread: mensagens.filter(m => m.status === 'Recebida' && m.fromme !== true).length,
+            status: temMensagens ? "waiting" : "resolved", // Sem mensagens = resolved (inativo)
+            lastMessage: temMensagens 
+              ? (messagensFormatadas[messagensFormatadas.length - 1]?.content || '')
+              : 'Sem histórico de conversa',
+            unread: temMensagens ? mensagens.filter(m => m.status === 'Recebida' && m.fromme !== true).length : 0,
             messages: messagensFormatadas,
             tags: [],
             phoneNumber: telefone,
@@ -2730,34 +2779,33 @@ function Conversas() {
           });
         }
 
-        console.log(`✅ ${novasConversas.length} conversas processadas em ${(performance.now() - startTime).toFixed(0)}ms total`);
+        console.log(`✅ ${novasConversas.length} contatos/conversas processados em ${(performance.now() - startTime).toFixed(0)}ms total`);
         
-        setConversations(novasConversas);
-        loadCompanyMetrics();
+      setConversations(novasConversas);
+      loadCompanyMetrics();
 
-        // ETAPA 6: Buscar fotos de perfil de forma assíncrona (não bloquear UI)
-        console.log('📸 Buscando fotos de perfil de forma assíncrona...');
-        novasConversas.forEach(async (conv) => {
-          if (conv.phoneNumber) {
-            try {
-              const profilePicUrl = await getProfilePictureWithFallback(
-                conv.phoneNumber, 
-                userRole.company_id, 
-                conv.contactName
-              );
-              
-              if (profilePicUrl) {
-                // Atualizar apenas a conversa específica
-                setConversations(prev => prev.map(c => 
-                  c.id === conv.id ? { ...c, avatarUrl: profilePicUrl } : c
-                ));
-              }
-            } catch (error) {
-              console.error(`❌ Erro ao buscar foto de perfil para ${conv.phoneNumber}:`, error);
+      // ETAPA 6: Buscar fotos de perfil de forma assíncrona (não bloquear UI)
+      console.log('📸 Buscando fotos de perfil de forma assíncrona...');
+      novasConversas.forEach(async (conv) => {
+        if (conv.phoneNumber) {
+          try {
+            const profilePicUrl = await getProfilePictureWithFallback(
+              conv.phoneNumber, 
+              userRole.company_id, 
+              conv.contactName
+            );
+            
+            if (profilePicUrl) {
+              // Atualizar apenas a conversa específica
+              setConversations(prev => prev.map(c => 
+                c.id === conv.id ? { ...c, avatarUrl: profilePicUrl } : c
+              ));
             }
+          } catch (error) {
+            console.error(`❌ Erro ao buscar foto de perfil para ${conv.phoneNumber}:`, error);
           }
-        });
-      }
+        }
+      });
     } catch (error) {
       console.error('Erro ao carregar conversas:', error);
     }
