@@ -273,6 +273,48 @@ serve(async (req) => {
       console.log(validatedData.quoted ? "💬 Enviando texto com citação" : "💬 Enviando texto");
     }
 
+    // Verificar se a instância existe antes de tentar enviar
+    console.log("🔍 Verificando se instância existe:", EVOLUTION_INSTANCE);
+    try {
+      const checkUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/instance/connectionState/${EVOLUTION_INSTANCE}`;
+      const checkRes = await fetch(checkUrl, {
+        method: "GET",
+        headers: {
+          "apikey": INSTANCE_API_KEY!,
+        },
+      });
+      
+      if (!checkRes.ok) {
+        console.error("❌ Instância não encontrada ou não conectada:", EVOLUTION_INSTANCE);
+        return new Response(
+          JSON.stringify({
+            error: `A instância WhatsApp "${EVOLUTION_INSTANCE}" não está conectada. Por favor, reconecte o WhatsApp nas Configurações.`,
+            code: "INSTANCE_NOT_CONNECTED",
+            instance: EVOLUTION_INSTANCE
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      const connectionState = await checkRes.json();
+      console.log("✅ Estado da conexão:", connectionState);
+      
+      if (connectionState.state !== 'open' && connectionState.instance?.state !== 'open') {
+        console.error("❌ WhatsApp não está conectado:", connectionState);
+        return new Response(
+          JSON.stringify({
+            error: `WhatsApp não está conectado. Por favor, escaneie o QR Code nas Configurações.`,
+            code: "WHATSAPP_NOT_CONNECTED",
+            state: connectionState
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } catch (verifyError) {
+      console.warn("⚠️ Não foi possível verificar o estado da instância:", verifyError);
+      // Continua mesmo se a verificação falhar - a Evolution pode não suportar este endpoint
+    }
+    
     // Função auxiliar para tentativas com endpoints alternativos (compatibilidade Evolution)
     const tryPost = async (urls: string[], payload: any) => {
       let lastError: any = null;
@@ -325,9 +367,18 @@ serve(async (req) => {
     const attempt = await tryPost(candidates, bodyPayload);
     if (!attempt.ok) {
       console.error("❌ Evolution API falhou em todos os endpoints candidatos:", attempt.lastError);
+      
+      // Mensagem de erro mais específica baseada no erro
+      let errorMessage = "Falha ao enviar mensagem. ";
+      if (attempt.lastError?.parsed?.response?.message?.[0]?.includes('does not exist')) {
+        errorMessage = `A instância WhatsApp "${EVOLUTION_INSTANCE}" não existe ou foi desconectada. Por favor, reconecte o WhatsApp nas Configurações.`;
+      } else if (attempt.lastError?.status === 404) {
+        errorMessage = `WhatsApp não conectado. Por favor, verifique a conexão nas Configurações.`;
+      }
+      
       return new Response(
         JSON.stringify({
-          error: "Falha ao enviar mensagem",
+          error: errorMessage,
           code: "EXTERNAL_API_ERROR",
           details: attempt.lastError
         }),
