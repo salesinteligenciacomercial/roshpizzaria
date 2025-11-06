@@ -754,6 +754,8 @@ function Conversas() {
                   ...prev,
                   messages: [...prev.messages, newMessage],
                   lastMessage: newMessage.content,
+                  // PRESERVAR nome editado manualmente - não sobrescrever com nome da mensagem
+                  contactName: prev.contactName,
                   // CORREÇÃO: NÃO incrementar unread quando conversa está aberta
                   unread: 0
                 };
@@ -766,6 +768,10 @@ function Conversas() {
                     ...conv,
                     messages: [...conv.messages, newMessage],
                     lastMessage: newMessage.content,
+                    // PRESERVAR nome editado manualmente - só atualizar se for o primeiro nome ou se veio vazio
+                    contactName: (conv.contactName && conv.contactName !== telefone) 
+                      ? conv.contactName 
+                      : (novaMensagem.nome_contato || conv.contactName),
                     // CORREÇÃO: NÃO incrementar unread quando conversa está aberta
                     unread: 0
                   };
@@ -2533,10 +2539,15 @@ function Conversas() {
           const ultima = mensagens[0];
           const isGroupConv = ultima.is_group || /@g\.us$/.test(telefone);
           
-          // Nome do contato - usar o nome da mensagem mais recente ou buscar no histórico
-          const contactName = ultima.nome_contato || 
+          // Nome do contato - preservar nome editado manualmente se existir no state
+          const conversaExistente = conversations.find(c => c.id === telefone);
+          const nomeDoState = conversaExistente?.contactName;
+          const nomeDoBanco = ultima.nome_contato || 
                              mensagens.find(m => m.nome_contato && m.nome_contato.trim() !== '')?.nome_contato || 
                              telefone;
+          
+          // Se já existe um nome no state E é diferente do telefone, preservar o nome editado
+          const contactName = (nomeDoState && nomeDoState !== telefone) ? nomeDoState : nomeDoBanco;
           
           // Avatar placeholder (será atualizado depois)
           const avatarUrl = isGroupConv 
