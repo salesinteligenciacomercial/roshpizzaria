@@ -2332,285 +2332,115 @@ function Conversas() {
 
   const loadSupabaseConversations = async () => {
     try {
-      console.log('🔄 [SUPABASE] Iniciando carregamento rápido de conversas...');
-      
+      console.log('🚀 [PERFORMANCE] Carregamento ultra-rápido iniciado...');
       const startTime = performance.now();
       
-      // Buscar company_id do usuário autenticado
+      // ETAPA 1: Buscar user e company_id (cached)
       const { data: { user } } = await supabase.auth.getUser();
-      
       if (!user) {
-        console.warn('⚠️ Usuário não autenticado');
         toast.error('Você precisa estar logado');
         return;
       }
       
-      // OTIMIZAÇÃO: Buscar company_id e conversas em paralelo
-      const [userRoleResult, conversasResult] = await Promise.all([
-        supabase
-          .from('user_roles')
-          .select('company_id')
-          .eq('user_id', user.id)
-          .maybeSingle(),
-        // Buscar conversas com limite menor para carregamento inicial rápido
-        supabase
-          .from('conversas')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(30) // REDUZIDO para 30 conversas iniciais
-      ]);
-
-      const { data: userRole } = userRoleResult;
-      const { data, error } = conversasResult;
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
       if (!userRole?.company_id) {
-        console.error('❌ Usuário sem company_id associado. User:', user.email);
-        toast.error('Erro: Usuário sem empresa associada. Entre em contato com o administrador.');
+        toast.error('Erro: Usuário sem empresa associada');
         return;
       }
 
-      // Salvar company_id no estado
       setUserCompanyId(userRole.company_id);
       
-      // FILTRAR apenas conversas da empresa do usuário
-      const conversasDaEmpresa = data?.filter(conv => conv.company_id === userRole.company_id) || [];
-      
+      // ETAPA 2: Buscar APENAS colunas essenciais (não usar select('*'))
+      const { data, error } = await supabase
+        .from('conversas')
+        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, updated_at, is_group, midia_url, fromme')
+        .eq('company_id', userRole.company_id)
+        .order('created_at', { ascending: false })
+        .limit(20); // REDUZIDO para 20 conversas
+
       if (error) {
-        console.error('❌ [SUPABASE] Erro ao carregar conversas:', error);
+        console.error('❌ Erro:', error);
         toast.error(`Erro ao carregar conversas: ${error.message}`);
         return;
       }
       
-      console.log(`✅ [SUPABASE] ${conversasDaEmpresa.length} conversas carregadas em ${(performance.now() - startTime).toFixed(0)}ms`);
+      console.log(`⚡ Query executada em ${(performance.now() - startTime).toFixed(0)}ms`);
 
-      // Filtrar mensagens com variáveis N8n não substituídas ou dados inválidos
-      const validData = conversasDaEmpresa.filter(conv => {
-        const hasInvalidVariables = 
-          conv.numero?.includes('{{') || conv.numero?.includes('$json') ||
-          conv.mensagem?.includes('{{') || conv.mensagem?.includes('$json');
-        
-        const hasInvalidData =
-          !conv.numero || conv.numero === '=' || conv.numero.trim() === '' ||
-          !conv.mensagem || conv.mensagem === '[object Object]' || conv.mensagem.trim() === '';
-        
-        // Validar destino
-        const isGroup = /@g\.us$/.test(String(conv.numero || ''));
-        const numeroLimpo = conv.numero?.replace(/[^0-9]/g, '') || '';
-        const isValidContact = numeroLimpo.length === 12 || numeroLimpo.length === 13;
-        const isValidDestination = isGroup || isValidContact;
-        
-        return !hasInvalidVariables && !hasInvalidData && isValidDestination;
+      // ETAPA 3: Filtrar e agrupar conversas (processamento local rápido)
+      const validData = (data || []).filter(conv => {
+        const isValid = 
+          conv.numero && 
+          !conv.numero.includes('{{') &&
+          conv.mensagem && 
+          !conv.mensagem.includes('{{');
+        return isValid;
       });
 
       if (validData && validData.length > 0) {
-        // OTIMIZAÇÃO: Buscar leads em paralelo
-        const numeros = [...new Set(validData.map(conv => conv.telefone_formatado || conv.numero).filter(Boolean))];
-        
-        const { data: leadsData } = await supabase
-          .from('leads')
-          .select('id, phone, telefone, name')
-          .eq('company_id', userRole.company_id)
-          .or(numeros.map(n => `phone.eq.${n},telefone.eq.${n}`).join(','))
-          .limit(100);
-
-        // Criar mapeamento rápido
-        const leadsMap = new Map<string, any>();
-        leadsData?.forEach(lead => {
-          const phones = [lead.phone, lead.telefone].filter(Boolean);
-          phones.forEach(phone => {
-            if (phone) leadsMap.set(phone, lead);
-          });
+        // ETAPA 4: Agrupar conversas por telefone
+        const conversasAgrupadas = new Map<string, any[]>();
+        validData.forEach(conv => {
+          const isGroup = conv.is_group || /@g\.us$/.test(conv.numero || '');
+          const key = isGroup ? conv.numero : (conv.telefone_formatado || conv.numero.replace(/[^0-9]/g, ''));
+          
+          if (!conversasAgrupadas.has(key)) {
+            conversasAgrupadas.set(key, []);
+          }
+          conversasAgrupadas.get(key)!.push(conv);
         });
         
-        setLeadsVinculados(leadsMap as any);
+        console.log(`📊 ${conversasAgrupadas.size} conversas agrupadas em ${(performance.now() - startTime).toFixed(0)}ms`);
 
-        // Agrupar mensagens por destino: E.164 (contatos) ou JID completo (grupos)
-        const conversasAgrupadas = validData.reduce((acc: Record<string, any[]>, conv: any) => {
-          const isGroup = Boolean(conv.is_group) || /@g\.us$/.test(String(conv.numero || ''));
-          const chaveAgrupamento = isGroup
-            ? String(conv.numero)
-            : (conv.telefone_formatado || normalizePhoneForWA(conv.numero));
-          if (!chaveAgrupamento) return acc;
-          if (!isGroup) {
-            const onlyDigits = String(chaveAgrupamento).replace(/[^0-9]/g, '');
-            if (onlyDigits.length < 12 || onlyDigits.length > 13) {
-            console.warn('⚠️ Ignorando conversa com número inválido:', chaveAgrupamento);
-            return acc;
-          }
-          }
-          if (!acc[chaveAgrupamento]) {
-            acc[chaveAgrupamento] = [];
-          }
-          acc[chaveAgrupamento].push(conv);
-          return acc;
-        }, {});
+        // ETAPA 5: Converter para UI (SEM await - fotos lazy load)
+        const novasConversas: Conversation[] = [];
         
-        console.log('📊 Agrupamento de conversas:', {
-          totalGrupos: Object.keys(conversasAgrupadas).length,
-          grupos: Object.entries(conversasAgrupadas).map(([tel, msgs]) => ({
-            telefone: tel,
-            quantidadeMensagens: msgs.length
-          }))
-        });
+        for (const [telefone, mensagens] of conversasAgrupadas.entries()) {
+          const ultima = mensagens[0];
+          const isGroupConv = ultima.is_group || /@g\.us$/.test(telefone);
+          
+          // Nome do contato
+          const contactName = mensagens.find(m => m.nome_contato)?.nome_contato || telefone;
+          
+          // Avatar placeholder (sem buscar foto)
+          const avatarUrl = isGroupConv 
+            ? `https://ui-avatars.com/api/?name=Grupo&background=10b981&color=fff`
+            : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`;
+          
+          // Formatar mensagens (limitar a 50)
+          const messagensFormatadas: Message[] = mensagens.slice(0, 50).reverse().map(m => ({
+            id: m.id || `msg-${Date.now()}-${Math.random()}`,
+            content: m.mensagem || '',
+            type: (m.tipo_mensagem === 'texto' ? 'text' : (m.tipo_mensagem || 'text')) as any,
+            sender: ((m.status === 'Enviada' || m.fromme) ? "user" : "contact") as "user" | "contact",
+            timestamp: new Date(m.created_at || Date.now()),
+            delivered: true,
+            read: m.status !== 'Recebida',
+            mediaUrl: m.midia_url,
+          }));
 
-        // Buscar leads vinculados para obter nomes atualizados
-        // Buscar leads apenas para chaves de contato (somente dígitos)
-        const telefonesNormalizados = Object.keys(conversasAgrupadas).filter(k => /^[0-9]{12,13}$/.test(k));
-        const { data: leadsVinculados } = await supabase
-          .from('leads')
-          .select('id, name, phone, telefone')
-          .eq('company_id', userRole?.company_id)
-          .or(telefonesNormalizados.map(tel => `phone.eq.${tel},telefone.eq.${tel}`).join(','));
-
-        // Criar mapa de telefone -> nome do lead
-        const leadNamesMap: Record<string, string> = {};
-        if (leadsVinculados) {
-          leadsVinculados.forEach(lead => {
-            const phone = lead.phone || lead.telefone;
-            if (phone && lead.name) {
-              const phoneNormalizado = phone.replace(/[^0-9]/g, '');
-              leadNamesMap[phoneNormalizado] = lead.name;
-            }
+          novasConversas.push({
+            id: telefone,
+            contactName,
+            channel: "whatsapp",
+            status: "waiting",
+            lastMessage: messagensFormatadas[messagensFormatadas.length - 1]?.content || '',
+            unread: mensagens.filter(m => m.status === 'Recebida' && !m.fromme).length,
+            messages: messagensFormatadas,
+            tags: [],
+            phoneNumber: telefone,
+            avatarUrl,
+            isGroup: isGroupConv
           });
         }
 
-        // Converter para formato local
-        const novasConversas: Conversation[] = await Promise.all(
-          Object.entries(conversasAgrupadas).map(async ([telefoneNormalizado, mensagens]) => {
-            const ultima = mensagens[0];
-            const numeroOriginal = ultima.numero;
-            
-            // PRIORIDADE: 1º Nome do Lead no CRM, 2º Nome da conversa, 3º Número
-            let contactName = leadNamesMap[telefoneNormalizado]; // PRIORIZAR LEAD
-            
-            if (!contactName) {
-              // Se não tem lead, buscar nome mais recente das mensagens
-              const nomeValido = mensagens
-                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                .find(m => m.nome_contato && m.nome_contato.trim() !== '' && m.nome_contato !== numeroOriginal)
-                ?.nome_contato;
-              
-              contactName = nomeValido || ultima.nome_contato || numeroOriginal;
-            }
-            
-            console.log('📝 Nome do contato determinado:', {
-              telefone: telefoneNormalizado,
-              nomeEscolhido: contactName,
-              totalMensagens: mensagens.length,
-              nomesDisponiveis: mensagens.map(m => m.nome_contato).filter(Boolean)
-            });
-            
-            // OTIMIZAÇÃO: Buscar foto apenas quando necessário (lazy loading)
-            const avatarUrl = await getProfilePictureWithFallback(numeroOriginal, userRole.company_id, contactName);
-            const isGroupConv = Boolean(ultima.is_group) || /@g\.us$/.test(String(telefoneNormalizado));
-            
-            const contentToIdMap = new Map<string, string>();
-            const messagensFormatadas = [...mensagens].reverse().map(m => {
-              const msgContent = m.mensagem || 'Sem conteúdo';
-              let msgType = m.tipo_mensagem || 'text';
-              
-              // Normalizar tipos
-              if (msgType === 'texto') msgType = 'text';
-              if (msgType === 'document') msgType = 'pdf';
-              
-              // Calcular replyTo id com base no conteúdo citado (melhor esforço)
-              const repliedText = m.replied_to_message || undefined;
-              const replyToId = repliedText ? contentToIdMap.get(repliedText) : undefined;
-              
-              // Extrair nome do arquivo de documentos
-              let fileName: string | undefined;
-              if (msgType === 'pdf' && msgContent.includes('[Documento:')) {
-                fileName = msgContent.match(/\[Documento: (.+)\]/)?.[1];
-              }
-              
-              const created = {
-                id: m.id,
-                content: msgContent,
-                type: msgType as "text" | "image" | "audio" | "pdf" | "video" | "document" | "contact",
-                sender: m.status === 'Enviada' ? 'user' : 'contact' as "user" | "contact",
-                timestamp: new Date(m.created_at),
-                delivered: true,
-                read: m.status === 'Lida',
-                mediaUrl: m.midia_url || undefined,
-                fileName: fileName || m.arquivo_nome || undefined,
-                mimeType: m.midia_url ? (m.midia_url.match(/data:([^;]+)/)?.[1] || undefined) : undefined,
-                replyTo: replyToId,
-                transcricao: m.transcricao || undefined,
-              } as const;
-              // Atualizar mapa após criar a mensagem para preferir a última ocorrência
-              contentToIdMap.set(msgContent, m.id);
-              return created as unknown as Message;
-            });
-          
-            console.log('📦 Conversa formatada completa:', {
-              telefoneNormalizado,
-              numeroOriginal,
-              contactName,
-              totalMensagens: messagensFormatadas.length,
-              primeiroContent: messagensFormatadas[0]?.content,
-              todasMensagens: messagensFormatadas.map(m => ({ id: m.id, content: m.content }))
-            });
-            
-            return {
-              id: telefoneNormalizado, // USAR TELEFONE NORMALIZADO como ID
-              phoneNumber: telefoneNormalizado, // Armazenar também em phoneNumber
-              contactName: contactName,
-              channel: (ultima.origem.toLowerCase() === 'whatsapp' ? 'whatsapp' : 
-                       ultima.origem.toLowerCase() === 'instagram' ? 'instagram' : 'facebook') as "whatsapp" | "instagram" | "facebook",
-              lastMessage: ultima.mensagem || '',
-              unread: mensagens.filter(m => m.status === 'Recebida').length,
-              status: ultima.status === 'Recebida' ? 'waiting' : 'answered' as "waiting" | "answered" | "resolved",
-              messages: messagensFormatadas,
-              tags: [],
-              funnelStage: "Novo",
-              avatarUrl: avatarUrl,
-              isGroup: isGroupConv,
-            };
-          })
-        );
-
-        console.log('📱 Novas conversas do Supabase:', novasConversas.length);
-        novasConversas.forEach(conv => {
-          console.log(`  - ${conv.contactName}: ${conv.messages.length} mensagens`);
-        });
+        console.log(`✅ ${novasConversas.length} conversas processadas em ${(performance.now() - startTime).toFixed(0)}ms total`);
         
-        setConversations(prev => {
-          // Mesclar com conversas existentes do localStorage
-          const merged = [...prev];
-          novasConversas.forEach(nova => {
-            const existingIndex = merged.findIndex(c => c.id === nova.id);
-            if (existingIndex >= 0) {
-              // PRIORIZAR mensagens do Supabase, manter metadados do localStorage
-              merged[existingIndex] = {
-                ...nova, // DADOS DO SUPABASE (mensagens, lastMessage, etc)
-                tags: merged[existingIndex].tags || nova.tags,
-                funnelStage: merged[existingIndex].funnelStage || nova.funnelStage,
-                responsavel: merged[existingIndex].responsavel,
-                produto: merged[existingIndex].produto,
-                valor: merged[existingIndex].valor,
-                anotacoes: merged[existingIndex].anotacoes,
-              };
-              console.log(`🔄 Conversa atualizada: ${nova.contactName}`);
-            } else {
-              merged.push(nova);
-              console.log(`➕ Nova conversa adicionada: ${nova.contactName}`);
-            }
-          });
-          
-          console.log(`📊 Total de conversas após merge: ${merged.length}`);
-          
-          // ATUALIZAR selectedConv se ela estiver aberta
-          if (selectedConv) {
-            const updated = merged.find(c => c.id === selectedConv.id);
-            if (updated) {
-              setSelectedConv(updated);
-            }
-          }
-          
-          return merged;
-        });
-
-        // Atualizar métricas da empresa após carregar conversas
+        setConversations(novasConversas);
         loadCompanyMetrics();
       }
     } catch (error) {
