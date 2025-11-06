@@ -416,13 +416,10 @@ function Conversas() {
 
   // MELHORIA: Wrapper enviar-whatsapp com retries e mapeamento de erros → toast
   const sendWhatsAppWithRetry = async (body: { company_id: string } & Record<string, any>): Promise<{ success: boolean; errorCode?: string; httpStatus?: number; message?: string; details?: any }> => {
-    console.log('📤 [ENVIO] Iniciando envio de mensagem...', { numero: body.numero, company_id: body.company_id });
     const maxRetries = 3;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`📤 [ENVIO] Tentativa ${attempt}/${maxRetries} - Chamando edge function...`);
         const res: any = await supabase.functions.invoke('enviar-whatsapp', { body });
-        console.log('📤 [ENVIO] Resposta da edge function:', { status: res?.status, hasData: !!res?.data, hasError: !!res?.error });
         const data = res?.data;
         const err = res?.error;
         // Tratar erros retornados como data
@@ -2015,16 +2012,13 @@ function Conversas() {
                   .or(`phone.eq.${telefoneFormatado},telefone.eq.${telefoneFormatado}`)
                   .maybeSingle();
                 
-                // PRIORIZAR NOME DO LEAD, depois nome da conversa existente, depois nome da mensagem
-                const conversaExistenteRealtime = conversations.find(c => c.id === telefoneNormalizado);
+                // PRIORIZAR NOME DO LEAD, depois nome da mensagem, depois número
                 const nomeValido = leadVinculadoRealtime?.name || 
-                                  (conversaExistenteRealtime?.contactName && conversaExistenteRealtime.contactName !== telefoneNormalizado
-                                    ? conversaExistenteRealtime.contactName
-                                    : (novaConversa.nome_contato && 
-                                       novaConversa.nome_contato.trim() !== '' && 
-                                       novaConversa.nome_contato !== novaConversa.numero
-                                        ? novaConversa.nome_contato 
-                                        : novaConversa.numero));
+                                  (novaConversa.nome_contato && 
+                                   novaConversa.nome_contato.trim() !== '' && 
+                                   novaConversa.nome_contato !== novaConversa.numero
+                                    ? novaConversa.nome_contato 
+                                    : novaConversa.numero);
                 
                 // Buscar foto de perfil da nova mensagem
                 let profilePic: string | undefined;
@@ -2164,11 +2158,6 @@ function Conversas() {
                       console.error('Erro ao marcar mensagem como lida (realtime):', e);
                     }
                   }
-                }
-                
-                // Mudar status para "waiting" quando receber mensagem do contato
-                if (novaConversa.status === 'Recebida' && !novaConversa.fromme) {
-                  novaConvFormatted.status = "waiting";
                 }
                 
                 // Notificar APENAS se for mensagem RECEBIDA do cliente (não quando o CRM envia) e a conversa não estiver aberta
@@ -2506,7 +2495,7 @@ function Conversas() {
       // ETAPA 2: Buscar APENAS colunas essenciais (não usar select('*'))
       const { data, error } = await supabase
         .from('conversas')
-        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, updated_at, is_group, midia_url, fromme, lead_id')
+        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, updated_at, is_group, midia_url, fromme')
         .eq('company_id', userRole.company_id)
         .order('created_at', { ascending: false })
         .limit(20); // REDUZIDO para 20 conversas
@@ -2547,50 +2536,19 @@ function Conversas() {
         // ETAPA 5: Converter para UI (COM placeholders primeiro)
         const novasConversas: Conversation[] = [];
         
-        // Buscar todos os lead_ids únicos para carregar nomes de uma vez
-        const leadIds = Array.from(new Set(
-          validData
-            .map(conv => conv.lead_id)
-            .filter(Boolean)
-        ));
-        
-        // Buscar todos os leads de uma vez (performance)
-        const leadsMap = new Map<string, any>();
-        if (leadIds.length > 0) {
-          const { data: leadsData } = await supabase
-            .from('leads')
-            .select('id, name, phone, telefone')
-            .in('id', leadIds);
-          
-          (leadsData || []).forEach(lead => {
-            leadsMap.set(lead.id, lead);
-          });
-        }
-        
         for (const [telefone, mensagens] of conversasAgrupadas.entries()) {
           const ultima = mensagens[0];
           const isGroupConv = ultima.is_group || /@g\.us$/.test(telefone);
           
-          // Buscar lead vinculado (se houver)
-          const leadVinculadoParaConversa = ultima.lead_id ? leadsMap.get(ultima.lead_id) : null;
-          
-          // Nome do contato - PRIORIZAR LEAD VINCULADO
+          // Nome do contato - preservar nome editado manualmente se existir no state
           const conversaExistente = conversations.find(c => c.id === telefone);
           const nomeDoState = conversaExistente?.contactName;
+          const nomeDoBanco = ultima.nome_contato || 
+                             mensagens.find(m => m.nome_contato && m.nome_contato.trim() !== '')?.nome_contato || 
+                             telefone;
           
-          // Ordem de prioridade: 1) Nome do Lead, 2) Nome do State (editado), 3) Nome do Banco, 4) Telefone
-          let contactName = telefone;
-          if (leadVinculadoParaConversa?.name) {
-            contactName = leadVinculadoParaConversa.name;
-          } else if (nomeDoState && nomeDoState !== telefone) {
-            contactName = nomeDoState;
-          } else {
-            const nomeDoBanco = ultima.nome_contato || 
-                               mensagens.find(m => m.nome_contato && m.nome_contato.trim() !== '' && m.nome_contato !== telefone)?.nome_contato;
-            if (nomeDoBanco && nomeDoBanco !== telefone) {
-              contactName = nomeDoBanco;
-            }
-          }
+          // Se já existe um nome no state E é diferente do telefone, preservar o nome editado
+          const contactName = (nomeDoState && nomeDoState !== telefone) ? nomeDoState : nomeDoBanco;
           
           // Avatar placeholder (será atualizado depois)
           const avatarUrl = isGroupConv 
@@ -2610,23 +2568,11 @@ function Conversas() {
             mediaUrl: m.midia_url,
           }));
 
-          // Determinar status baseado nas últimas mensagens
-          const ultimasMensagens = mensagens.slice(0, 5);
-          const temMensagemNaoLida = ultimasMensagens.some(m => m.status === 'Recebida' && m.fromme !== true);
-          const ultimaMensagemEnviada = ultimasMensagens.find(m => m.fromme === true || m.status === 'Enviada');
-          
-          let conversationStatus: "waiting" | "answered" | "resolved" = "waiting";
-          if (temMensagemNaoLida) {
-            conversationStatus = "waiting";
-          } else if (ultimaMensagemEnviada) {
-            conversationStatus = "answered";
-          }
-          
           novasConversas.push({
             id: telefone,
             contactName,
             channel: "whatsapp",
-            status: conversationStatus,
+            status: "waiting",
             lastMessage: messagensFormatadas[messagensFormatadas.length - 1]?.content || '',
             // CORREÇÃO: Só contar mensagens não lidas que são do contato (não fromme e status Recebida)
             unread: mensagens.filter(m => m.status === 'Recebida' && m.fromme !== true).length,
@@ -3509,18 +3455,12 @@ function Conversas() {
 
   const handleSendMessage = async (content?: string, type: Message["type"] = "text") => {
     const messageContent = content || messageInput.trim();
-    console.log('📝 [handleSendMessage] Iniciando...', { messageContent: messageContent.substring(0, 50), type, selectedConvId: selectedConv?.id });
-    if (!messageContent || !selectedConv) {
-      console.warn('⚠️ [handleSendMessage] Abortado - mensagem vazia ou sem conversa selecionada');
-      return;
-    }
+    if (!messageContent || !selectedConv) return;
 
     // Validar e formatar número
     try {
       const formattedPhone = formatPhoneNumber(selectedConv.id);
-      console.log('📱 [handleSendMessage] Telefone formatado:', formattedPhone);
     } catch (error: any) {
-      console.error('❌ [handleSendMessage] Erro ao formatar telefone:', error);
       toast.error(error.message);
       return;
     }
@@ -3575,8 +3515,6 @@ function Conversas() {
     // Enviar mensagem via Evolution API
     try {
       const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
-      console.log('📞 [handleSendMessage] Preparando envio...', { numeroNormalizado, tipo_mensagem: type });
-      
       const { data, error } = await enviarWhatsApp({
         numero: numeroNormalizado,
         ...mensagemParaEnviar,
@@ -3584,10 +3522,7 @@ function Conversas() {
         tipo_mensagem: type,
       });
 
-      console.log('📤 [handleSendMessage] Resultado do envio:', { hasData: !!data, hasError: !!error, data, error });
-
       if (error) {
-        console.error('❌ [handleSendMessage] Erro no envio:', error);
         // Wrapper já exibiu o toast de erro específico
         return;
       }
@@ -4898,17 +4833,12 @@ function Conversas() {
   };
 
   const enviarWhatsApp = async (body: any) => {
-    console.log('🔑 [enviarWhatsApp] Obtendo company_id...');
     const companyId = await getCompanyId();
-    console.log('🔑 [enviarWhatsApp] Company ID obtido:', companyId);
-    
     // Usar wrapper com retry/timeout e retornar no formato compatível (data/error)
     const result = await sendWhatsAppWithRetry({
       company_id: companyId,
       ...body,
     });
-    console.log('📤 [enviarWhatsApp] Resultado do retry:', result);
-    
     if (result && result.success) {
       return { data: result, error: null } as const;
     }
@@ -4957,16 +4887,12 @@ function Conversas() {
         company_id: userRole?.company_id,
       }]);
 
-      // Atualizar estados para resolvido e persistir no banco de dados
+      // Atualizar estados para resolvido
       const updatedConv: Conversation = { ...selectedConv, status: 'resolved', lastMessage: mensagem };
       const updatedList = conversations.map(c => c.id === selectedConv.id ? updatedConv : c);
       saveConversations(updatedList);
       setConversations(updatedList);
       setSelectedConv(updatedConv);
-      
-      // Salvar status resolvido em um campo separado no banco para persistência
-      // (Por enquanto, o status será gerenciado apenas no frontend)
-      
       toast.success('Atendimento finalizado e mensagem enviada');
     } catch (e) {
       console.error('❌ Erro ao finalizar atendimento:', e);
@@ -5078,14 +5004,8 @@ function Conversas() {
               variant={filter === "waiting" ? "default" : "ghost"}
               size="sm"
               onClick={() => setFilter("waiting")}
-              className="relative"
             >
               Aguardando
-              {conversations.filter(c => c.status === "waiting" && !c.isGroup).length > 0 && (
-                <Badge className="ml-2 bg-destructive text-destructive-foreground">
-                  {conversations.filter(c => c.status === "waiting" && !c.isGroup).length}
-                </Badge>
-              )}
             </Button>
             <Button
               variant={filter === "answered" ? "default" : "ghost"}

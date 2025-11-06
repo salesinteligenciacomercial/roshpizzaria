@@ -136,9 +136,9 @@ serve(async (req) => {
         });
       }
 
-      console.log('📝 [CRIAR-USUARIO] Criando nova empresa (subconta independente)...');
+      console.log('📝 [CRIAR-USUARIO] Criando nova empresa...');
       
-      // Criar nova empresa SEPARADA com seus próprios dados
+      // Criar nova empresa
       const { data: newCompany, error: companyErr } = await supabaseAdmin
         .from('companies')
         .insert({
@@ -172,7 +172,7 @@ serve(async (req) => {
       }
 
       targetCompanyId = newCompany.id;
-      console.log('✅ [CRIAR-USUARIO] Empresa criada com company_id único:', targetCompanyId);
+      console.log('✅ [CRIAR-USUARIO] Empresa criada:', targetCompanyId);
     } else {
       // Criar usuário em empresa existente
       const isCompanyAdminSameCompany = roles?.some(r => r.role === 'company_admin' && r.company_id === companyId) || false;
