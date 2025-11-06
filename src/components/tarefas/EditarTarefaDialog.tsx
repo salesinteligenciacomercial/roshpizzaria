@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, Paperclip, Download, X, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,12 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Trash2, Plus } from "lucide-react";
 import { upsertCompromissoParaTarefa } from "@/services/tarefaService";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Task {
   id: string;
@@ -37,6 +39,7 @@ interface Task {
   tags?: string[];
   comments?: { id?: string; text: string; author_id?: string; created_at?: string }[];
   responsaveis?: string[];
+  attachments?: { name: string; url: string }[];
 }
 
 interface EditarTarefaDialogProps {
@@ -64,6 +67,9 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
   const [comments, setComments] = useState<{ id?: string; text: string; author_id?: string; created_at?: string }[]>(task.comments || []);
   const [newComment, setNewComment] = useState("");
   const [responsaveis, setResponsaveis] = useState<string[]>(task.responsaveis || []);
+  const [attachments, setAttachments] = useState<{ name: string; url: string }[]>(task.attachments || []);
+  const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [attachmentName, setAttachmentName] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -78,6 +84,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
       setTags(task.tags || []);
       setComments(task.comments || []);
       setResponsaveis(task.responsaveis || []);
+      setAttachments(task.attachments || []);
     }
   }, [open, task]);
 
@@ -144,6 +151,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
             tags,
             comments,
             responsaveis,
+            attachments,
           },
         },
       });
@@ -208,6 +216,28 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
     setNewComment("");
   };
 
+  const addAttachment = () => {
+    const url = attachmentUrl.trim();
+    const name = attachmentName.trim() || url;
+    if (!url) {
+      toast.error("Digite uma URL válida");
+      return;
+    }
+    try {
+      new URL(url);
+      setAttachments((prev) => [...prev, { name, url }]);
+      setAttachmentUrl("");
+      setAttachmentName("");
+      toast.success("Anexo adicionado");
+    } catch {
+      toast.error("URL inválida");
+    }
+  };
+
+  const removeAttachment = (url: string) => {
+    setAttachments((prev) => prev.filter((a) => a.url !== url));
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -220,11 +250,22 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
           <Pencil className="h-3 w-3" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>Editar Tarefa</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <Tabs defaultValue="geral" className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="geral">Geral</TabsTrigger>
+            <TabsTrigger value="checklist">Checklist</TabsTrigger>
+            <TabsTrigger value="comentarios">Comentários</TabsTrigger>
+            <TabsTrigger value="anexos">
+              Anexos {attachments.length > 0 && `(${attachments.length})`}
+            </TabsTrigger>
+          </TabsList>
+
+          <ScrollArea className="h-[calc(85vh-180px)] pr-4">
+            <TabsContent value="geral" className="space-y-4 mt-4">
           <div>
             <Label>Título *</Label>
             <Input
@@ -259,169 +300,269 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
             </div>
           </div>
 
-          <div>
-            <Label>Descrição</Label>
-            <Textarea
-              value={description}
-              onChange={(e) => {
-                setDescription(e.target.value);
-                if (errors.description) setErrors({ ...errors, description: "" });
-              }}
-              placeholder="Descreva a tarefa..."
-              rows={3}
-              className={errors.description ? "border-destructive" : ""}
-            />
-            {errors.description && (
-              <p className="text-xs text-destructive mt-1">{errors.description}</p>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">
-              {description.length}/500 caracteres
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Checklist</Label>
-            {checklist.length > 0 && (
-              <div className="mb-2">
-                <Progress value={(doneCount / totalCount) * 100} />
-                <p className="text-xs text-muted-foreground mt-1">{doneCount}/{checklist.length} concluído(s)</p>
+              <div>
+                <Label>Descrição</Label>
+                <Textarea
+                  value={description}
+                  onChange={(e) => {
+                    setDescription(e.target.value);
+                    if (errors.description) setErrors({ ...errors, description: "" });
+                  }}
+                  placeholder="Descreva a tarefa..."
+                  rows={2}
+                  className={errors.description ? "border-destructive" : ""}
+                />
+                {errors.description && (
+                  <p className="text-xs text-destructive mt-1">{errors.description}</p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {description.length}/500 caracteres
+                </p>
               </div>
-            )}
-            <div className="flex gap-2">
-              <Input
-                value={newItem}
-                onChange={(e) => setNewItem(e.target.value)}
-                placeholder="Adicionar item..."
-              />
-              <Button type="button" variant="outline" onClick={addChecklistItem}>
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="space-y-2 max-h-56 overflow-auto">
-              {checklist.map((item) => (
-                <div key={item.id} className="flex items-center gap-2 p-2 rounded border">
-                  <Checkbox checked={item.done} onCheckedChange={(v: any) => toggleChecklist(item.id!, !!v)} />
-                  <span className={`flex-1 text-sm ${item.done ? 'line-through text-muted-foreground' : ''}`}>{item.text}</span>
-                  <Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => removeChecklistItem(item.id!)}>
-                    <Trash2 className="h-4 w-4" />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Prioridade</Label>
+                  <Select value={priority} onValueChange={setPriority}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="baixa">Baixa</SelectItem>
+                      <SelectItem value="media">Média</SelectItem>
+                      <SelectItem value="alta">Alta</SelectItem>
+                      <SelectItem value="urgente">Urgente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Prazo</Label>
+                  <Input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => {
+                      setDueDate(e.target.value);
+                      if (errors.dueDate) setErrors({ ...errors, dueDate: "" });
+                    }}
+                    className={errors.dueDate ? "border-destructive" : ""}
+                  />
+                  {errors.dueDate && (
+                    <p className="text-xs text-destructive mt-1">{errors.dueDate}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Tags</Label>
+                <div className="flex gap-2">
+                  <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} placeholder="Adicionar tag..." />
+                  <Button type="button" variant="outline" size="icon" onClick={addTag}>
+                    <Plus className="h-4 w-4" />
                   </Button>
                 </div>
-              ))}
-              {checklist.length === 0 && (
-                <p className="text-xs text-muted-foreground">Nenhum item adicionado.</p>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Prioridade</Label>
-              <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="baixa">Baixa</SelectItem>
-                  <SelectItem value="media">Média</SelectItem>
-                  <SelectItem value="alta">Alta</SelectItem>
-                  <SelectItem value="urgente">Urgente</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Prazo</Label>
-              <Input
-                type="date"
-                value={dueDate}
-                onChange={(e) => {
-                  setDueDate(e.target.value);
-                  if (errors.dueDate) setErrors({ ...errors, dueDate: "" });
-                }}
-                className={errors.dueDate ? "border-destructive" : ""}
-              />
-              {errors.dueDate && (
-                <p className="text-xs text-destructive mt-1">{errors.dueDate}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Tags</Label>
-            <div className="flex gap-2">
-              <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} placeholder="Adicionar tag..." />
-              <Button type="button" variant="outline" onClick={addTag}>
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {tags.map((tag) => (
-                <span key={tag} className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
-                  {tag}
-                  <button className="ml-1 text-muted-foreground" onClick={() => removeTag(tag)}>×</button>
-                </span>
-              ))}
-              {tags.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tag adicionada.</p>}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Comentários</Label>
-            <div className="space-y-2 max-h-56 overflow-auto">
-              {comments.length === 0 && <p className="text-xs text-muted-foreground">Sem comentários.</p>}
-              {comments.map((c) => (
-                <div key={c.id} className="p-2 border rounded text-sm">
-                  <div className="text-xs text-muted-foreground mb-1">
-                    {c.created_at ? new Date(c.created_at).toLocaleString('pt-BR') : ''}
-                  </div>
-                  <div>{c.text}</div>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <span key={tag} className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                      {tag}
+                      <button className="ml-1 text-muted-foreground" onClick={() => removeTag(tag)}>×</button>
+                    </span>
+                  ))}
+                  {tags.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tag adicionada.</p>}
                 </div>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Escrever comentário..." />
-              <Button type="button" variant="outline" onClick={addComment}>Adicionar</Button>
-            </div>
-          </div>
+              </div>
 
-          <div>
-            <Label>Responsável</Label>
-            <Select value={assigneeId} onValueChange={setAssigneeId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione um responsável" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Nenhum</SelectItem>
-                {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.full_name}
-                  </SelectItem>
+              <div>
+                <Label>Responsável Principal</Label>
+                <Select value={assigneeId} onValueChange={setAssigneeId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um responsável" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {users.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Responsáveis Adicionais</Label>
+                <div className="grid grid-cols-2 gap-2 max-h-24 overflow-auto p-2 border rounded-md">
+                  {users.map((u) => (
+                    <label key={u.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={responsaveis.includes(u.id)}
+                        onChange={(e) => {
+                          setResponsaveis((prev) => (e.target as HTMLInputElement).checked ? [...prev, u.id] : prev.filter(id => id !== u.id));
+                        }}
+                      />
+                      {u.full_name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label>Lead Relacionado</Label>
+                <Select value={leadId} onValueChange={setLeadId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um lead" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {leads.map((lead) => (
+                      <SelectItem key={lead.id} value={lead.id}>
+                        {lead.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="checklist" className="space-y-4 mt-4">
+              {checklist.length > 0 && (
+                <div className="mb-2">
+                  <Progress value={(doneCount / totalCount) * 100} />
+                  <p className="text-xs text-muted-foreground mt-1">{doneCount}/{checklist.length} concluído(s)</p>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Input
+                  value={newItem}
+                  onChange={(e) => setNewItem(e.target.value)}
+                  placeholder="Adicionar item..."
+                  onKeyDown={(e) => e.key === "Enter" && addChecklistItem()}
+                />
+                <Button type="button" variant="outline" size="icon" onClick={addChecklistItem}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {checklist.map((item) => (
+                  <div key={item.id} className="flex items-center gap-2 p-2 rounded border">
+                    <Checkbox checked={item.done} onCheckedChange={(v: any) => toggleChecklist(item.id!, !!v)} />
+                    <span className={`flex-1 text-sm ${item.done ? 'line-through text-muted-foreground' : ''}`}>{item.text}</span>
+                    <Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => removeChecklistItem(item.id!)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
+                {checklist.length === 0 && (
+                  <p className="text-center text-sm text-muted-foreground py-8">Nenhum item adicionado.</p>
+                )}
+              </div>
+            </TabsContent>
 
-          <div>
-            <Label>Lead Relacionado</Label>
-            <Select value={leadId} onValueChange={setLeadId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione um lead" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Nenhum</SelectItem>
-                {leads.map((lead) => (
-                  <SelectItem key={lead.id} value={lead.id}>
-                    {lead.name}
-                  </SelectItem>
+            <TabsContent value="comentarios" className="space-y-4 mt-4">
+              <div className="flex gap-2">
+                <Input 
+                  value={newComment} 
+                  onChange={(e) => setNewComment(e.target.value)} 
+                  placeholder="Escrever comentário..."
+                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && addComment()}
+                />
+                <Button type="button" variant="outline" onClick={addComment}>Adicionar</Button>
+              </div>
+              <div className="space-y-2">
+                {comments.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Sem comentários.</p>}
+                {comments.map((c) => (
+                  <div key={c.id} className="p-3 border rounded text-sm bg-muted/20">
+                    <div className="text-xs text-muted-foreground mb-1">
+                      {c.created_at ? new Date(c.created_at).toLocaleString('pt-BR') : ''}
+                    </div>
+                    <div>{c.text}</div>
+                  </div>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
+              </div>
+            </TabsContent>
 
-          <Button onClick={handleSubmit} className="w-full">
-            Salvar Alterações
-          </Button>
-        </div>
+            <TabsContent value="anexos" className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label>Nome do Arquivo</Label>
+                <Input 
+                  value={attachmentName} 
+                  onChange={(e) => setAttachmentName(e.target.value)} 
+                  placeholder="Ex: Documento.pdf"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>URL do Arquivo</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    value={attachmentUrl} 
+                    onChange={(e) => setAttachmentUrl(e.target.value)} 
+                    placeholder="https://exemplo.com/arquivo.pdf"
+                  />
+                  <Button type="button" variant="outline" size="icon" onClick={addAttachment}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {attachments.length === 0 && (
+                  <div className="text-center py-8">
+                    <Paperclip className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">Nenhum anexo adicionado</p>
+                  </div>
+                )}
+                {attachments.map((att, index) => (
+                  <div key={index} className="flex items-center gap-2 p-3 border rounded bg-muted/20">
+                    <Paperclip className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{att.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{att.url}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => window.open(att.url, '_blank')}
+                      title="Abrir arquivo"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        const a = document.createElement('a');
+                        a.href = att.url;
+                        a.download = att.name;
+                        a.click();
+                      }}
+                      title="Baixar arquivo"
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() => removeAttachment(att.url)}
+                      title="Remover anexo"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+          </ScrollArea>
+
+          <div className="pt-4 border-t">
+            <Button onClick={handleSubmit} className="w-full">
+              Salvar Alterações
+            </Button>
+          </div>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
