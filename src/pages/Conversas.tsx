@@ -706,7 +706,7 @@ function Conversas() {
   useEffect(() => {
     if (!userCompanyId) return;
 
-    console.log('📡 Configurando assinatura realtime para conversas...');
+    console.log('📡 [REALTIME] Configurando assinatura para company_id:', userCompanyId);
 
     const channel = supabase
       .channel(`conversas-company-${userCompanyId}`)
@@ -719,36 +719,38 @@ function Conversas() {
           filter: `company_id=eq.${userCompanyId}` 
         },
         (payload) => {
-          console.log('📨 Nova mensagem recebida via realtime:', payload);
+          console.log('📨 [REALTIME] Nova mensagem recebida:', payload);
           
           if (payload.eventType === 'INSERT') {
             const novaMensagem = payload.new;
             
             // Verificar se é mensagem válida (sem variáveis não substituídas)
             if (!novaMensagem.mensagem || novaMensagem.mensagem.includes('{{')) {
-              console.log('⚠️ Mensagem ignorada (inválida)');
+              console.log('⚠️ [REALTIME] Mensagem ignorada (inválida)');
               return;
             }
+
+            console.log('✅ [REALTIME] Mensagem válida recebida de:', novaMensagem.numero);
 
             const isGroup = novaMensagem.is_group || /@g\.us$/.test(novaMensagem.numero || '');
             const telefone = isGroup ? novaMensagem.numero : (novaMensagem.telefone_formatado || novaMensagem.numero?.replace(/[^0-9]/g, ''));
             
             // CORREÇÃO: Identificar corretamente se a mensagem é do usuário ou do contato
-            // fromme = true OU status = 'Enviada' = mensagem do usuário
-            // fromme = false E status = 'Recebida' = mensagem do contato
             const isFromUser = novaMensagem.fromme === true || novaMensagem.status === 'Enviada';
             const isFromContact = !isFromUser;
             
-            console.log('📍 Identificação da mensagem:', {
+            console.log('📍 [REALTIME] Identificação:', {
+              telefone,
               fromme: novaMensagem.fromme,
               status: novaMensagem.status,
               isFromUser,
-              isFromContact
+              isFromContact,
+              conversaAberta: selectedConvRef.current?.id
             });
 
             // Se a conversa aberta corresponde a esta mensagem, adicionar diretamente
             if (selectedConvRef.current && selectedConvRef.current.id === telefone) {
-              console.log('✅ Adicionando mensagem à conversa aberta');
+              console.log('✅ [REALTIME] Adicionando mensagem à conversa aberta');
               
               // Atualizar status online se mensagem é do contato
               if (isFromContact) {
@@ -784,9 +786,7 @@ function Conversas() {
                   ...prev,
                   messages: [...prev.messages, newMessage],
                   lastMessage: newMessage.content,
-                  // PRESERVAR nome editado manualmente - não sobrescrever com nome da mensagem
                   contactName: prev.contactName,
-                  // CORREÇÃO: NÃO incrementar unread quando conversa está aberta
                   unread: 0
                 };
               });
@@ -798,11 +798,9 @@ function Conversas() {
                     ...conv,
                     messages: [...conv.messages, newMessage],
                     lastMessage: newMessage.content,
-                    // PRESERVAR nome editado manualmente - só atualizar se for o primeiro nome ou se veio vazio
                     contactName: (conv.contactName && conv.contactName !== telefone) 
                       ? conv.contactName 
                       : (novaMensagem.nome_contato || conv.contactName),
-                    // CORREÇÃO: NÃO incrementar unread quando conversa está aberta
                     unread: 0
                   };
                 }
@@ -814,13 +812,12 @@ function Conversas() {
                 messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
               }, 100);
             } else {
-              // Conversa não está aberta, apenas recarregar lista
-              console.log('📋 Recarregando lista de conversas');
+              // Conversa não está aberta, recarregar lista completa
+              console.log('📋 [REALTIME] Nova mensagem de conversa não aberta, recarregando lista...');
               loadSupabaseConversations();
             }
           } else if (payload.eventType === 'UPDATE') {
-            // Atualizar mensagem existente se necessário
-            console.log('🔄 Mensagem atualizada');
+            console.log('🔄 [REALTIME] Mensagem atualizada');
             const updatedMsg = payload.new;
             
             setSelectedConv(prev => {
@@ -841,11 +838,18 @@ function Conversas() {
         }
       )
       .subscribe((status) => {
-        console.log('📡 Status do canal realtime:', status);
+        console.log('📡 [REALTIME] Status do canal:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ [REALTIME] Canal conectado com sucesso!');
+        } else if (status === 'CLOSED') {
+          console.warn('⚠️ [REALTIME] Canal fechado!');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ [REALTIME] Erro no canal!');
+        }
       });
 
     return () => {
-      console.log('📡 Desconectando canal realtime');
+      console.log('📡 [REALTIME] Desconectando canal');
       supabase.removeChannel(channel);
     };
   }, [userCompanyId]);
@@ -2637,20 +2641,18 @@ function Conversas() {
 
       setUserCompanyId(userRole.company_id);
       
-      // ETAPA 2: Buscar leads e conversas em paralelo
+      // ETAPA 2: Buscar leads e conversas em paralelo (SEM LIMITES)
       const [leadsResult, conversasResult] = await Promise.all([
         supabase
           .from('leads')
           .select('id, phone, name, telefone')
           .eq('company_id', userRole.company_id)
-          .order('created_at', { ascending: false })
-          .limit(50), // Limitar a 50 contatos
+          .order('created_at', { ascending: false }),
         supabase
           .from('conversas')
           .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, midia_url, fromme')
           .eq('company_id', userRole.company_id)
           .order('created_at', { ascending: false })
-          .limit(500) // Limitar mensagens
       ]);
 
       if (leadsResult.error) {
