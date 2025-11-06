@@ -32,6 +32,8 @@ import { MediaUpload } from "@/components/conversas/MediaUpload";
 import { NovaConversaDialog } from "@/components/conversas/NovaConversaDialog";
 import { EditarInformacoesLeadDialog } from "@/components/conversas/EditarInformacoesLeadDialog";
 import { ResponsaveisManager } from "@/components/conversas/ResponsaveisManager";
+import { AgendaModal } from "@/components/agenda/AgendaModal";
+import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { formatPhoneNumber, safeFormatPhoneNumber } from "@/utils/phoneFormatter";
 import { useLeadsSync } from "@/hooks/useLeadsSync";
 import { useGlobalSync } from "@/hooks/useGlobalSync";
@@ -261,6 +263,8 @@ function Conversas() {
   // Estados para controle dos modais
   const [tarefasDialogOpen, setTarefasDialogOpen] = useState(false);
   const [reunioesDialogOpen, setReunioesDialogOpen] = useState(false);
+  const [agendaModalOpen, setAgendaModalOpen] = useState(false);
+  const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
   
   // CORREÇÃO: Estados para quadro e etapa (igual ao Funil de Vendas) - DEVE VIR ANTES DOS useEffects
   const [taskBoards, setTaskBoards] = useState<any[]>([]);
@@ -5915,6 +5919,34 @@ function Conversas() {
                         </Dialog>
 
                         {/* Schedule Meeting */}
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-start"
+                          onClick={async () => {
+                            // CORREÇÃO: Criar lead automaticamente ao abrir o modal
+                            if (!leadVinculado?.id && selectedConv) {
+                              setSyncStatus('syncing');
+                              const lead = await findOrCreateLead(selectedConv);
+                              if (lead) {
+                                setLeadVinculado(lead);
+                                setMostrarBotaoCriarLead(false);
+                                const phoneKey = selectedConv.phoneNumber || selectedConv.id;
+                                const formatted = safeFormatPhoneNumber(phoneKey);
+                                setLeadsVinculados(prev => ({
+                                  ...prev,
+                                  [phoneKey]: lead.id,
+                                  ...(formatted ? { [formatted]: lead.id } : {})
+                                }));
+                                toast.success('Lead vinculado automaticamente!');
+                              }
+                              setSyncStatus('idle');
+                            }
+                            setAgendaModalOpen(true);
+                          }}
+                        >
+                          <Calendar className="h-4 w-4 mr-2" /> Agendar Compromisso
+                        </Button>
+
                         <Dialog open={reunioesDialogOpen} onOpenChange={setReunioesDialogOpen}>
                           <DialogTrigger asChild>
                             <Button 
@@ -5942,7 +5974,7 @@ function Conversas() {
                                 setReunioesDialogOpen(true);
                               }}
                             >
-                              <Calendar className="h-4 w-4 mr-2" /> Gerenciar Reuniões
+                              <Calendar className="h-4 w-4 mr-2" /> Histórico de Reuniões
                             </Button>
                           </DialogTrigger>
                           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -6082,6 +6114,34 @@ function Conversas() {
                         </Dialog>
 
                         {/* Tarefas do Lead */}
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-start"
+                          onClick={async () => {
+                            // CORREÇÃO: Criar lead automaticamente ao abrir o modal
+                            if (!leadVinculado?.id && selectedConv) {
+                              setSyncStatus('syncing');
+                              const lead = await findOrCreateLead(selectedConv);
+                              if (lead) {
+                                setLeadVinculado(lead);
+                                setMostrarBotaoCriarLead(false);
+                                const phoneKey = selectedConv.phoneNumber || selectedConv.id;
+                                const formatted = safeFormatPhoneNumber(phoneKey);
+                                setLeadsVinculados(prev => ({
+                                  ...prev,
+                                  [phoneKey]: lead.id,
+                                  ...(formatted ? { [formatted]: lead.id } : {})
+                                }));
+                                toast.success('Lead vinculado automaticamente!');
+                              }
+                              setSyncStatus('idle');
+                            }
+                            setTarefaModalOpen(true);
+                          }}
+                        >
+                          <CheckSquare className="h-4 w-4 mr-2" /> Criar Tarefa
+                        </Button>
+
                         <Dialog open={tarefasDialogOpen} onOpenChange={setTarefasDialogOpen}>
                           <DialogTrigger asChild>
                             <Button 
@@ -6110,7 +6170,7 @@ function Conversas() {
                               }}
                               type="button"
                             >
-                              <CheckSquare className="h-4 w-4 mr-2" /> Tarefas do Lead
+                              <CheckSquare className="h-4 w-4 mr-2" /> Histórico de Tarefas
                               {leadTasks.length > 0 && (
                                 <Badge variant="secondary" className="ml-auto">
                                   {leadTasks.filter(t => t.status !== 'concluida').length}
@@ -6516,6 +6576,42 @@ function Conversas() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modais de Agenda e Tarefa com lead pré-selecionado */}
+      {leadVinculado && selectedConv && (
+        <>
+          <AgendaModal
+            open={agendaModalOpen}
+            onOpenChange={setAgendaModalOpen}
+            lead={{
+              id: leadVinculado.id,
+              nome: leadVinculado.name || selectedConv.contactName,
+              telefone: leadVinculado.phone || leadVinculado.telefone || selectedConv.phoneNumber,
+            }}
+            onAgendamentoCriado={() => {
+              setAgendaModalOpen(false);
+              loadMeetings();
+              toast.success('Compromisso criado e vinculado ao lead!');
+            }}
+          />
+
+          <TarefaModal
+            open={tarefaModalOpen}
+            onOpenChange={setTarefaModalOpen}
+            lead={{
+              id: leadVinculado.id,
+              nome: leadVinculado.name || selectedConv.contactName,
+            }}
+            onTarefaCriada={() => {
+              setTarefaModalOpen(false);
+              if (leadVinculado?.id) {
+                carregarTarefasDoLead(leadVinculado.id);
+              }
+              toast.success('Tarefa criada e vinculada ao lead!');
+            }}
+          />
+        </>
+      )}
     </div>
   );
 }
