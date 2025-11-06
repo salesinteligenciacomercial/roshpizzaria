@@ -15,12 +15,13 @@
 import React, { useState, useEffect, type ReactNode, useMemo, useCallback, useRef } from "react";
 import { DndContext, DragEndEvent, closestCorners, useDroppable, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
-import { Plus, Settings } from "lucide-react";
+import { Plus, Settings, Trash2, Pencil, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { TaskCard } from "@/components/tarefas/TaskCard";
 import { NovaTarefaDialog } from "@/components/tarefas/NovaTarefaDialog";
@@ -110,6 +111,7 @@ export default function Tarefas() {
   const [filterTag, setFilterTag] = useState<string>("");
   const [tasksPerColumn, setTasksPerColumn] = useState<Record<string, number>>({});
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
+  const [editarQuadroOpen, setEditarQuadroOpen] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const TASKS_PER_PAGE = 20; // ✅ OTIMIZAÇÃO: Aumentado de 10 para 20
@@ -784,13 +786,6 @@ export default function Tarefas() {
               <option key={tag} value={tag}>{tag}</option>
             ))}
           </select>
-          {selectedBoard && (
-            <EditarQuadroDialog
-              boardId={selectedBoard}
-              boardNome={boards.find((b) => b.id === selectedBoard)?.nome || ""}
-              onUpdated={carregarDados}
-            />
-          )}
           <Dialog open={dialogNovoBoard} onOpenChange={setDialogNovoBoard}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -823,18 +818,58 @@ export default function Tarefas() {
       {viewMode === 'board' && boards.length > 0 && (
         <div className="mb-6">
           <Label>Quadro</Label>
-          <select 
-            value={selectedBoard} 
-            onChange={(e) => setSelectedBoard(e.target.value)} 
-            className="w-full max-w-xs p-2 border rounded-md mt-2"
-          >
-            {boards.map((board) => (
-              <option key={board.id} value={board.id}>
-                {board.nome}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2 mt-2">
+            <select 
+              value={selectedBoard} 
+              onChange={(e) => setSelectedBoard(e.target.value)} 
+              className="flex-1 max-w-xs p-2 border rounded-md"
+            >
+              {boards.map((board) => (
+                <option key={board.id} value={board.id}>
+                  {board.nome}
+                </option>
+              ))}
+            </select>
+            
+            {selectedBoard && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setEditarQuadroOpen(true)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Editar Quadro
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setEditarQuadroOpen(true)}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Gerenciar Colunas
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => setEditarQuadroOpen(true)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Excluir Quadro
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
+      )}
+      
+      {selectedBoard && (
+        <EditarQuadroDialog
+          boardId={selectedBoard}
+          boardNome={boards.find((b) => b.id === selectedBoard)?.nome || ""}
+          onUpdated={carregarDados}
+          open={editarQuadroOpen}
+          onOpenChange={setEditarQuadroOpen}
+        />
       )}
 
       {viewMode === 'calendar' ? (

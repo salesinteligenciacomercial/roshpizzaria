@@ -35,10 +35,12 @@ interface EditarQuadroDialogProps {
   boardId: string;
   boardNome: string;
   onUpdated: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function EditarQuadroDialog({ boardId, boardNome, onUpdated }: EditarQuadroDialogProps) {
-  const [open, setOpen] = useState(false);
+export function EditarQuadroDialog({ boardId, boardNome, onUpdated, open: controlledOpen, onOpenChange: controlledOnOpenChange }: EditarQuadroDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [columns, setColumns] = useState<Column[]>([]);
   const [novoNomeQuadro, setNovoNomeQuadro] = useState(boardNome);
   const [novaColunaNome, setNovaColunaNome] = useState("");
@@ -49,6 +51,10 @@ export function EditarQuadroDialog({ boardId, boardNome, onUpdated }: EditarQuad
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteColumnId, setDeleteColumnId] = useState<string | null>(null);
   const [deleteBoardDialogOpen, setDeleteBoardDialogOpen] = useState(false);
+  
+  // Use controlled state if provided, otherwise use internal state
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange || setInternalOpen;
 
   useEffect(() => {
     if (open) {
@@ -201,12 +207,6 @@ export function EditarQuadroDialog({ boardId, boardNome, onUpdated }: EditarQuad
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button variant="outline">
-            <Settings className="mr-2 h-4 w-4" />
-            Configurar Quadro
-          </Button>
-        </DialogTrigger>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Configurar Quadro</DialogTitle>
