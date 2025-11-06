@@ -1,5 +1,8 @@
 project_id = "dteppsfseusqixuppglh"
 
+[functions.download-media]
+verify_jwt = false
+
 [functions.webhook-conversas]
 verify_jwt = false
 
