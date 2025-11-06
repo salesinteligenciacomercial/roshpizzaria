@@ -61,6 +61,7 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
           companyName: formData.name,
           cnpj: formData.cnpj,
           email: formData.email,
+          full_name: formData.responsavel, // Nome completo do administrador
           telefone: formData.telefone,
           responsavel: formData.responsavel,
           plan: formData.plan,
