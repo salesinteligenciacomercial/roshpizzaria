@@ -221,6 +221,20 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
 
       const etapaId = etapas[0].id;
 
+      // Buscar todos os usuários da empresa para validar responsáveis
+      const { data: companyUsers } = await supabase
+        .from("user_roles")
+        .select("user_id, profiles(email)")
+        .eq("company_id", userRole.company_id);
+
+      const userEmailMap = new Map<string, string>();
+      companyUsers?.forEach(ur => {
+        const email = (ur.profiles as any)?.email;
+        if (email) {
+          userEmailMap.set(email.toLowerCase(), ur.user_id);
+        }
+      });
+
       const reader = new FileReader();
       reader.onload = async (event) => {
         const text = event.target?.result as string;
@@ -309,6 +323,17 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
                 case 'nota':
                 case 'observacao':
                   lead.notes = value;
+                  break;
+                case 'responsavel':
+                case 'responsible':
+                case 'atribuido':
+                case 'assignee':
+                  // Mapear email para user_id
+                  const responsavelEmail = value.toLowerCase().trim();
+                  const responsavelId = userEmailMap.get(responsavelEmail);
+                  if (responsavelId) {
+                    lead.responsavel_id = responsavelId;
+                  }
                   break;
               }
             });
@@ -404,11 +429,13 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
               <br />
               <strong>Obrigatório:</strong> nome
               <br />
-              <strong>Opcionais:</strong> telefone, email, cpf, empresa, origem, valor, status, servico, segmentacao, tags, observacoes
+              <strong>Opcionais:</strong> telefone, email, cpf, empresa, origem, valor, status, servico, segmentacao, tags, observacoes, responsavel
               <br />
               • Separe múltiplas tags com ponto e vírgula (;) ou vírgula (,)
               <br />
               • O telefone será formatado automaticamente com código do Brasil (+55)
+              <br />
+              • Para o responsável, use o email do usuário da empresa
             </AlertDescription>
           </Alert>
 
