@@ -196,11 +196,11 @@ export function TarefaModal({ open, onOpenChange, lead, onTarefaCriada }: Tarefa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Nova Tarefa</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto pr-2 flex-1"  style={{ maxHeight: 'calc(90vh - 120px)' }}>
           {/* ✅ CRÍTICO: Select de Quadro no topo - NÃO REMOVER */}
           {boards.length > 0 && (
             <div>
@@ -334,7 +334,7 @@ export function TarefaModal({ open, onOpenChange, lead, onTarefaCriada }: Tarefa
             </Select>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex justify-end gap-2 pt-4 border-t sticky bottom-0 bg-background pb-2">
             <Button
               type="button"
               variant="outline"

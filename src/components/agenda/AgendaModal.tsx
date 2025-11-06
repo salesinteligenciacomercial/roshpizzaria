@@ -139,11 +139,11 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Agendar Compromisso</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto pr-2 flex-1" style={{ maxHeight: 'calc(90vh - 120px)' }}>
           <div>
             <Label htmlFor="titulo">Título *</Label>
             <Input
@@ -219,7 +219,7 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex justify-end gap-2 pt-4 border-t sticky bottom-0 bg-background pb-2">
             <Button
               type="button"
               variant="outline"
