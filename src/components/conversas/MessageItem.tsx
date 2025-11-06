@@ -1,4 +1,4 @@
-import { useState, memo } from "react";
+import { useState, memo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -22,6 +22,7 @@ import {
 import { MessageActions } from "./MessageActions";
 import { PDFPreview } from "./PDFPreview";
 import { toast } from "@/hooks/use-toast";
+import { getMediaUrl } from "@/utils/mediaLoader";
 
 interface Message {
   id: string;
@@ -82,10 +83,35 @@ function MessageItemComponent({
   const [showActions, setShowActions] = useState(false);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [pdfExpanded, setPdfExpanded] = useState(false);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
 
   const repliedMessage = message.replyTo && allMessages 
     ? allMessages.find(m => m.id === message.replyTo)
     : null;
+
+  // Carregar mídia quando componente montar
+  useEffect(() => {
+    if (message.mediaUrl && (message.type === 'image' || message.type === 'video' || message.type === 'audio')) {
+      setMediaLoading(true);
+      getMediaUrl(message.id)
+        .then((url) => {
+          setMediaUrl(url);
+          setMediaLoading(false);
+        })
+        .catch((error) => {
+          console.error('❌ Erro ao carregar mídia:', error);
+          setMediaLoading(false);
+        });
+    }
+
+    // Cleanup blob URL quando desmontar
+    return () => {
+      if (mediaUrl) {
+        URL.revokeObjectURL(mediaUrl);
+      }
+    };
+  }, [message.id, message.mediaUrl, message.type]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setDragStart(e.touches[0].clientX);
@@ -189,13 +215,24 @@ function MessageItemComponent({
           {/* Image Message */}
           {message.type === "image" && message.mediaUrl && (
             <div className="space-y-2">
-              <img
-                src={message.mediaUrl}
-                alt="Imagem"
-                className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
-                style={{ maxHeight: '400px', maxWidth: '300px' }}
-                onClick={() => onImageClick?.(message.mediaUrl!, `imagem-${message.id}`)}
-              />
+              {mediaLoading ? (
+                <div className="flex items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : mediaUrl ? (
+                <img
+                  src={mediaUrl}
+                  alt="Imagem"
+                  className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                  style={{ maxHeight: '400px', maxWidth: '300px' }}
+                  onClick={() => onImageClick?.(mediaUrl, `imagem-${message.id}`)}
+                />
+              ) : (
+                <div className="flex items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg">
+                  <AlertCircle className="h-8 w-8 text-destructive" />
+                  <span className="text-sm text-muted-foreground ml-2">Imagem indisponível</span>
+                </div>
+              )}
               {message.content && !message.content.includes('[Imagem]') && (
                 <p className="text-sm">{message.content}</p>
               )}
@@ -209,9 +246,26 @@ function MessageItemComponent({
                 <Volume2 className="h-4 w-4" />
                 <span className="text-sm font-medium">Mensagem de áudio</span>
               </div>
-              <audio controls className="w-full h-8" style={{ maxWidth: '300px' }}>
-                <source src={message.mediaUrl} />
-              </audio>
+              {mediaLoading ? (
+                <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-xs text-muted-foreground">Carregando áudio...</span>
+                </div>
+              ) : mediaUrl ? (
+                <audio 
+                  controls 
+                  className="w-full h-8" 
+                  style={{ maxWidth: '300px' }}
+                >
+                  <source src={mediaUrl} type="audio/ogg" />
+                  Seu navegador não suporta o elemento de áudio.
+                </audio>
+              ) : (
+                <div className="flex items-center gap-2 p-2 bg-destructive/10 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                  <span className="text-xs text-destructive">Áudio indisponível</span>
+                </div>
+              )}
               
               {/* MELHORIA: Indicador visual de status de transcrição */}
               {transcriptionStatus === "processing" && (
@@ -372,13 +426,25 @@ function MessageItemComponent({
           {/* Video Message */}
           {message.type === "video" && message.mediaUrl && (
             <div className="space-y-2">
-              <video
-                controls
-                className="rounded-lg max-w-full h-auto"
-                style={{ maxHeight: '400px', maxWidth: '300px' }}
-              >
-                <source src={message.mediaUrl} type={message.mimeType || 'video/mp4'} />
-              </video>
+              {mediaLoading ? (
+                <div className="flex items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : mediaUrl ? (
+                <video
+                  controls
+                  className="rounded-lg max-w-full h-auto"
+                  style={{ maxHeight: '400px', maxWidth: '300px' }}
+                >
+                  <source src={mediaUrl} type="video/mp4" />
+                  Seu navegador não suporta o elemento de vídeo.
+                </video>
+              ) : (
+                <div className="flex items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg">
+                  <AlertCircle className="h-8 w-8 text-destructive" />
+                  <span className="text-sm text-muted-foreground ml-2">Vídeo indisponível</span>
+                </div>
+              )}
             </div>
           )}
 
