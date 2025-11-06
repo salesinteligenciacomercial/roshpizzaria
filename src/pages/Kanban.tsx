@@ -352,20 +352,24 @@ export default function KanbanPage() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'etapas' }, (payload: any) => {
           console.log('📡 [REALTIME] Etapas:', payload.eventType);
 
-          // Filtrar mudanças irrelevantes
-          if (payload.eventType === 'UPDATE' && payload.new && payload.old) {
-            const changedFields = Object.keys(payload.new).filter(key =>
-              payload.new[key] !== payload.old[key]
-            );
-
-            // Ignorar mudanças apenas de posição ou timestamp
-            if (changedFields.length === 1 && (changedFields[0] === 'posicao' || changedFields[0] === 'updated_at')) {
-              console.log('⏭️ [REALTIME] Ignorando mudança de posição/timestamp');
-              return;
-            }
+          // Não ignorar mudanças de posição durante operação de drag
+          if (isMovingRef.current && payload.eventType === 'UPDATE') {
+            console.log('⏸️ [REALTIME] Ignorando atualização durante operação de drag');
+            return;
           }
 
-          refreshEtapas();
+          // Atualizar etapas quando houver mudanças
+          if (payload.eventType === 'INSERT') {
+            setEtapas(prev => {
+              // Evitar duplicatas
+              if (prev.some(e => e.id === payload.new.id)) return prev;
+              return [...prev, payload.new].sort((a, b) => a.posicao - b.posicao);
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setEtapas(prev => prev.map(e => e.id === payload.new.id ? payload.new : e).sort((a, b) => a.posicao - b.posicao));
+          } else if (payload.eventType === 'DELETE') {
+            setEtapas(prev => prev.filter(e => e.id !== payload.old.id));
+          }
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'funis' }, () => {
           console.log('📡 [REALTIME] Funis atualizados');
@@ -751,13 +755,13 @@ export default function KanbanPage() {
   const handleEtapaReorder = useCallback(async (activeId: string, overId: string) => {
     if (activeId === overId) return;
 
-    console.log('[REORDER] Iniciando reordenação:', { activeId, overId });
+    console.log('[REORDER] 🔄 Iniciando reordenação de etapas');
 
     const activeIndex = etapasFiltradas.findIndex(etapa => etapa.id === activeId);
     const overIndex = etapasFiltradas.findIndex(etapa => etapa.id === overId);
 
     if (activeIndex === -1 || overIndex === -1) {
-      console.error('[REORDER] Índices não encontrados:', { activeIndex, overIndex });
+      console.error('[REORDER] ❌ Índices não encontrados:', { activeIndex, overIndex });
       return;
     }
 
@@ -766,87 +770,83 @@ export default function KanbanPage() {
     const [movedEtapa] = reorderedEtapas.splice(activeIndex, 1);
     reorderedEtapas.splice(overIndex, 0, movedEtapa);
 
-    console.log('[REORDER] Nova ordem:', reorderedEtapas.map(e => e.nome));
+    console.log('[REORDER] 📋 Nova ordem:', reorderedEtapas.map((e, i) => `${i + 1}. ${e.nome}`));
 
-    // Atualizar posições no estado local primeiro
+    // Atualizar posições
     const updatedEtapas = reorderedEtapas.map((etapa, index) => ({
       ...etapa,
       posicao: index + 1
     }));
 
-    // Atualizar estado local
-    setEtapas(prev =>
-      prev.map(etapa =>
-        etapa.funil_id === selectedFunil
-          ? updatedEtapas.find(e => e.id === etapa.id) || etapa
-          : etapa
-      )
-    );
-
     try {
-      // ✅ BACKUP ATUALIZADO - 2024-11-01: Tenta RPC primeiro, fallback para updates individuais
-      // Desabilitar temporariamente o realtime para evitar conflitos
-      console.log('[REORDER] Iniciando reordenação - desabilitando realtime temporariamente');
+      // 🔒 Bloquear realtime durante reordenação
+      isMovingRef.current = true;
 
-      // ✅ Tentar usar RPC se existir (mais eficiente)
-      let rpcError = null;
-      if (selectedFunil) {
-        try {
-          const { error: rpcErr } = await supabase.rpc('reorder_etapas', {
-            p_funil_id: selectedFunil,
-            p_order: updatedEtapas.map(etapa => etapa.id)
-          });
-          if (rpcErr) {
-            console.warn('[REORDER] RPC reorder_etapas não disponível, usando updates individuais:', rpcErr);
-            rpcError = rpcErr;
-          } else {
-            console.log('[REORDER] Etapas reordenadas com sucesso via RPC');
-            toast.success('Etapas reordenadas com sucesso');
-            return; // Sucesso via RPC, não precisa fazer updates individuais
-          }
-        } catch (e) {
-          console.warn('[REORDER] RPC reorder_etapas não disponível, usando updates individuais');
-          rpcError = e;
+      // 🎨 Atualizar UI imediatamente (optimistic update)
+      setEtapas(prev =>
+        prev.map(etapa =>
+          etapa.funil_id === selectedFunil
+            ? updatedEtapas.find(e => e.id === etapa.id) || etapa
+            : etapa
+        )
+      );
+
+      // 💾 Atualizar no banco de dados
+      console.log('[REORDER] 💾 Atualizando posições no banco...');
+
+      // Tentar usar RPC primeiro (mais eficiente e atômico)
+      try {
+        const { error: rpcError } = await supabase.rpc('reorder_etapas', {
+          p_funil_id: selectedFunil,
+          p_order: updatedEtapas.map(etapa => etapa.id)
+        });
+
+        if (!rpcError) {
+          console.log('[REORDER] ✅ Etapas reordenadas com sucesso via RPC');
+          toast.success('Ordem das etapas atualizada');
+          return;
         }
+
+        console.warn('[REORDER] ⚠️ RPC falhou, usando método alternativo:', rpcError);
+      } catch (rpcErr) {
+        console.warn('[REORDER] ⚠️ RPC não disponível, usando método alternativo');
       }
 
-      // ✅ CRÍTICO: Fallback para updates individuais - NÃO REMOVER
-      // ✅ IMPORTANTE: Usa campo atualizado_em (NÃO updated_at)
-      const updates = updatedEtapas.map(etapa => ({
-        id: etapa.id,
-        posicao: etapa.posicao,
-        atualizado_em: new Date().toISOString() // ✅ CRÍTICO: atualizado_em não updated_at
-      }));
-
-      // Executar todas as atualizações em paralelo para ser mais rápido
-      const updatePromises = updates.map(update =>
+      // Fallback: atualizar cada etapa individualmente
+      const updatePromises = updatedEtapas.map(etapa =>
         supabase
           .from('etapas')
           .update({
-            posicao: update.posicao,
-            atualizado_em: update.atualizado_em // ✅ CRÍTICO: atualizado_em não updated_at
+            posicao: etapa.posicao,
+            atualizado_em: new Date().toISOString()
           })
-          .eq('id', update.id)
+          .eq('id', etapa.id)
       );
 
       const results = await Promise.all(updatePromises);
 
-      // Verificar se todas as atualizações foram bem-sucedidas
+      // Verificar erros
       const errors = results.filter(result => result.error);
       if (errors.length > 0) {
-        console.error('[REORDER] Erros nas atualizações:', errors);
+        console.error('[REORDER] ❌ Erros nas atualizações:', errors);
         throw new Error('Erro ao atualizar posições das etapas');
       }
 
-      console.log('[REORDER] Etapas reordenadas com sucesso no banco');
-      toast.success('Etapas reordenadas com sucesso');
+      console.log('[REORDER] ✅ Etapas reordenadas com sucesso');
+      toast.success('Ordem das etapas atualizada');
 
     } catch (error) {
-      console.error('[REORDER] Erro ao reordenar etapas:', error);
-      toast.error('Erro ao reordenar etapas - revertendo mudanças');
+      console.error('[REORDER] ❌ Erro ao reordenar etapas:', error);
+      toast.error('Erro ao reordenar etapas');
 
-      // Reverter mudanças locais em caso de erro
+      // 🔄 Reverter mudanças locais
+      console.log('[REORDER] 🔄 Revertendo mudanças...');
       await refreshEtapas();
+    } finally {
+      // 🔓 Desbloquear realtime após pequeno delay
+      setTimeout(() => {
+        isMovingRef.current = false;
+      }, 500);
     }
   }, [etapasFiltradas, selectedFunil]);
 
