@@ -95,6 +95,10 @@ serve(async (req) => {
 
     console.log('🔍 Buscando foto de perfil para:', number, 'instância:', instanceName);
 
+    // Verificar se é um grupo (termina com @g.us)
+    const isGroup = /@g\.us$/.test(String(number));
+    console.log('📋 Tipo de contato:', isGroup ? 'GRUPO' : 'CONTATO INDIVIDUAL');
+
     // Endpoint Evolution API v2
     const url = `${instanceApiUrl || evolutionUrl}/chat/fetchProfilePictureUrl/${instanceName}`;
     console.log('📡 Chamando Evolution API:', url);
@@ -106,7 +110,9 @@ serve(async (req) => {
         'apikey': instanceApiKey,
       },
       body: JSON.stringify({ 
-        number: String(number).replace(/\D/g, '') // Remove caracteres não numéricos
+        // Para grupos, manter o formato completo (com @g.us)
+        // Para contatos individuais, remover caracteres não numéricos
+        number: isGroup ? String(number) : String(number).replace(/\D/g, '')
       }),
     });
 

@@ -373,14 +373,12 @@ function Conversas() {
     return null;
   };
 
-  // MELHORIA: Avatar com cache + fallback; ignora grupos (@g.us)
+  // MELHORIA: Avatar com cache + fallback
   const getProfilePictureWithFallback = async (number: string, companyId: string, contactName: string): Promise<string | undefined> => {
     if (!number) return undefined;
-    if (/@g\.us$/.test(String(number))) {
-      // Grupos: usar placeholder
-      return `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'Grupo')}&background=10b981&color=fff`;
-    }
-    const normalized = normalizePhoneForWA(number);
+    
+    const isGroup = /@g\.us$/.test(String(number));
+    const normalized = isGroup ? number : normalizePhoneForWA(number);
     const cacheKey = `${companyId || 'no-company'}:${normalized}`;
     const cached = avatarCacheRef.current.get(cacheKey);
     if (cached) return cached;
@@ -396,16 +394,20 @@ function Conversas() {
           maxRetries: 2,
           timeout: 8000,
         fallback: () => {
-          return Promise.resolve({
-              profilePictureUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || normalized)}&background=10b981&color=fff`
-          });
+          // Fallback diferente para grupos e contatos individuais
+          const fallbackUrl = isGroup
+            ? `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'Grupo')}&background=10b981&color=fff`
+            : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || normalized)}&background=0ea5e9&color=fff`;
+          return Promise.resolve({ profilePictureUrl: fallbackUrl });
         },
           onError: (error) => {
             console.error('❌ [PROFILE-PICTURE] In-flight erro:', error);
           }
         }
       );
-      const url = result?.profilePictureUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || normalized)}&background=10b981&color=fff`;
+      const url = result?.profilePictureUrl || (isGroup 
+        ? `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'Grupo')}&background=10b981&color=fff`
+        : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || normalized)}&background=0ea5e9&color=fff`);
       avatarCacheRef.current.set(cacheKey, url);
       inflightAvatarPromisesRef.current.delete(cacheKey);
       return url;
@@ -531,11 +533,15 @@ function Conversas() {
     let filtered = conversations;
 
     // Aplicar filtro de status
-    if (filter !== "all" && filter !== "group") {
-      filtered = filtered.filter((conv) => conv.status === filter);
-    }
-    if (filter === "group") {
+    if (filter === "all") {
+      // No filtro "Todos", excluir grupos
+      filtered = filtered.filter((conv) => conv.isGroup !== true);
+    } else if (filter === "group") {
+      // No filtro "Grupos", mostrar apenas grupos
       filtered = filtered.filter((conv) => conv.isGroup === true);
+    } else {
+      // Outros filtros (waiting, answered, resolved) - excluir grupos
+      filtered = filtered.filter((conv) => conv.status === filter && conv.isGroup !== true);
     }
 
     // Aplicar busca debounced (mais agressivo)
@@ -2592,7 +2598,7 @@ function Conversas() {
         // ETAPA 6: Buscar fotos de perfil de forma assíncrona (não bloquear UI)
         console.log('📸 Buscando fotos de perfil de forma assíncrona...');
         novasConversas.forEach(async (conv) => {
-          if (!conv.isGroup && conv.phoneNumber) {
+          if (conv.phoneNumber) {
             try {
               const profilePicUrl = await getProfilePictureWithFallback(
                 conv.phoneNumber, 
