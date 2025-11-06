@@ -23,6 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { enviarLembreteWhatsApp } from "@/services/whatsappService";
 import { useTaskTimer } from "@/hooks/useTaskTimer";
+import { ConversaPopup } from "@/components/leads/ConversaPopup";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -85,6 +86,8 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
   const [isExpanded, setIsExpanded] = useState(false);
   const [localComments, setLocalComments] = useState(task.comments || []);
   const [newComment, setNewComment] = useState("");
+  const [conversaOpen, setConversaOpen] = useState(false);
+  const [leadPhone, setLeadPhone] = useState<string | undefined>(undefined);
 
   // ✅ MELHORADO: Usar hook useTaskTimer para gerenciar timer
   const {
@@ -113,6 +116,31 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
   useEffect(() => {
     setLocalComments(task.comments || []);
   }, [task.comments, task.id]);
+
+  // Buscar telefone do lead se houver
+  useEffect(() => {
+    const fetchLeadPhone = async () => {
+      if (!task.lead_id) {
+        setLeadPhone(undefined);
+        return;
+      }
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        const { data, error } = await supabase
+          .from("leads")
+          .select("telefone, phone")
+          .eq("id", task.lead_id)
+          .maybeSingle();
+        
+        if (!error && data) {
+          setLeadPhone(data.telefone || data.phone || undefined);
+        }
+      } catch (e) {
+        console.error("Erro ao buscar telefone do lead:", e);
+      }
+    };
+    fetchLeadPhone();
+  }, [task.lead_id]);
 
   // ✅ REMOVIDO: Código antigo de timer substituído por useTaskTimer hook
 
@@ -518,16 +546,30 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
             <Badge variant="outline" className="text-xs border-primary/20 text-primary">
               Lead: {task.lead_name}
             </Badge>
-            {task.lead_id && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate(`/leads`)}
-                className="h-6 w-6 p-0 hover:bg-primary/10 text-primary transition-colors"
-              >
-                <ExternalLink className="h-3 w-3" />
-              </Button>
-            )}
+            <div className="flex items-center gap-1">
+              {leadPhone && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => { e.stopPropagation(); setConversaOpen(true); }}
+                  className="h-6 w-6 p-0 hover:bg-success/10 text-success transition-colors"
+                  title="Ver conversas do lead"
+                >
+                  <MessageSquare className="h-3 w-3" />
+                </Button>
+              )}
+              {task.lead_id && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate(`/leads`)}
+                  className="h-6 w-6 p-0 hover:bg-primary/10 text-primary transition-colors"
+                  title="Ver lead"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
           </div>
         )}
         
@@ -683,6 +725,17 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Conversa Popup */}
+      {task.lead_id && task.lead_name && leadPhone && (
+        <ConversaPopup
+          open={conversaOpen}
+          onOpenChange={setConversaOpen}
+          leadId={task.lead_id}
+          leadName={task.lead_name}
+          leadPhone={leadPhone}
+        />
+      )}
     </Card>
   );
 });
