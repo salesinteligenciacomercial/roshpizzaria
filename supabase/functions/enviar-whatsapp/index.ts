@@ -187,40 +187,36 @@ serve(async (req) => {
 
     // Verificar se é mídia (base64, URL) ou texto
     if (validatedData.mediaBase64) {
-      // Enviar mídia via base64
+      // Enviar mídia via base64 - Formato Evolution API v1
       evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
       
       // Normalizar tipo de mídia
       let mediaType = validatedData.tipo_mensagem || 'document';
       if (mediaType === 'texto') mediaType = 'text';
-      // PDF e document são mantidos como document
       if (mediaType === 'pdf') mediaType = 'document';
       
       // Definir mimeType baseado no tipo de mídia e extensão do arquivo
       let mimeType = validatedData.mimeType;
       if (!mimeType) {
         const fileName = validatedData.fileName?.toLowerCase() || '';
-        
-        // Detectar por tipo de mídia primeiro
         if (mediaType === 'image') {
           if (fileName.endsWith('.png')) mimeType = 'image/png';
           else if (fileName.endsWith('.gif')) mimeType = 'image/gif';
           else if (fileName.endsWith('.webp')) mimeType = 'image/webp';
-          else mimeType = 'image/jpeg'; // default para imagens
+          else mimeType = 'image/jpeg';
         } else if (mediaType === 'audio') {
           if (fileName.endsWith('.ogg')) mimeType = 'audio/ogg';
           else if (fileName.endsWith('.wav')) mimeType = 'audio/wav';
           else if (fileName.endsWith('.m4a')) mimeType = 'audio/mp4';
-          else mimeType = 'audio/mpeg'; // default para áudio
+          else mimeType = 'audio/mpeg';
         } else if (mediaType === 'video') {
           if (fileName.endsWith('.mov')) mimeType = 'video/quicktime';
           else if (fileName.endsWith('.avi')) mimeType = 'video/x-msvideo';
           else if (fileName.endsWith('.webm')) mimeType = 'video/webm';
-          else mimeType = 'video/mp4'; // default para vídeo
+          else mimeType = 'video/mp4';
         } else if (validatedData.tipo_mensagem === 'pdf' || fileName.endsWith('.pdf')) {
           mimeType = 'application/pdf';
         } else {
-          // Detectar por extensão para documentos
           if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
             mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
           } else if (fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) {
@@ -232,50 +228,49 @@ serve(async (req) => {
           } else if (fileName.endsWith('.zip')) {
             mimeType = 'application/zip';
           } else {
-            mimeType = 'application/octet-stream'; // fallback genérico
+            mimeType = 'application/octet-stream';
           }
         }
-        
-        console.log(`📄 MIME type detectado: ${mimeType} (arquivo: ${fileName})`);
       }
       
       bodyPayload = {
         ...(isGroup ? { groupId: (target as any).groupId } : { number: (target as any).number }),
-        mediatype: mediaType,
-        mimetype: mimeType,
-        caption: validatedData.caption || validatedData.mensagem || "",
-        fileName: validatedData.fileName || 'arquivo',
-        media: validatedData.mediaBase64,
-        ...(validatedData.quoted ? { quoted: validatedData.quoted } : {}),
-        ...(validatedData.quotedMessageId ? { quotedMessageId: validatedData.quotedMessageId } : {}),
+        mediaMessage: {
+          mediatype: mediaType,
+          mimetype: mimeType,
+          caption: validatedData.caption || validatedData.mensagem || "",
+          fileName: validatedData.fileName || 'arquivo',
+          media: validatedData.mediaBase64,
+        }
       };
       console.log(`📸 Enviando mídia base64 (${mediaType})`);
     } else if (validatedData.mediaUrl) {
-      // Enviar mídia via URL
+      // Enviar mídia via URL - Formato Evolution API v1
       evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
       bodyPayload = {
         ...(isGroup ? { groupId: (target as any).groupId } : { number: (target as any).number }),
-        mediaUrl: validatedData.mediaUrl,
-        caption: validatedData.mensagem || validatedData.caption || "",
-        ...(validatedData.quoted ? { quoted: validatedData.quoted } : {}),
-        ...(validatedData.quotedMessageId ? { quotedMessageId: validatedData.quotedMessageId } : {}),
+        mediaMessage: {
+          mediaUrl: validatedData.mediaUrl,
+          caption: validatedData.mensagem || validatedData.caption || ""
+        }
       };
       console.log("📸 Enviando mídia via URL");
     } else {
-      // Enviar texto
+      // Enviar texto - Formato correto da Evolution API v1
       evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`;
-      
-      console.log("📤 Enviando para URL:", evolutionUrl);
-      console.log("📝 Instance name:", EVOLUTION_INSTANCE);
-      console.log("🔑 API URL:", INSTANCE_API_URL || EVOLUTION_API_URL);
       
       bodyPayload = {
         ...(isGroup ? { groupId: (target as any).groupId } : { number: (target as any).number }),
-        text: validatedData.mensagem,
-        ...(validatedData.quoted ? { quoted: validatedData.quoted } : {}),
-        ...(validatedData.quotedMessageId ? { quotedMessageId: validatedData.quotedMessageId } : {}),
+        textMessage: {
+          text: validatedData.mensagem
+        },
+        ...(validatedData.quoted ? { 
+          options: {
+            quoted: validatedData.quoted 
+          }
+        } : {}),
       };
-      console.log(validatedData.quoted ? "💬 Enviando texto com citação" : "💬 Enviando texto");
+      console.log("💬 Enviando texto no formato Evolution API v1");
     }
 
     // Função auxiliar para tentativas com endpoints alternativos (compatibilidade Evolution)
@@ -311,26 +306,11 @@ serve(async (req) => {
       return { ok: false as const, lastError };
     };
 
-    // Montar candidatos de URL (ordem por probabilidade)
-    const base = (INSTANCE_API_URL || EVOLUTION_API_URL).replace(/\/$/, ''); // Remove trailing slash
-    const candidates: string[] = [];
+    // Usar apenas o endpoint correto da Evolution API v1
+    const base = (INSTANCE_API_URL || EVOLUTION_API_URL).replace(/\/$/, '');
+    const candidates: string[] = [evolutionUrl]; // Apenas o endpoint principal
     
-    if (evolutionUrl.includes('/message/sendText/')) {
-      // Tentar endpoints na ordem de compatibilidade
-      candidates.push(`${base}/message/sendText/${EVOLUTION_INSTANCE}`);
-      candidates.push(`${base}/v2/message/sendText/${EVOLUTION_INSTANCE}`);
-      candidates.push(`${base}/v1/message/sendText/${EVOLUTION_INSTANCE}`);
-      candidates.push(`${base}/message/sendMessage/${EVOLUTION_INSTANCE}`);
-    } else if (evolutionUrl.includes('/message/sendMedia/')) {
-      candidates.push(`${base}/message/sendMedia/${EVOLUTION_INSTANCE}`);
-      candidates.push(`${base}/v2/message/sendMedia/${EVOLUTION_INSTANCE}`);
-      candidates.push(`${base}/v1/message/sendMedia/${EVOLUTION_INSTANCE}`);
-      candidates.push(`${base}/message/sendMessage/${EVOLUTION_INSTANCE}`);
-    } else {
-      candidates.push(evolutionUrl);
-    }
-    
-    console.log("🔍 Tentando endpoints:", candidates);
+    console.log("📤 Enviando para:", evolutionUrl);
 
     const attempt = await tryPost(candidates, bodyPayload);
     if (!attempt.ok) {
