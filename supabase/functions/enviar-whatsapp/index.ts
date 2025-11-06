@@ -316,6 +316,40 @@ serve(async (req) => {
     if (!attempt.ok) {
       console.error("❌ Evolution API falhou em todos os endpoints candidatos:", attempt.lastError);
       
+      // Se der erro 404 de instância não existir, tentar listar instâncias disponíveis
+      if (attempt.lastError?.parsed?.response?.message?.[0]?.includes('does not exist')) {
+        console.log("🔍 Tentando listar instâncias disponíveis...");
+        try {
+          const listUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/instance/fetchInstances`;
+          const listRes = await fetch(listUrl, {
+            method: "GET",
+            headers: {
+              "apikey": INSTANCE_API_KEY!,
+            },
+          });
+          if (listRes.ok) {
+            const instances = await listRes.json();
+            console.log("📋 Instâncias disponíveis:", JSON.stringify(instances, null, 2));
+            
+            // Extrair nomes das instâncias
+            const instanceNames = instances.map((i: any) => i.instance?.instanceName).filter(Boolean);
+            console.log("📝 Nomes das instâncias:", instanceNames);
+            
+            return new Response(
+              JSON.stringify({
+                error: `A instância "${EVOLUTION_INSTANCE}" não existe. Instâncias disponíveis: ${instanceNames.join(', ')}`,
+                code: "INSTANCE_NOT_FOUND",
+                availableInstances: instanceNames,
+                details: attempt.lastError
+              }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } catch (listError) {
+          console.error("⚠️ Erro ao listar instâncias:", listError);
+        }
+      }
+      
       // Mensagem de erro mais específica baseada no erro
       let errorMessage = "Falha ao enviar mensagem. ";
       if (attempt.lastError?.parsed?.response?.message?.[0]?.includes('does not exist')) {
