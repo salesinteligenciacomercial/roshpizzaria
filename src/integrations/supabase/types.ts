@@ -297,9 +297,13 @@ export type Database = {
       conversas: {
         Row: {
           arquivo_nome: string | null
+          assigned_user_id: string | null
           company_id: string | null
           created_at: string | null
+          fila_id: string | null
+          fromme: boolean | null
           id: string
+          is_group: boolean | null
           lead_id: string | null
           mensagem: string
           midia_url: string | null
@@ -316,9 +320,13 @@ export type Database = {
         }
         Insert: {
           arquivo_nome?: string | null
+          assigned_user_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          fila_id?: string | null
+          fromme?: boolean | null
           id?: string
+          is_group?: boolean | null
           lead_id?: string | null
           mensagem: string
           midia_url?: string | null
@@ -335,9 +343,13 @@ export type Database = {
         }
         Update: {
           arquivo_nome?: string | null
+          assigned_user_id?: string | null
           company_id?: string | null
           created_at?: string | null
+          fila_id?: string | null
+          fromme?: boolean | null
           id?: string
+          is_group?: boolean | null
           lead_id?: string | null
           mensagem?: string
           midia_url?: string | null
@@ -358,6 +370,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversas_fila_id_fkey"
+            columns: ["fila_id"]
+            isOneToOne: false
+            referencedRelation: "filas_atendimento"
             referencedColumns: ["id"]
           },
           {
