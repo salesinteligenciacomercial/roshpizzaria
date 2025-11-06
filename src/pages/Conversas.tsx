@@ -2518,25 +2518,26 @@ function Conversas() {
     setConversations(initialConversations);
   };
 
-  // 🆕 SINCRONIZAR CONTATOS DO WHATSAPP
+  // 🆕 SINCRONIZAR CONTATOS DO WHATSAPP (SIMPLIFICADO - usa leads já no banco)
   const syncWhatsAppContacts = async (companyId: string) => {
     try {
-      const instanceName = await evolutionAPI.getInstanceName(companyId);
-      if (!instanceName) {
-        console.log("⚠️ Nenhuma instância WhatsApp configurada");
+      console.log("📋 Carregando contatos WhatsApp do banco de dados...");
+      
+      // Buscar todos os leads da empresa (que já foram sincronizados via webhook)
+      const { data: allLeads, error } = await supabase
+        .from('leads')
+        .select('id, phone, name, created_at')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error("❌ Erro ao buscar leads:", error);
         return;
       }
 
-      console.log("🔄 Sincronizando contatos da instância:", instanceName);
-      const contacts = await evolutionAPI.getContacts(instanceName);
-      console.log("📱 Contatos recebidos da Evolution API:", contacts.length);
-      
-      if (contacts.length > 0) {
-        await evolutionAPI.syncContactsToDatabase(contacts, companyId);
-        console.log("✅ Contatos sincronizados:", contacts.length);
-      }
+      console.log(`✅ Total de ${allLeads?.length || 0} leads encontrados no banco`);
     } catch (error) {
-      console.error("❌ Erro ao sincronizar contatos:", error);
+      console.error("❌ Erro ao carregar contatos:", error);
     }
   };
 
@@ -2636,27 +2637,27 @@ function Conversas() {
 
       setUserCompanyId(userRole.company_id);
       
-      // 🆕 SINCRONIZAR CONTATOS DO WHATSAPP
+      // 🆕 Notificar sincronização
       await syncWhatsAppContacts(userRole.company_id);
       
-      // ETAPA 2A: Buscar TODOS os leads/contatos sincronizados do WhatsApp
+      // ETAPA 2A: Buscar TODOS os leads (contatos) da empresa
       const { data: leadsData, error: leadsError } = await supabase
         .from('leads')
-        .select('id, phone, name, source')
+        .select('id, phone, name, telefone')
         .eq('company_id', userRole.company_id)
-        .eq('source', 'whatsapp')
         .order('created_at', { ascending: false });
 
       if (leadsError) {
         console.error('❌ Erro ao buscar leads:', leadsError);
       }
 
-      console.log("📋 Total de contatos WhatsApp sincronizados:", leadsData?.length || 0);
+      const totalLeads = leadsData?.length || 0;
+      console.log("📋 Total de leads/contatos encontrados:", totalLeads);
       
-      // ETAPA 2B: Buscar conversas com mensagens
+      // ETAPA 2B: Buscar conversas com mensagens  
       const { data, error } = await supabase
         .from('conversas')
-        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, updated_at, is_group, midia_url, fromme')
+        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, updated_at, is_group, midia_url, fromme, lead_id')
         .eq('company_id', userRole.company_id)
         .order('created_at', { ascending: false });
 
@@ -2695,55 +2696,52 @@ function Conversas() {
       
       console.log(`📊 ${conversasAgrupadas.size} conversas com mensagens em ${(performance.now() - startTime).toFixed(0)}ms`);
 
-      // ETAPA 4: Criar mapa de todos os contatos (leads + conversas)
-      const todosContatos = new Map<string, { name: string; phone: string; leadId?: string }>();
+      // ETAPA 4: Criar mapa de todos os contatos únicos
+      const todosContatos = new Map<string, { name: string; phone: string; leadId: string }>();
       
-      // Adicionar todos os leads do WhatsApp
+      // Adicionar TODOS os leads como contatos
       (leadsData || []).forEach(lead => {
-        const phoneKey = lead.phone.replace(/[^0-9]/g, '');
-        if (!todosContatos.has(phoneKey)) {
+        // Usar tanto 'phone' quanto 'telefone' (campos diferentes no banco)
+        const phoneRaw = lead.phone || lead.telefone;
+        if (!phoneRaw) return;
+        
+        const phoneKey = phoneRaw.replace(/[^0-9]/g, '');
+        if (phoneKey && !todosContatos.has(phoneKey)) {
           todosContatos.set(phoneKey, {
-            name: lead.name,
-            phone: lead.phone,
+            name: lead.name || phoneKey,
+            phone: phoneKey,
             leadId: lead.id
           });
         }
       });
 
-      console.log(`📱 Total de contatos únicos: ${todosContatos.size}`);
+      console.log(`📱 Contatos únicos mapeados: ${todosContatos.size}`);
 
-      // ETAPA 5: Converter para UI (incluindo contatos sem mensagens)
+      // ETAPA 5: Criar lista de conversas (incluindo contatos sem mensagens)
       const novasConversas: Conversation[] = [];
         
-        // Processar TODOS os contatos (com ou sem mensagens)
+        // Processar TODOS os contatos mapeados
         for (const [telefone, contatoInfo] of todosContatos.entries()) {
           const mensagens = conversasAgrupadas.get(telefone) || [];
           const temMensagens = mensagens.length > 0;
           
-          // Nome do contato: priorizar nome do lead sincronizado
-          const conversaExistente = conversations.find(c => c.id === telefone);
-          const nomeDoState = conversaExistente?.contactName;
+          // Determinar nome do contato (priorizar nome do lead)
+          let contactName = contatoInfo.name;
           
-          let contactName = contatoInfo.name; // Nome do lead (já vem do WhatsApp via Evolution)
-          
-          // Se tiver mensagens, verificar se tem um nome melhor
+          // Se tiver mensagens com nome melhor, usar
           if (temMensagens) {
-            const ultima = mensagens[0];
-            const nomeDaMensagem = ultima.nome_contato || 
-                                   mensagens.find(m => m.nome_contato && m.nome_contato.trim() !== '')?.nome_contato;
+            const nomeNaMensagem = mensagens.find(m => 
+              m.nome_contato && 
+              m.nome_contato.trim() !== '' && 
+              m.nome_contato !== telefone
+            )?.nome_contato;
             
-            // Se tem nome da mensagem e é diferente de telefone, usar
-            if (nomeDaMensagem && nomeDaMensagem !== telefone && nomeDaMensagem.trim() !== '') {
-              contactName = nomeDaMensagem;
+            if (nomeNaMensagem) {
+              contactName = nomeNaMensagem;
             }
           }
           
-          // Se já existe um nome editado no state, preservar
-          if (nomeDoState && nomeDoState !== telefone && nomeDoState !== contactName) {
-            contactName = nomeDoState;
-          }
-          
-          const isGroupConv = false; // Contatos individuais apenas (grupos viriam da conversa)
+          const isGroupConv = false;
           
           // Avatar placeholder (será atualizado depois)
           const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`;
