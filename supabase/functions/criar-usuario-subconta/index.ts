@@ -39,14 +39,18 @@ serve(async (req) => {
     }
 
     const body: CriarUsuarioRequest = await req.json();
-    console.log('📦 [CRIAR-USUARIO] Dados recebidos:', { 
-      hasParentCompanyId: !!body.parentCompanyId,
-      hasCompanyId: !!body.companyId,
-      email: body.email,
-      companyName: body.companyName 
-    });
+    console.log('📦 [CRIAR-USUARIO] Dados recebidos (completo):', JSON.stringify(body, null, 2));
     
     const { companyId, email, full_name, role, parentCompanyId, companyName, cnpj, telefone, responsavel, plan, max_users, max_leads } = body;
+    
+    console.log('📋 [CRIAR-USUARIO] Campos extraídos:', {
+      email,
+      full_name,
+      hasParentCompanyId: !!parentCompanyId,
+      hasCompanyId: !!companyId,
+      companyName,
+      responsavel
+    });
 
     if (!email || !full_name) {
       return new Response(JSON.stringify({ error: 'Email e nome completo são obrigatórios' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
