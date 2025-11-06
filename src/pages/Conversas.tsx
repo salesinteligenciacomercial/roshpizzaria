@@ -248,7 +248,7 @@ function Conversas() {
     whatsappConnected: 0,
   });
   const [loadingHistory, setLoadingHistory] = useState(false);
-  const [loadingConversations, setLoadingConversations] = useState(true);
+  const [loadingConversations, setLoadingConversations] = useState(false);
   const [historyStats, setHistoryStats] = useState<Record<string, { total: number; loaded: number }>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedConvRef = useRef<Conversation | null>(null);
