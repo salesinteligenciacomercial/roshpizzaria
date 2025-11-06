@@ -263,6 +263,54 @@ export default function Configuracoes() {
     });
   };
 
+  const elevateSuperAdmin = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({ variant: 'destructive', title: 'Você precisa estar autenticado' });
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('elevate-super-admin', {
+        body: { action: 'elevate_super_admin' }
+      });
+
+      if (error) throw error;
+
+      toast({ title: 'Sucesso!', description: 'Você agora é Super Admin' });
+      
+      // Recarregar roles
+      await checkAccessAndRoles();
+    } catch (error) {
+      console.error('Erro ao elevar privilégio:', error);
+      toast({ variant: 'destructive', title: 'Erro ao elevar privilégio' });
+    }
+  };
+
+  const makeMasterAccount = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({ variant: 'destructive', title: 'Você precisa estar autenticado' });
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('elevate-super-admin', {
+        body: { action: 'make_master_account' }
+      });
+
+      if (error) throw error;
+
+      toast({ title: 'Sucesso!', description: 'Sua empresa agora é uma Conta Mestre' });
+      
+      // Recarregar roles
+      await checkAccessAndRoles();
+    } catch (error) {
+      console.error('Erro ao tornar conta mestre:', error);
+      toast({ variant: 'destructive', title: 'Erro ao tornar conta mestre' });
+    }
+  };
+
   const adicionarColaborador = async () => {
     if (!novoColaborador.nome || !novoColaborador.email) {
       toast({
@@ -686,6 +734,43 @@ export default function Configuracoes() {
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{latestAnnouncement.body}</p>
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* Botões de elevação de privilégio - Aparece apenas se não for super admin */}
+      {!hasRole('super_admin') && (
+        <Card className="border-yellow-500/50 bg-yellow-500/5">
+          <CardHeader>
+            <CardTitle className="text-lg">🔐 Elevação de Privilégios</CardTitle>
+            <CardDescription>
+              Eleve suas permissões para acessar funcionalidades avançadas
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={elevateSuperAdmin}
+                className="border-primary/50 hover:bg-primary/10"
+              >
+                <UserCog className="mr-2 h-4 w-4" />
+                Tornar-me Super Admin
+              </Button>
+              {!isMasterAccount && (
+                <Button
+                  variant="outline"
+                  onClick={makeMasterAccount}
+                  className="border-purple-500/50 hover:bg-purple-500/10"
+                >
+                  <Building2 className="mr-2 h-4 w-4" />
+                  Tornar esta conta mestre
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              ⚠️ Use apenas se você é o administrador principal do sistema
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       <Tabs defaultValue={defaultTab} className="w-full">

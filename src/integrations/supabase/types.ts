@@ -157,13 +157,16 @@ export type Database = {
         Row: {
           cnpj: string | null
           created_at: string | null
+          created_by: string | null
           domain: string | null
           id: string
+          is_master_account: boolean | null
           max_leads: number | null
           max_users: number | null
           max_whatsapp_messages: number | null
           name: string
           owner_user_id: string | null
+          parent_company_id: string | null
           plan: string | null
           settings: Json | null
           status: string | null
@@ -172,13 +175,16 @@ export type Database = {
         Insert: {
           cnpj?: string | null
           created_at?: string | null
+          created_by?: string | null
           domain?: string | null
           id?: string
+          is_master_account?: boolean | null
           max_leads?: number | null
           max_users?: number | null
           max_whatsapp_messages?: number | null
           name: string
           owner_user_id?: string | null
+          parent_company_id?: string | null
           plan?: string | null
           settings?: Json | null
           status?: string | null
@@ -187,19 +193,30 @@ export type Database = {
         Update: {
           cnpj?: string | null
           created_at?: string | null
+          created_by?: string | null
           domain?: string | null
           id?: string
+          is_master_account?: boolean | null
           max_leads?: number | null
           max_users?: number | null
           max_whatsapp_messages?: number | null
           name?: string
           owner_user_id?: string | null
+          parent_company_id?: string | null
           plan?: string | null
           settings?: Json | null
           status?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "companies_parent_company_id_fkey"
+            columns: ["parent_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       compromissos: {
         Row: {

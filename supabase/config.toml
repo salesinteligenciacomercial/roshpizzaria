@@ -38,3 +38,6 @@ verify_jwt = true
 
 [functions.criar-usuario-subconta]
 verify_jwt = true
+
+[functions.elevate-super-admin]
+verify_jwt = true
