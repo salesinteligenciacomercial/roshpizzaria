@@ -2533,8 +2533,10 @@ function Conversas() {
           const ultima = mensagens[0];
           const isGroupConv = ultima.is_group || /@g\.us$/.test(telefone);
           
-          // Nome do contato
-          const contactName = mensagens.find(m => m.nome_contato)?.nome_contato || telefone;
+          // Nome do contato - usar o nome da mensagem mais recente ou buscar no histórico
+          const contactName = ultima.nome_contato || 
+                             mensagens.find(m => m.nome_contato && m.nome_contato.trim() !== '')?.nome_contato || 
+                             telefone;
           
           // Avatar placeholder (será atualizado depois)
           const avatarUrl = isGroupConv 
