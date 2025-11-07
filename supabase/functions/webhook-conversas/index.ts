@@ -100,6 +100,16 @@ function transformEvolutionPayload(body: any) {
   let arquivo_nome = null;
   let replied_to_message = null;
   
+  // CRÍTICO: Para mensagens enviadas (fromMe=true), NÃO usar pushName
+  // pois ele contém o nome do remetente, não do destinatário
+  let nome_contato = null;
+  if (!fromMe) {
+    // Mensagem recebida: usar pushName do contato
+    nome_contato = data.pushName || null;
+  }
+  // Para mensagens enviadas: deixar nome_contato como null para ser
+  // preenchido posteriormente com o nome do lead ou número
+  
   if (data.message.conversation) {
     mensagem = data.message.conversation;
     tipo_mensagem = 'texto';
@@ -197,7 +207,7 @@ function transformEvolutionPayload(body: any) {
     origem: 'WhatsApp',
     tipo_mensagem,
     midia_url,
-    nome_contato: data.pushName || 'Desconhecido',
+    nome_contato, // Null para mensagens enviadas, pushName para recebidas
     arquivo_nome,
     replied_to_message,
     status, // 'Enviada' se fromMe=true, 'Recebida' se fromMe=false
@@ -422,6 +432,28 @@ serve(async (req) => {
       );
     }
 
+    // CORREÇÃO: Para mensagens ENVIADAS, buscar nome do lead se disponível
+    let nomeContatoFinal = validatedData.nome_contato;
+    
+    if (validatedData.fromMe === true && leadId) {
+      // Buscar nome do lead para mensagens enviadas
+      const { data: leadData } = await supabase
+        .from('leads')
+        .select('name')
+        .eq('id', leadId)
+        .single();
+      
+      if (leadData?.name) {
+        nomeContatoFinal = leadData.name;
+        console.log('✅ Nome do lead usado para mensagem enviada:', nomeContatoFinal);
+      }
+    }
+    
+    // Se ainda não tem nome e não é mensagem enviada, usar número
+    if (!nomeContatoFinal && !validatedData.fromMe && !isGroup && numeroLimpo) {
+      nomeContatoFinal = numeroLimpo;
+    }
+    
     // Salvar conversa no Supabase com telefone normalizado e STATUS correto
     const { data, error } = await supabase
       .from('conversas')
@@ -433,7 +465,7 @@ serve(async (req) => {
         status: validatedData.status, // Usar status detectado (Enviada ou Recebida)
         tipo_mensagem: validatedData.tipo_mensagem,
         midia_url: validatedData.midia_url,
-        nome_contato: validatedData.nome_contato,
+        nome_contato: nomeContatoFinal, // Nome correto baseado no contexto
         arquivo_nome: validatedData.arquivo_nome,
         company_id: companyId,
         lead_id: leadId,
