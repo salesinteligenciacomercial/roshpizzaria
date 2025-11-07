@@ -15,65 +15,15 @@ export function MainLayout() {
   });
 
   useEffect(() => {
-    // Verificar modo offline SUPER ADMIN primeiro
-    const offlineMode = localStorage.getItem('offline_mode');
-    const offlineSession = localStorage.getItem('offline_session');
-    const isSuperAdmin = localStorage.getItem('is_super_admin');
-    const superAdminEmail = localStorage.getItem('super_admin_email');
-    
-    console.log("🔍 [MainLayout] Verificando autenticação...", {
-      offlineMode,
-      isSuperAdmin,
-      superAdminEmail,
-      hasOfflineSession: !!offlineSession
-    });
-    
-    if (offlineMode === 'true' && offlineSession && isSuperAdmin === 'true') {
-      // Usar sessão offline de super admin
-      const parsedSession = JSON.parse(offlineSession);
-      console.log("✅ [MainLayout] Usando sessão offline SUPER ADMIN:", parsedSession.user.email);
-      setSession(parsedSession as any);
-      setLoading(false);
-      return;
-    }
+    // Limpar flags antigas de modo offline
+    localStorage.removeItem('offline_mode');
+    localStorage.removeItem('offline_session');
+    localStorage.removeItem('is_super_admin');
+    localStorage.removeItem('super_admin_email');
 
     // Check current session via Supabase
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      console.log("🔐 [MainLayout] Sessão Supabase:", session?.user?.email || "Nenhuma");
-      
-      // CRÍTICO: Forçar elevação se for o super admin
-      if (session?.user?.email === "jeovauzumak@gmail.com") {
-        console.log("👑 [MainLayout] Detectado super admin, verificando elevação...");
-        
-        try {
-          // Chamar função de elevação
-          const { data: elevateData, error: elevateError } = await supabase.functions.invoke('elevate-super-admin', {
-            body: { action: 'elevate_super_admin' }
-          });
-
-          if (!elevateError && elevateData) {
-            console.log("✅ [MainLayout] Super Admin elevado:", elevateData);
-            localStorage.setItem("is_super_admin", "true");
-            localStorage.setItem("super_admin_email", session.user.email);
-            
-            // Recarregar sessão após elevação
-            const { data: newSession } = await supabase.auth.getSession();
-            setSession(newSession.session);
-          } else {
-            console.error("❌ [MainLayout] Erro ao elevar:", elevateError);
-            setSession(session);
-          }
-        } catch (err) {
-          console.error("❌ [MainLayout] Exceção ao elevar:", err);
-          setSession(session);
-        }
-      } else {
-        setSession(session);
-      }
-      
-      setLoading(false);
-    }).catch((error) => {
-      console.error("❌ [MainLayout] Erro ao buscar sessão:", error);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
       setLoading(false);
     });
 
@@ -81,14 +31,6 @@ export function MainLayout() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("🔄 [MainLayout] Auth state changed:", session?.user?.email || "Logout");
-      
-      // Se for super admin, garantir flag local
-      if (session?.user?.email === "jeovauzumak@gmail.com") {
-        localStorage.setItem("is_super_admin", "true");
-        localStorage.setItem("super_admin_email", session.user.email);
-      }
-      
       setSession(session);
     });
 

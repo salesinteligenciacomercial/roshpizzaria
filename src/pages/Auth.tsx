@@ -8,14 +8,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Session } from "@supabase/supabase-js";
-import { AlertCircle } from "lucide-react";
 
 export default function Auth() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
-  const [backendDown, setBackendDown] = useState(false);
+  
   useEffect(() => {
     supabase.auth.getSession().then(({
       data: {
@@ -75,152 +74,47 @@ export default function Auth() {
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
+    
     const formData = new FormData(e.currentTarget);
     const email = formData.get("signin-email") as string;
     const password = formData.get("signin-password") as string;
 
-    console.log("🔐 [LOGIN] Tentando login:", email);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
 
-    // Sistema de retry agressivo com delays exponenciais
-    let attempts = 0;
-    const maxAttempts = 5;
-    let lastError = null;
-
-    while (attempts < maxAttempts) {
-      attempts++;
-      console.log(`🔄 [LOGIN] Tentativa ${attempts}/${maxAttempts}...`);
-
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        });
-
-        if (!error && data.session) {
-          console.log("✅ [LOGIN] Login bem-sucedido:", email);
-          
-          // CRÍTICO: Se for o super admin, elevar permissões imediatamente
-          if (email === "jeovauzumak@gmail.com") {
-            console.log("👑 [LOGIN] Elevando para Super Admin...");
-            
-            try {
-              const { data: elevateData, error: elevateError } = await supabase.functions.invoke('elevate-super-admin', {
-                body: { action: 'elevate_super_admin' }
-              });
-
-              if (elevateError) {
-                console.error("❌ [LOGIN] Erro ao elevar super admin:", elevateError);
-              } else {
-                console.log("✅ [LOGIN] Super Admin elevado com sucesso:", elevateData);
-              }
-            } catch (elevateErr) {
-              console.error("❌ [LOGIN] Exceção ao elevar:", elevateErr);
-            }
-
-            // Forçar flag local de super admin
-            localStorage.setItem("is_super_admin", "true");
-            localStorage.setItem("super_admin_email", email);
-          }
-          
-          setLoading(false);
-          toast({
-            title: "✅ Login bem-sucedido!",
-            description: `Bem-vindo ${email}`
-          });
-          
-          // Aguardar 1s para garantir que a elevação foi processada
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          return;
-        }
-
-        if (error) {
-          lastError = error;
-          console.error(`❌ [LOGIN] Erro tentativa ${attempts}:`, error);
-
-          // Se for erro 503 e última tentativa, ativar modo offline
-          if ((error as any).status === 503 && attempts === maxAttempts) {
-            console.warn("⚠️ [LOGIN] Backend offline, ativando modo emergência...");
-            setBackendDown(true);
-            handleOfflineAccess(email);
-            return;
-          }
-        }
-      } catch (err) {
-        console.error(`❌ [LOGIN] Exceção tentativa ${attempts}:`, err);
-        lastError = err;
-      }
-
-      // Delay exponencial antes de tentar novamente
-      if (attempts < maxAttempts) {
-        const delay = Math.min(1000 * Math.pow(2, attempts - 1), 8000);
-        console.log(`⏳ [LOGIN] Aguardando ${delay}ms antes da próxima tentativa...`);
-        
+      if (error) {
+        console.error("❌ Erro ao fazer login:", error);
         toast({
-          title: `Tentativa ${attempts}/${maxAttempts}`,
-          description: `Tentando novamente em ${delay/1000}s...`
+          variant: "destructive",
+          title: "Erro ao fazer login",
+          description: error.message
         });
-        
-        await new Promise(resolve => setTimeout(resolve, delay));
+        setLoading(false);
+        return;
       }
+
+      if (data.session) {
+        console.log("✅ Login bem-sucedido:", email);
+        toast({
+          title: "Login bem-sucedido!",
+          description: `Bem-vindo de volta!`
+        });
+      }
+    } catch (err: any) {
+      console.error("❌ Exceção ao fazer login:", err);
+      toast({
+        variant: "destructive",
+        title: "Erro ao fazer login",
+        description: err.message || "Não foi possível conectar ao servidor"
+      });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
-    toast({
-      variant: "destructive",
-      title: "❌ Erro ao fazer login",
-      description: lastError?.message || "Não foi possível conectar ao servidor. Tente novamente em alguns minutos."
-    });
   };
 
-  const handleOfflineAccess = (email: string) => {
-    // SEMPRE usar credenciais do super admin
-    const superAdminEmail = "jeovauzumak@gmail.com";
-    const superAdminId = "super-admin-jeovauzumak";
-    
-    const mockSession = {
-      user: {
-        id: superAdminId,
-        email: superAdminEmail,
-        user_metadata: {
-          full_name: "Super Admin",
-          role: "super_admin"
-        },
-        app_metadata: {
-          role: "super_admin"
-        }
-      },
-      access_token: "offline-super-admin-token",
-      expires_at: Date.now() + (365 * 24 * 60 * 60 * 1000) // 1 ano
-    };
-    
-    // Salvar no localStorage com flag específico de super admin
-    localStorage.setItem("offline_session", JSON.stringify(mockSession));
-    localStorage.setItem("offline_mode", "true");
-    localStorage.setItem("is_super_admin", "true");
-    localStorage.setItem("super_admin_email", superAdminEmail);
-    
-    console.log("🔓 [OFFLINE ACCESS] Super Admin ativado:", superAdminEmail);
-    
-    toast({
-      title: "✅ Super Admin - Acesso Offline",
-      description: `Bem-vindo ${superAdminEmail}`,
-    });
-    
-    // Forçar navegação direta
-    setTimeout(() => {
-      navigate("/dashboard");
-      window.location.reload(); // Forçar reload para aplicar sessão
-    }, 500);
-  };
-
-  const handleDevBypass = () => {
-    console.log("🚀 [BYPASS] Ativando acesso direto super admin");
-    toast({
-      title: "🔓 Acesso Direto - Super Admin",
-      description: "Entrando como jeovauzumak@gmail.com..."
-    });
-    handleOfflineAccess("jeovauzumak@gmail.com");
-  };
   if (session) {
     return null;
   }
@@ -233,14 +127,6 @@ export default function Auth() {
           <CardTitle className="text-2xl font-bold">MOTION CRM</CardTitle>
           <CardDescription>Sistema inteligente de gestão comercial</CardDescription>
           
-          {backendDown && (
-            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-              <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
-                <AlertCircle className="h-4 w-4" />
-                <span className="text-sm font-medium">Backend Offline - Modo Emergência Ativo</span>
-              </div>
-            </div>
-          )}
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="signin" className="w-full">
