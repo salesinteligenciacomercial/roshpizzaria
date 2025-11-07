@@ -81,69 +81,8 @@ export default function Auth() {
 
     console.log("🔐 Tentando login:", email);
 
-    // Se for o super admin, usar edge function especial
-    if (email === "jeovauzumak@gmail.com") {
-      console.log("👑 Usando autenticação super admin...");
-      
-      try {
-        const { data: loginData, error: loginError } = await supabase.functions.invoke('super-admin-login', {
-          body: { email, password }
-        });
-
-        if (loginError) {
-          console.error("❌ Erro super admin login:", loginError);
-          toast({
-            variant: "destructive",
-            title: "Erro ao fazer login",
-            description: "Credenciais inválidas"
-          });
-          setLoading(false);
-          return;
-        }
-
-        if (loginData?.success && loginData?.session) {
-          console.log("✅ Super Admin autenticado com sucesso!");
-          
-          // Definir a sessão manualmente
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: loginData.session.access_token,
-            refresh_token: loginData.session.refresh_token
-          });
-
-          if (sessionError) {
-            console.error("❌ Erro ao definir sessão:", sessionError);
-            toast({
-              variant: "destructive",
-              title: "Erro ao fazer login",
-              description: "Não foi possível criar a sessão"
-            });
-            setLoading(false);
-            return;
-          }
-          
-          console.log("✅ Sessão definida, navegando para dashboard...");
-          
-          toast({
-            title: "Login bem-sucedido!",
-            description: `Bem-vindo Super Admin!`
-          });
-          
-          setLoading(false);
-          
-          // Navegar explicitamente para o dashboard
-          setTimeout(() => {
-            navigate("/dashboard");
-          }, 500);
-          
-          return;
-        }
-      } catch (err: any) {
-        console.error("❌ Exceção super admin login:", err);
-      }
-    }
-
-    // Login normal para outros usuários
     try {
+      // Login direto usando Supabase Auth (para todos os usuários, inclusive super admin)
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -151,29 +90,64 @@ export default function Auth() {
 
       if (error) {
         console.error("❌ Erro ao fazer login:", error);
-        toast({
-          variant: "destructive",
-          title: "Erro ao fazer login",
-          description: error.message
-        });
+        
+        // Verificar se é erro de conexão (503)
+        if (error.message.includes("503") || error.message.includes("upstream") || error.message.includes("connect")) {
+          toast({
+            variant: "destructive",
+            title: "Servidor temporariamente indisponível",
+            description: "O serviço de autenticação está temporariamente fora do ar. Tente novamente em alguns minutos."
+          });
+        } else if (error.message.includes("Invalid login credentials")) {
+          toast({
+            variant: "destructive",
+            title: "Credenciais inválidas",
+            description: "Email ou senha incorretos. Verifique suas credenciais e tente novamente."
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Erro ao fazer login",
+            description: error.message
+          });
+        }
         setLoading(false);
         return;
       }
 
       if (data.session) {
         console.log("✅ Login bem-sucedido:", email);
+        
+        // Verificar se é super admin
+        const isSuperAdmin = email === "jeovauzumak@gmail.com";
+        
         toast({
           title: "Login bem-sucedido!",
-          description: `Bem-vindo de volta!`
+          description: isSuperAdmin ? "Bem-vindo Super Admin!" : "Bem-vindo de volta!"
         });
+        
+        // Navegar para dashboard
+        setTimeout(() => {
+          navigate("/dashboard");
+        }, 300);
       }
     } catch (err: any) {
       console.error("❌ Exceção ao fazer login:", err);
-      toast({
-        variant: "destructive",
-        title: "Erro ao fazer login",
-        description: err.message || "Não foi possível conectar ao servidor"
-      });
+      
+      // Tratamento de erro de rede
+      if (err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError")) {
+        toast({
+          variant: "destructive",
+          title: "Erro de conexão",
+          description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente."
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Erro ao fazer login",
+          description: err.message || "Erro desconhecido. Tente novamente."
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -203,11 +177,25 @@ export default function Auth() {
               <form onSubmit={handleSignIn} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="signin-email">Email</Label>
-                  <Input id="signin-email" name="signin-email" type="email" placeholder="seu@email.com" required />
+                  <Input 
+                    id="signin-email" 
+                    name="signin-email" 
+                    type="email" 
+                    placeholder="seu@email.com" 
+                    required 
+                    autoComplete="email"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signin-password">Senha</Label>
-                  <Input id="signin-password" name="signin-password" type="password" placeholder="••••••••" required />
+                  <Input 
+                    id="signin-password" 
+                    name="signin-password" 
+                    type="password" 
+                    placeholder="••••••••" 
+                    required 
+                    autoComplete="current-password"
+                  />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Entrando..." : "Entrar"}
