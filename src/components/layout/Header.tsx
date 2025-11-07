@@ -1,10 +1,19 @@
-import { Bell, Building2, PanelLeftClose, PanelLeft, MessageSquare, Instagram, Zap, Clock, Users } from "lucide-react";
+import { Bell, Building2, PanelLeftClose, PanelLeft, MessageSquare, Instagram, Zap, Clock, Users, LogOut, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -13,9 +22,12 @@ interface HeaderProps {
 
 export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
   const [userName, setUserName] = useState("Usuário");
+  const [userRole, setUserRole] = useState("Usuário");
   const [companyName, setCompanyName] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   // Métricas rápidas para página de Conversas
   const conversationsMetrics = useMemo(() => {
@@ -52,8 +64,15 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
   }, []);
 
   const fetchUserData = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        console.error("❌ Erro ao obter usuário:", userError);
+        await handleLogout();
+        return;
+      }
+
       // Get user profile
       const { data: profile } = await supabase
         .from("profiles")
@@ -63,20 +82,79 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
       
       if (profile?.full_name) {
         setUserName(profile.full_name);
+      } else {
+        setUserName(user.email || "Usuário");
       }
 
-      // Get company info
-      const { data: userRole } = await supabase
+      // Get company info and role
+      const { data: userRoleData } = await supabase
         .from("user_roles")
-        .select("company_id, companies(name)")
+        .select("role, company_id, companies(name)")
         .eq("user_id", user.id)
         .single();
 
-      if (userRole?.companies) {
-        setCompanyName((userRole.companies as any).name);
+      if (userRoleData) {
+        // Mapear role para português
+        const roleMap: Record<string, string> = {
+          'super_admin': 'Super Administrador',
+          'admin': 'Administrador',
+          'moderator': 'Moderador',
+          'user': 'Usuário Padrão'
+        };
+        setUserRole(roleMap[userRoleData.role] || 'Usuário');
+        
+        if (userRoleData.companies) {
+          setCompanyName((userRoleData.companies as any).name);
+        }
       }
+    } catch (error) {
+      console.error("❌ Erro ao carregar dados do usuário:", error);
+      await handleLogout();
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  const handleLogout = async () => {
+    try {
+      console.log("🚪 Iniciando logout...");
+      
+      // Limpar todos os dados locais
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Fazer logout no Supabase
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error("❌ Erro no logout:", error);
+        toast({
+          variant: "destructive",
+          title: "Erro ao sair",
+          description: error.message
+        });
+      } else {
+        console.log("✅ Logout realizado com sucesso");
+        toast({
+          title: "Logout realizado",
+          description: "Você foi desconectado com sucesso"
+        });
+      }
+      
+      // Redirecionar para auth sempre, mesmo com erro
+      navigate("/auth", { replace: true });
+      
+      // Forçar reload da página para limpar qualquer estado residual
+      setTimeout(() => {
+        window.location.href = "/auth";
+      }, 100);
+    } catch (error) {
+      console.error("❌ Erro fatal no logout:", error);
+      // Mesmo com erro, limpar tudo e redirecionar
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = "/auth";
+    }
   };
 
   const initials = userName
@@ -148,17 +226,48 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
             <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive animate-pulse" />
           </Button>
 
-          <div className="flex items-center gap-3 pl-3 border-l border-border/40">
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-medium text-foreground">{userName}</p>
-              <p className="text-xs text-muted-foreground">Administrador</p>
-            </div>
-            <Avatar className="h-9 w-9 ring-2 ring-primary/10 hover:ring-primary/30 transition-all cursor-pointer">
-              <AvatarFallback className="bg-gradient-primary text-primary-foreground text-sm font-semibold">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <div className="flex items-center gap-3 pl-3 border-l border-border/40 cursor-pointer hover:bg-muted/50 rounded-lg p-2 transition-colors">
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-medium text-foreground">{userName}</p>
+                  <p className="text-xs text-muted-foreground">{userRole}</p>
+                </div>
+                <Avatar className="h-9 w-9 ring-2 ring-primary/10 hover:ring-primary/30 transition-all">
+                  <AvatarFallback className="bg-gradient-primary text-primary-foreground text-sm font-semibold">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium">{userName}</p>
+                  <p className="text-xs text-muted-foreground">{userRole}</p>
+                  {companyName && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Building2 className="h-3 w-3" />
+                      {companyName}
+                    </p>
+                  )}
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate("/configuracoes")}>
+                <Settings className="mr-2 h-4 w-4" />
+                Configurações
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={handleLogout}
+                className="text-destructive focus:text-destructive focus:bg-destructive/10"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Sair
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>

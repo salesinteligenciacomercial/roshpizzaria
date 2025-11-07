@@ -15,23 +15,50 @@ export function MainLayout() {
   });
 
   useEffect(() => {
-    // Limpar flags antigas de modo offline
-    localStorage.removeItem('offline_mode');
-    localStorage.removeItem('offline_session');
-    localStorage.removeItem('is_super_admin');
-    localStorage.removeItem('super_admin_email');
+    const initAuth = async () => {
+      try {
+        // Limpar flags antigas de modo offline
+        localStorage.removeItem('offline_mode');
+        localStorage.removeItem('offline_session');
+        localStorage.removeItem('is_super_admin');
+        localStorage.removeItem('super_admin_email');
 
-    // Check current session via Supabase
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
+        // Check current session via Supabase
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error("❌ Erro ao verificar sessão:", error);
+          // Limpar tudo em caso de erro
+          localStorage.clear();
+          sessionStorage.clear();
+          setSession(null);
+        } else {
+          setSession(session);
+        }
+      } catch (error) {
+        console.error("❌ Erro fatal ao inicializar auth:", error);
+        localStorage.clear();
+        sessionStorage.clear();
+        setSession(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initAuth();
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log("🔐 Auth state changed:", _event);
       setSession(session);
+      
+      // Se houver SIGNED_OUT, limpar tudo
+      if (_event === 'SIGNED_OUT') {
+        localStorage.clear();
+        sessionStorage.clear();
+      }
     });
 
     return () => subscription.unsubscribe();
