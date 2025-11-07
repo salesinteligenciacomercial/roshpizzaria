@@ -2141,6 +2141,7 @@ function Conversas() {
       }
 
       console.log('🔌 [REALTIME] Configurando canal com company_id:', userCompanyIdRef.current);
+      console.log('🔌 [REALTIME] Status anterior:', realtimeConnectionStatus);
 
       // Evitar múltiplas assinaturas: sempre remover canal anterior antes de criar
       if (realtimeChannelRef.current) {
@@ -2162,7 +2163,13 @@ function Conversas() {
         },
         async (payload) => {
           try {
-            console.log('📩 [REALTIME] Nova mensagem recebida (INSERT):', payload);
+            console.log('📩 [REALTIME] Nova mensagem recebida (INSERT):', {
+              id: payload.new?.id,
+              numero: payload.new?.numero,
+              mensagem: payload.new?.mensagem?.substring(0, 50),
+              status: payload.new?.status,
+              company_id: payload.new?.company_id
+            });
             
             // MELHORIA: Validar dados recebidos antes de processar
             if (!payload.new || !validateRealtimeData(payload.new)) {
@@ -2332,7 +2339,9 @@ function Conversas() {
                     return updated;
                   } else {
                     // Nova conversa - adicionar no topo
-                    console.log('➕ Nova conversa criada:', novaConvFormatted.contactName);
+                  console.log('➕ Nova conversa criada:', novaConvFormatted.contactName);
+                  console.log('📞 [DEBUG] Telefone:', telefoneNormalizado);
+                  console.log('💬 [DEBUG] Mensagem:', novaConversa.mensagem?.substring(0, 100));
                     conversaAtualizada = novaConvFormatted;
                     return [novaConvFormatted, ...prev];
                   }
@@ -2585,6 +2594,7 @@ function Conversas() {
       )
       .subscribe((status) => {
         console.log('📡 [REALTIME] Status do canal:', status);
+        console.log('📡 [REALTIME] Timestamp:', new Date().toISOString());
         
         // MELHORIA: Detectar desconexão e reconectar automaticamente
         if (status === 'SUBSCRIBED') {
@@ -2844,7 +2854,7 @@ function Conversas() {
           .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, midia_url, fromme')
           .eq('company_id', userRole.company_id)
           .order('created_at', { ascending: false })
-          .limit(limit * 20) // ⚡ Limite proporcional (20 msgs por lead aprox.)
+          .limit(50) // ⚡ OTIMIZADO: Apenas 50 mensagens mais recentes para carregamento rápido
       ]);
       
       // Atualizar flags de paginação
@@ -2935,7 +2945,7 @@ function Conversas() {
         }
         
         const messagensFormatadas: Message[] = temMensagens 
-          ? mensagens.slice(0, 20).reverse().map(m => ({ // ⚡ Limitar a 20 mensagens iniciais por conversa
+          ? mensagens.slice(0, 10).reverse().map(m => ({ // ⚡ OTIMIZADO: Apenas 10 mensagens mais recentes por conversa
               id: m.id || `msg-${Date.now()}-${Math.random()}`,
               content: m.mensagem || '',
               type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem || 'text') as any,
@@ -2966,10 +2976,12 @@ function Conversas() {
 
       console.log(`✅ ${novasConversas.length} conversas carregadas em ${(performance.now() - startTime).toFixed(0)}ms`);
       
-      // LOG: Verificar nomes carregados
-      console.log('📋 [NOMES] Primeiras 10 conversas:', novasConversas.slice(0, 10).map(c => ({
+      // LOG: Verificar nomes carregados e status
+      console.log('📋 [CONVERSAS] Primeiras 5 conversas:', novasConversas.slice(0, 5).map(c => ({
         telefone: c.phoneNumber,
-        nome: c.contactName
+        nome: c.contactName,
+        totalMensagens: c.messages.length,
+        ultimaMensagem: c.lastMessage?.substring(0, 50)
       })));
       
       // ⚡ APPEND ou REPLACE conversas
