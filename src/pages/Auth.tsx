@@ -79,52 +79,69 @@ export default function Auth() {
     const email = formData.get("signin-email") as string;
     const password = formData.get("signin-password") as string;
 
-    // Tentar login com retry automático
+    console.log("🔐 [LOGIN] Tentando login:", email);
+
+    // Sistema de retry agressivo com delays exponenciais
     let attempts = 0;
-    const maxAttempts = 2;
+    const maxAttempts = 5;
     let lastError = null;
 
     while (attempts < maxAttempts) {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-
-      if (!error) {
-        setLoading(false);
-        return;
-      }
-
-      lastError = error;
       attempts++;
+      console.log(`🔄 [LOGIN] Tentativa ${attempts}/${maxAttempts}...`);
 
-      // Se for erro 503 (backend offline), ativar bypass automático
-      if ((error as any).status === 503) {
-        setBackendDown(true);
-        setLoading(false);
-        
-        toast({
-          title: "⚠️ Backend Temporariamente Indisponível",
-          description: "Ativando modo offline automático...",
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password
         });
 
-        // Auto-bypass após 2 segundos
-        setTimeout(() => {
-          handleOfflineAccess(email);
-        }, 2000);
-        return;
+        if (!error && data.session) {
+          console.log("✅ [LOGIN] Login bem-sucedido:", email);
+          setLoading(false);
+          toast({
+            title: "✅ Login bem-sucedido!",
+            description: `Bem-vindo ${email}`
+          });
+          return;
+        }
+
+        if (error) {
+          lastError = error;
+          console.error(`❌ [LOGIN] Erro tentativa ${attempts}:`, error);
+
+          // Se for erro 503 e última tentativa, ativar modo offline
+          if ((error as any).status === 503 && attempts === maxAttempts) {
+            console.warn("⚠️ [LOGIN] Backend offline, ativando modo emergência...");
+            setBackendDown(true);
+            handleOfflineAccess(email);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error(`❌ [LOGIN] Exceção tentativa ${attempts}:`, err);
+        lastError = err;
       }
 
+      // Delay exponencial antes de tentar novamente
       if (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const delay = Math.min(1000 * Math.pow(2, attempts - 1), 8000);
+        console.log(`⏳ [LOGIN] Aguardando ${delay}ms antes da próxima tentativa...`);
+        
+        toast({
+          title: `Tentativa ${attempts}/${maxAttempts}`,
+          description: `Tentando novamente em ${delay/1000}s...`
+        });
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 
     setLoading(false);
     toast({
       variant: "destructive",
-      title: "Erro ao fazer login",
-      description: lastError?.message || "Serviço temporariamente indisponível"
+      title: "❌ Erro ao fazer login",
+      description: lastError?.message || "Não foi possível conectar ao servidor. Tente novamente em alguns minutos."
     });
   };
 
@@ -217,14 +234,6 @@ export default function Auth() {
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Entrando..." : "Entrar"}
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  className="w-full mt-2" 
-                  onClick={handleDevBypass}
-                >
-                  🔓 Acesso Direto Super Admin
                 </Button>
               </form>
             </TabsContent>
