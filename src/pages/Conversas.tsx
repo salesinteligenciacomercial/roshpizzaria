@@ -3018,35 +3018,20 @@ function Conversas() {
         ultimaMensagem: c.lastMessage?.substring(0, 50)
       })));
       
-      // ⚡ MERGE INTELIGENTE: Preservar conversas em tempo real
+      // ⚡ APPEND ou REPLACE conversas
       if (append) {
         setConversations(prev => [...prev, ...novasConversas]);
         toast.success(`+${novasConversas.length} conversas carregadas`);
       } else {
-        // CRÍTICO: Fazer merge ao invés de substituir completamente
-        // Isso preserva conversas adicionadas em tempo real
-        setConversations(prev => {
-          const telefonesDoBanco = new Set(novasConversas.map(c => c.phoneNumber || c.id));
-          
-          // Manter conversas que não vieram do banco (foram adicionadas em tempo real)
-          const conversasRealtime = prev.filter(c => {
-            const tel = c.phoneNumber || c.id;
-            return !telefonesDoBanco.has(tel);
-          });
-          
-          console.log(`🔄 [MERGE] Mantendo ${conversasRealtime.length} conversas em tempo real`);
-          
-          // Combinar: conversas do banco + conversas em tempo real
-          return [...conversasRealtime, ...novasConversas];
-        });
+        setConversations(novasConversas);
         toast.success(`${novasConversas.length} conversas carregadas`);
       }
       
       loadCompanyMetrics();
       setLoadingConversations(false);
 
-      // ⚡ LAZY LOADING DE AVATARES: Carregar primeiros 10 visíveis
-      const primeiros = novasConversas.slice(0, 10);
+      // ⚡ LAZY LOADING DE AVATARES: Carregar apenas dos 6 primeiros visíveis
+      const primeiros = novasConversas.slice(0, 6);
       primeiros.forEach(async (conv) => {
         if (conv.phoneNumber) {
           try {
@@ -3066,36 +3051,6 @@ function Conversas() {
           }
         }
       });
-
-      // ⚡ CARREGAR RESTANTES EM BACKGROUND (baixa prioridade)
-      const restantes = novasConversas.slice(10);
-      if (restantes.length > 0) {
-        // Aguardar 2 segundos antes de começar a carregar o restante
-        setTimeout(() => {
-          restantes.forEach(async (conv, index) => {
-            // Espaçar requisições em 500ms para não sobrecarregar
-            setTimeout(async () => {
-              if (conv.phoneNumber) {
-                try {
-                  const profilePicUrl = await getProfilePictureWithFallback(
-                    conv.phoneNumber, 
-                    userRole.company_id, 
-                    conv.contactName
-                  );
-                  
-                  if (profilePicUrl) {
-                    setConversations(prev => prev.map(c => 
-                      c.id === conv.id ? { ...c, avatarUrl: profilePicUrl } : c
-                    ));
-                  }
-                } catch (error) {
-                  // Silenciar erros de foto
-                }
-              }
-            }, index * 500);
-          });
-        }, 2000);
-      }
       
     } catch (error) {
       console.error('Erro ao carregar conversas:', error);
