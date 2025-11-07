@@ -14,6 +14,7 @@ serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
     
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: {
@@ -24,84 +25,83 @@ serve(async (req) => {
     
     const { email, password } = await req.json();
     
-    console.log(`🔐 [SUPER ADMIN] Autenticando:`, email);
+    console.log(`🔐 [SUPER ADMIN] Tentando autenticar:`, email);
 
     // Validar que é o super admin
     if (email !== 'jeovauzumak@gmail.com') {
+      console.log('❌ Email não autorizado');
       return new Response(
         JSON.stringify({ error: 'Acesso negado' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Usar admin API para criar sessão sem verificar senha
     const userId = '677a7847-1f34-44d0-b03b-c148b4b166b7';
     
-    console.log('✅ Gerando link de autenticação admin...');
+    // Passo 1: Resetar senha para a senha fornecida
+    console.log('🔧 Atualizando senha do super admin...');
     
-    // Gerar link mágico usando admin API
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'magiclink',
-      email: email,
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      { password: password }
+    );
+
+    if (updateError) {
+      console.error('❌ Erro ao atualizar senha:', updateError);
+      return new Response(
+        JSON.stringify({ error: 'Erro ao atualizar senha: ' + updateError.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('✅ Senha atualizada com sucesso');
+
+    // Passo 2: Fazer login usando a API REST do Supabase diretamente
+    console.log('🔑 Fazendo login via API REST...');
+    
+    const loginResponse = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        password,
+      }),
     });
 
-    if (linkError) {
-      console.error('❌ Erro ao gerar link:', linkError);
+    if (!loginResponse.ok) {
+      const errorData = await loginResponse.json();
+      console.error('❌ Erro no login REST:', errorData);
       return new Response(
-        JSON.stringify({ error: 'Erro ao autenticar' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Erro ao fazer login: ' + (errorData.error_description || errorData.msg) }),
+        { status: loginResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('✅ Link gerado, extraindo tokens...');
-
-    // Extrair tokens do link
-    const url = new URL(linkData.properties.action_link);
-    const accessToken = url.searchParams.get('access_token');
-    const refreshToken = url.searchParams.get('refresh_token');
-
-    if (!accessToken || !refreshToken) {
-      console.error('❌ Tokens não encontrados no link');
-      return new Response(
-        JSON.stringify({ error: 'Erro ao gerar tokens' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Buscar dados do usuário
-    const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
-
-    if (userError || !userData.user) {
-      console.error('❌ Erro ao buscar usuário:', userError);
-      return new Response(
-        JSON.stringify({ error: 'Usuário não encontrado' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const session = {
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      expires_in: 3600,
-      expires_at: Math.floor(Date.now() / 1000) + 3600,
-      token_type: 'bearer',
-      user: userData.user
-    };
-
-    console.log('✅ Sessão criada com sucesso para super admin');
+    const loginData = await loginResponse.json();
+    console.log('✅ Login bem-sucedido!');
 
     return new Response(
       JSON.stringify({ 
         success: true,
-        session,
-        user: userData.user,
+        session: {
+          access_token: loginData.access_token,
+          refresh_token: loginData.refresh_token,
+          expires_in: loginData.expires_in,
+          expires_at: loginData.expires_at,
+          token_type: loginData.token_type,
+          user: loginData.user
+        },
+        user: loginData.user,
         role: 'super_admin'
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: any) {
-    console.error('❌ Erro:', error);
+    console.error('❌ Erro fatal:', error);
     return new Response(
       JSON.stringify({ error: error?.message || 'Erro interno do servidor' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
