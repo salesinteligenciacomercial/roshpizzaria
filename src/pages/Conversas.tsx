@@ -1861,6 +1861,9 @@ function Conversas() {
               const convId = msg.telefone_formatado || msg.numero;
               
               if (!conversationsMap.has(convId)) {
+                const numeroLimpo = String(msg.numero || '').replace(/\D/g, '');
+                const isRealGroup = Boolean((msg as any)?.is_group) || (numeroLimpo.length >= 17 && /@g\.us$/.test(String(msg.numero || '')));
+                
                 conversationsMap.set(convId, {
                   id: convId,
                   contactName: leadData.name || msg.nome_contato || 'Desconhecido', // PRIORIZAR NOME DO LEAD
@@ -1869,7 +1872,7 @@ function Conversas() {
                   status: msg.status === 'Enviada' ? 'answered' : 'waiting',
                   lastMessage: msg.mensagem || '',
                   unread: 0,
-                  isGroup: Boolean((msg as any)?.is_group) || /@g\.us$/.test(String(msg.numero || '')),
+                  isGroup: isRealGroup,
                   messages: [],
                   tags: leadData.tags || [],
                   funnelStage: leadData.stage,
@@ -2236,13 +2239,25 @@ function Conversas() {
                 }
                 
                 // Converter para formato do componente
+                const numeroLimpoRealtime = String(novaConversa.numero || '').replace(/\D/g, '');
+                const isRealGroupRealtime = Boolean((novaConversa as any)?.is_group) || (numeroLimpoRealtime.length >= 17 && /@g\.us$/.test(String(novaConversa.numero || '')));
+                
+                console.log('🔍 [DEBUG] Classificando conversa:', {
+                  numero: novaConversa.numero,
+                  numeroLimpo: numeroLimpoRealtime,
+                  tamanho: numeroLimpoRealtime.length,
+                  is_group_db: (novaConversa as any)?.is_group,
+                  isRealGroup: isRealGroupRealtime,
+                  nome: nomeValido
+                });
+                
                 const novaConvFormatted: Conversation = {
                   id: telefoneNormalizado,
                   contactName: nomeValido,
                   avatarUrl: profilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(nomeValido)}&background=10b981&color=fff`,
                   channel: 'whatsapp' as const,
                   status: 'waiting' as const,
-                  isGroup: Boolean((novaConversa as any)?.is_group) || /@g\.us$/.test(String(novaConversa.numero || '')),
+                  isGroup: isRealGroupRealtime,
                   messages: [{
                     id: novaConversa.id,
                     content: novaConversa.mensagem,
