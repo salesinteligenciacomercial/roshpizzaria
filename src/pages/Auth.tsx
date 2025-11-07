@@ -5,15 +5,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Session } from "@supabase/supabase-js";
+import { AlertCircle, RefreshCw, ExternalLink } from "lucide-react";
 
 export default function Auth() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
+  const [backendDown, setBackendDown] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(false);
   
   useEffect(() => {
     supabase.auth.getSession().then(({
@@ -71,9 +75,30 @@ export default function Auth() {
       });
     }
   };
+  const checkBackendStatus = async () => {
+    setCheckingStatus(true);
+    try {
+      const { error } = await supabase.auth.getSession();
+      if (error && (error as any).status === 503) {
+        setBackendDown(true);
+      } else {
+        setBackendDown(false);
+        toast({
+          title: "Backend online!",
+          description: "O servidor está respondendo. Tente fazer login novamente."
+        });
+      }
+    } catch (err) {
+      setBackendDown(true);
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
+
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
+    setBackendDown(false);
     
     const formData = new FormData(e.currentTarget);
     const email = formData.get("signin-email") as string;
@@ -91,18 +116,31 @@ export default function Auth() {
       if (error) {
         console.error("❌ Erro ao fazer login:", error);
         
-        // Verificar se é erro de conexão (503)
-        if (error.message.includes("503") || error.message.includes("upstream") || error.message.includes("connect")) {
+        // Verificar se é erro 503 (backend fora do ar)
+        if ((error as any).status === 503 || error.message.includes("503")) {
+          setBackendDown(true);
           toast({
             variant: "destructive",
-            title: "Servidor temporariamente indisponível",
-            description: "O serviço de autenticação está temporariamente fora do ar. Tente novamente em alguns minutos."
+            title: "🔴 Backend fora do ar",
+            description: "O servidor de autenticação está indisponível. Aguarde alguns minutos."
+          });
+          setLoading(false);
+          return;
+        }
+        
+        // Verificar outros erros
+        if (error.message.includes("upstream") || error.message.includes("connect")) {
+          setBackendDown(true);
+          toast({
+            variant: "destructive",
+            title: "Erro de conexão com servidor",
+            description: "Não foi possível conectar ao backend. Verifique o status abaixo."
           });
         } else if (error.message.includes("Invalid login credentials")) {
           toast({
             variant: "destructive",
             title: "Credenciais inválidas",
-            description: "Email ou senha incorretos. Verifique suas credenciais e tente novamente."
+            description: "Email ou senha incorretos. Verifique suas credenciais."
           });
         } else {
           toast({
@@ -117,6 +155,7 @@ export default function Auth() {
 
       if (data.session) {
         console.log("✅ Login bem-sucedido:", email);
+        setBackendDown(false);
         
         // Verificar se é super admin
         const isSuperAdmin = email === "jeovauzumak@gmail.com";
@@ -134,12 +173,19 @@ export default function Auth() {
     } catch (err: any) {
       console.error("❌ Exceção ao fazer login:", err);
       
-      // Tratamento de erro de rede
-      if (err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError")) {
+      // Verificar se é erro 503
+      if (err.status === 503) {
+        setBackendDown(true);
+        toast({
+          variant: "destructive",
+          title: "Backend fora do ar",
+          description: "O servidor não está respondendo (erro 503)."
+        });
+      } else if (err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError")) {
         toast({
           variant: "destructive",
           title: "Erro de conexão",
-          description: "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente."
+          description: "Não foi possível conectar ao servidor."
         });
       } else {
         toast({
@@ -164,9 +210,38 @@ export default function Auth() {
           </div>
           <CardTitle className="text-2xl font-bold">MOTION CRM</CardTitle>
           <CardDescription>Sistema inteligente de gestão comercial</CardDescription>
-          
         </CardHeader>
         <CardContent>
+          {backendDown && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Backend Indisponível (503)</AlertTitle>
+              <AlertDescription className="space-y-2">
+                <p>O servidor de autenticação está temporariamente fora do ar.</p>
+                <div className="flex gap-2 mt-3">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={checkBackendStatus}
+                    disabled={checkingStatus}
+                    className="flex items-center gap-2"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${checkingStatus ? 'animate-spin' : ''}`} />
+                    {checkingStatus ? 'Verificando...' : 'Verificar Status'}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => window.open('https://status.supabase.com', '_blank')}
+                    className="flex items-center gap-2"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Status Supabase
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
           <Tabs defaultValue="signin" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Entrar</TabsTrigger>
