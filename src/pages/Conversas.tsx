@@ -560,8 +560,8 @@ function Conversas() {
 
     // Aplicar filtro de status
     if (filter === "all") {
-      // No filtro "Todos", excluir grupos
-      filtered = filtered.filter((conv) => conv.isGroup !== true);
+      // No filtro "Todos", mostrar TODAS as conversas (individuais + grupos)
+      // Não aplicar nenhum filtro adicional
     } else if (filter === "group") {
       // No filtro "Grupos", mostrar apenas grupos
       filtered = filtered.filter((conv) => conv.isGroup === true);
