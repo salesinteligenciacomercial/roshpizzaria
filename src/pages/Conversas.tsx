@@ -3018,12 +3018,27 @@ function Conversas() {
         ultimaMensagem: c.lastMessage?.substring(0, 50)
       })));
       
-      // ⚡ APPEND ou REPLACE conversas
+      // ⚡ MERGE INTELIGENTE: Preservar conversas em tempo real
       if (append) {
         setConversations(prev => [...prev, ...novasConversas]);
         toast.success(`+${novasConversas.length} conversas carregadas`);
       } else {
-        setConversations(novasConversas);
+        // CRÍTICO: Fazer merge ao invés de substituir completamente
+        // Isso preserva conversas adicionadas em tempo real
+        setConversations(prev => {
+          const telefonesDoBanco = new Set(novasConversas.map(c => c.phoneNumber || c.id));
+          
+          // Manter conversas que não vieram do banco (foram adicionadas em tempo real)
+          const conversasRealtime = prev.filter(c => {
+            const tel = c.phoneNumber || c.id;
+            return !telefonesDoBanco.has(tel);
+          });
+          
+          console.log(`🔄 [MERGE] Mantendo ${conversasRealtime.length} conversas em tempo real`);
+          
+          // Combinar: conversas do banco + conversas em tempo real
+          return [...conversasRealtime, ...novasConversas];
+        });
         toast.success(`${novasConversas.length} conversas carregadas`);
       }
       
