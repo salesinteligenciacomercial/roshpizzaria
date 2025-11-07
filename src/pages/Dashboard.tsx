@@ -369,25 +369,40 @@ export default function Dashboard() {
           {/* Pipeline por Etapa */}
           <Card className="border-0 shadow-card">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Pipeline por Etapa</CardTitle>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <CardTitle>Pipeline por Etapa</CardTitle>
+                  {funis.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">
+                      {funis.length} {funis.length === 1 ? 'funil' : 'funis'}
+                    </Badge>
+                  )}
+                </div>
                 <Select
                   value={selectedFunil || ""}
-                  onValueChange={(value) => setSelectedFunil(value)}                                
-                  disabled={funis.length === 0}
+                  onValueChange={(value) => setSelectedFunil(value)}
                 >
-                  <SelectTrigger className="w-[250px]">                                            
-                    <SelectValue placeholder={funis.length === 0 ? "Nenhum funil encontrado" : "Selecione o funil de vendas"} />                     
+                  <SelectTrigger className="min-w-[200px] sm:w-[280px]">
+                    <SelectValue placeholder={funis.length === 0 ? "Nenhum funil encontrado" : "Selecione o funil de vendas"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {funis.map((funil) => (
-                      <SelectItem key={funil.id} value={funil.id}>                                  
-                        {funil.nome}
-                      </SelectItem>
-                    ))}
+                    {funis.length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground text-center">
+                        Nenhum funil disponível
+                      </div>
+                    ) : (
+                      funis.map((funil) => (
+                        <SelectItem key={funil.id} value={funil.id}>
+                          {funil.nome}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
+              <p className="text-sm text-muted-foreground mt-2">
+                Distribuição visual dos leads no funil de vendas
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
               {!selectedFunil ? (
