@@ -86,30 +86,33 @@ function ConversationListItemComponent({
 
   return (
     <div
-      className={`relative p-4 border-b border-border cursor-pointer transition-colors hover:bg-muted/50 ${
+      className={`relative p-4 pr-14 border-b border-border cursor-pointer transition-colors hover:bg-muted/50 ${
         isSelected ? "bg-muted/70" : ""
       }`}
       onClick={onClick}
     >
-      {/* Botão de menu - SEMPRE VISÍVEL */}
-      <div className="absolute top-3 right-3 z-[60]">
+      {/* Botão de menu - SEMPRE VISÍVEL com z-index máximo */}
+      <div 
+        className="absolute top-2 right-2 z-[9999]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button 
-              variant="outline" 
+              variant="default" 
               size="icon" 
-              className="h-9 w-9 bg-background hover:bg-accent border-border shadow-sm"
+              className="h-10 w-10 bg-primary/90 hover:bg-primary text-primary-foreground shadow-lg border-2 border-background"
               onClick={(e) => {
                 e.stopPropagation();
                 console.log('🔘 Botão menu clicado!');
               }}
             >
-              <MoreVertical className="h-4 w-4 text-foreground" />
+              <MoreVertical className="h-5 w-5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent 
             align="end" 
-            className="w-56 bg-popover border-border shadow-md"
+            className="z-[10000] w-56 bg-background border-2 border-border shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <DropdownMenuItem 
@@ -118,7 +121,7 @@ function ConversationListItemComponent({
                 console.log('✏️ Editar nome');
                 onEditName?.();
               }}
-              className="cursor-pointer"
+              className="cursor-pointer hover:bg-accent"
             >
               <Edit className="h-4 w-4 mr-2" />
               Editar nome
@@ -130,7 +133,7 @@ function ConversationListItemComponent({
                   console.log('➕ Adicionar ao CRM');
                   onCreateLead();
                 }}
-                className="cursor-pointer"
+                className="cursor-pointer hover:bg-accent"
               >
                 <UserPlus className="h-4 w-4 mr-2" />
                 Adicionar ao CRM
@@ -142,7 +145,7 @@ function ConversationListItemComponent({
                 console.log('🗑️ Excluir conversa');
                 onDeleteConversation?.();
               }}
-              className="text-destructive cursor-pointer"
+              className="text-destructive cursor-pointer hover:bg-destructive/10"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Excluir conversa
