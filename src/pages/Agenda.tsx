@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Calendar as CalendarIcon, Plus, Clock, User, Filter, Settings, Bell, CheckCircle2, XCircle, AlertCircle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from "date-fns";
@@ -47,6 +48,9 @@ interface Lembrete {
   tentativas?: number;
   proxima_tentativa?: string;
   compromisso?: {
+    id?: string;
+    lead_id?: string;
+    titulo?: string;
     data_hora_inicio: string;
     tipo_servico: string;
     lead?: {
@@ -56,8 +60,25 @@ interface Lembrete {
   };
 }
 
+interface Agenda {
+  id: string;
+  nome: string;
+  tipo: string;
+  status: string;
+  capacidade_simultanea: number;
+  tempo_medio_servico: number;
+  disponibilidade: {
+    dias: string[];
+    horario_inicio: string;
+    horario_fim: string;
+  };
+  responsavel_id?: string;
+}
+
 interface Compromisso {
   id: string;
+  titulo?: string;
+  agenda_id?: string;
   lead_id?: string;
   usuario_responsavel_id: string;
   data_hora_inicio: string;
@@ -70,6 +91,10 @@ interface Compromisso {
   lead?: {
     name: string;
     phone?: string;
+  };
+  agenda?: {
+    nome: string;
+    tipo: string;
   };
 }
 
@@ -86,6 +111,7 @@ export default function Agenda() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [compromissos, setCompromissos] = useState<Compromisso[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [agendas, setAgendas] = useState<Agenda[]>([]);
   const [viewMode, setViewMode] = useState<"month" | "week" | "day">("month");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [novoCompromissoOpen, setNovoCompromissoOpen] = useState(false);
@@ -97,6 +123,12 @@ export default function Agenda() {
   
   // Cache de meses carregados para lazy loading
   const [loadedMonths, setLoadedMonths] = useState<Set<string>>(new Set());
+  
+  // Cache de avatares dos leads
+  const [leadAvatars, setLeadAvatars] = useState<Record<string, string>>({});
+  const avatarCacheRef = useRef<Map<string, string>>(new Map());
+  const avatarFetchingRef = useRef<Set<string>>(new Set());
+  const companyIdRef = useRef<string | null>(null);
 
   // Sistema de eventos globais para comunicação entre módulos
   const { emitGlobalEvent } = useGlobalSync({
@@ -285,6 +317,8 @@ export default function Agenda() {
 
   // Form states para novo compromisso
   const [formData, setFormData] = useState({
+    titulo: "",
+    agenda_id: "",
     lead_id: "",
     data: format(new Date(), "yyyy-MM-dd"),
     hora_inicio: "09:00",
@@ -312,14 +346,15 @@ export default function Agenda() {
     });
   }, [leads, leadSearch]);
 
-  // Função otimizada para carregar compromissos com range de datas
+      // Função otimizada para carregar compromissos com range de datas
   const carregarCompromissos = useCallback(async (startDate?: Date, endDate?: Date) => {
     try {
       let query = supabase
         .from('compromissos')
         .select(`
           *,
-          lead:leads(name, phone)
+          lead:leads(name, phone),
+          agenda:agendas(nome, tipo)
         `)
         .order('data_hora_inicio', { ascending: true });
 
@@ -378,10 +413,156 @@ export default function Agenda() {
     });
   }, [selectedDate]);
 
+  // Função para normalizar telefone brasileiro
+  const normalizePhoneBR = (phone: string): string | null => {
+    if (!phone) return null;
+    const cleaned = phone.replace(/\D/g, "");
+    if (cleaned.length < 10) return null;
+    if (cleaned.length === 10) return `55${cleaned}`;
+    if (cleaned.length === 11) return `55${cleaned}`;
+    if (cleaned.startsWith("55") && cleaned.length === 13) return cleaned;
+    if (cleaned.startsWith("55") && cleaned.length === 12) return cleaned;
+    return cleaned;
+  };
+
+  // Função para buscar avatar do lead com cache
+  const buscarAvatarLead = useCallback(async (lead: { id: string; name: string; phone?: string; telefone?: string }) => {
+    const telefone = lead.phone || lead.telefone;
+    if (!telefone) {
+      // Sem telefone, usar fallback
+      const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(lead.name)}&background=10b981&color=fff&size=32&bold=true`;
+      setLeadAvatars(prev => ({ ...prev, [lead.id]: fallbackUrl }));
+      return fallbackUrl;
+    }
+
+    // Verificar cache em memória
+    if (leadAvatars[lead.id]) return leadAvatars[lead.id];
+
+    // Verificar cache do Map
+    const cacheKey = `lead-${lead.id}`;
+    if (avatarCacheRef.current.has(cacheKey)) {
+      const cached = avatarCacheRef.current.get(cacheKey)!;
+      setLeadAvatars(prev => ({ ...prev, [lead.id]: cached }));
+      return cached;
+    }
+
+    // Evitar múltiplos fetches simultâneos
+    if (avatarFetchingRef.current.has(lead.id)) {
+      return leadAvatars[lead.id] || `https://ui-avatars.com/api/?name=${encodeURIComponent(lead.name)}&background=10b981&color=fff&size=32&bold=true`;
+    }
+
+    avatarFetchingRef.current.add(lead.id);
+
+    try {
+      // Obter company_id se ainda não tiver
+      if (!companyIdRef.current) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: userRole } = await supabase
+            .from('user_roles')
+            .select('company_id')
+            .eq('user_id', user.id)
+            .single();
+          companyIdRef.current = userRole?.company_id || null;
+        }
+      }
+
+      const telefoneNormalizado = normalizePhoneBR(telefone);
+      if (!telefoneNormalizado) {
+        throw new Error('Telefone inválido');
+      }
+
+      // Buscar foto com timeout de 5s
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout')), 5000)
+      );
+
+      const fetchPromise = supabase.functions.invoke('get-profile-picture', {
+        body: { number: telefoneNormalizado, company_id: companyIdRef.current }
+      });
+
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
+
+      if (!error && data?.profilePictureUrl) {
+        const avatarUrl = data.profilePictureUrl;
+        setLeadAvatars(prev => ({ ...prev, [lead.id]: avatarUrl }));
+        avatarCacheRef.current.set(cacheKey, avatarUrl);
+        avatarFetchingRef.current.delete(lead.id);
+        return avatarUrl;
+      } else {
+        throw new Error('Avatar não encontrado');
+      }
+    } catch (error) {
+      // Fallback para avatar gerado
+      const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(lead.name)}&background=10b981&color=fff&size=32&bold=true`;
+      setLeadAvatars(prev => ({ ...prev, [lead.id]: fallbackUrl }));
+      avatarCacheRef.current.set(cacheKey, fallbackUrl);
+      avatarFetchingRef.current.delete(lead.id);
+      return fallbackUrl;
+    }
+  }, [leadAvatars]);
+
+  // Buscar avatares dos leads quando compromissos são carregados
+  useEffect(() => {
+    const buscarAvatares = async () => {
+      const leadsComTelefone = compromissos
+        .filter(c => c.lead_id && c.lead && (c.lead.phone || c.lead.telefone))
+        .map(c => ({ 
+          id: c.lead_id!, 
+          name: c.lead!.name, 
+          phone: c.lead!.phone, 
+          telefone: c.lead!.phone 
+        }))
+        .filter((lead, index, self) => 
+          index === self.findIndex(l => l.id === lead.id)
+        );
+
+      for (const lead of leadsComTelefone) {
+        const cacheKey = lead.id;
+        if (!leadAvatars[cacheKey] && !avatarFetchingRef.current.has(cacheKey)) {
+          buscarAvatarLead(lead);
+        }
+      }
+    };
+
+    if (compromissos.length > 0) {
+      buscarAvatares();
+    }
+  }, [compromissos, buscarAvatarLead, leadAvatars]);
+
+  // Buscar avatares dos leads quando lembretes são carregados
+  useEffect(() => {
+    const buscarAvataresLembretes = async () => {
+      const leadsComTelefone = lembretes
+        .filter(l => l.compromisso?.lead_id && l.compromisso?.lead && (l.compromisso.lead.phone || l.compromisso.lead.phone))
+        .map(l => ({ 
+          id: l.compromisso!.lead_id!, 
+          name: l.compromisso!.lead!.name, 
+          phone: l.compromisso!.lead!.phone, 
+          telefone: l.compromisso!.lead!.phone 
+        }))
+        .filter((lead, index, self) => 
+          index === self.findIndex(l => l.id === lead.id)
+        );
+
+      for (const lead of leadsComTelefone) {
+        const cacheKey = lead.id;
+        if (!leadAvatars[cacheKey] && !avatarFetchingRef.current.has(cacheKey)) {
+          buscarAvatarLead(lead);
+        }
+      }
+    };
+
+    if (lembretes.length > 0) {
+      buscarAvataresLembretes();
+    }
+  }, [lembretes, buscarAvatarLead, leadAvatars]);
+
   useEffect(() => {
     // Carregar apenas compromissos do mês atual inicialmente (otimização)
     carregarCompromissosDoMes();
     carregarLeads();
+    carregarAgendas();
     carregarLembretes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     
@@ -451,6 +632,21 @@ export default function Agenda() {
     }
   };
 
+  const carregarAgendas = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('agendas')
+        .select('*')
+        .eq('status', 'ativo')
+        .order('nome');
+
+      if (error) throw error;
+      setAgendas(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar agendas:', error);
+    }
+  };
+
   const carregarLembretes = async () => {
     try {
       const { data, error } = await supabase
@@ -458,6 +654,9 @@ export default function Agenda() {
         .select(`
           *,
           compromisso:compromissos(
+            id,
+            lead_id,
+            titulo,
             data_hora_inicio,
             tipo_servico,
             lead:leads(name, phone)
@@ -503,10 +702,107 @@ export default function Agenda() {
       const dataHoraInicio = new Date(`${formData.data}T${formData.hora_inicio}`);
       const dataHoraFim = new Date(`${formData.data}T${formData.hora_fim}`);
 
-      // Criar compromisso COM company_id
+      // Validar agenda se selecionada
+      if (formData.agenda_id) {
+        // Carregar agendas se ainda não foram carregadas
+        let agendasDisponiveis = agendas;
+        if (agendasDisponiveis.length === 0) {
+          const { data: agendasData } = await supabase
+            .from('agendas')
+            .select('*')
+            .eq('status', 'ativo');
+          agendasDisponiveis = agendasData || [];
+        }
+        
+        const agendaSelecionada = agendasDisponiveis.find(a => a.id === formData.agenda_id);
+        
+        if (!agendaSelecionada) {
+          toast.error("Agenda selecionada não encontrada");
+          return;
+        }
+
+        // Validar disponibilidade - dia da semana
+        const diasSemana = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+        const diaSemana = diasSemana[dataHoraInicio.getDay()];
+        
+        if (!agendaSelecionada.disponibilidade?.dias?.includes(diaSemana)) {
+          toast.error(`A agenda "${agendaSelecionada.nome}" não está disponível neste dia da semana`);
+          return;
+        }
+
+        // Validar disponibilidade - horário
+        const [horaInicioDisponivel, minutoInicioDisponivel] = agendaSelecionada.disponibilidade.horario_inicio.split(':').map(Number);
+        const [horaFimDisponivel, minutoFimDisponivel] = agendaSelecionada.disponibilidade.horario_fim.split(':').map(Number);
+        const inicioDisponivel = horaInicioDisponivel * 60 + minutoInicioDisponivel;
+        const fimDisponivel = horaFimDisponivel * 60 + minutoFimDisponivel;
+        
+        const [horaInicio, minutoInicio] = formData.hora_inicio.split(':').map(Number);
+        const [horaFim, minutoFim] = formData.hora_fim.split(':').map(Number);
+        const inicioSolicitado = horaInicio * 60 + minutoInicio;
+        const fimSolicitado = horaFim * 60 + minutoFim;
+
+        if (inicioSolicitado < inicioDisponivel || fimSolicitado > fimDisponivel) {
+          toast.error(`O horário está fora do horário de funcionamento da agenda (${agendaSelecionada.disponibilidade.horario_inicio} - ${agendaSelecionada.disponibilidade.horario_fim})`);
+          return;
+        }
+
+        // Validar capacidade simultânea
+        const { data: compromissosAgenda, error: capacidadeError } = await supabase
+          .from('compromissos')
+          .select('id')
+          .eq('agenda_id', formData.agenda_id)
+          .eq('status', 'agendado')
+          .lt('data_hora_inicio', dataHoraFim.toISOString())
+          .gt('data_hora_fim', dataHoraInicio.toISOString());
+
+        if (capacidadeError) {
+          console.error('❌ [DEBUG] Erro ao verificar capacidade:', capacidadeError);
+          throw capacidadeError;
+        }
+
+        const ocupacaoAtual = compromissosAgenda?.length || 0;
+        if (ocupacaoAtual >= agendaSelecionada.capacidade_simultanea) {
+          toast.error(`A agenda "${agendaSelecionada.nome}" já está com capacidade máxima (${agendaSelecionada.capacidade_simultanea} compromissos simultâneos)`);
+          return;
+        }
+      }
+
+      // Checar conflito de horários (por usuário responsável, status agendado)
+      // Se agenda_id foi selecionado, também verificar conflitos na agenda
+      const conflitosQuery = supabase
+        .from('compromissos')
+        .select('id, data_hora_inicio, data_hora_fim')
+        .eq('status', 'agendado')
+        .lt('data_hora_inicio', dataHoraFim.toISOString())
+        .gt('data_hora_fim', dataHoraInicio.toISOString());
+
+      if (formData.agenda_id) {
+        conflitosQuery.eq('agenda_id', formData.agenda_id);
+      } else {
+        conflitosQuery.eq('usuario_responsavel_id', user.id);
+      }
+
+      const { data: conflitos, error: conflitoError } = await conflitosQuery;
+
+      if (conflitoError) {
+        console.error('❌ [DEBUG] Erro ao verificar conflitos:', conflitoError);
+        throw conflitoError;
+      }
+
+      if (conflitos && conflitos.length > 0) {
+        const mensagem = formData.agenda_id 
+          ? "Conflito de horário: já existe um compromisso nessa agenda nesse intervalo"
+          : "Conflito de horário: já existe um compromisso nesse intervalo";
+        toast.error(mensagem);
+        return;
+      }
+
+      // Criar compromisso COM company_id e agenda_id
       const { data: compromisso, error } = await supabase
         .from('compromissos')
         .insert({
+          titulo: formData.titulo?.trim() || null,
+          agenda_id: formData.agenda_id || null,
           lead_id: formData.lead_id || null,
           usuario_responsavel_id: user.id,
           owner_id: user.id,
@@ -649,6 +945,8 @@ export default function Agenda() {
 
   const limparFormulario = () => {
     setFormData({
+      titulo: "",
+      agenda_id: "",
       lead_id: "",
       data: format(new Date(), "yyyy-MM-dd"),
       hora_inicio: "09:00",
@@ -795,6 +1093,40 @@ export default function Agenda() {
                 <DialogTitle>Novo Agendamento</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Título</Label>
+                  <Input
+                    value={formData.titulo}
+                    onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
+                    placeholder="Assunto do compromisso (opcional)"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Agenda (Opcional)</Label>
+                  <Select value={formData.agenda_id || "none"} onValueChange={(value) => setFormData({ ...formData, agenda_id: value === "none" ? "" : value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma agenda ou deixe vazio" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma agenda</SelectItem>
+                      {agendas.map((agenda) => (
+                        <SelectItem key={agenda.id} value={agenda.id}>
+                          {agenda.nome} ({agenda.tipo}) - {agenda.disponibilidade?.horario_inicio} às {agenda.disponibilidade?.horario_fim}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formData.agenda_id && (
+                    <p className="text-xs text-muted-foreground">
+                      {(() => {
+                        const agenda = agendas.find(a => a.id === formData.agenda_id);
+                        return agenda ? `Capacidade: ${agenda.capacidade_simultanea} simultâneos | Dias: ${agenda.disponibilidade?.dias?.join(', ')}` : '';
+                      })()}
+                    </p>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   <Label>Cliente / Lead</Label>
                   <Input
@@ -1143,18 +1475,43 @@ export default function Agenda() {
                             <div className="flex justify-between items-start mb-2">
                               <div className="space-y-1 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-medium">{compromisso.tipo_servico}</span>
+                                  <span className="font-medium">{compromisso.titulo || compromisso.tipo_servico}</span>
                                   {getStatusBadge(compromisso.status)}
                                 </div>
                                 <p className="text-sm text-muted-foreground flex items-center gap-1">
                                   <Clock className="h-3 w-3" />
                                   {format(parseISO(compromisso.data_hora_inicio), "HH:mm")} - {format(parseISO(compromisso.data_hora_fim), "HH:mm")}
                                 </p>
-                                {compromisso.lead && (
-                                  <p className="text-sm flex items-center gap-1">
-                                    <User className="h-3 w-3" />
-                                    {compromisso.lead.name}
+                                {compromisso.agenda && (
+                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <CalendarIcon className="h-3 w-3" />
+                                    {compromisso.agenda.nome} ({compromisso.agenda.tipo})
                                   </p>
+                                )}
+                                {compromisso.lead && (
+                                  <div className="flex items-center gap-2">
+                                    <Avatar className="h-6 w-6">
+                                      <AvatarImage 
+                                        src={compromisso.lead_id ? leadAvatars[compromisso.lead_id] : undefined} 
+                                        alt={compromisso.lead.name}
+                                        onError={(e) => {
+                                          // Se falhar, tentar buscar
+                                          if (compromisso.lead_id && compromisso.lead) {
+                                            buscarAvatarLead({
+                                              id: compromisso.lead_id,
+                                              name: compromisso.lead.name,
+                                              phone: compromisso.lead.phone,
+                                              telefone: compromisso.lead.phone
+                                            });
+                                          }
+                                        }}
+                                      />
+                                      <AvatarFallback className="h-6 w-6 text-xs bg-primary/10">
+                                        {compromisso.lead.name.charAt(0).toUpperCase()}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <span className="text-sm">{compromisso.lead.name}</span>
+                                  </div>
                                 )}
                                 {compromisso.observacoes && (
                                   <p className="text-xs text-muted-foreground mt-2">
@@ -1249,17 +1606,41 @@ export default function Agenda() {
                           <div className="flex justify-between items-start">
                             <div className="space-y-1 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="font-medium">{compromisso.tipo_servico}</span>
+                                <span className="font-medium">{compromisso.titulo || compromisso.tipo_servico}</span>
                                 {getStatusBadge(compromisso.status)}
                               </div>
                               <p className="text-sm text-muted-foreground">
                                 {format(parseISO(compromisso.data_hora_inicio), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                               </p>
-                              {compromisso.lead && (
-                                <p className="text-sm flex items-center gap-1">
-                                  <User className="h-3 w-3" />
-                                  {compromisso.lead.name}
+                              {compromisso.agenda && (
+                                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <CalendarIcon className="h-3 w-3" />
+                                  {compromisso.agenda.nome} ({compromisso.agenda.tipo})
                                 </p>
+                              )}
+                              {compromisso.lead && (
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-6 w-6">
+                                    <AvatarImage 
+                                      src={compromisso.lead_id ? leadAvatars[compromisso.lead_id] : undefined} 
+                                      alt={compromisso.lead.name}
+                                      onError={(e) => {
+                                        if (compromisso.lead_id && compromisso.lead) {
+                                          buscarAvatarLead({
+                                            id: compromisso.lead_id,
+                                            name: compromisso.lead.name,
+                                            phone: compromisso.lead.phone,
+                                            telefone: compromisso.lead.phone
+                                          });
+                                        }
+                                      }}
+                                    />
+                                    <AvatarFallback className="h-6 w-6 text-xs bg-primary/10">
+                                      {compromisso.lead.name.charAt(0).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-sm">{compromisso.lead.name}</span>
+                                </div>
                               )}
                               {compromisso.custo_estimado && (
                                 <p className="text-sm font-medium text-primary">
@@ -1373,7 +1754,7 @@ export default function Agenda() {
                               <div className="space-y-1 flex-1">
                                 <div className="flex items-center gap-2">
                                   <span className="font-medium">
-                                    {lembrete.compromisso?.tipo_servico || 'Compromisso'}
+                                    {lembrete.compromisso?.titulo || lembrete.compromisso?.tipo_servico || 'Compromisso'}
                                   </span>
                                   <Badge variant={
                                     lembrete.status_envio === 'enviado' ? 'default' :
@@ -1398,10 +1779,28 @@ export default function Agenda() {
                                   )}
                                 </div>
                                 {lembrete.compromisso?.lead && (
-                                  <p className="text-sm text-muted-foreground flex items-center gap-1">
-                                    <User className="h-3 w-3" />
-                                    {lembrete.compromisso.lead.name}
-                                  </p>
+                                  <div className="flex items-center gap-2">
+                                    <Avatar className="h-6 w-6">
+                                      <AvatarImage 
+                                        src={lembrete.compromisso.lead_id ? leadAvatars[lembrete.compromisso.lead_id] : undefined} 
+                                        alt={lembrete.compromisso.lead.name}
+                                        onError={(e) => {
+                                          if (lembrete.compromisso?.lead_id && lembrete.compromisso.lead) {
+                                            buscarAvatarLead({
+                                              id: lembrete.compromisso.lead_id,
+                                              name: lembrete.compromisso.lead.name,
+                                              phone: lembrete.compromisso.lead.phone,
+                                              telefone: lembrete.compromisso.lead.phone
+                                            });
+                                          }
+                                        }}
+                                      />
+                                      <AvatarFallback className="h-6 w-6 text-xs bg-primary/10">
+                                        {lembrete.compromisso.lead.name.charAt(0).toUpperCase()}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <span className="text-sm text-muted-foreground">{lembrete.compromisso.lead.name}</span>
+                                  </div>
                                 )}
                                 <p className="text-sm text-muted-foreground flex items-center gap-1">
                                   <Clock className="h-3 w-3" />

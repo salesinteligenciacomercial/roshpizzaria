@@ -31,8 +31,23 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
+interface Agenda {
+  id: string;
+  nome: string;
+  tipo: string;
+  status: string;
+  capacidade_simultanea: number;
+  disponibilidade: {
+    dias: string[];
+    horario_inicio: string;
+    horario_fim: string;
+  };
+}
+
 interface Compromisso {
   id: string;
+  titulo?: string;
+  agenda_id?: string;
   lead_id?: string;
   data_hora_inicio: string;
   data_hora_fim: string;
@@ -40,6 +55,7 @@ interface Compromisso {
   observacoes?: string;
   custo_estimado?: number;
   status: string;
+  usuario_responsavel_id?: string;
 }
 
 interface Lead {
@@ -61,11 +77,14 @@ export function EditarCompromissoDialog({
 }: EditarCompromissoDialogProps) {
   const [open, setOpen] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [agendas, setAgendas] = useState<Agenda[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [leadSearch, setLeadSearch] = useState("");
   const [selectedLeadName, setSelectedLeadName] = useState("");
   
   const [leadId, setLeadId] = useState(compromisso.lead_id || "none");
+  const [agendaId, setAgendaId] = useState(compromisso.agenda_id || "");
+  const [titulo, setTitulo] = useState(compromisso.titulo || "");
   const [data, setData] = useState<Date>(parseISO(compromisso.data_hora_inicio));
   const [horaInicio, setHoraInicio] = useState(
     format(parseISO(compromisso.data_hora_inicio), "HH:mm")
@@ -82,12 +101,15 @@ export function EditarCompromissoDialog({
   useEffect(() => {
     if (open) {
       loadLeads();
+      loadAgendas();
       resetForm();
     }
   }, [open, compromisso]);
 
   const resetForm = () => {
     setLeadId(compromisso.lead_id || "none");
+    setAgendaId(compromisso.agenda_id || "");
+    setTitulo(compromisso.titulo || "");
     setData(parseISO(compromisso.data_hora_inicio));
     setHoraInicio(format(parseISO(compromisso.data_hora_inicio), "HH:mm"));
     setHoraFim(format(parseISO(compromisso.data_hora_fim), "HH:mm"));
@@ -113,6 +135,21 @@ export function EditarCompromissoDialog({
     }
   };
 
+  const loadAgendas = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("agendas")
+        .select("*")
+        .eq("status", "ativo")
+        .order("nome");
+
+      if (error) throw error;
+      setAgendas(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar agendas:", error);
+    }
+  };
+
   const filteredLeads = leads.filter((lead) => {
     if (!leadSearch.trim()) return true;
     const search = leadSearch.toLowerCase();
@@ -125,6 +162,10 @@ export function EditarCompromissoDialog({
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
+
+    if (titulo && titulo.length > 120) {
+      newErrors.titulo = "Título deve ter no máximo 120 caracteres";
+    }
 
     // Validar data
     const hoje = new Date();
@@ -180,9 +221,96 @@ export function EditarCompromissoDialog({
       const dataHoraInicio = new Date(`${dataFormatada}T${horaInicio}`);
       const dataHoraFim = new Date(`${dataFormatada}T${horaFim}`);
 
+      // Validar agenda se selecionada
+      if (agendaId) {
+        const agendaSelecionada = agendas.find(a => a.id === agendaId);
+        
+        if (!agendaSelecionada) {
+          toast.error("Agenda selecionada não encontrada");
+          return;
+        }
+
+        // Validar disponibilidade - dia da semana
+        const diasSemana = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+        const diaSemana = diasSemana[dataHoraInicio.getDay()];
+        
+        if (!agendaSelecionada.disponibilidade?.dias?.includes(diaSemana)) {
+          toast.error(`A agenda "${agendaSelecionada.nome}" não está disponível neste dia da semana`);
+          return;
+        }
+
+        // Validar disponibilidade - horário
+        const [horaInicioDisponivel, minutoInicioDisponivel] = agendaSelecionada.disponibilidade.horario_inicio.split(':').map(Number);
+        const [horaFimDisponivel, minutoFimDisponivel] = agendaSelecionada.disponibilidade.horario_fim.split(':').map(Number);
+        const inicioDisponivel = horaInicioDisponivel * 60 + minutoInicioDisponivel;
+        const fimDisponivel = horaFimDisponivel * 60 + minutoFimDisponivel;
+        
+        const [horaInicioNum, minutoInicioNum] = horaInicio.split(':').map(Number);
+        const [horaFimNum, minutoFimNum] = horaFim.split(':').map(Number);
+        const inicioSolicitado = horaInicioNum * 60 + minutoInicioNum;
+        const fimSolicitado = horaFimNum * 60 + minutoFimNum;
+
+        if (inicioSolicitado < inicioDisponivel || fimSolicitado > fimDisponivel) {
+          toast.error(`O horário está fora do horário de funcionamento da agenda (${agendaSelecionada.disponibilidade.horario_inicio} - ${agendaSelecionada.disponibilidade.horario_fim})`);
+          return;
+        }
+
+        // Validar capacidade simultânea (excluindo o próprio compromisso)
+        const { data: compromissosAgenda, error: capacidadeError } = await supabase
+          .from("compromissos")
+          .select("id")
+          .eq("agenda_id", agendaId)
+          .eq("status", "agendado")
+          .neq("id", compromisso.id)
+          .lt("data_hora_inicio", dataHoraFim.toISOString())
+          .gt("data_hora_fim", dataHoraInicio.toISOString());
+
+        if (capacidadeError) {
+          console.error("Erro ao verificar capacidade:", capacidadeError);
+          throw capacidadeError;
+        }
+
+        const ocupacaoAtual = compromissosAgenda?.length || 0;
+        if (ocupacaoAtual >= agendaSelecionada.capacidade_simultanea) {
+          toast.error(`A agenda "${agendaSelecionada.nome}" já está com capacidade máxima (${agendaSelecionada.capacidade_simultanea} compromissos simultâneos)`);
+          return;
+        }
+      }
+
+      // Checar conflito de horários
+      const conflitosQuery = supabase
+        .from("compromissos")
+        .select("id, data_hora_inicio, data_hora_fim")
+        .eq("status", "agendado")
+        .neq("id", compromisso.id)
+        .lt("data_hora_inicio", dataHoraFim.toISOString())
+        .gt("data_hora_fim", dataHoraInicio.toISOString());
+
+      if (agendaId) {
+        conflitosQuery.eq("agenda_id", agendaId);
+      } else if (compromisso.usuario_responsavel_id) {
+        conflitosQuery.eq("usuario_responsavel_id", compromisso.usuario_responsavel_id);
+      }
+
+      const { data: conflitos, error: confErr } = await conflitosQuery;
+
+      if (confErr) {
+        throw confErr;
+      }
+
+      if (conflitos && conflitos.length > 0) {
+        const mensagem = agendaId 
+          ? "Conflito de horário: já existe um compromisso nessa agenda nesse intervalo"
+          : "Conflito de horário: já existe um compromisso nesse intervalo";
+        toast.error(mensagem);
+        return;
+      }
+
       const { error } = await supabase
         .from("compromissos")
         .update({
+          titulo: titulo?.trim() || null,
+          agenda_id: agendaId || null,
           lead_id: leadId === 'none' ? null : leadId,
           data_hora_inicio: dataHoraInicio.toISOString(),
           data_hora_fim: dataHoraFim.toISOString(),
@@ -221,6 +349,45 @@ export function EditarCompromissoDialog({
           <DialogTitle>Editar Compromisso</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Título</Label>
+            <Input
+              value={titulo}
+              onChange={(e) => {
+                setTitulo(e.target.value);
+                if (errors.titulo) setErrors({ ...errors, titulo: "" });
+              }}
+              placeholder="Assunto do compromisso (opcional)"
+              className={errors.titulo ? "border-destructive" : ""}
+            />
+            {errors.titulo && (
+              <p className="text-xs text-destructive mt-1">{errors.titulo}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>Agenda (Opcional)</Label>
+            <Select value={agendaId || "none"} onValueChange={(value) => setAgendaId(value === "none" ? "" : value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione uma agenda ou deixe vazio" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Nenhuma agenda</SelectItem>
+                {agendas.map((agenda) => (
+                  <SelectItem key={agenda.id} value={agenda.id}>
+                    {agenda.nome} ({agenda.tipo}) - {agenda.disponibilidade?.horario_inicio} às {agenda.disponibilidade?.horario_fim}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {agendaId && (
+              <p className="text-xs text-muted-foreground">
+                {(() => {
+                  const agenda = agendas.find(a => a.id === agendaId);
+                  return agenda ? `Capacidade: ${agenda.capacidade_simultanea} simultâneos | Dias: ${agenda.disponibilidade?.dias?.join(', ')}` : '';
+                })()}
+              </p>
+            )}
+          </div>
           <div className="space-y-2">
             <Label>Cliente / Lead</Label>
             <Input
