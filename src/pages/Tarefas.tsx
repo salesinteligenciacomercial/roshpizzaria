@@ -137,9 +137,7 @@ const SortableColumn = React.memo(function SortableColumn({
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition: transition || 'transform 200ms ease',
-    // ✅ CORRIGIDO: Sem minimização visual durante drag
-    boxShadow: isDragging ? '0 10px 30px rgba(0,0,0,0.2)' : 'none',
+    transition,
   };
 
   return (
