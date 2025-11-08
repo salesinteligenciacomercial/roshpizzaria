@@ -17,7 +17,9 @@ export function MainLayout() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Limpar flags antigas de modo offline
+        console.log("🔐 Inicializando autenticação...");
+        
+        // ✅ CRÍTICO: Limpar TODOS os dados antigos primeiro
         localStorage.removeItem('offline_mode');
         localStorage.removeItem('offline_session');
         localStorage.removeItem('is_super_admin');
@@ -32,7 +34,14 @@ export function MainLayout() {
           localStorage.clear();
           sessionStorage.clear();
           setSession(null);
+        } else if (!session) {
+          console.log("⚠️ Nenhuma sessão ativa encontrada");
+          // Limpar tudo se não houver sessão
+          localStorage.clear();
+          sessionStorage.clear();
+          setSession(null);
         } else {
+          console.log("✅ Sessão ativa encontrada:", session.user.email);
           setSession(session);
         }
       } catch (error) {
@@ -51,13 +60,17 @@ export function MainLayout() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("🔐 Auth state changed:", _event);
-      setSession(session);
+      console.log("🔐 Auth state changed:", _event, session?.user?.email || "sem usuário");
       
-      // Se houver SIGNED_OUT, limpar tudo
-      if (_event === 'SIGNED_OUT') {
+      // Se houver SIGNED_OUT ou sem sessão, limpar tudo
+      if (_event === 'SIGNED_OUT' || !session) {
+        console.log("🚪 Limpando dados após logout/sem sessão");
         localStorage.clear();
         sessionStorage.clear();
+        setSession(null);
+      } else {
+        console.log("✅ Sessão atualizada:", session.user.email);
+        setSession(session);
       }
     });
 
