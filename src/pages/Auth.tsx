@@ -20,26 +20,40 @@ export default function Auth() {
   const [checkingStatus, setCheckingStatus] = useState(false);
   
   useEffect(() => {
-    supabase.auth.getSession().then(({
-      data: {
-        session
-      }
-    }) => {
-      setSession(session);
-      if (session) {
-        navigate("/dashboard");
-      }
-    });
+    // ✅ CRÍTICO: Configurar listener ANTES de verificar sessão existente
     const {
       data: {
         subscription
       }
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('🔐 Auth state changed:', _event, !!session);
       setSession(session);
+      
+      // ✅ CRÍTICO: Usar setTimeout(0) para evitar deadlock
       if (session) {
-        navigate("/dashboard");
+        setTimeout(() => {
+          console.log('✅ Navegando para dashboard após auth state change');
+          navigate("/dashboard");
+        }, 0);
       }
     });
+
+    // Verificar sessão existente APÓS configurar listener
+    supabase.auth.getSession().then(({
+      data: {
+        session
+      }
+    }) => {
+      console.log('🔐 Sessão inicial:', !!session);
+      setSession(session);
+      if (session) {
+        setTimeout(() => {
+          console.log('✅ Navegando para dashboard com sessão existente');
+          navigate("/dashboard");
+        }, 0);
+      }
+    });
+
     return () => subscription.unsubscribe();
   }, [navigate]);
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -165,10 +179,8 @@ export default function Auth() {
           description: isSuperAdmin ? "Bem-vindo Super Admin!" : "Bem-vindo de volta!"
         });
         
-        // Navegar para dashboard
-        setTimeout(() => {
-          navigate("/dashboard");
-        }, 300);
+        // ✅ A navegação será feita automaticamente pelo onAuthStateChange
+        // Não precisa navegar aqui para evitar navegação duplicada
       }
     } catch (err: any) {
       console.error("❌ Exceção ao fazer login:", err);
