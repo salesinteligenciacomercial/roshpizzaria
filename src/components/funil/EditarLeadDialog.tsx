@@ -50,6 +50,7 @@ export function EditarLeadDialog({
   const [funis, setFunis] = useState<any[]>([]);
   const [etapas, setEtapas] = useState<any[]>([]);
   const [etapasFiltradas, setEtapasFiltradas] = useState<any[]>([]);
+  const [responsaveis, setResponsaveis] = useState<any[]>([]);
   const { allTags: tagsExistentes } = useTagsManager();
   const [formData, setFormData] = useState({
     nome: lead.nome || "",
@@ -62,6 +63,7 @@ export function EditarLeadDialog({
     notes: lead.notes || "",
     funil_id: lead.funil_id || "",
     etapa_id: lead.etapa_id || "",
+    responsavel_id: (lead as any).responsavel_id || "",
     tags: lead.tags || []
   });
   const [newTag, setNewTag] = useState("");
@@ -80,6 +82,7 @@ export function EditarLeadDialog({
       notes: lead.notes || "",
       funil_id: lead.funil_id || "",
       etapa_id: lead.etapa_id || "",
+      responsavel_id: (lead as any).responsavel_id || "",
       tags: lead.tags || []
     });
   }, [lead]);
@@ -106,11 +109,37 @@ export function EditarLeadDialog({
       const { data: funisData, error: funisError } = await supabase.from("funis").select("*").order("criado_em");
       const { data: etapasData, error: etapasError } = await supabase.from("etapas").select("*").order("posicao");
 
+      // Buscar usuários da empresa (responsáveis)
+      let companyIdForUsers = lead.company_id;
+      if (!companyIdForUsers) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data: role } = await supabase
+            .from('user_roles')
+            .select('company_id')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
+          companyIdForUsers = role?.company_id;
+        }
+      }
+      let responsaveisList: any[] = [];
+      if (companyIdForUsers) {
+        const { data: responsaveisData } = await supabase
+          .from("user_roles")
+          .select("user_id, profiles(id, full_name, email)")
+          .eq("company_id", companyIdForUsers);
+        responsaveisList = responsaveisData?.map(r => ({
+          id: r.user_id,
+          name: (r.profiles as any)?.full_name || (r.profiles as any)?.email || "Sem nome"
+        })) || [];
+      }
+
       if (funisError) throw funisError;
       if (etapasError) throw etapasError;
 
       setFunis(funisData || []);
       setEtapas(etapasData || []);
+      setResponsaveis(responsaveisList);
     } catch (error) {
       console.error("Erro ao carregar dados do funil:", error);
       toast.error("Erro ao carregar dados do funil");
@@ -124,16 +153,6 @@ export function EditarLeadDialog({
     
     if (!formData.nome.trim()) {
       toast.error("Digite o nome do lead");
-      return;
-    }
-
-    if (!formData.funil_id) {
-      toast.error("Selecione um funil");
-      return;
-    }
-
-    if (!formData.etapa_id) {
-      toast.error("Selecione uma etapa");
       return;
     }
 
@@ -182,9 +201,10 @@ export function EditarLeadDialog({
           company_id: companyId, // 🔒 CRÍTICO: Manter company_id
           source: formData.source || null,
           notes: formData.notes || null,
-          etapa_id: formData.etapa_id,
-          funil_id: formData.funil_id,
-          tags: formData.tags,
+          etapa_id: formData.etapa_id || null,
+          funil_id: formData.funil_id || null,
+          responsavel_id: formData.responsavel_id || null,
+          tags: formData.tags && formData.tags.length > 0 ? formData.tags : null,
           updated_at: new Date().toISOString()
         })
         .eq("id", lead.id);
@@ -226,7 +246,7 @@ export function EditarLeadDialog({
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="funil">Funil *</Label>
+            <Label htmlFor="funil">Funil (opcional)</Label>
             <Select 
               value={formData.funil_id} 
               onValueChange={(value) => setFormData({ ...formData, funil_id: value })}
@@ -245,7 +265,7 @@ export function EditarLeadDialog({
           </div>
 
           <div>
-            <Label htmlFor="etapa">Etapa *</Label>
+            <Label htmlFor="etapa">Etapa (opcional)</Label>
             <Select 
               value={formData.etapa_id} 
               onValueChange={(value) => setFormData({ ...formData, etapa_id: value })}
@@ -257,6 +277,25 @@ export function EditarLeadDialog({
                 {etapasFiltradas.map((etapa) => (
                   <SelectItem key={etapa.id} value={etapa.id}>
                     {etapa.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="responsavel">Responsável</Label>
+            <Select 
+              value={formData.responsavel_id} 
+              onValueChange={(value) => setFormData({ ...formData, responsavel_id: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Nenhum responsável selecionado" />
+              </SelectTrigger>
+              <SelectContent>
+                {responsaveis.map((resp) => (
+                  <SelectItem key={resp.id} value={resp.id}>
+                    {resp.name}
                   </SelectItem>
                 ))}
               </SelectContent>

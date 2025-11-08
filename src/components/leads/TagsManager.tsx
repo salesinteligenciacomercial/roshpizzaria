@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tag, Plus, X, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useTagsManager } from "@/hooks/useTagsManager";
 
 interface TagStats {
   tag: string;
@@ -26,6 +27,7 @@ export function TagsManager({ onTagSelected, selectedTag }: TagsManagerProps) {
   const [tagStats, setTagStats] = useState<TagStats[]>([]);
   const [newTagName, setNewTagName] = useState("");
   const [loading, setLoading] = useState(false);
+  const { addStandaloneTag, removeStandaloneTag, allTags } = useTagsManager();
 
   useEffect(() => {
     if (open) {
@@ -60,13 +62,23 @@ export function TagsManager({ onTagSelected, selectedTag }: TagsManagerProps) {
       });
 
       // Converter para array e ordenar por quantidade
-      const stats: TagStats[] = Array.from(tagsMap.entries())
+      let stats: TagStats[] = Array.from(tagsMap.entries())
         .map(([tag, data]) => ({
           tag,
           count: data.count,
           leads: data.leads,
         }))
         .sort((a, b) => b.count - a.count);
+
+      // Incluir tags independentes (sem leads) para ficarem visíveis
+      const known = new Set(stats.map(s => s.tag.toLowerCase()));
+      allTags.forEach((t) => {
+        if (!known.has(t.toLowerCase())) {
+          stats.push({ tag: t, count: 0, leads: [] });
+        }
+      });
+      // Ordenar novamente: primeiro por count desc, depois alfabético
+      stats = stats.sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag));
 
       setTagStats(stats);
     } catch (error) {
@@ -91,12 +103,24 @@ export function TagsManager({ onTagSelected, selectedTag }: TagsManagerProps) {
       return;
     }
 
-    // Apenas adicionar à lista (será criada quando for atribuída a um lead)
-    setNewTagName("");
-    toast.success(`Tag "${tagName}" criada com sucesso`);
-    
-    // Recarregar estatísticas
-    await loadTagStats();
+    try {
+      // Tornar a tag visível globalmente (catálogo da empresa)
+      await addStandaloneTag(tagName);
+
+      // Incluir imediatamente na lista local com contagem 0
+      setTagStats((prev) => {
+        const exists = prev.some(s => s.tag.toLowerCase() === tagName.toLowerCase());
+        if (exists) return prev;
+        const next = [...prev, { tag: tagName, count: 0, leads: [] }];
+        return next.sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+      });
+
+      setNewTagName("");
+      toast.success(`Tag "${tagName}" criada com sucesso`);
+    } catch (e) {
+      console.error("Erro ao criar tag:", e);
+      toast.error("Erro ao criar tag");
+    }
   };
 
   const deleteTag = async (tagToDelete: string) => {
@@ -110,8 +134,11 @@ export function TagsManager({ onTagSelected, selectedTag }: TagsManagerProps) {
       if (fetchError) throw fetchError;
 
       if (!leads || leads.length === 0) {
+        // Remover do catálogo independente e atualizar UI
+        await removeStandaloneTag(tagToDelete);
+        // Atualizar UI local imediatamente
+        setTagStats(prev => prev.filter(s => s.tag.toLowerCase() !== tagToDelete.toLowerCase()));
         toast.success("Tag removida com sucesso");
-        await loadTagStats();
         return;
       }
 
@@ -127,8 +154,12 @@ export function TagsManager({ onTagSelected, selectedTag }: TagsManagerProps) {
         if (updateError) throw updateError;
       }
 
+      // Remover do catálogo independente e atualizar UI
+      await removeStandaloneTag(tagToDelete);
+
       toast.success(`Tag "${tagToDelete}" removida de ${leads.length} lead(s)`);
-      await loadTagStats();
+      // Atualizar UI local
+      setTagStats(prev => prev.filter(s => s.tag.toLowerCase() !== tagToDelete.toLowerCase()));
       
       // Se a tag removida estava selecionada, limpar seleção
       if (selectedTag === tagToDelete && onTagSelected) {

@@ -51,6 +51,7 @@ interface Lead {
   notes?: string | null;
   funil_id?: string | null;
   etapa_id?: string | null;
+  responsavel_id?: string | null;
   avatar_url?: string | null;
 }
 
@@ -775,6 +776,8 @@ export default function Leads() {
             tags: leadParaEditar.tags || [],
             funil_id: leadParaEditar.funil_id || undefined,
             etapa_id: leadParaEditar.etapa_id || undefined,
+            company_id: leadParaEditar.company_id || undefined,
+            ...(leadParaEditar.responsavel_id ? { responsavel_id: leadParaEditar.responsavel_id } : {}),
           }}
           onLeadUpdated={() => {
             // Recarregar leads após editar

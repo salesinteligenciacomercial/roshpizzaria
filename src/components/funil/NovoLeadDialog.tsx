@@ -92,9 +92,6 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
       setEtapas(etapasData || []);
       setResponsaveis(responsaveisList);
       
-      if (funisData && funisData.length > 0 && !formData.funil_id) {
-        setFormData(prev => ({ ...prev, funil_id: funisData[0].id }));
-      }
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
     }
@@ -105,16 +102,6 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
     
     if (!formData.nome.trim()) {
       toast.error("Digite o nome do lead");
-      return;
-    }
-
-    if (!formData.funil_id) {
-      toast.error("Selecione um funil");
-      return;
-    }
-
-    if (!formData.etapa_id) {
-      toast.error("Selecione uma etapa");
       return;
     }
 
@@ -169,8 +156,8 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
           company: formData.company || null,
           source: formData.source || null,
           notes: formData.notes || null,
-          etapa_id: formData.etapa_id,
-          funil_id: formData.funil_id,
+          etapa_id: formData.etapa_id || null,
+          funil_id: formData.funil_id || null,
           owner_id: session.user.id,
           responsavel_id: formData.responsavel_id || null,
           company_id: userRole.company_id,
@@ -195,7 +182,7 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
         company: "",
         source: "",
         notes: "",
-        funil_id: funis.length > 0 ? funis[0].id : "",
+        funil_id: "",
         etapa_id: "",
         responsavel_id: "",
         tags: []
@@ -227,7 +214,7 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="funil">Funil *</Label>
+            <Label htmlFor="funil">Funil (opcional)</Label>
             <Select 
               value={formData.funil_id} 
               onValueChange={(value) => setFormData({ ...formData, funil_id: value })}
@@ -246,7 +233,7 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
           </div>
 
           <div>
-            <Label htmlFor="etapa">Etapa *</Label>
+            <Label htmlFor="etapa">Etapa (opcional)</Label>
             <Select 
               value={formData.etapa_id} 
               onValueChange={(value) => setFormData({ ...formData, etapa_id: value })}

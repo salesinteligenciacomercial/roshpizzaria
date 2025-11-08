@@ -71,6 +71,9 @@ export function ConversaPopup({
   const [scheduledList, setScheduledList] = useState<any[]>([]);
   const [editLeadOpen, setEditLeadOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
+  // Mensagens rápidas compartilhadas com o menu Conversas (via localStorage)
+  const [quickMessages, setQuickMessages] = useState<Array<{ id: string; title: string; content: string; category: string }>>([]);
+  const [quickCategories, setQuickCategories] = useState<Array<{ id: string; name: string }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Cache simples de avatar por sessão do componente
@@ -100,6 +103,18 @@ export function ConversaPopup({
     return await supabase.functions.invoke("enviar-whatsapp", {
       body: { company_id: companyId, ...body },
     });
+  };
+
+  // Disparar processamento de mensagens agendadas (best-effort)
+  const processarMensagensAgendadas = async () => {
+    try {
+      await supabase.functions.invoke('processar-mensagens-agendadas', {
+        body: {},
+      });
+    } catch (err) {
+      // não bloquear UX por falha nesse disparo
+      console.warn('Falha ao disparar processamento de agendadas (ignorado):', err);
+    }
   };
 
   // Normaliza número para padrão BR com DDI 55 e somente dígitos
@@ -205,11 +220,22 @@ export function ConversaPopup({
     try {
       // Normalizar número de telefone
       const telefoneNormalizado = normalizePhoneBR(leadPhone)!;
-      
+      const companyId = await getCompanyId();
+
+      // Compatibilidade: considerar possíveis formatos de armazenamento do número
+      const jidSNet = `${telefoneNormalizado}@s.whatsapp.net`;
+      const jidCUs = `${telefoneNormalizado}@c.us`;
+
       const { data, error } = await supabase
         .from("conversas")
         .select("*")
-        .or(`numero.eq.${telefoneNormalizado},telefone_formatado.eq.${telefoneNormalizado}`)
+        .eq("company_id", companyId)
+        .or([
+          `telefone_formatado.eq.${telefoneNormalizado}`,
+          `numero.eq.${telefoneNormalizado}`,
+          `numero.eq.${jidSNet}`,
+          `numero.eq.${jidCUs}`
+        ].join(","))
         .order("created_at", { ascending: true });
 
       if (error) {
@@ -260,19 +286,30 @@ export function ConversaPopup({
           else if (fn.endsWith('.wav')) mimeType = 'audio/wav';
         }
 
+        // Determinar quem enviou de forma robusta (compatível com variações)
+        const statusStr = typeof msg.status === 'string' ? msg.status.toLowerCase() : '';
+        const fromMeFlag = msg.fromme === true || msg.fromMe === true;
+        const sender: Message["sender"] = fromMeFlag
+          ? "user"
+          : (statusStr === "recebida" || statusStr === "received" ? "contact" : "contact");
+
+        // Determinar status de entrega/leitura
+        const delivered = statusStr === "enviada" || statusStr === "entregue" || statusStr === "delivered" || fromMeFlag;
+        const read = statusStr === "lida" || statusStr === "read";
+
         return {
-        id: msg.id || Date.now().toString() + Math.random(),
-        content: msg.mensagem || "",
+          id: msg.id || Date.now().toString() + Math.random(),
+          content: msg.mensagem || "",
           type,
-        sender: msg.status === "Recebida" ? "contact" : "user",
-        timestamp: new Date(msg.created_at || new Date()),
-        delivered: msg.status === "Enviada",
-        read: msg.status === "Lida",
+          sender,
+          timestamp: new Date(msg.created_at || new Date()),
+          delivered,
+          read,
           mediaUrl,
           fileName,
           mimeType,
-        status: msg.status,
-        origem: msg.origem,
+          status: msg.status,
+          origem: msg.origem,
         } as Message;
       });
 
@@ -365,6 +402,34 @@ export function ConversaPopup({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Carregar Mensagens Rápidas quando o modal abrir
+  const loadQuickDataFromStorage = () => {
+    try {
+      const msgs = window.localStorage.getItem("continuum_quick_messages");
+      const cats = window.localStorage.getItem("continuum_quick_categories");
+      setQuickMessages(msgs ? JSON.parse(msgs) : []);
+      setQuickCategories(cats ? JSON.parse(cats) : []);
+    } catch {
+      setQuickMessages([]);
+      setQuickCategories([]);
+    }
+  };
+
+  useEffect(() => {
+    if (quickOpen) loadQuickDataFromStorage();
+  }, [quickOpen]);
+
+  // Garantir carregamento inicial e reagir a alterações no storage
+  useEffect(() => {
+    loadQuickDataFromStorage();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "continuum_quick_messages" || e.key === "continuum_quick_categories") {
+        loadQuickDataFromStorage();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
   // Enviar mensagem
   const handleSendMessage = async (content?: string, type: Message["type"] = "text") => {
     const messageContent = content || messageInput.trim();
@@ -431,6 +496,9 @@ export function ConversaPopup({
         console.log("✅ Mensagem salva no Supabase");
         toast.success("Mensagem enviada com sucesso!");
       }
+
+      // Tentar processar mensagens agendadas pendentes
+      processarMensagensAgendadas();
 
       // Adicionar mensagem à lista local
       const newMessage: Message = {
@@ -521,6 +589,9 @@ export function ConversaPopup({
       toast.success("Mídia enviada com sucesso!");
 
       emitGlobalEvent({ type: 'conversation-updated', source: 'conversa-popup', data: { numero: telefoneNormalizado, content: caption || `Arquivo ${type}`, messageType: type } });
+
+      // Disparar processamento de mensagens agendadas
+      processarMensagensAgendadas();
     } catch (error) {
       console.error("Erro ao enviar mídia:", error);
       toast.error("Erro ao enviar mídia");
@@ -637,6 +708,8 @@ export function ConversaPopup({
       setScheduledContent("");
       setScheduledDatetime("");
       carregarMensagensAgendadas();
+      // Opcional: disparar processamento (caso esteja atrasada e possa ser enviada já)
+      processarMensagensAgendadas();
     } catch (err) {
       console.error('Erro ao agendar:', err);
       toast.error('Erro ao agendar mensagem');
@@ -949,15 +1022,80 @@ export function ConversaPopup({
             <UIDialogTitle>Mensagens Rápidas</UIDialogTitle>
           </UIDialogHeader>
           <div className="grid gap-2">
-            {[
-              `Olá ${leadName && leadName.split(' ').length > 0 ? leadName.split(' ')[0] : 'cliente'}, tudo bem? Posso ajudar?`,
-              'Estamos com uma condição especial hoje, posso te explicar?',
-              'Consegue me enviar um áudio ou uma foto para entender melhor?'
-            ].map((msg) => (
-              <Button key={msg} variant="outline" className="justify-start" onClick={() => { handleSendMessage(msg); setQuickOpen(false); }}>
-                {msg}
-              </Button>
-            ))}
+            {quickMessages.length > 0 ? (
+              <>
+                {quickCategories.length > 0 ? (
+                  quickCategories.map(cat => {
+                    const items = quickMessages.filter(m => m.category === cat.id);
+                    if (items.length === 0) return null;
+                    return (
+                      <div key={cat.id} className="border rounded-md p-3 space-y-2">
+                        <div className="text-sm font-medium">{cat.name}</div>
+                        <div className="grid gap-2">
+                          {items.map((m) => (
+                            <Button
+                              key={m.id}
+                              variant="outline"
+                              className="justify-start"
+                              onClick={() => { handleSendMessage(m.content); setQuickOpen(false); }}
+                            >
+                              {m.title || (m.content.length > 60 ? m.content.slice(0, 57) + "..." : m.content)}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  quickMessages.map((m) => (
+                    <Button
+                      key={m.id}
+                      variant="outline"
+                      className="justify-start"
+                      onClick={() => { handleSendMessage(m.content); setQuickOpen(false); }}
+                    >
+                      {m.title || (m.content.length > 60 ? m.content.slice(0, 57) + "..." : m.content)}
+                    </Button>
+                  ))
+                )}
+
+                {/* Mensagens sem categoria conhecida */}
+                {quickCategories.length > 0 && (() => {
+                  const knownCatIds = new Set(quickCategories.map(c => c.id));
+                  const uncategorized = quickMessages.filter(m => !knownCatIds.has(m.category));
+                  if (uncategorized.length === 0) return null;
+                  return (
+                    <div className="border rounded-md p-3 space-y-2">
+                      <div className="text-sm font-medium">Outras</div>
+                      <div className="grid gap-2">
+                        {uncategorized.map(m => (
+                          <Button
+                            key={m.id}
+                            variant="outline"
+                            className="justify-start"
+                            onClick={() => { handleSendMessage(m.content); setQuickOpen(false); }}
+                          >
+                            {m.title || (m.content.length > 60 ? m.content.slice(0, 57) + "..." : m.content)}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </>
+            ) : (
+              <>
+                {[
+                  `Olá ${leadName && leadName.split(' ').length > 0 ? leadName.split(' ')[0] : 'cliente'}, tudo bem? Posso ajudar?`,
+                  'Estamos com uma condição especial hoje, posso te explicar?',
+                  'Consegue me enviar um áudio ou uma foto para entender melhor?'
+                ].map((msg) => (
+                  <Button key={msg} variant="outline" className="justify-start" onClick={() => { handleSendMessage(msg); setQuickOpen(false); }}>
+                    {msg}
+                  </Button>
+                ))}
+              </>
+            )}
           </div>
         </UIDialogContent>
       </UIDialog>
@@ -1013,6 +1151,8 @@ export function ConversaPopup({
             tags: leadVinculado.tags || [],
             funil_id: leadVinculado.funil_id || undefined,
             etapa_id: leadVinculado.etapa_id || undefined,
+            company_id: leadVinculado.company_id || undefined,
+            ...(leadVinculado.responsavel_id ? { responsavel_id: leadVinculado.responsavel_id } : {}),
           }}
           open={editLeadOpen}
           onOpenChange={(o) => setEditLeadOpen(o)}
