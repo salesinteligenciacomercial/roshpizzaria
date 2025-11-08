@@ -137,9 +137,8 @@ const SortableColumn = React.memo(function SortableColumn({
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-    scale: isDragging ? 0.95 : 1,
+    transition: transition || 'transform 200ms ease',
+    opacity: isDragging ? 0.6 : 1, // ✅ CORRIGIDO: Sem scale, apenas opacidade
     boxShadow: isDragging ? '0 10px 30px rgba(0,0,0,0.2)' : 'none',
   };
 
@@ -149,7 +148,7 @@ const SortableColumn = React.memo(function SortableColumn({
       style={style}
       className="min-w-[300px] flex-shrink-0 relative group"
     >
-      {/* Drag handle */}
+      {/* Drag handle - igual ao funil */}
       <div
         {...attributes}
         {...listeners}
@@ -438,15 +437,32 @@ export default function Tarefas() {
       })
       .subscribe();
 
-    // Realtime: colunas e quadros (recarregar estrutura quando houver mudanças)
+    // Realtime: colunas e quadros
+    // ✅ CORRIGIDO: Respeitar bloqueio durante operação de drag
     const columnsChannel = supabase
       .channel('task_columns_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_columns' }, () => carregarDados())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_columns' }, (payload: any) => {
+        // 🔒 Não recarregar se houver operação de drag em andamento
+        if (isMovingRef.current) {
+          console.log('[REALTIME] 🔒 Ignorando update de coluna durante drag');
+          return;
+        }
+        console.log('[REALTIME] 📡 Recarregando colunas após mudança');
+        carregarDados();
+      })
       .subscribe();
 
     const boardsChannel = supabase
       .channel('task_boards_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_boards' }, () => carregarDados())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_boards' }, () => {
+        // 🔒 Não recarregar se houver operação de drag em andamento
+        if (isMovingRef.current) {
+          console.log('[REALTIME] 🔒 Ignorando update de board durante drag');
+          return;
+        }
+        console.log('[REALTIME] 📡 Recarregando boards após mudança');
+        carregarDados();
+      })
       .subscribe();
 
     return () => {
@@ -516,7 +532,11 @@ export default function Tarefas() {
         setSelectedBoard(boardsData[0].id);
       }
 
-      const { data: columnsData } = await supabase.from("task_columns").select("*").order("posicao");
+      // ✅ CRÍTICO: Ordenar colunas por posição
+      const { data: columnsData } = await supabase
+        .from("task_columns")
+        .select("*")
+        .order("posicao", { ascending: true });
       setColumns(columnsData || []);
 
       // ✅ OTIMIZAÇÃO: Limitar query inicial - só carregar tarefas do board selecionado e limitar quantidade
@@ -562,8 +582,14 @@ export default function Tarefas() {
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     
+    console.log('[Drag&Drop] 🎯 handleDragEnd iniciado:', { 
+      activeId: active.id, 
+      overId: over?.id,
+      isMovingRef: isMovingRef.current 
+    });
+    
     if (!over) {
-      console.warn('[Drag&Drop] Sem destino válido');
+      console.warn('[Drag&Drop] ❌ Sem destino válido');
       setActiveTaskId(null);
       return;
     }
@@ -579,76 +605,97 @@ export default function Tarefas() {
     const activeId = String(active.id);
     const activeData = (active as any).data?.current;
     
+    console.log('[Drag&Drop] 📊 Dados do drag:', { 
+      activeId, 
+      activeType: activeData?.type,
+      overId: over.id 
+    });
+    
     // Verificar se estamos arrastando uma coluna
     if (activeData?.type === 'column') {
-      console.log('[Drag&Drop] 🔄 Movendo coluna');
+      console.log('[Drag&Drop] 🔄 Detectado drag de COLUNA');
       const overId = String(over.id);
       
-      if (activeId !== overId) {
-        const oldIndex = columnsFiltradas.findIndex(c => c.id === activeId);
-        const newIndex = columnsFiltradas.findIndex(c => c.id === overId);
-        
-        if (oldIndex !== -1 && newIndex !== -1) {
-          try {
-            // 🔒 Bloquear operações concorrentes
-            isMovingRef.current = true;
+      if (activeId === overId) {
+        console.log('[Drag&Drop] ℹ️ Drop na mesma posição, ignorando');
+        return;
+      }
+      
+      const oldIndex = columnsFiltradas.findIndex(c => c.id === activeId);
+      const newIndex = columnsFiltradas.findIndex(c => c.id === overId);
+      
+      console.log('[Drag&Drop] 📍 Índices:', { oldIndex, newIndex, total: columnsFiltradas.length });
+      
+      if (oldIndex !== -1 && newIndex !== -1) {
+        try {
+          // 🔒 Bloquear operações concorrentes
+          console.log('[Drag&Drop] 🔒 Bloqueando realtime...');
+          isMovingRef.current = true;
 
-            // Reordenar colunas localmente
-            const reorderedColumns = arrayMove(columnsFiltradas, oldIndex, newIndex);
-            
-            console.log('[Drag&Drop] 📋 Nova ordem:', reorderedColumns.map((c, i) => `${i}. ${c.nome}`));
-            
-            // 🎨 Atualizar UI imediatamente (optimistic update)
-            const updatedColumnsWithPosition = reorderedColumns.map((col, index) => ({
-              ...col,
-              posicao: index
-            }));
+          // Reordenar colunas localmente
+          const reorderedColumns = arrayMove(columnsFiltradas, oldIndex, newIndex);
+          
+          console.log('[Drag&Drop] 📋 Nova ordem:', reorderedColumns.map((c, i) => `${i}. ${c.nome}`));
+          
+          // 🎨 Atualizar UI imediatamente (optimistic update)
+          const updatedColumnsWithPosition = reorderedColumns.map((col, index) => ({
+            ...col,
+            posicao: index
+          }));
 
-            // Atualizar estado global com novas posições
-            setColumns(prev => prev.map(col => {
-              const updatedCol = updatedColumnsWithPosition.find(c => c.id === col.id);
-              return updatedCol || col;
-            }));
-            
-            // 💾 Atualizar posições no banco de dados
-            console.log('[Drag&Drop] 💾 Atualizando posições no banco...');
-            
-            const updatePromises = updatedColumnsWithPosition.map(col =>
-              supabase
-                .from('task_columns')
-                .update({ posicao: col.posicao })
-                .eq('id', col.id)
-            );
+          console.log('[Drag&Drop] 🎨 Atualizando UI com novas posições...');
+          
+          // Atualizar estado global com novas posições
+          setColumns(prev => prev.map(col => {
+            const updatedCol = updatedColumnsWithPosition.find(c => c.id === col.id);
+            return updatedCol || col;
+          }));
+          
+          // 💾 Atualizar posições no banco de dados
+          console.log('[Drag&Drop] 💾 Atualizando posições no banco...');
+          
+          const updatePromises = updatedColumnsWithPosition.map((col, index) => {
+            console.log(`[Drag&Drop] 📝 Atualizando ${col.nome}: posicao=${index}`);
+            return supabase
+              .from('task_columns')
+              .update({ posicao: index })
+              .eq('id', col.id);
+          });
 
-            const results = await Promise.all(updatePromises);
-            
-            // Verificar erros
-            const errors = results.filter(result => result.error);
-            if (errors.length > 0) {
-              console.error('[Drag&Drop] ❌ Erros nas atualizações:', errors);
-              throw new Error('Erro ao atualizar posições das colunas');
-            }
-
-            console.log('[Drag&Drop] ✅ Colunas reordenadas com sucesso');
-            toast.success("Ordem das colunas atualizada!");
-            
-          } catch (error) {
-            console.error('[Drag&Drop] ❌ Erro ao reordenar colunas:', error);
-            toast.error("Erro ao atualizar ordem das colunas");
-            // Recarregar dados em caso de erro
-            await carregarDados();
-          } finally {
-            // 🔓 Desbloquear após delay
-            setTimeout(() => {
-              isMovingRef.current = false;
-            }, 500);
+          const results = await Promise.all(updatePromises);
+          
+          // Verificar erros
+          const errors = results.filter(result => result.error);
+          if (errors.length > 0) {
+            console.error('[Drag&Drop] ❌ Erros nas atualizações:', errors);
+            throw new Error('Erro ao atualizar posições das colunas');
           }
+
+          console.log('[Drag&Drop] ✅ Colunas reordenadas com sucesso no banco!');
+          toast.success("Ordem das colunas atualizada!");
+          
+        } catch (error) {
+          console.error('[Drag&Drop] ❌ Erro ao reordenar colunas:', error);
+          toast.error("Erro ao atualizar ordem das colunas");
+          // Recarregar dados em caso de erro
+          console.log('[Drag&Drop] 🔄 Recarregando dados após erro...');
+          await carregarDados();
+        } finally {
+          // 🔓 Desbloquear após delay
+          console.log('[Drag&Drop] 🔓 Desbloqueando realtime após 1 segundo...');
+          setTimeout(() => {
+            isMovingRef.current = false;
+            console.log('[Drag&Drop] ✓ Realtime desbloqueado');
+          }, 1000); // Aumentado de 500ms para 1s
         }
+      } else {
+        console.error('[Drag&Drop] ❌ Índices inválidos:', { oldIndex, newIndex });
       }
       return;
     }
 
     // Caso contrário, estamos arrastando uma tarefa
+    console.log('[Drag&Drop] 📝 Detectado drag de TAREFA');
     const taskId = activeId;
     const task = tasks.find(t => t.id === taskId);
     
