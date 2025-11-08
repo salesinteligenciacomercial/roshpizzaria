@@ -72,7 +72,8 @@ const deleteBoardSchema = z.object({
 const editColumnSchema = z.object({
   column_id: z.string().uuid('ID de coluna inválido'),
   nome: z.string().trim().min(2, 'Nome muito curto').max(100, 'Nome muito longo').optional(),
-  cor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Cor inválida').optional()
+  cor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Cor inválida').optional(),
+  posicao: z.number().int().min(0).optional()
 });
 
 const deleteColumnSchema = z.object({
@@ -554,6 +555,7 @@ serve(async (req) => {
         const updateData: any = {};
         if (validatedData.nome !== undefined) updateData.nome = validatedData.nome;
         if (validatedData.cor !== undefined) updateData.cor = validatedData.cor;
+        if (validatedData.posicao !== undefined) updateData.posicao = validatedData.posicao;
 
         const { data: column, error } = await supabase
           .from("task_columns")

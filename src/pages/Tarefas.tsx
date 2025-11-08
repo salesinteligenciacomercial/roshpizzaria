@@ -14,7 +14,8 @@
 
 import React, { useState, useEffect, type ReactNode, useMemo, useCallback, useRef } from "react";
 import { DndContext, DragEndEvent, closestCorners, useDroppable, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy, horizontalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Plus, Settings, Trash2, Pencil, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -89,6 +90,154 @@ const DroppableColumnContainer = React.memo(function DroppableColumnContainer({ 
       }`}
     >
       {children}
+    </div>
+  );
+});
+
+// ✅ NOVO: SortableColumn - Coluna que pode ser arrastada e reordenada
+const SortableColumn = React.memo(function SortableColumn({ 
+  column, 
+  tasksByColumn, 
+  tasksPerColumn, 
+  taskCountsByColumn,
+  TASKS_PER_PAGE,
+  tasks,
+  loadingMore,
+  carregarDados,
+  loadMoreTasks,
+  selectedBoard,
+  emitGlobalEvent
+}: { 
+  column: Column;
+  tasksByColumn: Record<string, Task[]>;
+  tasksPerColumn: Record<string, number>;
+  taskCountsByColumn: Record<string, number>;
+  TASKS_PER_PAGE: number;
+  tasks: Task[];
+  loadingMore: Record<string, boolean>;
+  carregarDados: () => void;
+  loadMoreTasks: (columnId: string) => void;
+  selectedBoard: string;
+  emitGlobalEvent: (event: any) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ 
+    id: column.id,
+    data: {
+      type: 'column',
+      column
+    }
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style}
+      className="min-w-[300px] flex-shrink-0"
+    >
+      <div 
+        className="text-white p-3 rounded-t-lg cursor-move" 
+        style={{ backgroundColor: column.cor }}
+        {...attributes}
+        {...listeners}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-semibold">{column.nome}</h3>
+          <div className="flex gap-1">
+            <EditarColunaDialog
+              columnId={column.id}
+              nomeAtual={column.nome}
+              corAtual={column.cor}
+              onColumnUpdated={carregarDados}
+            />
+            <DeletarColunaDialog
+              columnId={column.id}
+              columnNome={column.nome}
+              onColumnDeleted={carregarDados}
+            />
+          </div>
+        </div>
+        <span className="text-sm">
+          {taskCountsByColumn[column.id] || 0} tarefas
+        </span>
+      </div>
+      <SortableContext 
+        id={column.id} 
+        items={(tasksByColumn[column.id] || []).slice(0, tasksPerColumn[column.id] || TASKS_PER_PAGE).map(t => t.id)} 
+        strategy={verticalListSortingStrategy}
+      >
+        <DroppableColumnContainer columnId={column.id}>
+          <NovaTarefaDialog 
+            columnId={column.id} 
+            boardId={selectedBoard} 
+            onTaskCreated={carregarDados}
+          />
+          {(tasksByColumn[column.id] || [])
+            .slice(0, tasksPerColumn[column.id] || TASKS_PER_PAGE)
+            .map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onDelete={async (id) => {
+                  const taskToDelete = tasks.find(t => t.id === id);
+                  await supabase.functions.invoke("api-tarefas", {
+                    body: { action: "deletar_tarefa", data: { task_id: id } }
+                  });
+                  if (taskToDelete) {
+                    emitGlobalEvent({
+                      type: 'task-deleted',
+                      data: taskToDelete,
+                      source: 'Tarefas'
+                    });
+                  }
+                }}
+                onUpdate={() => {}}
+              />
+            ))}
+
+          {(() => {
+            const totalTasksInColumn = taskCountsByColumn[column.id] || 0;
+            const visibleTasks = tasksPerColumn[column.id] || TASKS_PER_PAGE;
+            const hasMoreTasks = totalTasksInColumn > visibleTasks;
+
+            if (hasMoreTasks) {
+              return (
+                <div className="text-center py-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadMoreTasks(column.id)}
+                    disabled={loadingMore[column.id]}
+                    className="text-xs"
+                  >
+                    {loadingMore[column.id] ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3 w-3 border-b border-current mr-2"></div>
+                        Carregando...
+                      </>
+                    ) : (
+                      `Carregar mais tarefas (${totalTasksInColumn - visibleTasks} restantes)`
+                    )}
+                  </Button>
+                </div>
+              );
+            }
+            return null;
+          })()}
+        </DroppableColumnContainer>
+      </SortableContext>
     </div>
   );
 });
@@ -407,7 +556,58 @@ export default function Tarefas() {
       return;
     }
 
-    const taskId = String(active.id);
+    const activeId = String(active.id);
+    const activeData = (active as any).data?.current;
+    
+    // Verificar se estamos arrastando uma coluna
+    if (activeData?.type === 'column') {
+      console.log('[Drag&Drop] Movendo coluna');
+      const overId = String(over.id);
+      
+      if (activeId !== overId) {
+        const oldIndex = columnsFiltradas.findIndex(c => c.id === activeId);
+        const newIndex = columnsFiltradas.findIndex(c => c.id === overId);
+        
+        if (oldIndex !== -1 && newIndex !== -1) {
+          // Reordenar colunas localmente
+          const reorderedColumns = arrayMove(columnsFiltradas, oldIndex, newIndex);
+          
+          // Atualizar posições no estado global
+          const updatedColumns = columns.map(col => {
+            const newPosition = reorderedColumns.findIndex(c => c.id === col.id);
+            if (newPosition !== -1) {
+              return { ...col, posicao: newPosition };
+            }
+            return col;
+          });
+          
+          setColumns(updatedColumns);
+          
+          // Atualizar posições no backend
+          try {
+            await Promise.all(
+              reorderedColumns.map((col, index) =>
+                supabase.functions.invoke("api-tarefas", {
+                  body: {
+                    action: "editar_coluna",
+                    data: { column_id: col.id, posicao: index }
+                  }
+                })
+              )
+            );
+            toast.success("Ordem das colunas atualizada!");
+          } catch (error) {
+            console.error('[Drag&Drop] Erro ao atualizar posições:', error);
+            toast.error("Erro ao atualizar ordem das colunas");
+            carregarDados(); // Recarregar em caso de erro
+          }
+        }
+      }
+      return;
+    }
+
+    // Caso contrário, estamos arrastando uma tarefa
+    const taskId = activeId;
     const task = tasks.find(t => t.id === taskId);
     
     if (!task) {
@@ -988,105 +1188,27 @@ export default function Tarefas() {
           onDragEnd={handleDragEnd}
           onDragCancel={handleDragCancel}
         >
-          <div className="flex overflow-x-auto gap-4 pb-4">
-            {columnsFiltradas.map((column) => (
-              <div key={column.id} className="min-w-[300px] flex-shrink-0">
-                <div 
-                  className="text-white p-3 rounded-t-lg" 
-                  style={{ backgroundColor: column.cor }}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold">{column.nome}</h3>
-                    <div className="flex gap-1">
-                      <EditarColunaDialog
-                        columnId={column.id}
-                        nomeAtual={column.nome}
-                        corAtual={column.cor}
-                        onColumnUpdated={carregarDados}
-                      />
-                      <DeletarColunaDialog
-                        columnId={column.id}
-                        columnNome={column.nome}
-                        onColumnDeleted={carregarDados}
-                      />
-                    </div>
-                  </div>
-                  <span className="text-sm">
-                    {taskCountsByColumn[column.id] || 0} tarefas
-                  </span>
-                </div>
-                <SortableContext 
-                  id={column.id} 
-                  items={(tasksByColumn[column.id] || []).slice(0, tasksPerColumn[column.id] || TASKS_PER_PAGE).map(t => t.id)} 
-                  strategy={verticalListSortingStrategy}
-                >
-                  <DroppableColumnContainer columnId={column.id}>
-                    <NovaTarefaDialog 
-                      columnId={column.id} 
-                      boardId={selectedBoard} 
-                      onTaskCreated={carregarDados}
-                    />
-                    {/* ✅ OTIMIZAÇÃO: Usar tarefas já filtradas e memoizadas */}
-                    {(tasksByColumn[column.id] || [])
-                      .slice(0, tasksPerColumn[column.id] || TASKS_PER_PAGE)
-                      .map((task) => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          onDelete={async (id) => {
-                            const taskToDelete = tasks.find(t => t.id === id);
-                            await supabase.functions.invoke("api-tarefas", {
-                              body: { action: "deletar_tarefa", data: { task_id: id } }
-                            });
-
-                            // Emitir evento global para sincronização
-                            if (taskToDelete) {
-                              emitGlobalEvent({
-                                type: 'task-deleted',
-                                data: taskToDelete,
-                                source: 'Tarefas'
-                              });
-                            }
-                            // Realtime removerá a tarefa; evitar recarga completa
-                          }}
-                          onUpdate={() => {}}
-                        />
-                      ))}
-
-                    {/* Botão Carregar Mais - ✅ OTIMIZAÇÃO: Usar contagem memoizada */}
-                    {(() => {
-                      const totalTasksInColumn = taskCountsByColumn[column.id] || 0;
-                      const visibleTasks = tasksPerColumn[column.id] || TASKS_PER_PAGE;
-                      const hasMoreTasks = totalTasksInColumn > visibleTasks;
-
-                      if (hasMoreTasks) {
-                        return (
-                          <div className="text-center py-4">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => loadMoreTasks(column.id)}
-                              disabled={loadingMore[column.id]}
-                              className="text-xs"
-                            >
-                              {loadingMore[column.id] ? (
-                                <>
-                                  <div className="animate-spin rounded-full h-3 w-3 border-b border-current mr-2"></div>
-                                  Carregando...
-                                </>
-                              ) : (
-                                `Carregar mais tarefas (${totalTasksInColumn - visibleTasks} restantes)`
-                              )}
-                            </Button>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </DroppableColumnContainer>
-                </SortableContext>
-              </div>
-            ))}
+          <SortableContext 
+            items={columnsFiltradas.map(c => c.id)} 
+            strategy={horizontalListSortingStrategy}
+          >
+            <div className="flex overflow-x-auto gap-4 pb-4">
+              {columnsFiltradas.map((column) => (
+                <SortableColumn
+                  key={column.id}
+                  column={column}
+                  tasksByColumn={tasksByColumn}
+                  tasksPerColumn={tasksPerColumn}
+                  taskCountsByColumn={taskCountsByColumn}
+                  TASKS_PER_PAGE={TASKS_PER_PAGE}
+                  tasks={tasks}
+                  loadingMore={loadingMore}
+                  carregarDados={carregarDados}
+                  loadMoreTasks={loadMoreTasks}
+                  selectedBoard={selectedBoard}
+                  emitGlobalEvent={emitGlobalEvent}
+                />
+              ))}
             {/* Botão para adicionar nova coluna */}
             <div className="min-w-[280px] flex-shrink-0">
               <AdicionarColunaDialog
@@ -1096,6 +1218,7 @@ export default function Tarefas() {
               />
             </div>
           </div>
+          </SortableContext>
           <DragOverlay dropAnimation={{
             duration: 180,
             easing: 'cubic-bezier(0.2, 0, 0, 1)',
