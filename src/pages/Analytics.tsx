@@ -123,6 +123,8 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [etapas, setEtapas] = useState<any[]>([]);
+  const [funis, setFunis] = useState<any[]>([]);
+  const [selectedFunil, setSelectedFunil] = useState<string | null>(null);
   const [globalFilters, setGlobalFilters] = useState<GlobalFilters>({
     period: 'all'
   });
@@ -172,6 +174,14 @@ export default function Analytics() {
     fetchFilteredStats();
   }, [globalFilters]);
 
+  useEffect(() => {
+    if (selectedFunil) {
+      fetchEtapasDoFunil(selectedFunil);
+    } else {
+      setEtapas([]);
+    }
+  }, [selectedFunil]);
+
   const fetchAllStats = async () => {
     setLoading(true);
     try {
@@ -219,22 +229,26 @@ export default function Analytics() {
       // Mensagens IA
       const { count: iaCount } = await supabase.from("ia_training_data").select("*", { count: 'exact', head: true });
 
-      // Etapas para gráfico de funil
-      const { data: etapasData } = await supabase
-        .from("etapas")
-        .select("id, nome, cor")
-        .order("posicao");
-
-      const etapasComContagem = await Promise.all((etapasData || []).map(async (etapa) => {
-        const leadsNaEtapa = leads?.filter(l => l.etapa_id === etapa.id) || [];
-        return {
-          ...etapa,
-          quantidade: leadsNaEtapa.length,
-          valor: leadsNaEtapa.reduce((sum, l) => sum + (Number(l.value) || 0), 0),
-        };
-      }));
-
-      setEtapas(etapasComContagem);
+      // Carregar funis disponíveis
+      let funisData: any[] | null = null;
+      let funisError: any = null;
+      try {
+        const res = await supabase.from("funis").select("id, nome");
+        funisData = res.data as any[] | null;
+        funisError = res.error;
+      } catch (e) {
+        funisError = e;
+      }
+      if (funisError) {
+        console.error("[Analytics] Erro ao carregar lista de funis:", funisError);
+      }
+      setFunis(funisData || []);
+      if (!funisData || funisData.length === 0) {
+        setEtapas([]);
+        setSelectedFunil(null);
+      } else if (selectedFunil && !funisData.some((f: any) => f.id === selectedFunil)) {
+        setSelectedFunil(null);
+      }
 
       setStats({
         totalLeads,
@@ -248,6 +262,31 @@ export default function Analytics() {
       });
     } catch (error) {
       console.error("Erro ao carregar estatísticas:", error);
+    }
+  };
+
+  const fetchEtapasDoFunil = async (funilId: string) => {
+    try {
+      const { data: leads } = await supabase.from("leads").select("value, status, etapa_id, funil_id");
+      const { data: etapasData } = await supabase
+        .from("etapas")
+        .select("id, nome, cor, funil_id")
+        .eq("funil_id", funilId)
+        .order("posicao");
+
+      const leadsDoFunil = leads?.filter(l => l.funil_id === funilId) || [];
+      const etapasComContagem = await Promise.all((etapasData || []).map(async (etapa) => {
+        const leadsNaEtapa = leadsDoFunil.filter(l => l.etapa_id === etapa.id) || [];
+        return {
+          ...etapa,
+          quantidade: leadsNaEtapa.length,
+          valor: leadsNaEtapa.reduce((sum, l) => sum + (Number(l.value) || 0), 0),
+        };
+      }));
+
+      setEtapas(etapasComContagem);
+    } catch (error) {
+      console.error("[Analytics] Erro ao carregar etapas do funil:", error);
     }
   };
 
@@ -647,46 +686,93 @@ export default function Analytics() {
           </div>
 
           {/* Pipeline Visual */}
-          {etapas.length > 0 && (
-            <Card className="border-0 shadow-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <PieChart className="h-5 w-5 text-primary" />
-                  Pipeline por Etapa
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Distribuição visual dos leads no funil de vendas
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {etapas.map((etapa) => (
-                  <div key={etapa.id} className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
+          <Card className="border-0 shadow-card">
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <CardTitle className="flex items-center gap-2">
+                    <PieChart className="h-5 w-5 text-primary" />
+                    Pipeline por Etapa
+                  </CardTitle>
+                  {funis.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">
+                      {funis.length} {funis.length === 1 ? 'funil' : 'funis'}
+                    </Badge>
+                  )}
+                </div>
+                <Select
+                  value={selectedFunil || ""}
+                  onValueChange={(value) => setSelectedFunil(value)}
+                >
+                  <SelectTrigger className="min-w-[200px] sm:w-[280px]">
+                    <SelectValue placeholder={funis.length === 0 ? "Nenhum funil encontrado" : "Selecione o funil de vendas"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {funis.length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground text-center">
+                        Nenhum funil disponível
+                      </div>
+                    ) : (
+                      funis.map((funil) => (
+                        <SelectItem key={funil.id} value={funil.id}>
+                          {funil.nome}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">
+                Distribuição visual dos leads no funil de vendas
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!selectedFunil ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Target className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                  <p className="text-sm">
+                    {funis.length === 0 
+                      ? "Nenhum funil de vendas encontrado. Crie um funil para visualizar os dados."
+                      : "Selecione um funil de vendas para visualizar as etapas"}
+                  </p>
+                </div>
+              ) : etapas.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Target className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                  <p className="text-sm">Nenhuma etapa encontrada para este funil</p>
+                </div>
+              ) : (
+                etapas.map((etapa) => {
+                  const totalLeadsDoFunil = etapas.reduce((sum: number, e: any) => sum + e.quantidade, 0);
+                  return (
+                    <div key={etapa.id} className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: etapa.cor }}
+                          />
+                          <span className="font-medium">{etapa.nome}</span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {etapa.quantidade} leads • R$ {etapa.valor.toLocaleString("pt-BR")}
+                        </div>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-3">
                         <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: etapa.cor }}
+                          className="h-3 rounded-full transition-all duration-500"
+                          style={{
+                            backgroundColor: etapa.cor,
+                            width: `${totalLeadsDoFunil > 0 ? (etapa.quantidade / totalLeadsDoFunil) * 100 : 0}%`
+                          }}
                         />
-                        <span className="font-medium">{etapa.nome}</span>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {etapa.quantidade} leads • R$ {etapa.valor.toLocaleString("pt-BR")}
                       </div>
                     </div>
-                    <div className="w-full bg-muted rounded-full h-3">
-                      <div
-                        className="h-3 rounded-full transition-all duration-500"
-                        style={{
-                          backgroundColor: etapa.cor,
-                          width: `${stats.totalLeads > 0 ? (etapa.quantidade / stats.totalLeads) * 100 : 0}%`
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+                  );
+                })
+              )}
+            </CardContent>
+          </Card>
 
           {/* Sistema CEUSIA */}
           <Card className="border-0 shadow-card overflow-hidden">
