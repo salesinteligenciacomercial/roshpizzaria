@@ -20,6 +20,29 @@ export default function Auth() {
   const [checkingStatus, setCheckingStatus] = useState(false);
   
   useEffect(() => {
+    // ✅ CRÍTICO: Limpar TUDO ao carregar a página de login
+    const cleanupOldData = async () => {
+      console.log("🧹 Limpando dados antigos da página de login...");
+      
+      // Verificar se há sessão ativa
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // Se não houver sessão, limpar tudo
+      if (!session) {
+        console.log("🗑️ Nenhuma sessão ativa, limpando localStorage/sessionStorage");
+        localStorage.clear();
+        sessionStorage.clear();
+      } else {
+        console.log("✅ Sessão ativa encontrada, redirecionando...");
+        // Se há sessão, redirecionar para dashboard
+        setTimeout(() => {
+          navigate("/dashboard");
+        }, 0);
+      }
+    };
+    
+    cleanupOldData();
+    
     // ✅ CRÍTICO: Configurar listener ANTES de verificar sessão existente
     const {
       data: {
@@ -33,22 +56,6 @@ export default function Auth() {
       if (session) {
         setTimeout(() => {
           console.log('✅ Navegando para dashboard após auth state change');
-          navigate("/dashboard");
-        }, 0);
-      }
-    });
-
-    // Verificar sessão existente APÓS configurar listener
-    supabase.auth.getSession().then(({
-      data: {
-        session
-      }
-    }) => {
-      console.log('🔐 Sessão inicial:', !!session);
-      setSession(session);
-      if (session) {
-        setTimeout(() => {
-          console.log('✅ Navegando para dashboard com sessão existente');
           navigate("/dashboard");
         }, 0);
       }
