@@ -92,36 +92,167 @@ export function NovaTarefaDialog({
       // Converter data (YYYY-MM-DD) para ISO esperado pelo backend
       const dueDateIso = dueDate ? new Date(`${dueDate}T00:00:00`).toISOString() : null;
 
-      const { data, error } = await supabase.functions.invoke("api-tarefas", {
-        body: {
-          action: "criar_tarefa",
-          data: {
-            title: title.trim(),
-            description,
-            priority,
-            due_date: dueDateIso,
-            assignee_id: assigneeId || null,
-            lead_id: leadId || null,
-            column_id: columnId,
-            board_id: boardId,
-            checklist,
-          },
-        },
-      });
+      // Normalizar valores vazios para null (o schema espera null, não string vazia)
+      const normalizedData = {
+        title,
+        description: description || null,
+        priority,
+        due_date: dueDateIso,
+        assignee_id: assigneeId && assigneeId.trim() ? assigneeId : null,
+        lead_id: leadId && leadId.trim() ? leadId : null,
+        column_id: columnId && columnId.trim() ? columnId : null,
+        board_id: boardId && boardId.trim() ? boardId : null,
+        checklist: checklist || [],
+        tags: tags || [],
+        responsaveis: responsaveis || [],
+      };
 
+      console.log('📤 Enviando dados para criar tarefa:', normalizedData);
+
+      let data: any = null;
+      let error: any = null;
+      
+      // Tentar criar via Edge Function primeiro
+      try {
+        const result = await supabase.functions.invoke("api-tarefas", {
+          body: {
+            action: "criar_tarefa",
+            data: normalizedData,
+          },
+        });
+        
+        // Verificar se há erro na resposta
+        if (result.error) {
+          console.error("❌ Erro da Edge Function:", result.error);
+          error = result.error;
+          
+          // Se for erro de validação, mostrar detalhes e retornar
+          if (result.data?.code === 'VALIDATION_ERROR') {
+            toast.error(`Erro de validação: ${result.data.details || result.error.message}`);
+            return;
+          }
+        } else {
+          // Sucesso!
+          data = result.data;
+        }
+      } catch (invokeError: any) {
+        // Quando a Edge Function retorna non-2xx, o Supabase lança uma exceção
+        console.error("❌ Exceção ao invocar Edge Function:", invokeError);
+        error = invokeError;
+      }
+
+      // Se houve erro (seja na resposta ou exceção), tentar fallback
+      if (error) {
+        console.warn('⚠️ Edge Function falhou, tentando criar tarefa diretamente no banco...');
+        try {
+          const { data: userRole } = await supabase
+            .from("user_roles")
+            .select("company_id")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+
+          if (!userRole?.company_id) {
+            toast.error('Empresa não encontrada');
+            return;
+          }
+
+          // SOLUÇÃO DEFINITIVA: Usar apenas campos que DEFINITIVAMENTE existem na tabela
+          // Baseado na estrutura real da tabela tasks
+          const taskInsert: any = {
+            title: normalizedData.title,
+            description: normalizedData.description || null,
+            priority: normalizedData.priority || 'media',
+            due_date: normalizedData.due_date || null,
+            assignee_id: normalizedData.assignee_id || null,
+            lead_id: normalizedData.lead_id || null,
+            column_id: normalizedData.column_id || null,
+            board_id: normalizedData.board_id || null,
+            company_id: userRole.company_id,
+            owner_id: session.user.id,
+            status: 'pendente',
+          };
+
+          // Tentar inserir com campos básicos primeiro
+          let directTask, directError;
+          const result = await supabase
+            .from('tasks')
+            .insert([taskInsert])
+            .select()
+            .single();
+          
+          directTask = result.data;
+          directError = result.error;
+
+          // Se falhou, pode ser por causa de algum campo opcional
+          // Tentar novamente apenas com campos essenciais
+          if (directError && directError.message?.includes('column')) {
+            console.warn('⚠️ Erro com campo opcional, tentando apenas campos essenciais...');
+            const essentialTaskInsert: any = {
+              title: normalizedData.title,
+              description: normalizedData.description || null,
+              priority: normalizedData.priority || 'media',
+              due_date: normalizedData.due_date || null,
+              assignee_id: normalizedData.assignee_id || null,
+              lead_id: normalizedData.lead_id || null,
+              company_id: userRole.company_id,
+              owner_id: session.user.id,
+              status: 'pendente',
+            };
+            
+            const retryResult = await supabase
+              .from('tasks')
+              .insert([essentialTaskInsert])
+              .select()
+              .single();
+            
+            directTask = retryResult.data;
+            directError = retryResult.error;
+          }
+
+          if (directError) {
+            console.error('❌ Erro ao criar tarefa diretamente:', directError);
+            toast.error(`Erro ao criar tarefa: ${directError.message || 'Erro desconhecido'}`);
+            return;
+          }
+
+          if (directTask) {
+            console.log('✅ Tarefa criada diretamente no banco (fallback)');
+            data = { success: true, data: directTask };
+            error = null;
+          }
+        } catch (fallbackError: any) {
+          console.error('❌ Erro no fallback:', fallbackError);
+          toast.error(`Erro ao criar tarefa: ${fallbackError?.message || 'Erro desconhecido'}`);
+          return;
+        }
+      }
+
+      // Se ainda houver erro após o fallback, mostrar mensagem
       if (error) {
         console.error("Erro ao criar tarefa (edge):", error);
-        toast.error(error.message || "Erro ao criar tarefa");
+        const errorMessage = error?.message || error?.error?.message || "Erro ao criar tarefa";
+        toast.error(errorMessage);
         return;
       }
 
+      // Verificar se temos dados válidos
+      if (!data || !data.data) {
+        console.error("❌ Dados inválidos retornados");
+        toast.error("Erro ao criar tarefa: resposta inválida");
+        return;
+      }
+
+      const createdTask = (data as any)?.data;
+      console.log('✅ [NovaTarefaDialog] Tarefa criada:', createdTask);
+
       toast.success("Tarefa criada com sucesso!");
       try {
-        const createdId = (data as any)?.data?.id;
+        const createdId = createdTask?.id;
         if (createdId && dueDateIso) {
           await upsertCompromissoParaTarefa({ id: createdId, title, due_date: dueDateIso, assignee_id: assigneeId || null });
         }
       } catch {}
+      
       setOpen(false);
       setTitle("");
       setDescription("");
@@ -134,6 +265,9 @@ export function NovaTarefaDialog({
       setChecklist([]);
       setResponsaveis([]);
       setTags([]);
+      
+      // Chamar callback para atualizar lista
+      console.log('✅ [NovaTarefaDialog] Chamando onTaskCreated para atualizar lista');
       onTaskCreated();
     } catch (error) {
       console.error("Erro ao criar tarefa:", error);

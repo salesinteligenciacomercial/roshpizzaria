@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
     strictPort: false,
     hmr: {
-      overlay: false,
+      overlay: true,
     },
     open: false,
   },

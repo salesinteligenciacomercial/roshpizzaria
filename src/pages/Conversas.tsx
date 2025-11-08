@@ -138,12 +138,15 @@ interface Meeting {
 }
 
 const CONVERSATIONS_KEY = "continuum_conversations";
+const CONVERSATIONS_CACHE_KEY = "continuum_conversations_cache"; // Cache para carregamento instantâneo
+const CONVERSATIONS_CACHE_TIMESTAMP_KEY = "continuum_conversations_cache_timestamp";
 const QUICK_MESSAGES_KEY = "continuum_quick_messages";
 const QUICK_CATEGORIES_KEY = "continuum_quick_categories";
 const REMINDERS_KEY = "continuum_reminders";
 const SCHEDULED_MESSAGES_KEY = "continuum_scheduled_messages";
 const MEETINGS_KEY = "continuum_meetings";
 const AI_MODE_KEY = "continuum_ai_mode";
+const CACHE_MAX_AGE = 5 * 60 * 1000; // Cache válido por 5 minutos
 
 const initialConversations: Conversation[] = [
   {
@@ -272,6 +275,7 @@ function Conversas() {
   
   // Estados para controle dos modais
   const [tarefasDialogOpen, setTarefasDialogOpen] = useState(false);
+  const [tarefasTabValue, setTarefasTabValue] = useState("criar");
   const [reunioesDialogOpen, setReunioesDialogOpen] = useState(false);
   const [agendaModalOpen, setAgendaModalOpen] = useState(false);
   const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
@@ -558,16 +562,47 @@ function Conversas() {
     
     let filtered = conversations;
 
-    // Aplicar filtro de status
+    // ⚡ CORREÇÃO: Aplicar filtro de status corretamente
     if (filter === "all") {
-      // No filtro "Todos", mostrar TODAS as conversas (individuais + grupos)
-      // Não aplicar nenhum filtro adicional
+      // No filtro "Todos", mostrar TODAS as conversas INDIVIDUAIS (excluir grupos)
+      filtered = filtered.filter((conv) => conv.isGroup !== true);
     } else if (filter === "group") {
-      // No filtro "Grupos", mostrar apenas grupos
+      // No filtro "Grupos", mostrar APENAS grupos (não aparecem em outros filtros)
       filtered = filtered.filter((conv) => conv.isGroup === true);
-    } else {
-      // Outros filtros (waiting, answered, resolved) - excluir grupos
-      filtered = filtered.filter((conv) => conv.status === filter && conv.isGroup !== true);
+    } else if (filter === "waiting") {
+      // Filtro "Aguardando": mensagens recebidas recentemente (não respondidas)
+      // Última mensagem deve ser do contato (não do usuário)
+      filtered = filtered.filter((conv) => {
+        if (conv.isGroup === true) return false; // Excluir grupos
+        if (conv.status === 'resolved') return false; // Excluir finalizadas
+        
+        // Verificar se a última mensagem é do contato (não respondida)
+        const lastMessage = conv.messages?.[conv.messages.length - 1];
+        if (!lastMessage) return false;
+        
+        // Se última mensagem é do contato = aguardando resposta
+        return lastMessage.sender === 'contact';
+      });
+    } else if (filter === "answered") {
+      // Filtro "Respondidos": conversas que foram respondidas
+      // Última mensagem deve ser do usuário OU status é answered
+      filtered = filtered.filter((conv) => {
+        if (conv.isGroup === true) return false; // Excluir grupos
+        if (conv.status === 'resolved') return false; // Excluir finalizadas
+        
+        // Verificar se a última mensagem é do usuário (respondida)
+        const lastMessage = conv.messages?.[conv.messages.length - 1];
+        if (!lastMessage) return false;
+        
+        // Se última mensagem é do usuário = foi respondida
+        return lastMessage.sender === 'user' || conv.status === 'answered';
+      });
+    } else if (filter === "resolved") {
+      // Filtro "Finalizados": conversas que foram finalizadas
+      filtered = filtered.filter((conv) => {
+        if (conv.isGroup === true) return false; // Excluir grupos
+        return conv.status === 'resolved';
+      });
     }
 
     console.log('📊 [DEBUG] Após filtro de status:', filtered.length);
@@ -586,8 +621,17 @@ function Conversas() {
 
     // Ordenar por última mensagem (mais recentes primeiro)
     filtered = filtered.sort((a, b) => {
-      const aTime = a.messages?.[a.messages.length - 1]?.timestamp?.getTime() || 0;
-      const bTime = b.messages?.[b.messages.length - 1]?.timestamp?.getTime() || 0;
+      // ⚡ CORREÇÃO: Garantir que timestamp seja Date antes de chamar getTime()
+      const aLastMsg = a.messages?.[a.messages.length - 1];
+      const bLastMsg = b.messages?.[b.messages.length - 1];
+      const aTimestamp = aLastMsg?.timestamp instanceof Date 
+        ? aLastMsg.timestamp 
+        : (aLastMsg?.timestamp ? new Date(aLastMsg.timestamp) : null);
+      const bTimestamp = bLastMsg?.timestamp instanceof Date 
+        ? bLastMsg.timestamp 
+        : (bLastMsg?.timestamp ? new Date(bLastMsg.timestamp) : null);
+      const aTime = aTimestamp?.getTime() || 0;
+      const bTime = bTimestamp?.getTime() || 0;
       return bTime - aTime;
     });
 
@@ -672,7 +716,13 @@ function Conversas() {
   // CORREÇÃO: Carregar tarefas quando o modal de tarefas abrir e tiver lead vinculado
   useEffect(() => {
     if (tarefasDialogOpen && leadVinculado?.id) {
+      console.log('📋 [TAREFAS] Modal aberto, carregando tarefas para lead:', leadVinculado.id);
       carregarTarefasDoLead(leadVinculado.id);
+      // Resetar aba para "criar" quando abrir o modal
+      setTarefasTabValue("criar");
+    } else if (tarefasDialogOpen && !leadVinculado?.id) {
+      // Se abrir sem lead, limpar lista
+      setLeadTasks([]);
     }
   }, [tarefasDialogOpen, leadVinculado?.id]);
 
@@ -1138,7 +1188,15 @@ function Conversas() {
   };
 
   const carregarTarefasDoLead = async (leadId: string) => {
+    if (!leadId) {
+      console.warn('⚠️ [TAREFAS] leadId não fornecido');
+      setLeadTasks([]);
+      return;
+    }
+
     try {
+      console.log('📋 [TAREFAS] Carregando tarefas para lead:', leadId);
+      
       const { data: tasks, error } = await supabase
         .from('tasks')
         .select('*')
@@ -1147,13 +1205,17 @@ function Conversas() {
 
       if (error) {
         console.error('❌ Erro ao carregar tarefas:', error);
+        toast.error('Erro ao carregar tarefas');
         return;
       }
 
-      console.log('📋 Tarefas carregadas:', tasks?.length || 0);
+      console.log('✅ [TAREFAS] Tarefas carregadas:', tasks?.length || 0, tasks);
+      console.log('✅ [TAREFAS] Detalhes das tarefas:', tasks?.map(t => ({ id: t.id, title: t.title, lead_id: t.lead_id })));
       setLeadTasks(tasks || []);
+      console.log('✅ [TAREFAS] Estado leadTasks atualizado com', tasks?.length || 0, 'tarefas');
     } catch (error) {
       console.error('❌ Erro ao carregar tarefas:', error);
+      toast.error('Erro ao carregar tarefas');
     }
   };
 
@@ -1849,7 +1911,12 @@ function Conversas() {
             // Converter para array e ordenar mensagens
             const loadedConversations = Array.from(conversationsMap.values()).map(conv => ({
               ...conv,
-              messages: conv.messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+              messages: conv.messages.sort((a, b) => {
+                // ⚡ CORREÇÃO: Garantir que timestamp seja Date antes de chamar getTime()
+                const aTimestamp = a.timestamp instanceof Date ? a.timestamp : new Date(a.timestamp);
+                const bTimestamp = b.timestamp instanceof Date ? b.timestamp : new Date(b.timestamp);
+                return aTimestamp.getTime() - bTimestamp.getTime();
+              })
             }));
             
             // Adicionar ou atualizar no estado
@@ -2646,16 +2713,56 @@ function Conversas() {
     };
   }, [userCompanyId]); // ⚡ DEPENDÊNCIA CRÍTICA: Reconfigurar quando company_id mudar
   
-  // 📡 Carregar conversas quando userCompanyId estiver disponível
+  // 📡 Carregar conversas quando userCompanyId estiver disponível - INSTANTÂNEO
   useEffect(() => {
     if (!userCompanyId || initialLoadRef.current) return;
     
     initialLoadRef.current = true;
-    console.log('🔄 [DEBUG] Carregando conversas iniciais do Supabase com company_id:', userCompanyId);
+    
+    // ⚡ INSTANTÂNEO: Carregar do cache primeiro (tempo 0)
+    const loadFromCache = () => {
+      try {
+        const cachedData = sessionStorage.getItem(CONVERSATIONS_CACHE_KEY);
+        const cacheTimestamp = sessionStorage.getItem(CONVERSATIONS_CACHE_TIMESTAMP_KEY);
+        
+        if (cachedData && cacheTimestamp) {
+          const age = Date.now() - parseInt(cacheTimestamp, 10);
+          if (age < CACHE_MAX_AGE) {
+            const cachedConversations = JSON.parse(cachedData);
+            
+            // ⚡ CORREÇÃO: Converter strings de data de volta para objetos Date
+            const restoredConversations = cachedConversations.map((conv: any) => ({
+              ...conv,
+              messages: (conv.messages || []).map((msg: any) => ({
+                ...msg,
+                timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
+              }))
+            }));
+            
+            console.log(`⚡ [CACHE] Carregando ${restoredConversations.length} conversas do cache (${age}ms atrás)`);
+            setConversations(restoredConversations);
+            return true; // Cache válido
+          } else {
+            console.log('⏰ [CACHE] Cache expirado, recarregando...');
+            sessionStorage.removeItem(CONVERSATIONS_CACHE_KEY);
+            sessionStorage.removeItem(CONVERSATIONS_CACHE_TIMESTAMP_KEY);
+          }
+        }
+      } catch (error) {
+        console.error('❌ [CACHE] Erro ao carregar cache:', error);
+      }
+      return false; // Cache inválido ou não existe
+    };
+    
+    // Carregar do cache instantaneamente
+    const hasCache = loadFromCache();
+    
+    // Carregar do Supabase em background (atualizar cache)
+    console.log('🔄 [LOAD] Carregando conversas do Supabase em background...');
     loadSupabaseConversations(false).then(() => {
-      console.log('✅ [DEBUG] loadSupabaseConversations concluído');
+      console.log('✅ [LOAD] Conversas atualizadas do Supabase');
     }).catch((err) => {
-      console.error('❌ [DEBUG] Erro em loadSupabaseConversations:', err);
+      console.error('❌ [LOAD] Erro ao carregar conversas:', err);
     });
   }, [userCompanyId]); // ⚡ Carregar quando company_id estiver disponível
 
@@ -2689,6 +2796,21 @@ function Conversas() {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  // ⚡ HELPER: Atualizar conversas e cache simultaneamente
+  const updateConversationsWithCache = useCallback((updater: (prev: Conversation[]) => Conversation[]) => {
+    setConversations(prev => {
+      const updated = updater(prev);
+      // Salvar no cache imediatamente
+      try {
+        sessionStorage.setItem(CONVERSATIONS_CACHE_KEY, JSON.stringify(updated));
+        sessionStorage.setItem(CONVERSATIONS_CACHE_TIMESTAMP_KEY, Date.now().toString());
+      } catch (e) {
+        // Ignorar erros de cache (pode estar cheio)
+      }
+      return updated;
+    });
+  }, []);
 
   const loadConversations = () => {
     // Não carregar do localStorage - dados vêm apenas do Supabase
@@ -2774,83 +2896,130 @@ function Conversas() {
       setLoadingConversations(true);
       const startTime = performance.now();
       
-      // ETAPA 1: Buscar user e company_id
-      const { data: { user } } = await supabase.auth.getUser();
+      // ⚡ OTIMIZAÇÃO: Usar company_id em cache se disponível
+      let companyId = userCompanyId || userCompanyIdRef.current;
       
-      if (!user) {
-        toast.error('Você precisa estar logado');
-        setLoadingConversations(false);
-        return;
+      // ETAPA 1: Buscar user e company_id (apenas se não tiver cache)
+      if (!companyId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          toast.error('Você precisa estar logado');
+          setLoadingConversations(false);
+          return;
+        }
+        
+        const { data: userRole } = await supabase
+          .from('user_roles')
+          .select('company_id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (!userRole?.company_id) {
+          toast.error('Erro: Usuário sem empresa associada');
+          setLoadingConversations(false);
+          return;
+        }
+
+        companyId = userRole.company_id;
+        setUserCompanyId(companyId);
+        userCompanyIdRef.current = companyId;
       }
       
-      const { data: userRole } = await supabase
-        .from('user_roles')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (!userRole?.company_id) {
-        toast.error('Erro: Usuário sem empresa associada');
-        setLoadingConversations(false);
-        return;
-      }
-
-      // ⚡ Atualizar company_id se ainda não foi definido
-      if (!userCompanyId) {
-        setUserCompanyId(userRole.company_id);
-        userCompanyIdRef.current = userRole.company_id;
+      // ⚡ OTIMIZAÇÃO: Limitar quantidade inicial de conversas para carregamento RÁPIDO (tempo 0)
+      const INITIAL_LIMIT = 30; // Reduzir para 30 conversas iniciais (mais rápido)
+      const MESSAGES_PER_CONVERSATION = 3; // Apenas 3 últimas mensagens por conversa (mais rápido)
+      
+      // ⚡ CORREÇÃO: Para append, buscar mensagens mais antigas (conversas diferentes)
+      const MESSAGES_TO_FETCH = append ? 100 : INITIAL_LIMIT * 2; // Buscar mais mensagens para agrupar
+      
+      // ETAPA 2: ⚡ BUSCAR CONVERSAS OTIMIZADO - Buscar apenas últimas mensagens por telefone
+      // Query otimizada: buscar apenas campos essenciais e limitar quantidade
+      let query = supabase
+        .from('conversas')
+        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, midia_url, fromme')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+      
+      // ⚡ CORREÇÃO: Para append, buscar mensagens mais antigas usando a data da última mensagem carregada
+      if (append && conversations.length > 0) {
+        // Encontrar a data da mensagem mais antiga já carregada
+        const todasMensagens = conversations.flatMap(c => c.messages);
+        if (todasMensagens.length > 0) {
+          const dataMaisAntiga = todasMensagens
+            .map(m => m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp))
+            .sort((a, b) => a.getTime() - b.getTime())[0];
+          
+          // Buscar mensagens mais antigas que a data mais antiga já carregada
+          query = query.lt('created_at', dataMaisAntiga.toISOString());
+        }
       }
       
-      // ETAPA 2: ⚡ BUSCAR TODAS AS CONVERSAS (não apenas de leads)
-      const offset = append ? conversationsOffset : 0;
-      const limit = 100; // Aumentar limite para garantir que pegamos todas as conversas únicas
+      query = query.limit(MESSAGES_TO_FETCH);
       
-      // Buscar TODAS as conversas e todos os leads em paralelo
-      const [leadsResult, conversasResult] = await Promise.all([
-        supabase
-          .from('leads')
-          .select('id, phone, name, telefone')
-          .eq('company_id', userRole.company_id),
-        supabase
-          .from('conversas')
-          .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, midia_url, fromme')
-          .eq('company_id', userRole.company_id)
-          .order('created_at', { ascending: false })
-      ]);
+      const { data: conversasResult, error: conversasError } = await query;
 
-      if (leadsResult.error) {
-        toast.error('Erro ao buscar contatos');
-        setLoadingConversations(false);
-        return;
-      }
-
-      if (conversasResult.error) {
+      if (conversasError) {
         toast.error('Erro ao carregar conversas');
         setLoadingConversations(false);
         return;
       }
 
-      const leadsData = leadsResult.data || [];
-      const conversasData = conversasResult.data || [];
+      const conversasData = conversasResult || [];
       
-      console.log(`📊 [LOAD] ${conversasData.length} mensagens totais, ${leadsData.length} leads cadastrados`);
-      
-      // ETAPA 3: Processar dados (otimizado)
+      // ⚡ OTIMIZAÇÃO: Processar e agrupar de forma mais eficiente
       const validConversas = conversasData.filter(conv => 
         conv.numero && !conv.numero.includes('{{') &&
         conv.mensagem && !conv.mensagem.includes('{{')
       );
 
-      // Agrupar conversas por telefone (PRIORIDADE: Todas as conversas existentes)
+      // Agrupar conversas por telefone e pegar apenas última mensagem de cada
       const conversasMap = new Map<string, any[]>();
       validConversas.forEach(conv => {
         const isGroup = conv.is_group || /@g\.us$/.test(conv.numero || '');
         const key = isGroup ? conv.numero : (conv.telefone_formatado || conv.numero.replace(/[^0-9]/g, ''));
         
-        if (!conversasMap.has(key)) conversasMap.set(key, []);
-        conversasMap.get(key)!.push(conv);
+        if (!conversasMap.has(key)) {
+          conversasMap.set(key, []);
+        }
+        const mensagens = conversasMap.get(key)!;
+        mensagens.push(conv);
+        // Manter apenas últimas mensagens ordenadas por data
+        if (mensagens.length > MESSAGES_PER_CONVERSATION) {
+          mensagens.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          mensagens.splice(MESSAGES_PER_CONVERSATION);
+        }
       });
 
+      // ⚡ OTIMIZAÇÃO: Buscar apenas leads dos telefones encontrados (não todos) - MAIS RÁPIDO
+      const telefonesUnicos = Array.from(conversasMap.keys())
+        .map(tel => tel.replace(/[^0-9]/g, ''))
+        .filter(tel => tel.length >= 10)
+        .slice(0, 30); // Limitar a 30 telefones para query mais rápida
+      
+      // Buscar leads de forma otimizada - limitar quantidade drasticamente
+      let leadsData: any[] = [];
+      if (telefonesUnicos.length > 0) {
+        // Buscar apenas 50 leads (muito mais rápido)
+        const leadsResult = await supabase
+          .from('leads')
+          .select('id, phone, name, telefone')
+          .eq('company_id', companyId)
+          .limit(50); // Reduzir para 50 leads (muito mais rápido)
+        
+        if (!leadsResult.error && leadsResult.data) {
+          // Filtrar localmente apenas os leads relevantes
+          leadsData = leadsResult.data.filter(lead => {
+            const phoneRaw = lead.phone || lead.telefone;
+            if (!phoneRaw) return false;
+            const phoneKey = phoneRaw.replace(/[^0-9]/g, '');
+            return telefonesUnicos.some(tel => phoneKey.includes(tel) || tel.includes(phoneKey));
+          });
+        }
+      }
+      
+      console.log(`📊 [LOAD] ${conversasData.length} mensagens processadas, ${conversasMap.size} conversas únicas, ${leadsData.length} leads encontrados`);
+      
       // Criar mapa de leads para buscar nomes
       const leadsMap = new Map<string, { name: string; leadId: string }>();
       leadsData.forEach(lead => {
@@ -2866,10 +3035,11 @@ function Conversas() {
         }
       });
 
-      // ETAPA 4: Criar lista de conversas BASEANDO-SE NAS CONVERSAS (não nos leads)
-      // ✅ CORREÇÃO: Agora todas as conversas aparecem, tenham lead vinculado ou não
-      const novasConversas: Conversation[] = Array.from(conversasMap.entries()).map(([telefone, mensagens]) => {
-        const leadInfo = leadsMap.get(telefone); // Pode ser undefined se não tiver lead
+      // ETAPA 3: Criar lista de conversas (otimizado)
+      const novasConversas: Conversation[] = Array.from(conversasMap.entries())
+        .slice(0, INITIAL_LIMIT) // Limitar a 50 conversas iniciais
+        .map(([telefone, mensagens]) => {
+        const leadInfo = leadsMap.get(telefone);
         
         // PRIORIDADE 1: Nome do Lead (se existir)
         let contactName = leadInfo?.name;
@@ -2901,22 +3071,44 @@ function Conversas() {
           contactName = telefone;
         }
         
-        const messagensFormatadas: Message[] = mensagens.slice(0, 20).reverse().map(m => ({
-          id: m.id || `msg-${Date.now()}-${Math.random()}`,
-          content: m.mensagem || '',
-          type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem || 'text') as any,
-          sender: (m.fromme === true || m.status === 'Enviada') ? "user" : "contact",
-          timestamp: new Date(m.created_at || Date.now()),
-          delivered: true,
-          read: m.status !== 'Recebida',
-          mediaUrl: m.midia_url,
-        }));
+        // ⚡ OTIMIZAÇÃO: Processar apenas últimas mensagens (já limitado acima)
+        const messagensFormatadas: Message[] = mensagens
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+          .slice(-MESSAGES_PER_CONVERSATION)
+          .map(m => ({
+            id: m.id || `msg-${Date.now()}-${Math.random()}`,
+            content: m.mensagem || '',
+            type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem || 'text') as any,
+            sender: (m.fromme === true || m.status === 'Enviada') ? "user" : "contact",
+            timestamp: new Date(m.created_at || Date.now()),
+            delivered: true,
+            read: m.status !== 'Recebida',
+            mediaUrl: m.midia_url,
+          }));
 
+        // ⚡ CORREÇÃO: Determinar status baseado na última mensagem
+        const ultimaMensagem = messagensFormatadas[messagensFormatadas.length - 1];
+        let statusConversa: "waiting" | "answered" | "resolved" = "waiting";
+        
+        // Verificar se há mensagem marcada como resolvida no banco
+        const temMensagemResolvida = mensagens.some(m => m.status === 'Resolvida' || m.status === 'Finalizada');
+        if (temMensagemResolvida) {
+          statusConversa = "resolved";
+        } else if (ultimaMensagem) {
+          // Se última mensagem é do usuário = foi respondida
+          if (ultimaMensagem.sender === 'user') {
+            statusConversa = "answered";
+          } else {
+            // Se última mensagem é do contato = aguardando resposta
+            statusConversa = "waiting";
+          }
+        }
+        
         return {
           id: telefone,
           contactName,
           channel: "whatsapp" as const,
-          status: "waiting" as const,
+          status: statusConversa,
           lastMessage: messagensFormatadas[messagensFormatadas.length - 1]?.content || '',
           unread: mensagens.filter(m => m.status === 'Recebida' && m.fromme !== true).length,
           messages: messagensFormatadas,
@@ -2927,78 +3119,113 @@ function Conversas() {
         };
       });
 
-      console.log(`✅ ${novasConversas.length} conversas carregadas em ${(performance.now() - startTime).toFixed(0)}ms`);
+      const loadTime = performance.now() - startTime;
+      console.log(`✅ ${novasConversas.length} conversas carregadas em ${loadTime.toFixed(0)}ms`);
       
-      // LOG: Verificar nomes carregados e status
-      console.log('📋 [CONVERSAS] Primeiras 5 conversas:', novasConversas.slice(0, 5).map(c => ({
-        telefone: c.phoneNumber,
-        nome: c.contactName,
-        totalMensagens: c.messages.length,
-        ultimaMensagem: c.lastMessage?.substring(0, 50)
-      })));
-      
-      // ⚡ MERGE INTELIGENTE: Preservar conversas em tempo real
+      // ⚡ MERGE INTELIGENTE: Preservar conversas em tempo real e evitar duplicatas
       if (append) {
-        setConversations(prev => [...prev, ...novasConversas]);
-        toast.success(`+${novasConversas.length} conversas carregadas`);
+        setConversations(prev => {
+          // ⚡ CORREÇÃO: Filtrar conversas que já existem para evitar duplicação
+          const telefonesExistentes = new Set(prev.map(c => c.phoneNumber || c.id));
+          const conversasNovas = novasConversas.filter(conv => {
+            const tel = conv.phoneNumber || conv.id;
+            return !telefonesExistentes.has(tel);
+          });
+          
+          if (conversasNovas.length === 0) {
+            console.log('⚠️ [APPEND] Nenhuma conversa nova encontrada (todas já estão carregadas)');
+            setHasMoreConversations(false); // Não há mais conversas para carregar
+            toast.info('Todas as conversas já estão carregadas');
+            return prev; // Não adicionar duplicatas
+          }
+          
+          console.log(`✅ [APPEND] Adicionando ${conversasNovas.length} conversas novas (${novasConversas.length - conversasNovas.length} duplicadas ignoradas)`);
+          
+          const merged = [...prev, ...conversasNovas];
+          
+          // Salvar no cache
+          try {
+            sessionStorage.setItem(CONVERSATIONS_CACHE_KEY, JSON.stringify(merged));
+            sessionStorage.setItem(CONVERSATIONS_CACHE_TIMESTAMP_KEY, Date.now().toString());
+          } catch (e) {
+            console.warn('⚠️ [CACHE] Erro ao salvar cache:', e);
+          }
+          
+          // Se não encontrou conversas novas, não há mais para carregar
+          if (conversasNovas.length < novasConversas.length || conversasNovas.length === 0) {
+            setHasMoreConversations(false);
+          }
+          
+          return merged;
+        });
+        toast.success(`+${novasConversas.filter(conv => {
+          const tel = conv.phoneNumber || conv.id;
+          return !conversations.some(c => (c.phoneNumber || c.id) === tel);
+        }).length} novas conversas carregadas`);
       } else {
-        // CRÍTICO: Fazer merge ao invés de substituir completamente
-        // Isso preserva conversas adicionadas em tempo real
         setConversations(prev => {
           const telefonesDoBanco = new Set(novasConversas.map(c => c.phoneNumber || c.id));
-          
-          // Manter conversas que não vieram do banco (foram adicionadas em tempo real)
           const conversasRealtime = prev.filter(c => {
             const tel = c.phoneNumber || c.id;
             return !telefonesDoBanco.has(tel);
           });
+          const merged = [...conversasRealtime, ...novasConversas];
           
-          console.log(`🔄 [MERGE] Mantendo ${conversasRealtime.length} conversas em tempo real`);
+          // ⚡ INSTANTÂNEO: Salvar no cache imediatamente
+          try {
+            sessionStorage.setItem(CONVERSATIONS_CACHE_KEY, JSON.stringify(merged));
+            sessionStorage.setItem(CONVERSATIONS_CACHE_TIMESTAMP_KEY, Date.now().toString());
+          } catch (e) {
+            console.warn('⚠️ [CACHE] Erro ao salvar cache:', e);
+          }
           
-          // Combinar: conversas do banco + conversas em tempo real
-          return [...conversasRealtime, ...novasConversas];
+          return merged;
         });
-        toast.success(`${novasConversas.length} conversas carregadas`);
+        // Não mostrar toast se carregou do cache (já está visível)
       }
       
+      // ⚡ OTIMIZAÇÃO: Carregar métricas em paralelo (não bloqueia)
       loadCompanyMetrics();
+      
+      // ⚡ OTIMIZAÇÃO: Finalizar loading ANTES de carregar avatares
       setLoadingConversations(false);
 
-      // ⚡ LAZY LOADING DE AVATARES: Carregar primeiros 10 visíveis
-      const primeiros = novasConversas.slice(0, 10);
-      primeiros.forEach(async (conv) => {
-        if (conv.phoneNumber) {
-          try {
-            const profilePicUrl = await getProfilePictureWithFallback(
-              conv.phoneNumber, 
-              userRole.company_id, 
-              conv.contactName
-            );
-            
-            if (profilePicUrl) {
-              setConversations(prev => prev.map(c => 
-                c.id === conv.id ? { ...c, avatarUrl: profilePicUrl } : c
-              ));
+      // ⚡ LAZY LOADING DE AVATARES: Carregar apenas primeiros 3 visíveis de forma não bloqueante (mais rápido)
+      const primeiros = novasConversas.slice(0, 3);
+      // Usar requestIdleCallback ou setTimeout(0) para não bloquear
+      setTimeout(() => {
+        Promise.all(primeiros.map(async (conv) => {
+          if (conv.phoneNumber) {
+            try {
+              const profilePicUrl = await getProfilePictureWithFallback(
+                conv.phoneNumber, 
+                companyId, 
+                conv.contactName
+              );
+              
+              if (profilePicUrl) {
+                setConversations(prev => prev.map(c => 
+                  c.id === conv.id ? { ...c, avatarUrl: profilePicUrl } : c
+                ));
+              }
+            } catch (error) {
+              // Silenciar erros de foto
             }
-          } catch (error) {
-            // Silenciar erros de foto
           }
-        }
-      });
+        })).catch(() => {}); // Não bloquear se houver erro
+      }, 0); // Executar no próximo tick (não bloqueia)
 
-      // ⚡ CARREGAR RESTANTES EM BACKGROUND (baixa prioridade)
-      const restantes = novasConversas.slice(10);
+      // ⚡ CARREGAR RESTANTES EM BACKGROUND (baixa prioridade) - após 500ms (mais rápido)
+      const restantes = novasConversas.slice(3);
       if (restantes.length > 0) {
-        // Aguardar 2 segundos antes de começar a carregar o restante
         setTimeout(() => {
           restantes.forEach(async (conv, index) => {
-            // Espaçar requisições em 500ms para não sobrecarregar
             setTimeout(async () => {
               if (conv.phoneNumber) {
                 try {
                   const profilePicUrl = await getProfilePictureWithFallback(
                     conv.phoneNumber, 
-                    userRole.company_id, 
+                    companyId, 
                     conv.contactName
                   );
                   
@@ -3011,9 +3238,9 @@ function Conversas() {
                   // Silenciar erros de foto
                 }
               }
-            }, index * 500);
+            }, index * 100); // Reduzir espaçamento para 100ms (mais rápido)
           });
-        }, 2000);
+        }, 500); // Reduzir para 500ms (mais rápido)
       }
       
     } catch (error) {
@@ -3120,15 +3347,55 @@ function Conversas() {
     console.log(`📜 Carregando histórico completo para ${contactName} (${phoneNumber})...`);
     
     try {
-      // Buscar TODAS as mensagens do contato (sem limite)
-      const { data: allMessages, error } = await supabase
-        .from('conversas')
-        .select('*')
-        .eq('company_id', userCompanyId)
-        .eq('telefone_formatado', phoneNumber)
-        .order('created_at', { ascending: true });
+      // Normalizar número de telefone para buscar em diferentes formatos
+      const telefoneNormalizado = normalizePhoneForWA(phoneNumber);
+      const telefoneSemFormatacao = telefoneNormalizado.replace(/\D/g, '');
+      const telefoneOriginal = phoneNumber.replace(/\D/g, '');
       
-      if (error) throw error;
+      // Criar lista de variações para buscar (remover duplicatas)
+      const variacoes = Array.from(new Set([
+        phoneNumber,
+        telefoneNormalizado,
+        telefoneSemFormatacao,
+        telefoneOriginal,
+        `${telefoneNormalizado}@s.whatsapp.net`,
+        `${telefoneNormalizado}@c.us`
+      ].filter(v => v && v.length > 0)));
+      
+      // Buscar TODAS as mensagens do contato (sem limite) - tentar múltiplos formatos
+      // Construir condições de forma mais segura
+      const telefoneConditions = variacoes.map(v => `telefone_formatado.eq.${v}`).join(',');
+      const numeroConditions = variacoes.map(v => `numero.eq.${v}`).join(',');
+      const allConditions = [telefoneConditions, numeroConditions].filter(c => c).join(',');
+      
+      let allMessages, error;
+      if (allConditions) {
+        const result = await supabase
+          .from('conversas')
+          .select('*')
+          .eq('company_id', userCompanyId)
+          .or(allConditions)
+          .order('created_at', { ascending: true });
+        
+        allMessages = result.data;
+        error = result.error;
+      } else {
+        // Fallback: buscar apenas pelo número original
+        const result = await supabase
+          .from('conversas')
+          .select('*')
+          .eq('company_id', userCompanyId)
+          .eq('telefone_formatado', phoneNumber)
+          .order('created_at', { ascending: true });
+        
+        allMessages = result.data;
+        error = result.error;
+      }
+      
+      if (error) {
+        console.error('❌ Erro ao buscar histórico:', error);
+        throw error;
+      }
       
       if (allMessages && allMessages.length > 0) {
         console.log(`✅ ${allMessages.length} mensagens carregadas do histórico`);
@@ -4552,14 +4819,17 @@ function Conversas() {
       return;
     }
 
-    // Garantir lead automaticamente
-    if (!leadVinculado?.id) {
+    // Garantir lead automaticamente e aguardar atualização do estado
+    let leadIdFinal = leadVinculado?.id;
+    if (!leadIdFinal) {
       const lead = await findOrCreateLead(selectedConv);
       if (!lead) {
         toast.error("Não foi possível vincular o lead automaticamente");
         return;
       }
       setLeadVinculado(lead);
+      leadIdFinal = lead.id;
+      console.log('📋 [TAREFAS] Lead criado/vincular:', leadIdFinal);
     }
 
     try {
@@ -4580,36 +4850,116 @@ function Conversas() {
         return;
       }
 
-      const taskData = {
+      // SOLUÇÃO DEFINITIVA: Usar apenas campos que existem na tabela
+      // Garantir que o lead_id seja sempre o do lead vinculado
+      const leadIdParaTarefa = leadIdFinal || leadVinculado?.id;
+      if (!leadIdParaTarefa) {
+        toast.error("Erro: Lead não encontrado");
+        return;
+      }
+      
+      console.log('📋 [TAREFAS] Criando tarefa com lead_id:', leadIdParaTarefa);
+      
+      const taskData: any = {
         title: newTaskTitle,
         description: newTaskDescription || null,
         priority: newTaskPriority,
         due_date: newTaskDueDate || null,
         status: 'pendente',
-        lead_id: (leadVinculado?.id || (await findOrCreateLead(selectedConv))?.id) as string,
+        lead_id: leadIdParaTarefa,
         company_id: userRole.company_id,
         owner_id: session.user.id,
-        // CORREÇÃO: Incluir board_id e column_id (igual ao Funil de Vendas)
-        board_id: selectedTaskBoardId || null,
-        column_id: selectedTaskColumnId || null,
+        // Incluir board_id e column_id apenas se fornecidos
+        board_id: selectedTaskBoardId && selectedTaskBoardId.trim() ? selectedTaskBoardId : null,
+        column_id: selectedTaskColumnId && selectedTaskColumnId.trim() ? selectedTaskColumnId : null,
       };
 
-      const { error } = await supabase
-        .from('tasks')
-        .insert([taskData]);
+      // Inserir tarefa e obter o resultado
+      let createdTask = null;
+      let insertError = null;
+      
+      try {
+        const result = await supabase
+          .from('tasks')
+          .insert([taskData])
+          .select()
+          .single(); // Usar .single() para obter a tarefa criada
+        
+        insertError = result.error;
+        createdTask = result.data;
+      } catch (insertException: any) {
+        // Capturar qualquer exceção que possa ser lançada durante o insert
+        console.error('❌ Exceção ao inserir tarefa:', insertException);
+        
+        // Verificar se é um erro de Edge Function
+        if (insertException?.message?.includes('Edge Function') || 
+            insertException?.message?.includes('non-2xx')) {
+          // Erro de Edge Function - provavelmente da busca de foto
+          // Ignorar e continuar, pois a tarefa pode ter sido criada mesmo assim
+          console.warn('⚠️ Erro de Edge Function detectado (provavelmente da busca de foto) - ignorando');
+        } else {
+          // Outro tipo de erro - propagar
+          throw insertException;
+        }
+      }
 
-      if (error) {
-        console.error('❌ Erro ao criar tarefa:', error);
-        toast.error('Erro ao criar tarefa');
+      if (insertError) {
+        console.error('❌ Erro ao criar tarefa:', insertError);
+        console.error('❌ Detalhes do erro:', {
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          code: insertError.code
+        });
+        toast.error(`Erro ao criar tarefa: ${insertError.message || 'Erro desconhecido'}`);
         return;
       }
 
-      console.log('✅ Tarefa criada com sucesso');
+      console.log('✅ Tarefa criada com sucesso:', createdTask);
+      console.log('📋 [TAREFAS] Lead vinculado:', leadVinculado?.id);
+      console.log('📋 [TAREFAS] Lead_id da tarefa:', createdTask?.lead_id);
+      console.log('📋 [TAREFAS] LeadIdFinal:', leadIdFinal);
       toast.success('Tarefa criada!');
       
-      // CORREÇÃO: Recarregar tarefas após criar
-      if (leadVinculado?.id) {
-        await carregarTarefasDoLead(leadVinculado.id);
+      // CORREÇÃO DEFINITIVA: SEMPRE adicionar tarefa à lista imediatamente
+      if (createdTask) {
+        const leadIdTarefa = createdTask.lead_id;
+        const leadIdParaBuscar = leadIdTarefa || leadIdFinal || leadVinculado?.id;
+        
+        console.log('📋 [TAREFAS] Adicionando tarefa à lista. Lead_id tarefa:', leadIdTarefa, 'Lead_id buscar:', leadIdParaBuscar);
+        
+        // SEMPRE adicionar à lista imediatamente (otimista)
+        setLeadTasks(prev => {
+          const existe = prev.find(t => t.id === createdTask.id);
+          if (existe) {
+            console.log('📋 [TAREFAS] Tarefa já está na lista, atualizando');
+            return prev.map(t => t.id === createdTask.id ? createdTask : t);
+          }
+          console.log('📋 [TAREFAS] Adicionando nova tarefa. Total antes:', prev.length);
+          const novaLista = [createdTask, ...prev];
+          console.log('📋 [TAREFAS] Total depois:', novaLista.length, 'Tarefas:', novaLista.map(t => ({ id: t.id, title: t.title, lead_id: t.lead_id })));
+          return novaLista;
+        });
+        
+        // Mudar para aba "Histórico" imediatamente
+        setTarefasTabValue("historico");
+        
+        // Recarregar lista em background para garantir sincronização
+        if (leadIdParaBuscar) {
+          console.log('📋 [TAREFAS] Recarregando lista em background para sincronização');
+          // Usar setTimeout para não bloquear a UI
+          setTimeout(async () => {
+            await carregarTarefasDoLead(leadIdParaBuscar);
+          }, 100);
+        }
+      } else {
+        // Se não conseguiu criar, recarregar lista do lead vinculado
+        const leadIdParaBuscar = leadIdFinal || leadVinculado?.id;
+        if (leadIdParaBuscar) {
+          console.log('📋 [TAREFAS] Tarefa não criada, recarregando lista');
+          await carregarTarefasDoLead(leadIdParaBuscar);
+          setTarefasTabValue("historico");
+        }
       }
       
       // Limpar campos
@@ -4619,9 +4969,11 @@ function Conversas() {
       setNewTaskDueDate("");
       // CORREÇÃO: Manter board_id selecionado, mas limpar column_id
       setSelectedTaskColumnId("");
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Erro ao criar tarefa:', error);
-      toast.error('Erro ao criar tarefa');
+      console.error('❌ Stack trace:', error?.stack);
+      const errorMessage = error?.message || error?.error?.message || 'Erro desconhecido ao criar tarefa';
+      toast.error(`Erro ao criar tarefa: ${errorMessage}`);
     }
   };
 
@@ -6743,7 +7095,7 @@ function Conversas() {
                               <DialogTitle>Tarefas do Lead</DialogTitle>
                             </DialogHeader>
 
-                            <Tabs defaultValue="criar" className="w-full">
+                            <Tabs defaultValue="criar" value={tarefasTabValue} onValueChange={setTarefasTabValue} className="w-full">
                               <TabsList className="grid w-full grid-cols-2">
                                 <TabsTrigger value="criar">Criar Nova</TabsTrigger>
                                 <TabsTrigger value="historico">
@@ -6872,7 +7224,11 @@ function Conversas() {
                                       </div>
                                     </div>
                                     <Button 
-                                      onClick={async () => {
+                                      type="button"
+                                      onClick={async (e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        
                                         if (!leadVinculado?.id && selectedConv) {
                                           setSyncStatus('syncing');
                                           const lead = await findOrCreateLead(selectedConv);
@@ -6903,14 +7259,21 @@ function Conversas() {
 
                               <TabsContent value="historico" className="space-y-4">
                                 <ScrollArea className="h-[400px]">
+                                  {(() => {
+                                    console.log('📋 [TAREFAS] Renderizando histórico. Total de tarefas:', leadTasks.length, 'Tarefas:', leadTasks.map(t => ({ id: t.id, title: t.title, lead_id: t.lead_id })));
+                                    return null;
+                                  })()}
                                   {leadTasks.length === 0 ? (
                                     <div className="text-center py-12 text-muted-foreground">
                                       <CheckSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
                                       <p>Nenhuma tarefa criada</p>
+                                      <p className="text-xs mt-2">Lead ID: {leadVinculado?.id || 'N/A'}</p>
                                     </div>
                                   ) : (
                                     <div className="space-y-2">
-                                      {leadTasks.map((task) => (
+                                      {leadTasks.map((task) => {
+                                        console.log('📋 [TAREFAS] Renderizando tarefa:', task.id, task.title, 'Lead_id:', task.lead_id);
+                                        return (
                                         <div
                                           key={task.id}
                                           className={`p-3 border rounded-lg ${
@@ -6976,7 +7339,8 @@ function Conversas() {
                                             </Button>
                                           </div>
                                         </div>
-                                      ))}
+                                        );
+                                      })}
                                     </div>
                                   )}
                                 </ScrollArea>

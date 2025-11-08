@@ -29,7 +29,11 @@ const createTaskSchema = z.object({
   board_id: z.string().uuid('ID de board inválido').nullable().optional(),
   due_date: z.string().datetime().nullable().optional(),
   priority: z.enum(['baixa', 'media', 'alta', 'urgente']).optional(),
-  checklist: z.array(z.object({ id: z.string().optional(), text: z.string(), done: z.boolean() })).optional()
+  tags: z.array(z.string()).optional(),
+  checklist: z.array(z.object({ id: z.string().optional(), text: z.string(), done: z.boolean() })).optional(),
+  comments: z.array(z.object({ id: z.string().optional(), text: z.string(), author_id: z.string().uuid().nullable().optional(), created_at: z.string().optional() })).optional(),
+  attachments: z.array(z.object({ name: z.string(), url: z.string().url() })).optional(),
+  responsaveis: z.array(z.string().uuid()).optional()
 });
 
 const moveTaskSchema = z.object({
@@ -49,7 +53,11 @@ const editTaskSchema = z.object({
   due_date: z.string().datetime().nullable().optional(),
   assignee_id: z.string().uuid('ID de responsável inválido').nullable().optional(),
   lead_id: z.string().uuid('ID de lead inválido').nullable().optional(),
-  checklist: z.array(z.object({ id: z.string().optional(), text: z.string(), done: z.boolean() })).optional()
+  tags: z.array(z.string()).optional(),
+  checklist: z.array(z.object({ id: z.string().optional(), text: z.string(), done: z.boolean() })).optional(),
+  comments: z.array(z.object({ id: z.string().optional(), text: z.string(), author_id: z.string().uuid().nullable().optional(), created_at: z.string().optional() })).optional(),
+  attachments: z.array(z.object({ name: z.string(), url: z.string().url() })).optional(),
+  responsaveis: z.array(z.string().uuid()).optional()
 });
 
 const editBoardSchema = z.object({
@@ -64,8 +72,7 @@ const deleteBoardSchema = z.object({
 const editColumnSchema = z.object({
   column_id: z.string().uuid('ID de coluna inválido'),
   nome: z.string().trim().min(2, 'Nome muito curto').max(100, 'Nome muito longo').optional(),
-  cor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Cor inválida').optional(),
-  posicao: z.number().int().min(0).optional()
+  cor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Cor inválida').optional()
 });
 
 const deleteColumnSchema = z.object({
@@ -82,14 +89,23 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const authHeader = req.headers.get('Authorization')!;
 
+    if (!authHeader) {
+      console.error('❌ [API-TAREFAS] Authorization header não encontrado');
+      return new Response(
+        JSON.stringify({ error: "Não autorizado", code: "UNAUTHORIZED" }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: authHeader } }
     });
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error('❌ [API-TAREFAS] Erro de autenticação:', authError);
       return new Response(
-        JSON.stringify({ error: "Não autorizado", code: "UNAUTHORIZED" }),
+        JSON.stringify({ error: "Não autorizado", code: "UNAUTHORIZED", details: authError?.message }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -193,7 +209,41 @@ serve(async (req) => {
       }
 
       case "criar_tarefa": {
-        const validatedData = createTaskSchema.parse(data);
+        console.log('📥 [API-TAREFAS] Recebendo dados para criar tarefa:', JSON.stringify(data, null, 2));
+        
+        // Normalizar dados antes de validar (converter strings vazias para null)
+        const normalizedData = {
+          ...data,
+          assignee_id: data.assignee_id && typeof data.assignee_id === 'string' && data.assignee_id.trim() ? data.assignee_id : null,
+          lead_id: data.lead_id && typeof data.lead_id === 'string' && data.lead_id.trim() ? data.lead_id : null,
+          column_id: data.column_id && typeof data.column_id === 'string' && data.column_id.trim() ? data.column_id : null,
+          board_id: data.board_id && typeof data.board_id === 'string' && data.board_id.trim() ? data.board_id : null,
+          description: data.description && typeof data.description === 'string' && data.description.trim() ? data.description : null,
+        };
+
+        console.log('📦 [API-TAREFAS] Dados normalizados:', JSON.stringify(normalizedData, null, 2));
+
+        let validatedData;
+        try {
+          validatedData = createTaskSchema.parse(normalizedData);
+          console.log('✅ [API-TAREFAS] Dados validados com sucesso');
+        } catch (validationError: any) {
+          console.error('❌ [API-TAREFAS] Erro de validação:', validationError);
+          if (validationError instanceof z.ZodError) {
+            const errorDetails = validationError.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+            console.error('❌ [API-TAREFAS] Detalhes do erro:', errorDetails);
+            return new Response(
+              JSON.stringify({
+                error: "Dados inválidos",
+                code: "VALIDATION_ERROR",
+                details: errorDetails
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          throw validationError;
+        }
+
         console.log('Creating task with data:', {
           title: validatedData.title,
           assignee_id: validatedData.assignee_id,
@@ -204,24 +254,63 @@ serve(async (req) => {
           company_id: companyId
         });
 
-        const { data: task, error } = await supabase
+        // SOLUÇÃO DEFINITIVA: Usar apenas campos que DEFINITIVAMENTE existem
+        // Baseado na estrutura real da tabela tasks (sem attachments, tags, comments, responsaveis)
+        const taskInsert: any = {
+          title: validatedData.title,
+          description: validatedData.description || null,
+          assignee_id: validatedData.assignee_id || null,
+          lead_id: validatedData.lead_id || null,
+          column_id: validatedData.column_id || null,
+          board_id: validatedData.board_id || null,
+          due_date: validatedData.due_date || null,
+          priority: validatedData.priority || 'media',
+          status: 'pendente',
+          owner_id: user.id,
+          company_id: companyId,
+        };
+
+        // Adicionar apenas checklist se fornecido (é o único campo JSONB que sabemos que existe)
+        if (validatedData.checklist && Array.isArray(validatedData.checklist) && validatedData.checklist.length > 0) {
+          taskInsert.checklist = validatedData.checklist;
+        }
+
+        console.log('📝 [API-TAREFAS] Inserindo tarefa com dados:', JSON.stringify(taskInsert, null, 2));
+
+        let task, error;
+        const result = await supabase
           .from("tasks")
-          .insert([{
+          .insert([taskInsert])
+          .select()
+          .single();
+        
+        task = result.data;
+        error = result.error;
+
+        // Se falhou por causa de algum campo, tentar novamente sem campos opcionais
+        if (error && error.message?.includes('column')) {
+          console.warn('⚠️ [API-TAREFAS] Erro com campo opcional, tentando apenas campos essenciais...');
+          const essentialTaskInsert: any = {
             title: validatedData.title,
-            description: validatedData.description,
-            assignee_id: validatedData.assignee_id,
-            lead_id: validatedData.lead_id,
-            column_id: validatedData.column_id,
-            board_id: validatedData.board_id,
-            due_date: validatedData.due_date,
+            description: validatedData.description || null,
+            assignee_id: validatedData.assignee_id || null,
+            lead_id: validatedData.lead_id || null,
+            due_date: validatedData.due_date || null,
             priority: validatedData.priority || 'media',
             status: 'pendente',
             owner_id: user.id,
             company_id: companyId,
-            checklist: validatedData.checklist || []
-          }])
-          .select()
-          .single();
+          };
+
+          const retryResult = await supabase
+            .from("tasks")
+            .insert([essentialTaskInsert])
+            .select()
+            .single();
+          
+          task = retryResult.data;
+          error = retryResult.error;
+        }
 
         if (error) {
           console.error("Error creating task:", error);
@@ -390,7 +479,11 @@ serve(async (req) => {
         if (validatedData.due_date !== undefined) updateData.due_date = validatedData.due_date;
         if (validatedData.assignee_id !== undefined) updateData.assignee_id = validatedData.assignee_id;
         if (validatedData.lead_id !== undefined) updateData.lead_id = validatedData.lead_id;
+        if (validatedData.tags !== undefined) updateData.tags = validatedData.tags;
         if (validatedData.checklist !== undefined) updateData.checklist = validatedData.checklist;
+        if (validatedData.comments !== undefined) updateData.comments = validatedData.comments;
+        if (validatedData.attachments !== undefined) updateData.attachments = validatedData.attachments;
+        if (validatedData.responsaveis !== undefined) updateData.responsaveis = validatedData.responsaveis;
 
         const { data: task, error } = await supabase
           .from("tasks")
@@ -539,7 +632,6 @@ serve(async (req) => {
         const updateData: any = {};
         if (validatedData.nome !== undefined) updateData.nome = validatedData.nome;
         if (validatedData.cor !== undefined) updateData.cor = validatedData.cor;
-        if (validatedData.posicao !== undefined) updateData.posicao = validatedData.posicao;
 
         const { data: column, error } = await supabase
           .from("task_columns")

@@ -417,7 +417,7 @@ export default function Tarefas() {
         comments: task.comments ?? [],
         attachments: task.attachments ?? [],
         assignee_name: (task as any).assignee?.full_name,
-        lead_name: (task as any).lead?.name,
+        lead_name: (task as any).lead?.nome || task.lead_name, // ✅ CORRIGIDO: usar 'nome' em vez de 'name'
       } as any;
     };
 
@@ -529,30 +529,91 @@ export default function Tarefas() {
         setSelectedBoard(boardsData[0].id);
       }
 
-      // ✅ CRÍTICO: Ordenar colunas por posição
-      const { data: columnsData } = await supabase
+      // ✅ CRÍTICO: Ordenar colunas por posição - filtrar por board selecionado
+      const columnsQuery = supabase
         .from("task_columns")
         .select("*")
         .order("posicao", { ascending: true });
+      
+      if (selectedBoard) {
+        columnsQuery.eq("board_id", selectedBoard);
+      }
+      
+      const { data: columnsData } = await columnsQuery;
       setColumns(columnsData || []);
 
       // ✅ OTIMIZAÇÃO: Limitar query inicial - só carregar tarefas do board selecionado e limitar quantidade
-      const tasksQuery = supabase
+      console.log("🔍 Executando query de tarefas...");
+      console.log("📋 Board ID:", selectedBoard);
+      
+      // ✅ CORRIGIDO: Tentar query com relacionamento primeiro, se falhar usar query simples
+      let tasksQuery = supabase
         .from("tasks")
         .select(`
           *,
           assignee:profiles!tasks_assignee_id_fkey(full_name),
-          lead:leads!tasks_lead_id_fkey(name)
+          lead:leads!tasks_lead_id_fkey(id, nome, telefone, phone)
         `)
         .order("created_at", { ascending: false })
         .limit(INITIAL_LOAD_LIMIT);
 
-      // Se tiver board selecionado, filtrar por board
+      // ✅ CRÍTICO: Sempre filtrar por board selecionado (ou carregar todas se não houver board)
       if (selectedBoard) {
-        tasksQuery.eq("board_id", selectedBoard);
+        tasksQuery = tasksQuery.eq("board_id", selectedBoard);
+      }
+      
+      let { data: tasksData, error: tasksError } = await tasksQuery;
+
+      // ✅ FALLBACK: Se a query com relacionamento falhar, tentar sem relacionamento
+      if (tasksError) {
+        console.warn("⚠️ Query com relacionamento falhou, tentando sem relacionamento...", tasksError);
+        
+        let fallbackQuery = supabase
+          .from("tasks")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(INITIAL_LOAD_LIMIT);
+        
+        if (selectedBoard) {
+          fallbackQuery = fallbackQuery.eq("board_id", selectedBoard);
+        }
+        
+        const fallbackResult = await fallbackQuery;
+        tasksData = fallbackResult.data;
+        tasksError = fallbackResult.error;
+        
+        if (tasksError) {
+          console.error("❌ Erro ao carregar tarefas (fallback também falhou):", tasksError);
+          console.error("❌ Detalhes do erro:", JSON.stringify(tasksError, null, 2));
+          toast.error(`Erro ao carregar tarefas: ${tasksError.message || tasksError.code || 'Erro desconhecido'}`);
+          setTasks([]);
+          return;
+        }
+        
+        // Se o fallback funcionou, buscar dados relacionados manualmente
+        if (tasksData && tasksData.length > 0) {
+          const assigneeIds = [...new Set(tasksData.map((t: any) => t.assignee_id).filter(Boolean))];
+          const leadIds = [...new Set(tasksData.map((t: any) => t.lead_id).filter(Boolean))];
+          
+          const [assigneesResult, leadsResult] = await Promise.all([
+            assigneeIds.length > 0 ? supabase.from("profiles").select("id, full_name").in("id", assigneeIds) : { data: [] },
+            leadIds.length > 0 ? supabase.from("leads").select("id, nome, telefone, phone").in("id", leadIds) : { data: [] }
+          ]);
+          
+          const assigneesMap = new Map((assigneesResult.data || []).map((a: any) => [a.id, a]));
+          const leadsMap = new Map((leadsResult.data || []).map((l: any) => [l.id, l]));
+          
+          tasksData = tasksData.map((task: any) => ({
+            ...task,
+            assignee: assigneesMap.get(task.assignee_id) || null,
+            lead: leadsMap.get(task.lead_id) || null
+          }));
+        }
       }
 
-      const { data: tasksData } = await tasksQuery;
+      console.log("✅ Tarefas carregadas:", tasksData?.length || 0, "tarefas");
+      console.log("📋 Board selecionado:", selectedBoard);
+      console.log("📊 Dados brutos:", tasksData);
 
       // ✅ CORRIGIDO: Usa campos reais do banco sem fallback de descrição
       const formattedTasks = (tasksData || []).map((task: any) => {
@@ -563,9 +624,11 @@ export default function Tarefas() {
           comments: task.comments ?? [],
           attachments: task.attachments ?? [],
           assignee_name: task.assignee?.full_name,
-          lead_name: task.lead?.name,
+          lead_name: task.lead?.nome || task.lead_name, // ✅ CORRIGIDO: usar 'nome' em vez de 'name'
         };
       });
+      
+      console.log("✅ Tarefas formatadas:", formattedTasks.length);
       setTasks(formattedTasks);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);

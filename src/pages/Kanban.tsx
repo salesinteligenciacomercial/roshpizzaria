@@ -128,6 +128,24 @@ export default function KanbanPage() {
         setLoading(true);
         setError(null);
 
+        // Verificar se Supabase está configurado
+        const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
+        const supabaseKey = (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY;
+        const isSupabaseConfigured = supabaseUrl && supabaseKey && 
+          supabaseUrl !== "http://localhost:54321" && 
+          supabaseKey !== "anon-key";
+
+        if (!isSupabaseConfigured) {
+          console.log("⚠️ Supabase não configurado - modo desenvolvimento");
+          if (mounted) {
+            setFunis([]);
+            setEtapas([]);
+            setLeads([]);
+            setLoading(false);
+          }
+          return;
+        }
+
         // Carregar funis
         const { data: funisData, error: funisError } = await supabase
           .from("funis")

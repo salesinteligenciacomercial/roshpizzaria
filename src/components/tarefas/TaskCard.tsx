@@ -16,7 +16,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { User, Calendar as CalendarIcon, Trash2, ExternalLink, MessageSquare, Plus, GripVertical, Bell, Play, Pause, Clock, Paperclip, Link, FileText, Image, ChevronDown, ChevronUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EditarTarefaDialog } from "./EditarTarefaDialog";
@@ -49,6 +48,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Task {
   id: string;
@@ -89,8 +90,8 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
   const [newComment, setNewComment] = useState("");
   const [conversaOpen, setConversaOpen] = useState(false);
   const [leadPhone, setLeadPhone] = useState<string | undefined>(undefined);
-  const [leadAvatar, setLeadAvatar] = useState<string | null>(null);
-  const [leadName, setLeadName] = useState<string>("");
+  const [leadAvatarUrl, setLeadAvatarUrl] = useState<string | null>(null);
+  const [leadNome, setLeadNome] = useState<string | null>(null);
 
   // ✅ MELHORADO: Usar hook useTaskTimer para gerenciar timer
   const {
@@ -120,94 +121,125 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     setLocalComments(task.comments || []);
   }, [task.comments, task.id]);
 
-  // ✅ Funções de cache de avatar
-  const getCachedAvatar = useCallback((leadId: string): string | null => {
-    try {
-      const cached = localStorage.getItem(`avatar_${leadId}`);
-      if (!cached) return null;
-      
-      const { url, timestamp } = JSON.parse(cached);
-      const age = Date.now() - timestamp;
-      
-      // Cache válido por 24 horas
-      if (age < 24 * 60 * 60 * 1000) {
-        return url;
-      }
-      
-      localStorage.removeItem(`avatar_${leadId}`);
-      return null;
-    } catch (error) {
-      return null;
-    }
-  }, []);
+  // Normalizar telefone brasileiro
+  const normalizePhoneBR = (raw?: string): string | null => {
+    if (!raw) return null;
+    let n = raw.replace(/\D/g, "");
+    if (n.startsWith("55")) return n;
+    if (n.length === 10 || n.length === 11) return "55" + n;
+    if (n.length >= 8 && n.length <= 13) return n.startsWith("55") ? n : "55" + n;
+    return "55" + n;
+  };
 
-  const setCachedAvatar = useCallback((leadId: string, url: string) => {
-    try {
-      localStorage.setItem(`avatar_${leadId}`, JSON.stringify({
-        url,
-        timestamp: Date.now()
-      }));
-    } catch (error) {
-      console.error('Erro ao salvar avatar no cache:', error);
-    }
-  }, []);
+  // Buscar company_id
+  const getCompanyId = async (): Promise<string | null> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { data: userRole } = await supabase
+      .from("user_roles")
+      .select("company_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    return userRole?.company_id || null;
+  };
 
-  // Buscar dados do lead (telefone, avatar e nome)
+  // Inicializar avatar com fallback se já tiver lead_name (apenas uma vez)
+  useEffect(() => {
+    if (task.lead_id && task.lead_name) {
+      setLeadNome(task.lead_name);
+      // Só definir fallback se ainda não tiver avatar carregado
+      setLeadAvatarUrl(prev => {
+        if (prev) return prev; // Manter se já tiver
+        return `https://ui-avatars.com/api/?name=${encodeURIComponent(task.lead_name!)}&background=10b981&color=fff&bold=true&size=128`;
+      });
+    }
+  }, [task.lead_id, task.lead_name]);
+
+  // Buscar telefone e foto do lead se houver
   useEffect(() => {
     const fetchLeadData = async () => {
       if (!task.lead_id) {
         setLeadPhone(undefined);
-        setLeadAvatar(null);
-        setLeadName("");
+        setLeadAvatarUrl(null);
+        setLeadNome(null);
         return;
       }
-      
       try {
-        const { supabase } = await import("@/integrations/supabase/client");
         const { data, error } = await supabase
           .from("leads")
-          .select("telefone, phone, name, company_id")
+          .select("telefone, phone, nome, avatar_url")
           .eq("id", task.lead_id)
           .maybeSingle();
         
         if (!error && data) {
-          const telefone = data.telefone || data.phone;
-          setLeadPhone(telefone || undefined);
-          setLeadName(data.name || "");
+          setLeadPhone(data.telefone || data.phone || undefined);
+          setLeadNome(data.nome || null);
           
-          // Buscar avatar do WhatsApp
-          if (telefone) {
-            // 1. Verificar cache do localStorage
-            const cachedUrl = getCachedAvatar(task.lead_id);
-            if (cachedUrl) {
-              setLeadAvatar(cachedUrl);
-              return;
-            }
-
-            // 2. Buscar do WhatsApp com timeout de 5s
-            const telefoneNormalizado = telefone.replace(/\D/g, "");
-            const timeoutPromise = new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('Timeout')), 5000)
-            );
-
-            const fetchPromise = supabase.functions.invoke('get-profile-picture', {
-              body: { number: telefoneNormalizado, company_id: data.company_id }
-            });
-
-            try {
-              const result = await Promise.race([fetchPromise, timeoutPromise]);
-              if (result?.data?.profilePictureUrl) {
-                setLeadAvatar(result.data.profilePictureUrl);
-                setCachedAvatar(task.lead_id, result.data.profilePictureUrl);
-              } else {
-                throw new Error('Sem avatar');
+          // Buscar foto de perfil do WhatsApp
+          if (data.avatar_url) {
+            setLeadAvatarUrl(data.avatar_url);
+          } else {
+            const rawPhone = data.telefone || data.phone || "";
+            const nomeLead = data.nome || task.lead_name || "Lead";
+            
+            // Sempre definir fallback primeiro para garantir que o avatar apareça
+            setLeadAvatarUrl(`https://ui-avatars.com/api/?name=${encodeURIComponent(nomeLead)}&background=10b981&color=fff&bold=true&size=128`);
+            
+            // Tentar buscar foto do WhatsApp em background (não bloqueia)
+            if (rawPhone) {
+              const numero = normalizePhoneBR(rawPhone);
+              if (numero) {
+                // Buscar foto de forma assíncrona sem bloquear
+                // IMPORTANTE: Esta busca não deve causar erros que bloqueiem a criação da tarefa
+                setTimeout(async () => {
+                  try {
+                    const companyId = await getCompanyId();
+                    if (!companyId) {
+                      // Se não tem company_id, manter fallback
+                      return;
+                    }
+                    
+                    // Timeout de 5 segundos para não travar
+                    const timeoutPromise = new Promise<never>((_, reject) =>
+                      setTimeout(() => reject(new Error('Timeout')), 5000)
+                    );
+                    
+                    // Envolver a chamada da Edge Function em try/catch e .catch() para garantir que nenhum erro seja propagado
+                    const fetchPromise = supabase.functions.invoke('get-profile-picture', {
+                      body: { number: numero, company_id: companyId }
+                    }).catch((err) => {
+                      // Capturar qualquer erro da Edge Function e retornar objeto com erro
+                      return { data: null, error: err };
+                    });
+                    
+                    try {
+                      const result = await Promise.race([
+                        fetchPromise,
+                        timeoutPromise
+                      ]) as any;
+                      
+                      // Verificar se o resultado é válido e não tem erro
+                      if (result && !result.error && result.data?.profilePictureUrl) {
+                        setLeadAvatarUrl(result.data.profilePictureUrl);
+                      }
+                      // Se falhar, manter o fallback que já foi definido acima
+                    } catch (raceError) {
+                      // Timeout ou outro erro - silenciosamente ignorar
+                      // O fallback já foi definido acima
+                    }
+                  } catch (error) {
+                    // Silenciosamente manter fallback - não logar erro para não poluir console
+                    // O fallback já foi definido acima
+                  }
+                }, 100); // Pequeno delay para não bloquear a renderização inicial
               }
-            } catch {
-              // Fallback para UI Avatars
-              const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'Lead')}&background=10b981&color=fff&size=128&bold=true`;
-              setLeadAvatar(fallbackUrl);
-              setCachedAvatar(task.lead_id, fallbackUrl);
             }
+          }
+        } else if (task.lead_id) {
+          // Se não encontrou dados mas tem lead_id, usar fallback com lead_name
+          if (task.lead_name) {
+            setLeadNome(task.lead_name);
+            setLeadAvatarUrl(`https://ui-avatars.com/api/?name=${encodeURIComponent(task.lead_name)}&background=10b981&color=fff&bold=true&size=128`);
           }
         }
       } catch (e) {
@@ -215,7 +247,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       }
     };
     fetchLeadData();
-  }, [task.lead_id, getCachedAvatar, setCachedAvatar]);
+  }, [task.lead_id, task.lead_name]);
 
   // ✅ REMOVIDO: Código antigo de timer substituído por useTaskTimer hook
 
@@ -461,20 +493,24 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       <CardHeader className="relative pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 flex-1">
-            {/* ✅ Handle de drag - maior e mais visível */}
-            <div 
-              {...attributes} 
-              {...listeners}
-              className="flex items-center justify-center w-6 h-6 -ml-1 cursor-grab active:cursor-grabbing hover:bg-muted/50 rounded transition-colors"
-            >
-              <GripVertical className="h-4 w-4 text-muted-foreground" />
-            </div>
+            <span className="text-muted-foreground/70">
+              <GripVertical className="h-3 w-3 cursor-grab active:cursor-grabbing" {...attributes} {...listeners} />
+            </span>
             <div className={`h-1 w-1 rounded-full ${getPriorityColor(task.priority)} animate-pulse`} />
-            {/* ✅ Avatar do lead vinculado */}
-            {task.lead_id && leadAvatar && (
-              <Avatar className="h-6 w-6 border-2 border-primary/20">
-                <AvatarImage src={leadAvatar} alt={leadName} />
-                <AvatarFallback className="text-xs">{leadName.substring(0, 2).toUpperCase()}</AvatarFallback>
+            {/* Foto de perfil do lead antes do nome da tarefa */}
+            {task.lead_id && (
+              <Avatar className="h-6 w-6 flex-shrink-0">
+                <AvatarImage 
+                  src={leadAvatarUrl || undefined} 
+                  alt={leadNome || task.lead_name || "Lead"}
+                  onError={() => {
+                    const nomeLead = leadNome || task.lead_name || "Lead";
+                    setLeadAvatarUrl(`https://ui-avatars.com/api/?name=${encodeURIComponent(nomeLead)}&background=10b981&color=fff&bold=true&size=128`);
+                  }}
+                />
+                <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                  {(leadNome || task.lead_name || "L")?.charAt(0).toUpperCase()}
+                </AvatarFallback>
               </Avatar>
             )}
             <CardTitle className={`text-base font-semibold ${isOverdue ? 'text-red-700' : 'text-foreground'}`}>
