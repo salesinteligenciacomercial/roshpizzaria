@@ -16,7 +16,7 @@ import { ConversaPopup } from "@/components/leads/ConversaPopup";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 
 /**
@@ -32,6 +32,7 @@ interface LeadCardProps {
     id: string;
     nome: string;
     telefone?: string;
+      phone?: string;
     email?: string;
     value?: number;
     company?: string;
@@ -41,6 +42,7 @@ interface LeadCardProps {
     etapa_id?: string;
     notes?: string | null;
     responsavel_id?: string | null;
+      avatar_url?: string | null;
   };
   onDelete: (leadId: string) => void;
   onLeadMoved?: () => void;
@@ -61,6 +63,62 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
   const [responsavelDialogOpen, setResponsavelDialogOpen] = useState(false);
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [novoResponsavel, setNovoResponsavel] = useState<string>("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  const normalizePhoneBR = (raw?: string): string | null => {
+    if (!raw) return null;
+    let n = raw.replace(/\D/g, "");
+    if (n.startsWith("55")) return n;
+    if (n.length === 10 || n.length === 11) return "55" + n;
+    if (n.length >= 8 && n.length <= 13) return n.startsWith("55") ? n : "55" + n;
+    return "55" + n;
+  };
+
+  const getCompanyId = async (): Promise<string | null> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { data: userRole } = await supabase
+      .from("user_roles")
+      .select("company_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    return userRole?.company_id || null;
+  };
+
+  useEffect(() => {
+    const fetchAvatar = async () => {
+      try {
+        // Se já houver avatar_url no lead, usar direto
+        if (lead.avatar_url) {
+          setAvatarUrl(lead.avatar_url);
+          return;
+        }
+
+        const rawPhone = lead.telefone || (lead as any)?.phone || "";
+        if (!rawPhone) {
+          setAvatarUrl(null);
+          return;
+        }
+        const numero = normalizePhoneBR(rawPhone);
+        if (!numero) {
+          setAvatarUrl(null);
+          return;
+        }
+        const companyId = await getCompanyId();
+        const { data, error } = await supabase.functions.invoke('get-profile-picture', {
+          body: { number: numero, company_id: companyId }
+        });
+        if (!error && data?.profilePictureUrl) {
+          setAvatarUrl(data.profilePictureUrl);
+        } else {
+          setAvatarUrl(`https://ui-avatars.com/api/?name=${encodeURIComponent(lead.nome)}&background=10b981&color=fff&bold=true&size=128`);
+        }
+      } catch {
+        setAvatarUrl(`https://ui-avatars.com/api/?name=${encodeURIComponent(lead.nome)}&background=10b981&color=fff&bold=true&size=128`);
+      }
+    };
+    fetchAvatar();
+  }, [lead.telefone, (lead as any)?.phone, lead.nome, lead.avatar_url]);
 
   const carregarProximasAtividades = useCallback(async () => {
     try {
@@ -248,10 +306,22 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
     e.stopPropagation();
     if (lead.telefone) {
       setConversaOpen(true);
+      toast.success("Abrindo conversa...");
     } else {
-      console.warn('Lead sem telefone:', lead.nome);
+      toast.error("Lead não possui telefone cadastrado");
     }
   }, [lead.telefone, lead.nome]);
+
+  const ligarWhatsApp = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (lead.telefone) {
+      const numero = lead.telefone.replace(/\D/g, "");
+      window.open(`https://wa.me/55${numero}`, "_blank");
+    } else {
+      toast.error("Lead não possui telefone cadastrado");
+    }
+  }, [lead.telefone]);
 
   const handleDelete = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -290,9 +360,18 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
         {/* Header sempre visível */}
         <div className="flex justify-between items-start gap-2">
           <div className="flex items-start gap-2 flex-1" {...(modifiedListeners as any)}>
-            <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-              <User className="h-4 w-4 text-primary" />
-            </div>
+            <Avatar className="h-8 w-8">
+              <AvatarImage 
+                src={avatarUrl || lead.avatar_url || undefined} 
+                alt={lead.nome}
+                onError={() => {
+                  setAvatarUrl(`https://ui-avatars.com/api/?name=${encodeURIComponent(lead.nome)}&background=10b981&color=fff&bold=true&size=128`);
+                }}
+              />
+              <AvatarFallback className="bg-primary/10 text-primary">
+                {lead.nome && lead.nome.length > 0 ? lead.nome.charAt(0).toUpperCase() : "?"}
+              </AvatarFallback>
+            </Avatar>
             <div className="flex-1 min-w-0">
               <h4 className="font-semibold text-sm text-foreground mb-1">{lead.nome}</h4>
               
@@ -352,7 +431,8 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                 <DropdownMenuItem onClick={() => setEditOpen(true)}>Editar lead</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setConversaOpen(true)}>Ver conversas</DropdownMenuItem>
+                <DropdownMenuItem onClick={abrirConversa} disabled={!lead.telefone}>Ver conversas</DropdownMenuItem>
+                <DropdownMenuItem onClick={ligarWhatsApp} disabled={!lead.telefone}>Ligar no WhatsApp</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setResponsavelDialogOpen(true)}>
                   <UserPlus className="h-3 w-3 mr-2" />
                   Atribuir responsável

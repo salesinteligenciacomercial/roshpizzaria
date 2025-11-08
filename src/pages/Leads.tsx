@@ -348,7 +348,70 @@ export default function Leads() {
   const filterLeads = () => {
     let filtered = leads;
 
-    // Filtro por tag (client-side apenas para tag)
+    const normalizeString = (s: string | null | undefined) =>
+      (s || "")
+        .toString()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+
+    const onlyDigits = (s: string | null | undefined) =>
+      (s || "").toString().replace(/\D/g, "");
+
+    if (searchTerm) {
+      const searchTrimmed = searchTerm.trim();
+      const searchNormalized = normalizeString(searchTerm);
+      const searchDigits = onlyDigits(searchTerm);
+
+      filtered = filtered.filter((lead) => {
+        const leadName = (lead.name || (lead as any)?.nome || "") as string;
+        const leadEmail = lead.email || "";
+        const leadPhone = lead.phone || "";
+        const leadTelefone = lead.telefone || "";
+        const leadCompany = lead.company || "";
+        const leadCpf = lead.cpf || "";
+        const leadSource = lead.source || "";
+        const leadNotes = lead.notes || "";
+
+        const textMatch =
+          normalizeString(leadName).includes(searchNormalized) ||
+          normalizeString(leadEmail).includes(searchNormalized) ||
+          normalizeString(leadCompany).includes(searchNormalized) ||
+          normalizeString(leadSource).includes(searchNormalized) ||
+          lead.value.toString().includes(searchTerm) ||
+          new Date(lead.created_at).toLocaleDateString('pt-BR').includes(searchTerm) ||
+          normalizeString(leadNotes).includes(searchNormalized);
+
+        const digitsMatch =
+          searchDigits.length > 0 &&
+          (onlyDigits(leadPhone).includes(searchDigits) ||
+            onlyDigits(leadTelefone).includes(searchDigits) ||
+            onlyDigits(leadCpf).includes(searchDigits));
+
+        const valueMatch = (() => {
+          if (!searchTrimmed.match(/^[<>=]\d+(\.\d+)?$/)) return false;
+          const operator = searchTrimmed[0];
+          const value = parseFloat(searchTrimmed.slice(1));
+          switch (operator) {
+            case '>':
+              return lead.value > value;
+            case '<':
+              return lead.value < value;
+            case '=':
+              return lead.value === value;
+            default:
+              return false;
+          }
+        })();
+
+        return textMatch || digitsMatch || valueMatch;
+      });
+    }
+
+    if (selectedStatus !== "all") {
+      filtered = filtered.filter((lead) => lead.status === selectedStatus);
+    }
+
     if (selectedTag) {
       filtered = filtered.filter((lead) =>
         lead.tags?.includes(selectedTag)
