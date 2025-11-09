@@ -84,7 +84,8 @@ function ConversationListItemComponent({
       onEditName: !!onEditName,
       onCreateLead: !!onCreateLead,
       onDeleteConversation: !!onDeleteConversation
-    }
+    },
+    showingButton: true // SEMPRE TRUE
   });
 
   return (
@@ -131,13 +132,14 @@ function ConversationListItemComponent({
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="h-8 w-8 hover:bg-accent hover:text-accent-foreground shrink-0 opacity-100"
+                    className="h-8 w-8 hover:bg-accent hover:text-accent-foreground shrink-0"
+                    style={{ opacity: 1, visibility: 'visible', display: 'flex' }}
                     onClick={(e) => {
                       e.stopPropagation();
                       console.log('🔘 Menu clicado!', { conversationId, leadId });
                     }}
                   >
-                    <MoreVertical className="h-4 w-4 text-foreground" />
+                    <MoreVertical className="h-4 w-4" style={{ color: 'currentColor' }} />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent 
@@ -238,21 +240,5 @@ function ConversationListItemComponent({
 }
 
 // MELHORIA: Memoizar componente para otimização de performance (MICRO-PROMPT 4)
-export const ConversationListItem = memo(ConversationListItemComponent, (prevProps, nextProps) => {
-  // Comparação personalizada para evitar re-renders desnecessários
-  return (
-    prevProps.contactName === nextProps.contactName &&
-    prevProps.channel === nextProps.channel &&
-    prevProps.lastMessage === nextProps.lastMessage &&
-    prevProps.timestamp.getTime() === nextProps.timestamp.getTime() &&
-    prevProps.unread === nextProps.unread &&
-    prevProps.isSelected === nextProps.isSelected &&
-    prevProps.avatarUrl === nextProps.avatarUrl &&
-    JSON.stringify(prevProps.tags) === JSON.stringify(nextProps.tags) &&
-    prevProps.responsavel === nextProps.responsavel &&
-    prevProps.funnelStage === nextProps.funnelStage &&
-    prevProps.valor === nextProps.valor &&
-    prevProps.conversationId === nextProps.conversationId &&
-    prevProps.leadId === nextProps.leadId
-  );
-});
+// CORREÇÃO: Remover memoização que pode causar problemas de renderização
+export const ConversationListItem = ConversationListItemComponent;
