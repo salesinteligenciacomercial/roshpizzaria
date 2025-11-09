@@ -167,72 +167,68 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       try {
         const { data, error } = await supabase
           .from("leads")
-          .select("telefone, phone, nome, avatar_url")
+          .select("phone, name")
           .eq("id", task.lead_id)
           .maybeSingle();
         
         if (!error && data) {
-          setLeadPhone(data.telefone || data.phone || undefined);
-          setLeadNome(data.nome || null);
+          setLeadPhone(data.phone || undefined);
+          setLeadNome(data.name || null);
           
           // Buscar foto de perfil do WhatsApp
-          if (data.avatar_url) {
-            setLeadAvatarUrl(data.avatar_url);
-          } else {
-            const rawPhone = data.telefone || data.phone || "";
-            const nomeLead = data.nome || task.lead_name || "Lead";
+          const rawPhone = data.phone || "";
+          const nomeLead = data.name || task.lead_name || "Lead";
             
-            // Sempre definir fallback primeiro para garantir que o avatar apareça
-            setLeadAvatarUrl(`https://ui-avatars.com/api/?name=${encodeURIComponent(nomeLead)}&background=10b981&color=fff&bold=true&size=128`);
-            
-            // Tentar buscar foto do WhatsApp em background (não bloqueia)
-            if (rawPhone) {
-              const numero = normalizePhoneBR(rawPhone);
-              if (numero) {
-                // Buscar foto de forma assíncrona sem bloquear
-                // IMPORTANTE: Esta busca não deve causar erros que bloqueiem a criação da tarefa
-                setTimeout(async () => {
+          // Sempre definir fallback primeiro para garantir que o avatar apareça
+          setLeadAvatarUrl(`https://ui-avatars.com/api/?name=${encodeURIComponent(nomeLead)}&background=10b981&color=fff&bold=true&size=128`);
+          
+          // Tentar buscar foto do WhatsApp em background (não bloqueia)
+          if (rawPhone) {
+            const numero = normalizePhoneBR(rawPhone);
+            if (numero) {
+              // Buscar foto de forma assíncrona sem bloquear
+              // IMPORTANTE: Esta busca não deve causar erros que bloqueiem a criação da tarefa
+              setTimeout(async () => {
+                try {
+                  const companyId = await getCompanyId();
+                  if (!companyId) {
+                    // Se não tem company_id, manter fallback
+                    return;
+                  }
+                  
+                  // Timeout de 5 segundos para não travar
+                  const timeoutPromise = new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('Timeout')), 5000)
+                  );
+                  
+                  // Envolver a chamada da Edge Function em try/catch e .catch() para garantir que nenhum erro seja propagado
+                  const fetchPromise = supabase.functions.invoke('get-profile-picture', {
+                    body: { number: numero, company_id: companyId }
+                  }).catch((err) => {
+                    // Capturar qualquer erro da Edge Function e retornar objeto com erro
+                    return { data: null, error: err };
+                  });
+                  
                   try {
-                    const companyId = await getCompanyId();
-                    if (!companyId) {
-                      // Se não tem company_id, manter fallback
-                      return;
+                    const result = await Promise.race([
+                      fetchPromise,
+                      timeoutPromise
+                    ]) as any;
+                    
+                    // Verificar se o resultado é válido e não tem erro
+                    if (result && !result.error && result.data?.profilePictureUrl) {
+                      setLeadAvatarUrl(result.data.profilePictureUrl);
                     }
-                    
-                    // Timeout de 5 segundos para não travar
-                    const timeoutPromise = new Promise<never>((_, reject) =>
-                      setTimeout(() => reject(new Error('Timeout')), 5000)
-                    );
-                    
-                    // Envolver a chamada da Edge Function em try/catch e .catch() para garantir que nenhum erro seja propagado
-                    const fetchPromise = supabase.functions.invoke('get-profile-picture', {
-                      body: { number: numero, company_id: companyId }
-                    }).catch((err) => {
-                      // Capturar qualquer erro da Edge Function e retornar objeto com erro
-                      return { data: null, error: err };
-                    });
-                    
-                    try {
-                      const result = await Promise.race([
-                        fetchPromise,
-                        timeoutPromise
-                      ]) as any;
-                      
-                      // Verificar se o resultado é válido e não tem erro
-                      if (result && !result.error && result.data?.profilePictureUrl) {
-                        setLeadAvatarUrl(result.data.profilePictureUrl);
-                      }
-                      // Se falhar, manter o fallback que já foi definido acima
-                    } catch (raceError) {
-                      // Timeout ou outro erro - silenciosamente ignorar
-                      // O fallback já foi definido acima
-                    }
-                  } catch (error) {
-                    // Silenciosamente manter fallback - não logar erro para não poluir console
+                    // Se falhar, manter o fallback que já foi definido acima
+                  } catch (raceError) {
+                    // Timeout ou outro erro - silenciosamente ignorar
                     // O fallback já foi definido acima
                   }
-                }, 100); // Pequeno delay para não bloquear a renderização inicial
-              }
+                } catch (error) {
+                  // Silenciosamente manter fallback - não logar erro para não poluir console
+                  // O fallback já foi definido acima
+                }
+              }, 100); // Pequeno delay para não bloquear a renderização inicial
             }
           }
         } else if (task.lead_id) {

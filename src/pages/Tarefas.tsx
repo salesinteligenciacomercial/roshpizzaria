@@ -552,7 +552,7 @@ export default function Tarefas() {
         .select(`
           *,
           assignee:profiles!tasks_assignee_id_fkey(full_name),
-          lead:leads!tasks_lead_id_fkey(id, nome, telefone, phone)
+          lead:leads!tasks_lead_id_fkey(id, name, phone)
         `)
         .order("created_at", { ascending: false })
         .limit(INITIAL_LOAD_LIMIT);
@@ -579,7 +579,7 @@ export default function Tarefas() {
         }
         
         const fallbackResult = await fallbackQuery;
-        tasksData = fallbackResult.data;
+        const fallbackTasksData = fallbackResult.data;
         tasksError = fallbackResult.error;
         
         if (tasksError) {
@@ -591,23 +591,25 @@ export default function Tarefas() {
         }
         
         // Se o fallback funcionou, buscar dados relacionados manualmente
-        if (tasksData && tasksData.length > 0) {
-          const assigneeIds = [...new Set(tasksData.map((t: any) => t.assignee_id).filter(Boolean))];
-          const leadIds = [...new Set(tasksData.map((t: any) => t.lead_id).filter(Boolean))];
+        if (fallbackTasksData && fallbackTasksData.length > 0) {
+          const assigneeIds = [...new Set(fallbackTasksData.map((t: any) => t.assignee_id).filter(Boolean))];
+          const leadIds = [...new Set(fallbackTasksData.map((t: any) => t.lead_id).filter(Boolean))];
           
           const [assigneesResult, leadsResult] = await Promise.all([
             assigneeIds.length > 0 ? supabase.from("profiles").select("id, full_name").in("id", assigneeIds) : { data: [] },
-            leadIds.length > 0 ? supabase.from("leads").select("id, nome, telefone, phone").in("id", leadIds) : { data: [] }
+            leadIds.length > 0 ? supabase.from("leads").select("id, name, phone").in("id", leadIds) : { data: [] }
           ]);
           
           const assigneesMap = new Map((assigneesResult.data || []).map((a: any) => [a.id, a]));
           const leadsMap = new Map((leadsResult.data || []).map((l: any) => [l.id, l]));
           
-          tasksData = tasksData.map((task: any) => ({
+          tasksData = fallbackTasksData.map((task: any) => ({
             ...task,
             assignee: assigneesMap.get(task.assignee_id) || null,
             lead: leadsMap.get(task.lead_id) || null
           }));
+        } else {
+          tasksData = [];
         }
       }
 
