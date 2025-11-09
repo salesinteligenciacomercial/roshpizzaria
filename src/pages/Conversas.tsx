@@ -1733,6 +1733,12 @@ function Conversas() {
                 return;
               }
               
+              // 🚫 CORREÇÃO: Ignorar mensagens enviadas por mim (já foram adicionadas localmente)
+              if (novaConversa.fromme === true || novaConversa.status === 'Enviada') {
+                console.log('⏭️ [REALTIME] Mensagem própria ignorada (já adicionada localmente)');
+                return;
+              }
+              
               debouncedUpdate(async () => {
                 const isGroup = Boolean((novaConversa as any)?.is_group) || /@g\.us$/.test(String(novaConversa.numero || ''));
                 const telefoneNormalizado = isGroup 
@@ -1766,7 +1772,15 @@ function Conversas() {
                 };
                 setConversations(prev => {
                   const exists = prev.find(c => c.id === telefoneNormalizado);
-                  if (exists) return prev.map(c => c.id === telefoneNormalizado ? { ...c, messages: [...c.messages, novaConvFormatted.messages[0]], lastMessage: novaConvFormatted.lastMessage, unread: c.unread + novaConvFormatted.unread } : c);
+                  if (exists) {
+                    // Verificar se mensagem já existe antes de adicionar
+                    const messageExists = exists.messages.some(m => m.id === novaConvFormatted.messages[0].id);
+                    if (messageExists) {
+                      console.log('⏭️ [REALTIME] Mensagem já existe, pulando duplicação');
+                      return prev;
+                    }
+                    return prev.map(c => c.id === telefoneNormalizado ? { ...c, messages: [...c.messages, novaConvFormatted.messages[0]], lastMessage: novaConvFormatted.lastMessage, unread: c.unread + novaConvFormatted.unread } : c);
+                  }
                   return [novaConvFormatted, ...prev];
                 });
                 if (novaConvFormatted.unread > 0) {
