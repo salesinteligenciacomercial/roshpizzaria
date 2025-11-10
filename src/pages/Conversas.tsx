@@ -4469,6 +4469,15 @@ function Conversas() {
     }
 
     try {
+      const scheduledDate = new Date(scheduledDatetime);
+      const now = new Date();
+      
+      // Validar se a data está no futuro (sem restrição mínima de tempo)
+      if (scheduledDate <= now) {
+        toast.error("A data deve ser no futuro");
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast.error("Usuário não autenticado");
@@ -4497,7 +4506,7 @@ function Conversas() {
           phone_number: phoneNumber,
           contact_name: selectedConv.contactName,
           message_content: scheduledContent,
-          scheduled_datetime: new Date(scheduledDatetime).toISOString(),
+          scheduled_datetime: scheduledDate.toISOString(),
           status: 'pending',
         }]);
 
@@ -4507,8 +4516,20 @@ function Conversas() {
         return;
       }
 
-      console.log('✅ Mensagem agendada com sucesso');
-      toast.success("Mensagem agendada com sucesso!");
+      // Calcular tempo até o envio
+      const minutosAteEnvio = Math.round((scheduledDate.getTime() - now.getTime()) / (1000 * 60));
+      const horasAteEnvio = Math.floor(minutosAteEnvio / 60);
+      const minutosRestantes = minutosAteEnvio % 60;
+      
+      let tempoMensagem = "";
+      if (horasAteEnvio > 0) {
+        tempoMensagem = `em ${horasAteEnvio}h${minutosRestantes > 0 ? ` e ${minutosRestantes}min` : ''}`;
+      } else {
+        tempoMensagem = `em ${minutosRestantes} minuto${minutosRestantes !== 1 ? 's' : ''}`;
+      }
+
+      console.log('✅ Mensagem agendada com sucesso para:', scheduledDate.toISOString());
+      toast.success(`Mensagem agendada para ser enviada ${tempoMensagem}!`);
       setScheduledContent("");
       setScheduledDatetime("");
       
@@ -6706,7 +6727,10 @@ function Conversas() {
                                       min={new Date().toISOString().slice(0, 16)}
                                     />
                                     <p className="text-xs text-muted-foreground">
-                                      A mensagem será enviada automaticamente no horário agendado
+                                      ⚡ Agende para qualquer momento futuro - sem tempo mínimo!
+                                    </p>
+                                    <p className="text-xs text-primary/70">
+                                      💡 Pode agendar para daqui a 5 minutos, 1 hora, ou dias
                                     </p>
                                   </div>
                                   <Button onClick={scheduleMessage} className="w-full">
