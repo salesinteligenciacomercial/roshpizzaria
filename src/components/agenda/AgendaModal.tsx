@@ -151,96 +151,104 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-md">
+        <DialogHeader className="pb-3">
           <DialogTitle>Agendar Compromisso</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto pr-2 flex-1" style={{ maxHeight: 'calc(90vh - 120px)' }}>
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <Label htmlFor="titulo">Título *</Label>
+            <Label htmlFor="titulo" className="text-sm">Título *</Label>
             <Input
               id="titulo"
               value={formData.titulo}
               onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
               placeholder="Ex: Reunião de apresentação"
               required
+              className="h-9"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="data_hora_inicio">Data/Hora Início *</Label>
+              <Label htmlFor="data_hora_inicio" className="text-sm">Data/Hora Início *</Label>
               <Input
                 id="data_hora_inicio"
                 type="datetime-local"
                 value={formData.data_hora_inicio}
                 onChange={(e) => setFormData({ ...formData, data_hora_inicio: e.target.value })}
                 required
+                className="h-9"
               />
             </div>
             <div>
-              <Label htmlFor="data_hora_fim">Data/Hora Fim *</Label>
+              <Label htmlFor="data_hora_fim" className="text-sm">Data/Hora Fim *</Label>
               <Input
                 id="data_hora_fim"
                 type="datetime-local"
                 value={formData.data_hora_fim}
                 onChange={(e) => setFormData({ ...formData, data_hora_fim: e.target.value })}
                 required
+                className="h-9"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="tipo_servico" className="text-sm">Tipo de Serviço</Label>
+              <Select
+                value={formData.tipo_servico}
+                onValueChange={(value) => setFormData({ ...formData, tipo_servico: value })}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="reuniao">Reunião</SelectItem>
+                  <SelectItem value="apresentacao">Apresentação</SelectItem>
+                  <SelectItem value="visita">Visita</SelectItem>
+                  <SelectItem value="outro">Outro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="custo_estimado" className="text-sm">Custo Estimado (R$)</Label>
+              <Input
+                id="custo_estimado"
+                type="number"
+                step="0.01"
+                value={formData.custo_estimado}
+                onChange={(e) => setFormData({ ...formData, custo_estimado: e.target.value })}
+                placeholder="0.00"
+                className="h-9"
               />
             </div>
           </div>
 
           <div>
-            <Label htmlFor="tipo_servico">Tipo de Serviço</Label>
-            <Select
-              value={formData.tipo_servico}
-              onValueChange={(value) => setFormData({ ...formData, tipo_servico: value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="reuniao">Reunião</SelectItem>
-                <SelectItem value="apresentacao">Apresentação</SelectItem>
-                <SelectItem value="visita">Visita</SelectItem>
-                <SelectItem value="outro">Outro</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="custo_estimado">Custo Estimado (R$)</Label>
-            <Input
-              id="custo_estimado"
-              type="number"
-              step="0.01"
-              value={formData.custo_estimado}
-              onChange={(e) => setFormData({ ...formData, custo_estimado: e.target.value })}
-              placeholder="0.00"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="observacoes">Observações</Label>
+            <Label htmlFor="observacoes" className="text-sm">Observações</Label>
             <Textarea
               id="observacoes"
               value={formData.observacoes}
               onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-              placeholder="Informações adicionais sobre o compromisso"
-              rows={3}
+              placeholder="Informações adicionais..."
+              rows={2}
+              className="resize-none"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t sticky bottom-0 bg-background pb-2">
+          <div className="flex justify-end gap-2 pt-3 border-t">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={loading}
+              size="sm"
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading} size="sm">
               {loading ? "Agendando..." : "Agendar"}
             </Button>
           </div>
