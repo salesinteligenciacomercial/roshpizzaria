@@ -827,7 +827,7 @@ export default function Agenda() {
         .select('id, data_hora_inicio, data_hora_fim')
         .eq('status', 'agendado')
         .lt('data_hora_inicio', dataHoraFim.toISOString())
-        .gt('data_hora_fim', dataHoraInicio.toISOString());
+        .gte('data_hora_fim', dataHoraInicio.toISOString());
 
       if (formData.agenda_id) {
         conflitosQuery.eq('agenda_id', formData.agenda_id);
