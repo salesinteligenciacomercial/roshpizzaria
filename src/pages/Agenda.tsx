@@ -854,7 +854,6 @@ export default function Agenda() {
       const { data: compromisso, error } = await supabase
         .from('compromissos')
         .insert({
-          titulo: formData.titulo?.trim() || null,
           agenda_id: formData.agenda_id || null,
           lead_id: formData.lead_id || null,
           usuario_responsavel_id: user.id,
