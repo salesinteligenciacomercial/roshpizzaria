@@ -2339,9 +2339,21 @@ function Conversas() {
                     const conversaExistente = updated[existingIndex];
                     
                     // Verificar se a mensagem já não existe (evitar duplicatas)
-                    const mensagemJaExiste = conversaExistente.messages.some(
-                      m => m.id === novaConvFormatted.messages[0].id
-                    );
+                    // CORREÇÃO: Verificar também por conteúdo e timestamp para evitar duplicatas de mensagens enviadas localmente
+                    const novaMensagem = novaConvFormatted.messages[0];
+                    const mensagemJaExiste = conversaExistente.messages.some(m => {
+                      // Verificar por ID (mensagens do banco)
+                      if (m.id === novaMensagem.id) return true;
+                      
+                      // Verificar por conteúdo + timestamp próximo (mensagens enviadas localmente)
+                      // Se for mensagem do usuário com mesmo conteúdo nos últimos 5 segundos, é duplicata
+                      if (m.sender === 'user' && novaMensagem.sender === 'user' && m.content === novaMensagem.content) {
+                        const diffMs = Math.abs(new Date(m.timestamp).getTime() - new Date(novaMensagem.timestamp).getTime());
+                        if (diffMs < 5000) return true; // 5 segundos de margem
+                      }
+                      
+                      return false;
+                    });
                     
                     if (!mensagemJaExiste) {
                       // Resolver replyTo por conteúdo citado (melhor esforço)
