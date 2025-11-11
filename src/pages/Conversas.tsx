@@ -1420,7 +1420,7 @@ function Conversas() {
           
           if (hasExternalChanges) {
             setSyncStatus('syncing');
-            setTimeout(() => setSyncStatus('synced'), 2000);
+            setTimeout(() => setSyncStatus('synced'), 500);
           }
           
           setSelectedConv(prev => prev ? {
@@ -3204,11 +3204,32 @@ function Conversas() {
       // ⚡ OTIMIZAÇÃO: Finalizar loading ANTES de carregar avatares
       setLoadingConversations(false);
 
-      // ⚡ LAZY LOADING DE AVATARES: Carregar apenas primeiros 3 visíveis de forma não bloqueante (mais rápido)
+      // ⚡ LAZY LOADING DE AVATARES: Carregar imediatamente (sem delays)
       const primeiros = novasConversas.slice(0, 3);
-      // Usar requestIdleCallback ou setTimeout(0) para não bloquear
-      setTimeout(() => {
-        Promise.all(primeiros.map(async (conv) => {
+      Promise.all(primeiros.map(async (conv) => {
+        if (conv.phoneNumber) {
+          try {
+            const profilePicUrl = await getProfilePictureWithFallback(
+              conv.phoneNumber, 
+              companyId, 
+              conv.contactName
+            );
+            
+            if (profilePicUrl) {
+              setConversations(prev => prev.map(c => 
+                c.id === conv.id ? { ...c, avatarUrl: profilePicUrl } : c
+              ));
+            }
+          } catch (error) {
+            // Silenciar erros de foto
+          }
+        }
+      })).catch(() => {}); // Não bloquear se houver erro
+
+      // ⚡ CARREGAR RESTANTES EM BACKGROUND (baixa prioridade)
+      const restantes = novasConversas.slice(3);
+      if (restantes.length > 0) {
+        restantes.forEach(async (conv, index) => {
           if (conv.phoneNumber) {
             try {
               const profilePicUrl = await getProfilePictureWithFallback(
@@ -3226,35 +3247,7 @@ function Conversas() {
               // Silenciar erros de foto
             }
           }
-        })).catch(() => {}); // Não bloquear se houver erro
-      }, 0); // Executar no próximo tick (não bloqueia)
-
-      // ⚡ CARREGAR RESTANTES EM BACKGROUND (baixa prioridade) - após 500ms (mais rápido)
-      const restantes = novasConversas.slice(3);
-      if (restantes.length > 0) {
-        setTimeout(() => {
-          restantes.forEach(async (conv, index) => {
-            setTimeout(async () => {
-              if (conv.phoneNumber) {
-                try {
-                  const profilePicUrl = await getProfilePictureWithFallback(
-                    conv.phoneNumber, 
-                    companyId, 
-                    conv.contactName
-                  );
-                  
-                  if (profilePicUrl) {
-                    setConversations(prev => prev.map(c => 
-                      c.id === conv.id ? { ...c, avatarUrl: profilePicUrl } : c
-                    ));
-                  }
-                } catch (error) {
-                  // Silenciar erros de foto
-                }
-              }
-            }, index * 100); // Reduzir espaçamento para 100ms (mais rápido)
-          });
-        }, 500); // Reduzir para 500ms (mais rápido)
+        });
       }
       
     } catch (error) {
@@ -4027,14 +4020,14 @@ function Conversas() {
       // já salvo acima
 
       setSyncStatus('synced');
-      setTimeout(() => setSyncStatus('idle'), 4000);
+      setTimeout(() => setSyncStatus('idle'), 1000);
       
       // Não mostrar notificação ao enviar mídia - apenas logs
       console.log('✅ Mídia enviada com sucesso');
     } catch (error) {
       console.error("❌ Erro ao enviar mídia:", error);
       setSyncStatus('error');
-      setTimeout(() => setSyncStatus('idle'), 5000);
+      setTimeout(() => setSyncStatus('idle'), 2000);
       toast.error("Erro ao enviar mídia");
     }
   };
@@ -4159,14 +4152,14 @@ function Conversas() {
       }
 
       setSyncStatus('synced');
-      setTimeout(() => setSyncStatus('idle'), 4000);
+      setTimeout(() => setSyncStatus('idle'), 1000);
       
       // Não mostrar notificação ao enviar áudio - apenas logs
       console.log('✅ Áudio enviado com sucesso');
     } catch (error) {
       console.error("❌ Erro ao enviar áudio:", error);
       setSyncStatus('error');
-      setTimeout(() => setSyncStatus('idle'), 5000);
+      setTimeout(() => setSyncStatus('idle'), 2000);
       toast.error("Erro ao enviar áudio");
     }
   };
@@ -4705,13 +4698,13 @@ function Conversas() {
           console.error('Erro ao atualizar tags no Supabase:', error);
           setSyncStatus('error');
           toast.error('Erro ao salvar tag');
-          setTimeout(() => setSyncStatus('idle'), 5000);
+          setTimeout(() => setSyncStatus('idle'), 2000);
           return;
         }
         
         console.log('✅ Tag adicionada no Supabase');
         setSyncStatus('synced');
-        setTimeout(() => setSyncStatus('idle'), 4000);
+        setTimeout(() => setSyncStatus('idle'), 1000);
       }
       
       // Atualizar localmente (será sincronizado via realtime)
@@ -4728,7 +4721,7 @@ function Conversas() {
       console.error('Erro ao adicionar tag:', error);
       setSyncStatus('error');
       toast.error('Erro ao adicionar tag');
-      setTimeout(() => setSyncStatus('idle'), 5000);
+      setTimeout(() => setSyncStatus('idle'), 2000);
     }
   };
 
@@ -4758,13 +4751,13 @@ function Conversas() {
           console.error('Erro ao atualizar funil no Supabase:', error);
           setSyncStatus('error');
           toast.error('Erro ao salvar no funil');
-          setTimeout(() => setSyncStatus('idle'), 5000);
+          setTimeout(() => setSyncStatus('idle'), 2000);
           return;
         }
         
         console.log('✅ Lead adicionado ao funil no Supabase');
         setSyncStatus('synced');
-        setTimeout(() => setSyncStatus('idle'), 4000);
+        setTimeout(() => setSyncStatus('idle'), 1000);
       }
       
       // Buscar nome da etapa para exibição local
@@ -4790,7 +4783,7 @@ function Conversas() {
       console.error('Erro ao adicionar ao funil:', error);
       setSyncStatus('error');
       toast.error('Erro ao adicionar ao funil');
-      setTimeout(() => setSyncStatus('idle'), 5000);
+      setTimeout(() => setSyncStatus('idle'), 2000);
     }
   };
 
@@ -4820,13 +4813,13 @@ function Conversas() {
           console.error('Erro ao atualizar responsável no Supabase:', error);
           setSyncStatus('error');
           toast.error('Erro ao salvar responsável');
-          setTimeout(() => setSyncStatus('idle'), 5000);
+          setTimeout(() => setSyncStatus('idle'), 2000);
           return;
         }
         
         console.log('✅ Responsável atualizado no Supabase');
         setSyncStatus('synced');
-        setTimeout(() => setSyncStatus('idle'), 4000);
+        setTimeout(() => setSyncStatus('idle'), 1000);
       }
       
       // Atualizar localmente
@@ -4843,7 +4836,7 @@ function Conversas() {
       console.error('Erro ao atualizar responsável:', error);
       setSyncStatus('error');
       toast.error('Erro ao atualizar responsável');
-      setTimeout(() => setSyncStatus('idle'), 5000);
+      setTimeout(() => setSyncStatus('idle'), 2000);
     }
   };
 
@@ -5089,13 +5082,13 @@ function Conversas() {
           console.error('Erro ao atualizar informações no Supabase:', error);
           setSyncStatus('error');
           toast.error('Erro ao salvar informações');
-          setTimeout(() => setSyncStatus('idle'), 5000);
+          setTimeout(() => setSyncStatus('idle'), 2000);
           return;
         }
         
         console.log('✅ Informações atualizadas no Supabase');
         setSyncStatus('synced');
-        setTimeout(() => setSyncStatus('idle'), 4000);
+        setTimeout(() => setSyncStatus('idle'), 1000);
       }
       
       // Atualizar localmente (será sincronizado via realtime)
@@ -5124,7 +5117,7 @@ function Conversas() {
       console.error('Erro ao atualizar informações:', error);
       setSyncStatus('error');
       toast.error('Erro ao atualizar informações');
-      setTimeout(() => setSyncStatus('idle'), 5000);
+      setTimeout(() => setSyncStatus('idle'), 2000);
     }
   };
 
@@ -5487,15 +5480,15 @@ function Conversas() {
         }));
         
         setSyncStatus('synced');
-        setTimeout(() => setSyncStatus('idle'), 4000);
+        setTimeout(() => setSyncStatus('idle'), 1000);
       } else {
         setSyncStatus('error');
-        setTimeout(() => setSyncStatus('idle'), 5000);
+        setTimeout(() => setSyncStatus('idle'), 2000);
       }
     } catch (error) {
       console.error('Erro ao criar lead:', error);
       setSyncStatus('error');
-      setTimeout(() => setSyncStatus('idle'), 5000);
+      setTimeout(() => setSyncStatus('idle'), 2000);
     }
   };
 
@@ -5563,17 +5556,17 @@ function Conversas() {
         
         setLeadVinculado(lead);
         setSyncStatus('synced');
-        setTimeout(() => setSyncStatus('idle'), 4000);
+        setTimeout(() => setSyncStatus('idle'), 1000);
         toast.success(`Lead ${conv.contactName} criado com sucesso!`);
       } else {
         setSyncStatus('error');
-        setTimeout(() => setSyncStatus('idle'), 5000);
+        setTimeout(() => setSyncStatus('idle'), 2000);
         toast.error("Erro ao criar lead");
       }
     } catch (error) {
       console.error('Erro ao criar lead:', error);
       setSyncStatus('error');
-      setTimeout(() => setSyncStatus('idle'), 5000);
+      setTimeout(() => setSyncStatus('idle'), 2000);
       toast.error("Erro ao criar lead");
     }
   };
