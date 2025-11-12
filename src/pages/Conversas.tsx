@@ -1724,7 +1724,6 @@ function Conversas() {
           console.log(`✅ [REALTIME] Reconectado com sucesso na tentativa ${attempt}`);
           setRealtimeConnectionStatus('connected');
           setRealtimeReconnectAttempts(0);
-          toast.success('Conexão em tempo real restaurada');
           isReconnectingRef.current = false;
         } catch (error) {
           console.error(`❌ [REALTIME] Erro ao reconectar (tentativa ${attempt}):`, error);
@@ -2213,7 +2212,6 @@ function Conversas() {
           console.log(`✅ [REALTIME] Reconectado com sucesso na tentativa ${attempt}`);
           setRealtimeConnectionStatus('connected');
           setRealtimeReconnectAttempts(0);
-          toast.success('Conexão em tempo real restaurada');
           isReconnectingRef.current = false;
         } catch (error) {
           console.error(`❌ [REALTIME] Erro ao reconectar (tentativa ${attempt}):`, error);
@@ -2997,7 +2995,8 @@ function Conversas() {
             
             console.log(`⚡ [CACHE] Carregando ${restoredConversations.length} conversas do cache INSTANTANEAMENTE (${age}ms atrás)`);
             setConversations(restoredConversations);
-            // ⚡ IMPORTANTE: Não setar loadingConversations como false aqui, pois pode estar carregando do Supabase
+            // ⚡ CRÍTICO: Setar loadingConversations como false IMEDIATAMENTE para exibir conversas do cache
+            setLoadingConversations(false);
             return true; // Cache válido
           } else {
             console.log('⏰ [CACHE] Cache expirado, recarregando...');
@@ -3026,8 +3025,14 @@ function Conversas() {
     
     console.log('⚡ [INSTANT] Carregamento instantâneo iniciado');
     
-    // ⚡ ZERO DELAY: Sincronizar imediatamente (o hook cuida do cache)
-    syncConversations(true).then(() => {
+    // ⚡ OTIMIZAÇÃO: Verificar se já temos cache válido antes de forçar refresh
+    // Se já temos cache, não forçar refresh para evitar delay desnecessário
+    const cachedData = sessionStorage.getItem(CONVERSATIONS_CACHE_KEY);
+    const cacheTimestamp = sessionStorage.getItem(CONVERSATIONS_CACHE_TIMESTAMP_KEY);
+    const hasValidCache = cachedData && cacheTimestamp && (Date.now() - parseInt(cacheTimestamp, 10)) < CACHE_MAX_AGE;
+    
+    // Se já temos cache válido, sincronizar em background sem forçar refresh
+    syncConversations(hasValidCache ? false : true).then(() => {
       console.log('✅ [INSTANT] Conversas disponíveis instantaneamente');
     }).catch((err) => {
       console.error('❌ [INSTANT] Erro:', err);
@@ -3161,8 +3166,14 @@ function Conversas() {
   const loadSupabaseConversations = async (append: boolean = false) => {
     if (loadingConversations) return;
     
-    try {
+    // ⚡ OTIMIZAÇÃO: Se já temos conversas do cache, não bloquear a exibição
+    // Apenas setar loading se não temos conversas ainda
+    const hasCachedConversations = conversations.length > 0;
+    if (!hasCachedConversations) {
       setLoadingConversations(true);
+    }
+    
+    try {
       const startTime = performance.now();
       
       // ⚡ OTIMIZAÇÃO: Usar company_id em cache se disponível
