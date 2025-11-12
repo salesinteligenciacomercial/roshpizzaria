@@ -821,10 +821,11 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                   variant="ghost"
                   size="sm"
                   onClick={(e) => { e.stopPropagation(); setConversaOpen(true); }}
-                  className="h-6 w-6 p-0 hover:bg-success/10 text-success transition-colors"
-                  title="Ver conversas do lead"
+                  className="h-7 px-2 text-success hover:text-success hover:bg-success/10 transition-all"
+                  title="Ver histórico de conversas"
                 >
-                  <MessageSquare className="h-3 w-3" />
+                  <MessageSquare className="h-3.5 w-3.5 mr-1" />
+                  <span className="text-xs font-medium">Ver Conversas</span>
                 </Button>
               )}
               {task.lead_id && (
