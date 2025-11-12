@@ -139,8 +139,13 @@ export default function Configuracoes() {
         const { data, error } = await query;
         if (error) throw error;
         setLatestAnnouncement((data && data.length > 0) ? data[0] : null);
-      } catch (e) {
-        console.error('Erro ao carregar avisos:', e);
+      } catch (e: any) {
+        // Ignorar erro se a tabela não existir
+        if (e?.message?.includes('announcements')) {
+          // Tabela não existe, não é crítico
+          return;
+        }
+        console.error('Erro ao carregar avisos:', e?.message || e);
       }
     };
     loadAnnouncement();
@@ -158,39 +163,70 @@ export default function Configuracoes() {
     try {
       setFilasLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Buscar company_id do usuário
-      const { data: userRole } = await supabase
-        .from('user_roles')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!userRole?.company_id) {
-        console.warn('Usuário não associado a empresa');
+      if (!user) {
         setFilas([]);
         return;
       }
 
-      const { data, error } = await (supabase as any)
-        .from('filas_atendimento')
-        .select('*')
-        .eq('company_id', userRole.company_id)
-        .order('prioridade', { ascending: true });
+      // Tentar buscar por company_id primeiro (estrutura nova)
+      let data, error;
+      const companyId = currentCompany?.id;
+      
+      if (companyId) {
+        // Tentar com company_id primeiro
+        const resultCompany = await supabase
+          .from('filas_atendimento')
+          .select('*')
+          .eq('company_id', companyId)
+          .order('prioridade', { ascending: true });
+        
+        // Se der erro de coluna não encontrada, tentar com owner_id
+        if (resultCompany.error && resultCompany.error.message?.includes('company_id')) {
+          const resultOwner = await supabase
+            .from('filas_atendimento')
+            .select('*')
+            .eq('owner_id', user.id)
+            .order('prioridade', { ascending: true });
+          
+          data = resultOwner.data;
+          error = resultOwner.error;
+        } else {
+          data = resultCompany.data;
+          error = resultCompany.error;
+        }
+      } else {
+        // Fallback: buscar por owner_id (estrutura antiga)
+        const result = await supabase
+          .from('filas_atendimento')
+          .select('*')
+          .eq('owner_id', user.id)
+          .order('prioridade', { ascending: true });
+        
+        data = result.data;
+        error = result.error;
+      }
 
       if (error) throw error;
       setFilas(data || []);
-    } catch (e) {
-      console.error('Erro ao carregar filas:', e);
+    } catch (e: any) {
+      console.error('Erro ao carregar filas:', e?.message || e);
+      console.error('Detalhes do erro:', JSON.stringify(e, null, 2));
+      toast({
+        variant: "destructive",
+        title: "Erro ao carregar filas",
+        description: e?.message || "Não foi possível carregar as filas de atendimento.",
+      });
+      setFilas([]);
     } finally {
       setFilasLoading(false);
     }
   };
 
   useEffect(() => {
-    carregarFilas();
-  }, []);
+    if (currentCompany?.id) {
+      carregarFilas();
+    }
+  }, [currentCompany?.id]);
 
   useEffect(() => {
     carregarColaboradores();
@@ -209,6 +245,20 @@ export default function Configuracoes() {
   const abrirGerenciarColaboradores = (fila: any) => {
     setFilaSelecionada(fila);
     setColaboradoresDialogOpen(true);
+  };
+
+  const fecharFilaDialog = (open: boolean) => {
+    setFilaDialogOpen(open);
+    if (!open) {
+      setEditingFila(null);
+    }
+  };
+
+  const fecharColaboradoresDialog = (open: boolean) => {
+    setColaboradoresDialogOpen(open);
+    if (!open) {
+      setFilaSelecionada(null);
+    }
   };
 
   const removerFila = async (id: string) => {
@@ -235,31 +285,59 @@ export default function Configuracoes() {
   const carregarColaboradores = async () => {
     try {
       const companyId = currentCompany?.id;
-      if (!companyId) return;
-      const { data: userRoles, error } = await supabase
+      if (!companyId) {
+        setColaboradores([]);
+        return;
+      }
+      
+      // Buscar user_roles primeiro
+      const { data: userRoles, error: rolesError } = await supabase
         .from('user_roles')
-        .select(`
-          id,
-          user_id,
-          role,
-          profiles:profiles!user_roles_user_id_fkey(full_name,email)
-        `)
+        .select('id, user_id, role')
         .eq('company_id', companyId);
-      if (error) throw error;
-      const mapped: Colaborador[] = (userRoles || []).map((u: any) => ({
-        id: u.id,
-        userId: u.user_id,
-        nome: u.profiles?.full_name || u.profiles?.email || 'Usuário',
-        email: u.profiles?.email || '',
-        setor: undefined,
-        funcao: u.role,
-        atendimentosAtivos: 0,
-        capacidadeMaxima: 10,
-        status: "disponivel",
-      }));
+        
+      if (rolesError) throw rolesError;
+      
+      if (!userRoles || userRoles.length === 0) {
+        setColaboradores([]);
+        return;
+      }
+
+      // Buscar profiles separadamente
+      const userIds = userRoles.map((ur: any) => ur.user_id);
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      // Combinar dados
+      const mapped: Colaborador[] = (userRoles || []).map((u: any) => {
+        const profile = (profilesData || []).find((p: any) => p.id === u.user_id);
+        return {
+          id: u.id,
+          userId: u.user_id,
+          nome: profile?.full_name || profile?.email || 'Usuário',
+          email: profile?.email || '',
+          setor: undefined,
+          funcao: u.role,
+          atendimentosAtivos: 0,
+          capacidadeMaxima: 10,
+          status: "disponivel" as const,
+        };
+      });
+      
       setColaboradores(mapped);
-    } catch (e) {
-      console.error('Erro ao carregar colaboradores:', e);
+    } catch (e: any) {
+      console.error('Erro ao carregar colaboradores:', e?.message || e);
+      console.error('Detalhes do erro:', JSON.stringify(e, null, 2));
+      toast({
+        variant: "destructive",
+        title: "Erro ao carregar colaboradores",
+        description: e?.message || "Não foi possível carregar os colaboradores.",
+      });
+      setColaboradores([]);
     }
   };
 
@@ -327,23 +405,45 @@ export default function Configuracoes() {
       });
       return;
     }
+    
+    // Validar email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(novoColaborador.email)) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "E-mail inválido",
+      });
+      return;
+    }
+
     try {
       if (!currentCompany?.id) throw new Error('Empresa não encontrada');
-      const { error } = await supabase.functions.invoke('criar-usuario-subconta', {
+      
+      const { data, error } = await supabase.functions.invoke('criar-usuario-subconta', {
         body: {
           companyId: currentCompany.id,
-      email: novoColaborador.email,
+          email: novoColaborador.email,
           full_name: novoColaborador.nome,
-          role: 'user',
+          role: novoColaborador.funcao || 'user',
         },
       });
+      
       if (error) throw error;
+      
       setNovoColaborador({ nome: "", email: "", setor: "", funcao: "", capacidadeMaxima: 10 });
-      toast({ title: "Usuário criado", description: "Usuário vinculado à empresa." });
+      toast({ 
+        title: "Usuário criado", 
+        description: "Usuário criado e vinculado à empresa com sucesso." 
+      });
       await carregarColaboradores();
     } catch (e: any) {
       console.error('Erro ao criar usuário:', e);
-      toast({ variant: 'destructive', title: 'Erro ao criar usuário', description: e.message });
+      toast({ 
+        variant: 'destructive', 
+        title: 'Erro ao criar usuário', 
+        description: e.message || 'Ocorreu um erro ao criar o usuário. Verifique se o e-mail já não está cadastrado.' 
+      });
     }
   };
 
@@ -456,13 +556,15 @@ export default function Configuracoes() {
 
           <FilaDialog
             open={filaDialogOpen}
-            onOpenChange={setFilaDialogOpen}
+            onOpenChange={fecharFilaDialog}
+            fila={editingFila}
+            onSuccess={carregarFilas}
           />
 
           <FilaColaboradoresDialog
             open={colaboradoresDialogOpen}
-            onOpenChange={setColaboradoresDialogOpen}
-            filaId=""
+            onOpenChange={fecharColaboradoresDialog}
+            filaId={filaSelecionada?.id || null}
           />
     </>
   );
@@ -485,9 +587,10 @@ export default function Configuracoes() {
                       id="nome"
                       placeholder="Nome completo"
                       value={novoColaborador.nome}
-                      onChange={(e) =>
-                        setNovoColaborador({ ...novoColaborador, nome: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setNovoColaborador(prev => ({ ...prev, nome: value }));
+                      }}
                     />
                   </div>
 
@@ -498,24 +601,25 @@ export default function Configuracoes() {
                       type="email"
                       placeholder="email@example.com"
                       value={novoColaborador.email}
-                      onChange={(e) =>
-                        setNovoColaborador({ ...novoColaborador, email: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setNovoColaborador(prev => ({ ...prev, email: value }));
+                      }}
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="setor">Setor *</Label>
+                    <Label htmlFor="setor">Setor</Label>
                     <Select
                       value={novoColaborador.setor}
-                      onValueChange={(value) =>
-                        setNovoColaborador({ ...novoColaborador, setor: value })
-                      }
+                      onValueChange={(value) => {
+                        setNovoColaborador(prev => ({ ...prev, setor: value }));
+                      }}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
+                        <SelectValue placeholder="Selecione (opcional)" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Atendimento">Atendimento</SelectItem>
@@ -528,15 +632,24 @@ export default function Configuracoes() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="funcao">Função</Label>
-                    <Input
-                      id="funcao"
-                      placeholder="Ex: Atendente, Vendedor"
+                    <Label htmlFor="funcao">Perfil</Label>
+                    <Select
                       value={novoColaborador.funcao}
-                      onChange={(e) =>
-                        setNovoColaborador({ ...novoColaborador, funcao: e.target.value })
-                      }
-                    />
+                      onValueChange={(value) => {
+                        setNovoColaborador(prev => ({ ...prev, funcao: value }));
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o perfil" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="company_admin">Administrador</SelectItem>
+                        <SelectItem value="gestor">Gestor</SelectItem>
+                        <SelectItem value="vendedor">Vendedor</SelectItem>
+                        <SelectItem value="suporte">Suporte</SelectItem>
+                        <SelectItem value="user">Usuário</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
@@ -547,12 +660,10 @@ export default function Configuracoes() {
                       min="1"
                       max="50"
                       value={novoColaborador.capacidadeMaxima}
-                      onChange={(e) =>
-                        setNovoColaborador({
-                          ...novoColaborador,
-                          capacidadeMaxima: parseInt(e.target.value) || 10,
-                        })
-                      }
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 10;
+                        setNovoColaborador(prev => ({ ...prev, capacidadeMaxima: value }));
+                      }}
                     />
                   </div>
                 </div>

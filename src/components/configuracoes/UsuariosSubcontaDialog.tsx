@@ -53,34 +53,54 @@ export function UsuariosSubcontaDialog({ company, open, onOpenChange }: Usuarios
       setLoading(true);
       console.log("Carregando usuários para empresa:", company.id);
       
-      // Busca user_roles com profiles em uma única query usando JOIN
-      const { data: userRoles, error } = await supabase
+      // Buscar user_roles primeiro
+      const { data: userRoles, error: rolesError } = await supabase
         .from("user_roles")
-        .select(`
-          id,
-          user_id,
-          role,
-          profiles!user_roles_user_id_fkey (
-            full_name,
-            email
-          )
-        `)
+        .select("id, user_id, role")
         .eq("company_id", company.id);
 
-      if (error) {
-        console.error("Erro ao buscar user_roles:", error);
-        throw error;
+      if (rolesError) {
+        console.error("Erro ao buscar user_roles:", rolesError);
+        throw rolesError;
       }
 
-      console.log("Usuários carregados:", userRoles);
-      setUsers(userRoles as any || []);
+      if (!userRoles || userRoles.length === 0) {
+        setUsers([]);
+        return;
+      }
+
+      // Buscar profiles separadamente
+      const userIds = userRoles.map((ur: any) => ur.user_id);
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", userIds);
+
+      if (profilesError) {
+        console.error("Erro ao buscar profiles:", profilesError);
+        throw profilesError;
+      }
+
+      // Combinar dados
+      const usersWithProfiles = userRoles.map((ur: any) => {
+        const profile = (profilesData || []).find((p: any) => p.id === ur.user_id);
+        return {
+          ...ur,
+          profiles: profile || null,
+        };
+      });
+
+      console.log("Usuários carregados:", usersWithProfiles);
+      setUsers(usersWithProfiles as any);
     } catch (error: any) {
-      console.error("Erro completo ao carregar usuários:", error);
+      console.error("Erro completo ao carregar usuários:", error?.message || error);
+      console.error("Detalhes do erro:", JSON.stringify(error, null, 2));
       toast({
         title: "Erro ao carregar usuários",
-        description: error.message,
+        description: error?.message || "Não foi possível carregar os usuários.",
         variant: "destructive",
       });
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -91,20 +111,78 @@ export function UsuariosSubcontaDialog({ company, open, onOpenChange }: Usuarios
     try {
       console.log("➕ [USUÁRIOS] Adicionando novo usuário:", formData.email);
 
-      const { data, error } = await supabase.functions.invoke('criar-usuario-subconta', {
-        body: {
-          companyId: company.id,
-          email: formData.email,
-          full_name: formData.full_name,
-          role: formData.role,
-        },
-      });
-
-      if (error) {
-        throw error;
+      // Fazer chamada direta via fetch para capturar resposta completa em caso de erro
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("Sessão expirada. Faça login novamente.");
       }
 
-      console.log("✅ [USUÁRIOS] Criado com sucesso:", data);
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error("Configuração do Supabase não encontrada.");
+      }
+
+      const functionUrl = `${supabaseUrl}/functions/v1/criar-usuario-subconta`;
+
+      const requestBody = {
+        companyId: company.id,
+        email: formData.email,
+        full_name: formData.full_name,
+        role: formData.role,
+      };
+
+      console.log("📤 [USUÁRIOS] Enviando requisição:", requestBody);
+
+      const fetchResponse = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const responseText = await fetchResponse.text();
+      let responseData: any;
+      
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (e) {
+        console.error("Erro ao parsear resposta:", e, "Resposta:", responseText);
+        throw new Error("Resposta inválida do servidor");
+      }
+
+      // Se não for sucesso, tratar como erro
+      if (!fetchResponse.ok) {
+        // Priorizar mensagem de erro mais específica
+        let errorMessage = responseData?.error || responseData?.message;
+        
+        // Se não tiver mensagem, usar status
+        if (!errorMessage) {
+          errorMessage = `Erro ${fetchResponse.status}: ${fetchResponse.statusText}`;
+        }
+        
+        // Adicionar detalhes se disponível
+        if (responseData?.details && responseData.details !== errorMessage) {
+          errorMessage = `${errorMessage} (${responseData.details})`;
+        }
+        
+        console.error("❌ [USUÁRIOS] Erro da edge function:", {
+          status: fetchResponse.status,
+          statusText: fetchResponse.statusText,
+          data: responseData,
+          errorMessage
+        });
+        
+        throw new Error(errorMessage);
+      }
+
+      // Sucesso!
+      console.log("✅ [USUÁRIOS] Criado com sucesso:", responseData);
+
       toast({
         title: "Usuário adicionado",
         description: "Usuário criado com sucesso e vinculado à empresa.",
@@ -115,9 +193,31 @@ export function UsuariosSubcontaDialog({ company, open, onOpenChange }: Usuarios
       loadUsers();
     } catch (error: any) {
       console.error("❌ [USUÁRIOS] Erro completo:", error);
+      console.error("❌ [USUÁRIOS] Detalhes:", JSON.stringify(error, null, 2));
+      
+      let errorMessage = "Não foi possível criar o usuário.";
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.error) {
+        errorMessage = error.error;
+      }
+      
+      // Mensagens de erro mais específicas
+      if (errorMessage.toLowerCase().includes('email') && errorMessage.toLowerCase().includes('already') || 
+          errorMessage.toLowerCase().includes('já está') || 
+          errorMessage.toLowerCase().includes('duplicate')) {
+        errorMessage = `O e-mail ${formData.email} já está cadastrado no sistema.`;
+      } else if (errorMessage.toLowerCase().includes('unauthorized') || 
+                 errorMessage.toLowerCase().includes('permissão')) {
+        errorMessage = "Você não tem permissão para criar usuários nesta empresa.";
+      } else if (errorMessage.toLowerCase().includes('sessão') || 
+                 errorMessage.toLowerCase().includes('session')) {
+        errorMessage = "Sua sessão expirou. Por favor, faça login novamente.";
+      }
+      
       toast({
         title: "Erro ao adicionar usuário",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     }

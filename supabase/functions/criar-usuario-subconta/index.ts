@@ -201,6 +201,22 @@ serve(async (req) => {
       }
 
       targetCompanyId = companyId!;
+      
+      // VERIFICAR SE EMAIL JÁ EXISTE (para usuários em empresa existente também)
+      console.log('🔍 [CRIAR-USUARIO] Verificando se email já existe...');
+      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+      const emailExists = existingUsers?.users?.some(u => u.email?.toLowerCase() === email.toLowerCase());
+      
+      if (emailExists) {
+        console.error('❌ [CRIAR-USUARIO] Email já cadastrado:', email);
+        return new Response(JSON.stringify({ 
+          error: `O e-mail ${email} já está cadastrado no sistema. Use outro e-mail ou remova o usuário existente primeiro.`,
+          code: 'EMAIL_JA_CADASTRADO'
+        }), { 
+          status: 409, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+      }
     }
 
     console.log('🔐 [CRIAR-USUARIO] Criando usuário de autenticação...');
@@ -210,7 +226,7 @@ serve(async (req) => {
 
     // Criar usuário de autenticação
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-      email,
+      email: email.toLowerCase().trim(),
       password: tempPassword,
       user_metadata: { full_name },
       email_confirm: true,
@@ -218,9 +234,27 @@ serve(async (req) => {
 
     if (createErr || !created?.user) {
       console.error('❌ [CRIAR-USUARIO] Erro ao criar usuário auth:', createErr);
+      
+      // Mensagem de erro mais específica
+      let errorMessage = 'Erro ao criar usuário de autenticação';
+      let errorDetails = createErr?.message || 'Erro desconhecido';
+      
+      // Verificar tipos comuns de erro
+      if (errorDetails.includes('already registered') || errorDetails.includes('already exists') || errorDetails.includes('duplicate')) {
+        errorMessage = `O e-mail ${email} já está cadastrado no sistema.`;
+        errorDetails = 'EMAIL_JA_CADASTRADO';
+      } else if (errorDetails.includes('invalid email') || errorDetails.includes('email format')) {
+        errorMessage = `O e-mail ${email} não é válido.`;
+        errorDetails = 'EMAIL_INVALIDO';
+      } else if (errorDetails.includes('password')) {
+        errorMessage = 'Erro ao gerar senha do usuário.';
+        errorDetails = 'ERRO_SENHA';
+      }
+      
       return new Response(JSON.stringify({ 
-        error: 'Erro ao criar usuário de autenticação',
-        details: createErr?.message 
+        error: errorMessage,
+        details: errorDetails,
+        originalError: createErr?.message
       }), { 
         status: 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
