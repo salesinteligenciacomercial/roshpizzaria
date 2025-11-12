@@ -2376,27 +2376,25 @@ function Conversas() {
                     const novaMensagem = novaConvFormatted.messages[0];
                     const mensagemIndexLocal = conversaExistente.messages.findIndex(m => {
                       // Verificar por ID (mensagens do banco)
-                      if (m.id === novaMensagem.id) return true;
-                      
-                      // ⚡ CORREÇÃO MELHORADA: Verificar por conteúdo + timestamp próximo (mensagens enviadas localmente)
-                      // Se for mensagem do usuário com mesmo conteúdo nos últimos 10 segundos, é duplicata
-                      // Aumentar margem de tempo para 10 segundos para garantir detecção
-                      if (m.sender === 'user' && novaMensagem.sender === 'user' && m.content === novaMensagem.content) {
-                        const diffMs = Math.abs(new Date(m.timestamp).getTime() - new Date(novaMensagem.timestamp).getTime());
-                        if (diffMs < 10000) return true; // 10 segundos de margem (aumentado de 5 para 10)
+                      if (m.id === novaMensagem.id) {
+                        console.log('🔍 Duplicata detectada por ID:', m.id);
+                        return true;
                       }
                       
-                      // ⚡ NOVA DETECÇÃO: Verificar também por conteúdo similar (caso haja pequenas diferenças)
-                      // Se for mensagem do usuário com conteúdo muito similar nos últimos 10 segundos
-                      if (m.sender === 'user' && novaMensagem.sender === 'user') {
-                        const contentSimilar = m.content.trim() === novaMensagem.content.trim() || 
-                                              (m.content.trim().length > 0 && 
-                                               novaMensagem.content.trim().length > 0 &&
-                                               Math.abs(m.content.trim().length - novaMensagem.content.trim().length) <= 2);
-                        if (contentSimilar) {
-                          const diffMs = Math.abs(new Date(m.timestamp).getTime() - new Date(novaMensagem.timestamp).getTime());
-                          if (diffMs < 10000) return true; // 10 segundos de margem
-                        }
+                      // ⚡ CORREÇÃO MELHORADA: Verificar por conteúdo + timestamp próximo (mensagens enviadas localmente)
+                      // Aumentar margem de tempo para 30 segundos para cobrir latências de rede
+                      const mesmoSender = (m.sender === 'user') === (novaMensagem.sender === 'user');
+                      const mesmoConteudo = m.content.trim() === novaMensagem.content.trim();
+                      const diffMs = Math.abs(new Date(m.timestamp).getTime() - new Date(novaMensagem.timestamp).getTime());
+                      
+                      if (mesmoSender && mesmoConteudo && diffMs < 30000) {
+                        console.log('🔍 Duplicata detectada por conteúdo+timestamp:', {
+                          conteudo: m.content.substring(0, 50),
+                          diffMs,
+                          idLocal: m.id,
+                          idBanco: novaMensagem.id
+                        });
+                        return true;
                       }
                       
                       return false;
@@ -2407,9 +2405,19 @@ function Conversas() {
                     // ⚡ CORREÇÃO CRÍTICA: Se a mensagem já existe localmente (enviada pelo usuário),
                     // substituir pela versão do banco (com ID real) para garantir sincronização
                     if (mensagemJaExiste && mensagemIndexLocal >= 0) {
+                      console.log('🔄 [REALTIME] Substituindo mensagem local pela versão do banco:', {
+                        idLocal: conversaExistente.messages[mensagemIndexLocal]?.id,
+                        idBanco: novaMensagem.id,
+                        conteudo: novaMensagem.content.substring(0, 50)
+                      });
+                      
                       // Substituir mensagem local pela versão do banco (com ID real)
                       const mensagensAtualizadas = [...conversaExistente.messages];
-                      mensagensAtualizadas[mensagemIndexLocal] = novaMensagem; // Substituir com ID do banco
+                      mensagensAtualizadas[mensagemIndexLocal] = {
+                        ...novaMensagem,
+                        // Preservar campos locais importantes (como sentBy)
+                        sentBy: mensagensAtualizadas[mensagemIndexLocal].sentBy || novaMensagem.sentBy
+                      };
                       
                       // Resolver replyTo por conteúdo citado (melhor esforço)
                       if (novaConversa.replied_to_message) {
@@ -4413,6 +4421,13 @@ function Conversas() {
     const messageContent = content || messageInput.trim();
     if (!messageContent || !selectedConv) return;
 
+    console.log('📤 [ENVIO] Iniciando envio de mensagem:', {
+      conteudo: messageContent.substring(0, 50),
+      tipo: type,
+      conversaId: selectedConv.id,
+      timestamp: new Date().toISOString()
+    });
+
     // Validar e formatar número
     try {
       const formattedPhone = formatPhoneNumber(selectedConv.id);
@@ -4422,7 +4437,7 @@ function Conversas() {
     }
 
     const newMessage: Message = {
-      id: Date.now().toString(),
+      id: `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`, // ID temporário único
       content: messageContent,
       type,
       sender: "user",
@@ -4431,6 +4446,8 @@ function Conversas() {
       replyTo: replyingTo || undefined,
       sentBy: userName || "Você", // Adicionar quem enviou a mensagem
     };
+
+    console.log('📝 [ENVIO] Mensagem criada com ID temporário:', newMessage.id);
 
     const updatedConversations = conversations.map((conv) =>
       conv.id === selectedConv.id
