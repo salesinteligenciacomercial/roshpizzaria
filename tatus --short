@@ -1,0 +1,154 @@
+[33m87050ca[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Deduplicate messages in realtime
+[33mf5c67f1[m Improve message storage robustly
+[33ma44566b[m Corrigir agenda: criar compromisso
+[33m45c9d31[m Fix task card popup open
+[33m761174a[m Ensure Conversations popup opens from WhatsApp button
+[33m9a1e210[m Move WhatsApp button to TaskCard header
+[33m6951463[m Add WhatsApp button on TaskCard
+[33mbe3773b[m Adicionar botão WhatsApp no TaskCard
+[33m842e38d[m Corrigir edição de tarefa
+[33m570886d[m Fix config tasks errors
+[33m3cc3058[m Atualizar comentários no TaskCard
+[33m7a8fa12[m Persist comments in JSONB field
+[33mfbc1d5e[m Mostrar apenas texto do comentário e posicionar
+[33m0902939[m Atualizar cartão de tarefa Lead
+[33mc649812[m feat: adiciona edição e exclusão de itens do checklist no menu de tarefas
+[33m5d969b9[m feat: Sistema de atualizações seguras para subcontas - Botão de atualização no menu Configurações/Subcontas com isolamento total de dados, versionamento e garantia de não alteração de dados existentes
+[33m18ff6ae[m feat: Melhorias no menu Configurações - Aba Equipe e Permissões
+[33m3b0b72c[m feat(agenda): melhorias completas no menu agenda
+[33m147bf56[m feat: Melhorias críticas no menu Conversas
+[33m681de95[m Load full conversation history
+[33m9a39054[m Atualizar status Resolvida no banco
+[33ma20bf51[m Fix duplicate sent messages
+[33me1d1fbf[m Remover verificação de verificação
+[33mb632185[m Fix unread badge logic
+[33md37d3d5[m Load conversations instantly
+[33m550d5c9[m Update site info
+[33m49972cc[m Remove vertical scroll in conversations panel
+[33mbb666d4[m Remove sidebar scrollbar in Conversations panel
+[33mded57ee[m Fix fixed agenda modal scroll
+[33m0f3ce44[m Permitir agendamento sem mínimo
+[33mdd54931[m Improve Conversas popup lead funnel
+[33mee5b83b[m Fix appointment creation error
+[33m576847e[m Corrige agenda: impedir conflito
+[33m1b57f4b[m Fix appointment scheduling errors
+[33ma7dc437[m Fix: Corrigir agendamento de compromissos
+[33mb05d8b9[m Fix duplicate messages in Conversations menu
+[33m756c605[m Fix: Ensure action button is visible in all filters
+[33m1e3e919[m Fix: Show conversation action menu on all filters
+[33mfeb2446[m Refactor Conversas.tsx to improve performance
+[33mb0a92cd[m melhorias no menu conversa
+[33m3cb6733[m Fix task creation error
+[33mee52c63[m Fix task creation error
+[33m29bb1fc[m Fix task creation error
+[33m6522154[m Add lead avatar to task card
+[33m5b9614f[m Fix drag and drop for tasks
+[33m556b157[m Fix drag and drop for task cards
+[33m9b491d9[m Remove column minimization during drag
+[33m70ebb57[m Fix column reordering in Tasks menu
+[33m0958941[m Fix: Prevent ghost user login
+[33mf6aca07[m Fix: Prevent incorrect user display
+[33m6f4b7e8[m Fix login deadlock
+[33md251a10[m Fix column reordering in Tasks menu
+[33mcec35b8[m Fix column reordering in Tarefas
+[33m867f7f6[m feat: Add column reordering to tasks
+[33m9148b14[m Fix agenda build errors and finalize improvements
+[33m64465ab[m feat(agenda): melhorias no menu agenda - adiciona titulo, agenda_id, validacoes e avatares de leads
+[33m43251b9[m Fix duplicate code in Leads.tsx
+[33m5f08b2b[m melhorias no menu funil de vendas
+[33md40e946[m melhorias no menu funil
+[33m1ba7902[m Implementa melhorias no menu Leads
+[33mfb735e6[m melhorias no menu lead
+[33m46bfda4[m alterei o pepeline
+[33m4bbdef5[m Fix dashboard pipeline selection
+[33m270c7bf[m Revert pipeline selection logic
+[33mf01806f[m alterei o pepeline
+[33mfc416c1[m Fix conversation button and avatar visibility
+[33maaf910e[m Fix: Make conversation action buttons visible
+[33m1f361e5[m Fix: Make action buttons visible
+[33me7666fb[m Fix conversation action buttons and delete
+[33m3028ea2[m Fix incorrect contact name in new conversations
+[33ma0b720d[m Fix: Ensure conversations persist after page reload
+[33m29acefb[m Fix realtime conversation sync
+[33m2557a5d[m Fix realtime conversations not appearing
+[33mf4d2105[m Handle Supabase backend 503 errors
+[33m2a60fce[m Fix Supabase 503 error by simplifying auth
+[33m28cbbef[m Fix logout and session corruption
+[33m7aa6309[m Visual edit in Lovable
+[33mf88ab69[m Visual edit in Lovable
+[33mb2212b9[m Visual edit in Lovable
+[33me6ff38b[m Visual edit in Lovable
+[33m1879bf4[m Fix super admin login bypass
+[33m37e1320[m Fix super admin login JWT signature
+[33md7fa8c7[m Fix login redirect after successful authentication
+[33mcdf3cb9[m Bypass Supabase auth for super admin
+[33md372e87[m Bypass Supabase auth for super admin
+[33me766a19[m Implement super admin login bypass
+[33ma87bce8[m Simplify auth logic and remove offline mode
+[33m0f1756b[m Fix super admin login redirection
+[33m3636722[m Remove direct access button and improve login retry
+[33m8277fe7[m Fix super admin login bypass
+[33me4101ba[m Implementar bypass automático para backend indisponível
+[33mcb1ed3e[m Update dev bypass to use super admin
+[33mb3c4080[m Add automatic login retry and dev bypass
+[33mba3b338[m Reverted to commit a9183480b0b5ce4aae48381cd875a7dc9f2e83dd
+[33mf2b5341[m Reverted to commit f994c7caa229cf9b33c33d8526c4e4ea1b807f8b
+[33ma918348[m Fix real-time conversation loading
+[33md9d9c2c[m Fix profile picture loading
+[33mf994c7c[m Fix: Display all conversations in "Todos" filter
+[33mb491641[m Fix real-time message delivery
+[33m79a0f31[m Fix: Correct group message filtering
+[33md6b9e11[m Fix real-time message display
+[33m42b4cf3[m Fix realtime message display for subaccounts
+[33m069ec92[m Add sound notification for new messages
+[33m9a6b93c[m Fix realtime message loading
+[33m3408e76[m Fix dashboard funnel selector
+[33m1401d2c[m Start fixing menu conversations
+[33m4c42eed[m Fix contact name duplication
+[33mbbec93b[m Approve database replica identity
+[33md427543[m Fix: Handle new WhatsApp messages
+[33m05b7fad[m Refactor: Optimize conversation loading time
+[33m808f0b3[m Fix: Display contacts and conversations
+[33m0df23b2[m Fix infinite loading on page
+[33mee0cbe5[m Fix: Infinite page load issue
+[33m784e87e[m Fix: Display all contacts
+[33ma38d6e2[m Fix: Contacts not displaying
+[33mcfa0a82[m Fix: Display all contacts in conversations
+[33m446f7ce[m Fix: Display all WhatsApp contacts
+[33mb936f51[m feat: Sync contacts and restore conversations
+[33m54897ee[m Fix media display and download issues
+[33m5d2e796[m Fix waiting count synchronization
+[33m51b2af6[m feat: Add pending message counter
+[33m9f0740a[m feat: Filtrar mensagens de grupo e carregar foto
+[33me06f7b7[m Fix: Media loading errors persist
+[33m74dde6b[m Fix media loading error
+[33m88eebd9[m Fix decryption failed error
+[33m926929e[m Fix media loading in chat
+[33mbfd5fa6[m Fix media loading errors
+[33m4a187f2[m Fix media loading error
+[33m84dc679[m Fix: Invalid JWT in download-media function
+[33ma0a7cca[m Fix media loading error
+[33m817e09b[m Fix media loading in conversations
+[33m4c20547[m Fix sub-account creation error
+[33mbfcf5f2[m Reverted to commit bc76282b041143b0901f54edeeb180dec83af97a
+[33m9e39d5d[m Fix: Mensagens não estão chegando
+[33m734d189[m Fix WhatsApp instance transfer
+[33m1ccc045[m Approve RLS migration
+[33m98f3307[m Revert subaccount consolidation
+[33m3dc03c4[m Fix sub-account synchronization issues
+[33m74165a3[m Verify sub-account sync
+[33mc36c431[m Fix: Correct contact name display
+[33ma72b41f[m Fix RLS policies for subaccounts
+[33mb1be24f[m Fix RLS policies for subaccounts
+[33m127d369[m Fix conversation filters and counts
+[33mbc76282[m Fix sub-account profile picture loading
+[33m6d6b33d[m Fix WhatsApp connection issue
+[33m4c59dc1[m Fix sub-account creation permissions
+[33m1607f88[m Fix conversation history display
+[33mdb0767e[m Consolidate related menu options
+[33m0e80f09[m Fix data loss on edit
+[33ma5c8990[m Remove edit buttons from chat
+[33macab53f[m Visual edit in Lovable
+[33m670a250[m Visual edit in Lovable
+[33m22bcece[m Fix: Prevent incorrect name overwrite
+[33ma19db9f[m Fix 

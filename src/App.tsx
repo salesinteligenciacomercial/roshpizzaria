@@ -10,6 +10,7 @@ import Leads from "./pages/Leads";
 import Kanban from "./pages/Kanban";
 import Conversas from "./pages/Conversas";
 import Agenda from "./pages/Agenda";
+import AgendaPublica from "./pages/AgendaPublica";
 import Tarefas from "./pages/Tarefas";
 import IA from "./pages/IA";
 import Configuracoes from "./pages/Configuracoes";
@@ -59,6 +60,7 @@ const App = () => (
           <Sonner />
           <Routes>
             <Route path="/auth" element={<Auth />} />
+            <Route path="/agenda/:slug" element={<AgendaPublica />} />
             <Route path="/" element={<MainLayout />}>
               <Route index element={<Navigate to="/kanban" replace />} />
               <Route path="dashboard" element={<Dashboard />} />

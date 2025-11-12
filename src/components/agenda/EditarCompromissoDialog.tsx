@@ -46,7 +46,6 @@ interface Agenda {
 
 interface Compromisso {
   id: string;
-  titulo?: string;
   agenda_id?: string;
   lead_id?: string;
   data_hora_inicio: string;
@@ -84,7 +83,6 @@ export function EditarCompromissoDialog({
   
   const [leadId, setLeadId] = useState(compromisso.lead_id || "none");
   const [agendaId, setAgendaId] = useState(compromisso.agenda_id || "");
-  const [titulo, setTitulo] = useState(compromisso.titulo || "");
   const [data, setData] = useState<Date>(parseISO(compromisso.data_hora_inicio));
   const [horaInicio, setHoraInicio] = useState(
     format(parseISO(compromisso.data_hora_inicio), "HH:mm")
@@ -109,7 +107,6 @@ export function EditarCompromissoDialog({
   const resetForm = () => {
     setLeadId(compromisso.lead_id || "none");
     setAgendaId(compromisso.agenda_id || "");
-    setTitulo(compromisso.titulo || "");
     setData(parseISO(compromisso.data_hora_inicio));
     setHoraInicio(format(parseISO(compromisso.data_hora_inicio), "HH:mm"));
     setHoraFim(format(parseISO(compromisso.data_hora_fim), "HH:mm"));
@@ -163,10 +160,6 @@ export function EditarCompromissoDialog({
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (titulo && titulo.length > 120) {
-      newErrors.titulo = "Título deve ter no máximo 120 caracteres";
-    }
-
     // Validar data
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
@@ -211,15 +204,49 @@ export function EditarCompromissoDialog({
   };
 
   const handleSubmit = async () => {
+    console.log('🚀 [DEBUG] Iniciando atualização de compromisso...');
+    
     if (!validateForm()) {
       toast.error("Corrija os erros antes de salvar");
       return;
     }
 
     try {
+      console.log('✅ [DEBUG] Validação do formulário passou');
       const dataFormatada = format(data, "yyyy-MM-dd");
-      const dataHoraInicio = new Date(`${dataFormatada}T${horaInicio}`);
-      const dataHoraFim = new Date(`${dataFormatada}T${horaFim}`);
+      // Garantir que o horário tenha formato completo (HH:mm:00)
+      const horaInicioCompleta = horaInicio.includes(':') && horaInicio.split(':').length === 2 
+        ? `${horaInicio}:00` 
+        : horaInicio;
+      const horaFimCompleta = horaFim.includes(':') && horaFim.split(':').length === 2 
+        ? `${horaFim}:00` 
+        : horaFim;
+      
+      const dataHoraInicio = new Date(`${dataFormatada}T${horaInicioCompleta}`);
+      const dataHoraFim = new Date(`${dataFormatada}T${horaFimCompleta}`);
+      
+      // Validar se as datas são válidas
+      if (isNaN(dataHoraInicio.getTime())) {
+        toast.error("Data/horário de início inválido");
+        return;
+      }
+      if (isNaN(dataHoraFim.getTime())) {
+        toast.error("Data/horário de fim inválido");
+        return;
+      }
+      
+      // Validar se hora fim é depois da hora início
+      if (dataHoraFim <= dataHoraInicio) {
+        toast.error("O horário de término deve ser após o horário de início");
+        return;
+      }
+      
+      // Validar duração mínima (15 minutos)
+      const duracaoMinutos = (dataHoraFim.getTime() - dataHoraInicio.getTime()) / (1000 * 60);
+      if (duracaoMinutos < 15) {
+        toast.error("O compromisso deve ter no mínimo 15 minutos de duração");
+        return;
+      }
 
       // Validar agenda se selecionada
       if (agendaId) {
@@ -266,14 +293,18 @@ export function EditarCompromissoDialog({
           .gt("data_hora_fim", dataHoraInicio.toISOString());
 
         if (capacidadeError) {
-          console.error("Erro ao verificar capacidade:", capacidadeError);
-          throw capacidadeError;
-        }
-
-        const ocupacaoAtual = compromissosAgenda?.length || 0;
-        if (ocupacaoAtual >= agendaSelecionada.capacidade_simultanea) {
-          toast.error(`A agenda "${agendaSelecionada.nome}" já está com capacidade máxima (${agendaSelecionada.capacidade_simultanea} compromissos simultâneos)`);
-          return;
+          console.error("❌ [DEBUG] Erro ao verificar capacidade:");
+          console.error("  Mensagem:", capacidadeError.message || "(vazia)");
+          console.error("  Código:", capacidadeError.code || "(vazio)");
+          console.error("  Detalhes:", capacidadeError.details || "(vazio)");
+          // Não bloquear atualização por erro na verificação de capacidade, apenas logar
+          console.warn("⚠️ [DEBUG] Continuando apesar do erro na verificação de capacidade");
+        } else {
+          const ocupacaoAtual = compromissosAgenda?.length || 0;
+          if (ocupacaoAtual >= agendaSelecionada.capacidade_simultanea) {
+            toast.error(`A agenda "${agendaSelecionada.nome}" já está com capacidade máxima (${agendaSelecionada.capacidade_simultanea} compromissos simultâneos)`);
+            return;
+          }
         }
       }
 
@@ -295,40 +326,258 @@ export function EditarCompromissoDialog({
       const { data: conflitos, error: confErr } = await conflitosQuery;
 
       if (confErr) {
-        throw confErr;
+        console.error('❌ [DEBUG] Erro ao verificar conflitos:', {
+          message: confErr.message,
+          code: confErr.code,
+          details: confErr.details,
+          hint: confErr.hint
+        });
+        // Não bloquear atualização por erro na verificação de conflitos, apenas logar
+        console.warn('⚠️ [DEBUG] Continuando apesar do erro na verificação de conflitos');
+      } else {
+        if (conflitos && conflitos.length > 0) {
+          const mensagem = agendaId 
+            ? "Conflito de horário: já existe um compromisso nessa agenda nesse intervalo"
+            : "Conflito de horário: já existe um compromisso nesse intervalo";
+          toast.error(mensagem);
+          return;
+        }
       }
 
-      if (conflitos && conflitos.length > 0) {
-        const mensagem = agendaId 
-          ? "Conflito de horário: já existe um compromisso nessa agenda nesse intervalo"
-          : "Conflito de horário: já existe um compromisso nesse intervalo";
-        toast.error(mensagem);
+      // Detectar alterações para notificação
+      const dataOriginal = parseISO(compromisso.data_hora_inicio);
+      const horaInicioOriginal = format(dataOriginal, "HH:mm");
+      const horaFimOriginal = format(parseISO(compromisso.data_hora_fim), "HH:mm");
+      const dataOriginalFormatada = format(dataOriginal, "yyyy-MM-dd");
+      
+      const dataAlterada = dataFormatada !== dataOriginalFormatada;
+      const horarioAlterado = horaInicio !== horaInicioOriginal || horaFim !== horaFimOriginal;
+      const houveAlteracao = dataAlterada || horarioAlterado;
+
+      // Verificar autenticação e permissões antes de atualizar
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Você precisa estar autenticado para atualizar um compromisso");
         return;
       }
 
-      const { error } = await supabase
-        .from("compromissos")
-        .update({
-          titulo: titulo?.trim() || null,
-          agenda_id: agendaId || null,
-          lead_id: leadId === 'none' ? null : leadId,
-          data_hora_inicio: dataHoraInicio.toISOString(),
-          data_hora_fim: dataHoraFim.toISOString(),
-          tipo_servico: tipoServico.trim(),
-          observacoes: observacoes.trim(),
-          custo_estimado: custoEstimado ? parseFloat(custoEstimado) : null,
-        })
-        .eq("id", compromisso.id);
+      console.log('🔐 [DEBUG] Usuário autenticado:', user.id);
+      console.log('📋 [DEBUG] Compromisso atual - owner_id:', compromisso.owner_id || compromisso.usuario_responsavel_id);
 
-      if (error) throw error;
+      // Preparar dados de atualização
+      const updateData: any = {
+        // titulo removido - coluna não existe no banco
+        agenda_id: agendaId && agendaId.trim() ? agendaId.trim() : null,
+        lead_id: leadId === 'none' ? null : (leadId && leadId.trim() ? leadId.trim() : null),
+        data_hora_inicio: dataHoraInicio.toISOString(),
+        data_hora_fim: dataHoraFim.toISOString(),
+        tipo_servico: tipoServico.trim() || 'outro',
+        observacoes: observacoes && observacoes.trim() ? observacoes.trim() : null,
+        custo_estimado: custoEstimado && custoEstimado.trim() ? parseFloat(custoEstimado) : null,
+      };
+
+      // Log dos dados antes de atualizar para debug
+      console.log('📤 [DEBUG] Dados que serão atualizados:');
+      console.log('  - agenda_id:', updateData.agenda_id);
+      console.log('  - lead_id:', updateData.lead_id);
+      console.log('  - data_hora_inicio:', updateData.data_hora_inicio);
+      console.log('  - data_hora_fim:', updateData.data_hora_fim);
+      console.log('  - tipo_servico:', updateData.tipo_servico);
+      console.log('  - observacoes:', updateData.observacoes);
+      console.log('  - custo_estimado:', updateData.custo_estimado);
+      console.log('📋 [DEBUG] ID do compromisso:', compromisso.id);
+      console.log('📋 [DEBUG] Dados completos (JSON):', JSON.stringify(updateData, null, 2));
+
+      // Garantir que não há campo titulo no updateData (remover se existir)
+      const updateDataLimpo: any = {};
+      Object.keys(updateData).forEach(key => {
+        if (key !== 'titulo') {
+          updateDataLimpo[key] = updateData[key];
+        }
+      });
+      
+      console.log('📤 [DEBUG] updateDataLimpo (garantido sem titulo):', JSON.stringify(updateDataLimpo, null, 2));
+
+      // Tentar atualizar
+      console.log('🔄 [DEBUG] Tentando atualizar compromisso...');
+      const { data: updatedData, error } = await supabase
+        .from("compromissos")
+        .update(updateDataLimpo)
+        .eq("id", compromisso.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ [DEBUG] Erro retornado pelo Supabase:');
+        console.error('  Mensagem:', error.message || '(vazia)');
+        console.error('  Código:', error.code || '(vazio)');
+        console.error('  Detalhes:', error.details || '(vazio)');
+        console.error('  Hint:', error.hint || '(vazio)');
+        console.error('  Erro completo:', JSON.stringify({
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        }, null, 2));
+        
+        // Se for erro de permissão (RLS), tentar verificar se o usuário tem acesso
+        if (error.code === '42501' || error.message?.toLowerCase().includes('permission') || error.message?.toLowerCase().includes('policy')) {
+          console.error('🔒 [DEBUG] Possível erro de permissão RLS');
+          console.error('  Verificando se o usuário tem acesso ao compromisso...');
+          
+          // Verificar se consegue ler o compromisso
+          const { data: compromissoCheck, error: checkError } = await supabase
+            .from("compromissos")
+            .select("id, owner_id, usuario_responsavel_id, company_id")
+            .eq("id", compromisso.id)
+            .single();
+          
+          if (checkError) {
+            console.error('  ❌ Não consegue ler o compromisso:', checkError.message);
+            toast.error("Erro de permissão: Você não tem acesso a este compromisso.");
+          } else {
+            console.log('  ✅ Consegue ler o compromisso:', compromissoCheck);
+            console.log('  - owner_id:', compromissoCheck?.owner_id);
+            console.log('  - usuario_responsavel_id:', compromissoCheck?.usuario_responsavel_id);
+            console.log('  - company_id:', compromissoCheck?.company_id);
+            toast.error("Erro de permissão ao atualizar. Verifique se você tem acesso a este compromisso.");
+          }
+        }
+        
+        throw error;
+      }
+      
+      console.log('✅ [DEBUG] Compromisso atualizado com sucesso:', updatedData?.id);
+
+      // Enviar notificação de alteração se houver mudança de data/horário e se tiver lead
+      if (houveAlteracao && leadId && leadId !== 'none') {
+        try {
+          const { data: leadData } = await supabase
+            .from("leads")
+            .select("name, phone, telefone")
+            .eq("id", leadId)
+            .single();
+
+          if (leadData && (leadData.phone || leadData.telefone)) {
+            const telefone = leadData.phone || leadData.telefone;
+            if (telefone) {
+              // Normalizar telefone (função similar à do Agenda.tsx)
+              const normalizePhoneBR = (phone: string) => {
+                const cleaned = phone.replace(/\D/g, '');
+                if (cleaned.length === 10 || cleaned.length === 11) {
+                  return cleaned.length === 10 ? `55${cleaned}` : `55${cleaned}`;
+                }
+                return cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
+              };
+
+              const telefoneNormalizado = normalizePhoneBR(telefone);
+              const tipoServicoFormatado = tipoServico.charAt(0).toUpperCase() + tipoServico.slice(1);
+              
+              let mensagemAlteracao = `🔄 *Alteração no Compromisso*\n\n`;
+              mensagemAlteracao += `Olá ${leadData.name}! Seu compromisso foi alterado.\n\n`;
+              
+              if (dataAlterada) {
+                mensagemAlteracao += `📅 *Nova Data:* ${format(dataHoraInicio, "dd/MM/yyyy", { locale: ptBR })}\n`;
+                mensagemAlteracao += `📅 *Data Anterior:* ${format(dataOriginal, "dd/MM/yyyy", { locale: ptBR })}\n`;
+              }
+              
+              if (horarioAlterado) {
+                mensagemAlteracao += `🕐 *Novo Horário:* ${format(dataHoraInicio, "HH:mm", { locale: ptBR })} às ${format(dataHoraFim, "HH:mm", { locale: ptBR })}\n`;
+                mensagemAlteracao += `🕐 *Horário Anterior:* ${horaInicioOriginal} às ${horaFimOriginal}\n`;
+              }
+              
+              mensagemAlteracao += `📋 *Tipo:* ${tipoServicoFormatado}\n`;
+              mensagemAlteracao += `\n✅ *Status:* Agendado\n\n`;
+              mensagemAlteracao += `Por favor, anote o novo dia e horário!\n\n`;
+              mensagemAlteracao += `_Esta é uma notificação automática de alteração._`;
+
+              // Obter company_id do usuário
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) {
+                const { data: userRole } = await supabase
+                  .from('user_roles')
+                  .select('company_id')
+                  .eq('user_id', user.id)
+                  .single();
+
+                if (userRole?.company_id) {
+                  await supabase.functions.invoke('enviar-whatsapp', {
+                    body: {
+                      numero: telefoneNormalizado,
+                      mensagem: mensagemAlteracao,
+                      company_id: userRole.company_id
+                    }
+                  });
+                }
+              }
+            }
+          }
+        } catch (notifError) {
+          console.error("Erro ao enviar notificação de alteração:", notifError);
+          // Não bloquear a atualização se a notificação falhar
+        }
+      }
 
       toast.success("Compromisso atualizado com sucesso!");
       setOpen(false);
       setErrors({});
       onCompromissoUpdated();
-    } catch (error) {
-      console.error("Erro ao atualizar compromisso:", error);
-      toast.error("Erro ao atualizar compromisso");
+    } catch (error: any) {
+      // Log completo do erro de forma legível - PRIMEIRO LOG
+      console.error("=".repeat(50));
+      console.error("❌ [ERRO CRÍTICO] Erro ao atualizar compromisso:");
+      console.error("=".repeat(50));
+      
+      // Log direto do objeto primeiro para garantir que vemos algo
+      console.error("📦 Erro (objeto direto):", error);
+      
+      // Depois logar detalhes
+      console.error("  Mensagem:", error?.message || "(vazia)");
+      console.error("  Código:", error?.code || "(vazio)");
+      console.error("  Detalhes:", error?.details || "(vazio)");
+      console.error("  Hint:", error?.hint || "(vazio)");
+      console.error("  Name:", error?.name || "(vazio)");
+      
+      // Tentar serializar o erro completo
+      try {
+        const errorObj = {
+          message: error?.message,
+          code: error?.code,
+          details: error?.details,
+          hint: error?.hint,
+          name: error?.name,
+          stack: error?.stack
+        };
+        console.error("  Erro completo (serializado):", JSON.stringify(errorObj, null, 2));
+      } catch (e) {
+        console.error("  Erro ao serializar:", e);
+        console.error("  Erro original (objeto):", error);
+      }
+      
+      console.error("=".repeat(50));
+      
+      // Mensagens de erro mais específicas
+      const errorMessage = error?.message || '';
+      const errorCode = error?.code || '';
+      
+      if (errorCode === '23503') {
+        // Foreign key violation
+        if (errorMessage.includes('agenda_id')) {
+          toast.error("Erro: Agenda selecionada não encontrada.");
+        } else if (errorMessage.includes('lead_id')) {
+          toast.error("Erro: Lead selecionado não encontrado.");
+        } else {
+          toast.error("Erro: Referência inválida. Verifique os dados selecionados.");
+        }
+      } else if (errorCode === '23514') {
+        toast.error("Erro: Os dados fornecidos não atendem aos requisitos.");
+      } else if (errorMessage.toLowerCase().includes('titulo') || errorCode === 'PGRST204') {
+        toast.error("Erro: Problema com a estrutura do banco de dados.");
+      } else if (errorMessage.includes('null value') || errorMessage.includes('NOT NULL')) {
+        toast.error("Erro: Campos obrigatórios não preenchidos.");
+      } else {
+        toast.error(`Erro ao atualizar compromisso: ${errorMessage || errorCode || 'Erro desconhecido'}`);
+      }
     }
   };
 
@@ -349,21 +598,7 @@ export function EditarCompromissoDialog({
           <DialogTitle>Editar Compromisso</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Título</Label>
-            <Input
-              value={titulo}
-              onChange={(e) => {
-                setTitulo(e.target.value);
-                if (errors.titulo) setErrors({ ...errors, titulo: "" });
-              }}
-              placeholder="Assunto do compromisso (opcional)"
-              className={errors.titulo ? "border-destructive" : ""}
-            />
-            {errors.titulo && (
-              <p className="text-xs text-destructive mt-1">{errors.titulo}</p>
-            )}
-          </div>
+          {/* Campo título removido - coluna não existe no banco de dados */}
           <div className="space-y-2">
             <Label>Agenda (Opcional)</Label>
             <Select value={agendaId || "none"} onValueChange={(value) => setAgendaId(value === "none" ? "" : value)}>

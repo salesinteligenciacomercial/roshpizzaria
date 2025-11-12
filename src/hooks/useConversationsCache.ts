@@ -51,6 +51,25 @@ export const useConversationsCache = (companyId: string | null) => {
   const [isLoading, setIsLoading] = useState(true);
   const [lastSync, setLastSync] = useState<number>(0);
 
+  // ⚡ FASE 1: Carregar imediatamente do cache quando companyId estiver disponível
+  useEffect(() => {
+    if (!companyId) {
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('⚡ [CACHE] Company ID disponível, carregando cache:', companyId);
+    const cached = loadFromCache();
+    
+    if (cached && cached.length > 0) {
+      console.log(`💾 [CACHE] ${cached.length} conversas carregadas instantaneamente`);
+      setConversations(cached);
+      setLastSync(Date.now());
+    }
+    
+    setIsLoading(false);
+  }, [companyId]);
+
   // ⚡ FASE 2.2: Carregar do cache persistente
   const loadFromCache = useCallback((): Conversation[] | null => {
     if (!companyId) return null;

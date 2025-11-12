@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, User, Trash2, Clock, DollarSign } from "lucide-react";
+import { Plus, User, Trash2, Clock, DollarSign, Copy, ExternalLink, Link2, Check } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -19,12 +19,16 @@ interface Agenda {
   tempo_medio_servico: number;
   disponibilidade: any;
   responsavel_id?: string;
+  slug?: string;
 }
 
 export function AgendaColaboradores() {
+  console.log('🚀 [AgendaColaboradores] Componente INICIADO!');
+  
   const [agendas, setAgendas] = useState<Agenda[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     nome: "",
@@ -37,24 +41,86 @@ export function AgendaColaboradores() {
   });
 
   useEffect(() => {
+    console.log('🔄 [AgendaColaboradores] Componente montado, carregando agendas...');
     carregarAgendas();
   }, []);
 
   const carregarAgendas = async () => {
     try {
+      console.log('📋 [AgendaColaboradores] Buscando agendas no banco...');
       const { data, error } = await supabase
         .from('agendas')
         .select('*')
         .order('nome');
 
-      if (error) throw error;
-      setAgendas(data || []);
+      if (error) {
+        console.error('❌ [AgendaColaboradores] Erro ao buscar agendas:', error);
+        throw error;
+      }
+      
+      console.log('✅ [AgendaColaboradores] Agendas encontradas:', data?.length || 0, data);
+      
+      // Gerar slug para agendas que não têm
+      const agendasComSlug = await Promise.all(
+        (data || []).map(async (agenda) => {
+          if (!agenda.slug) {
+            const slugGerado = gerarSlug(agenda.nome);
+            let slugFinal = slugGerado;
+            let tentativas = 0;
+            const maxTentativas = 10;
+
+            // Verificar se slug já existe
+            while (tentativas < maxTentativas) {
+              const { data: existing } = await supabase
+                .from('agendas')
+                .select('id')
+                .eq('slug', slugFinal)
+                .single();
+
+              if (!existing) break; // Slug disponível
+
+              tentativas++;
+              slugFinal = `${slugGerado}-${tentativas}`;
+            }
+
+            if (tentativas >= maxTentativas) {
+              slugFinal = `${slugGerado}-${Date.now()}`;
+            }
+
+            // Atualizar agenda com slug
+            const { error: updateError } = await supabase
+              .from('agendas')
+              .update({ slug: slugFinal })
+              .eq('id', agenda.id);
+
+            if (!updateError) {
+              return { ...agenda, slug: slugFinal };
+            }
+          }
+          return agenda;
+        })
+      );
+
+      setAgendas(agendasComSlug);
     } catch (error) {
       console.error('Erro ao carregar agendas:', error);
       toast.error("Erro ao carregar agendas");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Função para gerar slug a partir do nome
+  const gerarSlug = (nome: string): string => {
+    return nome
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+      .replace(/[^a-z0-9\s-]/g, '') // Remove caracteres especiais
+      .trim()
+      .replace(/\s+/g, '-') // Substitui espaços por hífens
+      .replace(/-+/g, '-') // Remove hífens duplicados
+      .replace(/^-|-$/g, ''); // Remove hífens no início/fim
   };
 
   const criarAgenda = async () => {
@@ -70,12 +136,38 @@ export function AgendaColaboradores() {
 
       if (!userRole?.company_id) throw new Error("Empresa não encontrada");
 
-      const { error } = await supabase
+      // Gerar slug único
+      let slugBase = gerarSlug(formData.nome);
+      let slugFinal = slugBase;
+      let tentativas = 0;
+      const maxTentativas = 10;
+
+      // Verificar se slug já existe e gerar um único
+      while (tentativas < maxTentativas) {
+        const { data: existing } = await supabase
+          .from('agendas')
+          .select('id')
+          .eq('slug', slugFinal)
+          .single();
+
+        if (!existing) break; // Slug disponível
+
+        tentativas++;
+        slugFinal = `${slugBase}-${tentativas}`;
+      }
+
+      if (tentativas >= maxTentativas) {
+        // Se não conseguir gerar slug único, usar timestamp
+        slugFinal = `${slugBase}-${Date.now()}`;
+      }
+
+      const { data: novaAgenda, error } = await supabase
         .from('agendas')
         .insert({
           nome: formData.nome,
           tipo: formData.tipo,
           status: 'ativo',
+          slug: slugFinal,
           capacidade_simultanea: formData.capacidade_simultanea,
           tempo_medio_servico: formData.tempo_medio_servico,
           disponibilidade: {
@@ -85,9 +177,16 @@ export function AgendaColaboradores() {
           },
           owner_id: user.id,
           company_id: userRole.company_id,
-        });
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao criar agenda:', error);
+        throw error;
+      }
+
+      console.log('✅ Agenda criada com slug:', { id: novaAgenda?.id, slug: novaAgenda?.slug, nome: novaAgenda?.nome });
 
       toast.success("Agenda criada com sucesso!");
       setDialogOpen(false);
@@ -141,9 +240,41 @@ export function AgendaColaboradores() {
     return badges[tipo as keyof typeof badges] || badges.colaborador;
   };
 
+  const copiarLinkAgenda = async (slug: string) => {
+    const url = `${window.location.origin}/agenda/${slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedSlug(slug);
+      toast.success("Link copiado para a área de transferência!");
+      setTimeout(() => setCopiedSlug(null), 2000);
+    } catch (error) {
+      // Fallback para navegadores antigos
+      const textArea = document.createElement('textarea');
+      textArea.value = url;
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setCopiedSlug(slug);
+        toast.success("Link copiado para a área de transferência!");
+        setTimeout(() => setCopiedSlug(null), 2000);
+      } catch (err) {
+        toast.error("Erro ao copiar link");
+      }
+      document.body.removeChild(textArea);
+    }
+  };
+
+  console.log('🎨 [AgendaColaboradores] Renderizando. Loading:', loading, 'Agendas:', agendas.length);
+
   if (loading) {
-    return <div>Carregando...</div>;
+    console.log('⏳ [AgendaColaboradores] Estado de loading, retornando mensagem...');
+    return <div>Carregando agendas...</div>;
   }
+
+  console.log('✅ [AgendaColaboradores] Renderizando conteúdo com', agendas.length, 'agendas');
 
   return (
     <div className="space-y-4">
@@ -248,7 +379,19 @@ export function AgendaColaboradores() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {agendas.map((agenda) => (
+        {agendas.length === 0 && (
+          <div className="col-span-2 text-center py-8 text-muted-foreground">
+            Nenhuma agenda encontrada. Crie uma nova agenda.
+          </div>
+        )}
+        {agendas.map((agenda) => {
+          console.log('🎴 [AgendaColaboradores] Renderizando card da agenda:', { 
+            id: agenda.id, 
+            nome: agenda.nome, 
+            slug: agenda.slug || 'SEM SLUG',
+            temSlug: !!agenda.slug 
+          });
+          return (
           <Card key={agenda.id} className="border-0 shadow-card">
             <CardHeader>
               <div className="flex justify-between items-start">
@@ -262,17 +405,82 @@ export function AgendaColaboradores() {
                     {getStatusBadge(agenda.status)}
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => excluirAgenda(agenda.id)}
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-1">
+                  {agenda.slug && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => copiarLinkAgenda(agenda.slug!)}
+                      title="Copiar link da agenda"
+                      className="text-primary hover:text-primary hover:bg-primary/10"
+                    >
+                      {copiedSlug === agenda.slug ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <Link2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => excluirAgenda(agenda.id)}
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    title="Excluir agenda"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
+              {/* Link Público - SEMPRE exibir - SEM CONDIÇÕES */}
+              {/* TESTE: Este comentário deve aparecer no HTML */}
+              <div className="space-y-2 p-3 bg-muted rounded-md mb-3" style={{ border: '2px solid red' }}>
+                {(() => {
+                  const slugAtual = agenda.slug || gerarSlug(agenda.nome);
+                  console.log('🔗 [AgendaColaboradores] Renderizando link SEMPRE para:', { nome: agenda.nome, slug: slugAtual });
+                  return null; // Apenas para log
+                })()}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Link Público:</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const slug = agenda.slug || gerarSlug(agenda.nome);
+                      copiarLinkAgenda(slug);
+                    }}
+                    className="h-6 px-2 text-xs"
+                  >
+                    {copiedSlug === (agenda.slug || gerarSlug(agenda.nome)) ? (
+                      <>
+                        <Check className="h-3 w-3 mr-1" />
+                        Copiado!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3 mr-1" />
+                        Copiar
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link2 className="h-3 w-3 text-muted-foreground" />
+                  <code className="text-xs bg-background px-2 py-1 rounded flex-1 truncate">
+                    {typeof window !== 'undefined' ? window.location.origin : ''}/agenda/{agenda.slug || gerarSlug(agenda.nome)}
+                  </code>
+                </div>
+                {!agenda.slug && (
+                  <p className="text-xs text-yellow-600 bg-yellow-50 p-2 rounded">
+                    ⚠️ Slug sendo gerado automaticamente. Recarregue a página em alguns segundos.
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Compartilhe este link com o colaborador para visualizar sua agenda
+                </p>
+              </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <User className="h-4 w-4" />
                 <span>Capacidade: {agenda.capacidade_simultanea} simultâneos</span>
@@ -291,7 +499,8 @@ export function AgendaColaboradores() {
               )}
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {agendas.length === 0 && (

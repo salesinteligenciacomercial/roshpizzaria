@@ -38,6 +38,7 @@ import { formatPhoneNumber, safeFormatPhoneNumber } from "@/utils/phoneFormatter
 import { useLeadsSync } from "@/hooks/useLeadsSync";
 import { useGlobalSync } from "@/hooks/useGlobalSync";
 import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
+import { useConversationsCache } from "@/hooks/useConversationsCache";
 import * as evolutionAPI from "@/services/evolutionApi";
 
 interface Message {
@@ -207,6 +208,17 @@ const initialConversations: Conversation[] = [
 ];
 
 function Conversas() {
+  const [userCompanyId, setUserCompanyId] = useState<string | null>(null); // Declarar primeiro
+  
+  // ⚡ CARREGAMENTO INSTANTÂNEO: Hook carrega do cache em 0 segundos
+  const { 
+    conversations: cachedConversations, 
+    isLoading: cacheLoading,
+    syncConversations,
+    updateConversation: updateCachedConversation,
+    addMessage: addCachedMessage
+  } = useConversationsCache(userCompanyId);
+  
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [filter, setFilter] = useState<"all" | "waiting" | "answered" | "resolved" | "group">("all");
@@ -238,7 +250,6 @@ function Conversas() {
   const [mostrarBotaoCriarLead, setMostrarBotaoCriarLead] = useState(false);
   const [leadsVinculados, setLeadsVinculados] = useState<Record<string, string>>({}); // conversationId -> leadId
   const [onlineStatus, setOnlineStatus] = useState<Record<string, 'online' | 'offline' | 'unknown'>>({}); // telefone -> status
-  const [userCompanyId, setUserCompanyId] = useState<string | null>(null); // Company ID do usuário
   const [userName, setUserName] = useState<string>(""); // Nome do usuário logado
   const [companyMetrics, setCompanyMetrics] = useState<{
     totalConversas: number;
@@ -831,6 +842,14 @@ function Conversas() {
       loadCompanyMetrics();
     }
   }, [userCompanyId]);
+
+  // ⚡ SINCRONIZAÇÃO INSTANTÂNEA: Atualizar conversas do cache imediatamente (0 segundos)
+  useEffect(() => {
+    if (cachedConversations.length > 0) {
+      console.log(`⚡ [INSTANT] ${cachedConversations.length} conversas carregadas instantaneamente do cache`);
+      setConversations(cachedConversations);
+    }
+  }, [cachedConversations]);
 
   // Form states
   const [newQuickTitle, setNewQuickTitle] = useState("");
@@ -2996,29 +3015,25 @@ function Conversas() {
     loadFromCache();
   }, []); // ⚡ Executar apenas uma vez no mount - INSTANTÂNEO (antes de tudo)
 
-  // 📡 Carregar conversas do Supabase quando userCompanyId estiver disponível (em background)
-  // ⚡ IMPORTANTE: Isso roda em background, não bloqueia a exibição das conversas do cache
+  // 📡 CARREGAMENTO INSTANTÂNEO: Usar hook de cache para zero tempo de espera
+  // ⚡ O hook carrega do localStorage imediatamente e sincroniza em background
   useEffect(() => {
     if (!userCompanyId) return;
     
-    // ⚡ Usar flag separada para evitar múltiplos carregamentos
+    // ⚡ Evitar múltiplos carregamentos
     if (initialLoadRef.current) return;
     initialLoadRef.current = true;
     
-    // ⚡ OTIMIZAÇÃO: Aguardar um pouco para não competir com o carregamento do cache
-    // Mas não bloquear a UI - apenas atualizar em background
-    setTimeout(() => {
-      // Carregar do Supabase em background (atualizar cache)
-      console.log('🔄 [LOAD] Carregando conversas do Supabase em background...');
-      loadSupabaseConversations(false).then(() => {
-        console.log('✅ [LOAD] Conversas atualizadas do Supabase');
-      }).catch((err) => {
-        console.error('❌ [LOAD] Erro ao carregar conversas:', err);
-        // ⚡ Se falhar, permitir tentar novamente
-        initialLoadRef.current = false;
-      });
-    }, 100); // ⚡ Pequeno delay para garantir que cache foi carregado primeiro
-  }, [userCompanyId]); // ⚡ Carregar quando company_id estiver disponível
+    console.log('⚡ [INSTANT] Carregamento instantâneo iniciado');
+    
+    // ⚡ ZERO DELAY: Sincronizar imediatamente (o hook cuida do cache)
+    syncConversations(true).then(() => {
+      console.log('✅ [INSTANT] Conversas disponíveis instantaneamente');
+    }).catch((err) => {
+      console.error('❌ [INSTANT] Erro:', err);
+      initialLoadRef.current = false;
+    });
+  }, [userCompanyId, syncConversations]);
 
   // Fallback: polling com jitter enquanto desconectado
   useEffect(() => {

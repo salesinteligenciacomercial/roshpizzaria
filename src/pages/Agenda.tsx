@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Calendar as CalendarIcon, Plus, Clock, User, Filter, Settings, Bell, CheckCircle2, XCircle, AlertCircle, Trash2, Search, CalendarDays } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, Clock, User, Filter, Settings, Bell, CheckCircle2, XCircle, AlertCircle, Trash2, Search, CalendarDays, Copy, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -77,7 +77,6 @@ interface Agenda {
 
 interface Compromisso {
   id: string;
-  titulo?: string;
   agenda_id?: string;
   lead_id?: string;
   usuario_responsavel_id: string;
@@ -123,6 +122,8 @@ export default function Agenda() {
   const [buscaCompromissos, setBuscaCompromissos] = useState<string>("");
   const [filtroAgenda, setFiltroAgenda] = useState<string>("all");
   const [filtroTipoServico, setFiltroTipoServico] = useState<string>("all");
+  const [filtroPeriodo, setFiltroPeriodo] = useState<string>("all"); // all, hoje, semana, mes
+  const [filtroResponsavel, setFiltroResponsavel] = useState<string>("all");
   
   // Cache de meses carregados para lazy loading
   const [loadedMonths, setLoadedMonths] = useState<Set<string>>(new Set());
@@ -829,12 +830,19 @@ export default function Agenda() {
 
       // Checar conflito de horários (por usuário responsável, status agendado)
       // Se agenda_id foi selecionado, também verificar conflitos na agenda
+      console.log('🔍 [DEBUG] Verificando conflitos de horário...', {
+        dataHoraInicio: dataHoraInicio.toISOString(),
+        dataHoraFim: dataHoraFim.toISOString(),
+        agenda_id: formData.agenda_id || 'nenhuma',
+        usuario_id: user.id
+      });
+      
       const conflitosQuery = supabase
         .from('compromissos')
         .select('id, data_hora_inicio, data_hora_fim')
         .eq('status', 'agendado')
         .lt('data_hora_inicio', dataHoraFim.toISOString())
-        .gte('data_hora_fim', dataHoraInicio.toISOString());
+        .gt('data_hora_fim', dataHoraInicio.toISOString());
 
       if (formData.agenda_id) {
         conflitosQuery.eq('agenda_id', formData.agenda_id);
@@ -845,11 +853,20 @@ export default function Agenda() {
       const { data: conflitos, error: conflitoError } = await conflitosQuery;
 
       if (conflitoError) {
-        console.error('❌ [DEBUG] Erro ao verificar conflitos:', conflitoError);
-        throw conflitoError;
+        console.error('❌ [DEBUG] Erro ao verificar conflitos:', {
+          message: conflitoError.message,
+          code: (conflitoError as any).code,
+          details: (conflitoError as any).details,
+          hint: (conflitoError as any).hint
+        });
+        // Não bloquear criação por erro na verificação de conflitos, apenas logar
+        console.warn('⚠️ [DEBUG] Continuando apesar do erro na verificação de conflitos');
+      } else {
+        console.log('✅ [DEBUG] Verificação de conflitos concluída. Encontrados:', conflitos?.length || 0);
       }
 
       if (conflitos && conflitos.length > 0) {
+        console.warn('⚠️ [DEBUG] Conflitos encontrados:', conflitos);
         const mensagem = formData.agenda_id 
           ? "Conflito de horário: já existe um compromisso nessa agenda nesse intervalo"
           : "Conflito de horário: já existe um compromisso nesse intervalo";
@@ -861,26 +878,45 @@ export default function Agenda() {
       // Garantir que tipo_servico não seja string vazia
       const tipoServicoFinal = formData.tipo_servico?.trim() || 'outro';
       
-      // Preparar dados do compromisso
+      // Preparar dados do compromisso - APENAS campos obrigatórios e válidos
       const compromissoData: any = {
-        agenda_id: formData.agenda_id || null,
-        lead_id: formData.lead_id || null,
+        // Campos obrigatórios (NOT NULL)
         usuario_responsavel_id: user.id,
         owner_id: user.id,
-        company_id: userRole.company_id,
         data_hora_inicio: dataHoraInicio.toISOString(),
         data_hora_fim: dataHoraFim.toISOString(),
         tipo_servico: tipoServicoFinal,
-        status: 'agendado',
       };
 
-      // Adicionar campos opcionais apenas se preenchidos
-      if (formData.titulo?.trim()) {
-        compromissoData.titulo = formData.titulo.trim();
+      // Adicionar campos opcionais apenas se tiverem valores válidos (não vazios)
+      const agendaId = formData.agenda_id?.trim();
+      if (agendaId && agendaId.length > 0) {
+        compromissoData.agenda_id = agendaId;
+      } else {
+        compromissoData.agenda_id = null; // Explicitamente null se vazio
       }
+      
+      const leadId = formData.lead_id?.trim();
+      if (leadId && leadId.length > 0) {
+        compromissoData.lead_id = leadId;
+      } else {
+        compromissoData.lead_id = null; // Explicitamente null se vazio
+      }
+      
+      // company_id é opcional mas recomendado
+      if (userRole.company_id) {
+        compromissoData.company_id = userRole.company_id;
+      }
+      
+      // status tem default 'agendado', mas vamos definir explicitamente
+      compromissoData.status = 'agendado';
+      
+      // Campos opcionais de texto
       if (formData.observacoes?.trim()) {
         compromissoData.observacoes = formData.observacoes.trim();
       }
+      
+      // Custo estimado - validar antes de adicionar
       if (formData.custo_estimado) {
         const custo = parseFloat(formData.custo_estimado);
         if (!isNaN(custo) && custo > 0) {
@@ -888,26 +924,138 @@ export default function Agenda() {
         }
       }
       
-      const { data: compromisso, error } = await supabase
+      // Log dos dados antes de inserir para debug
+      console.log('📤 [DEBUG] Dados que serão inseridos:', JSON.stringify(compromissoData, null, 2));
+      
+      // Tentar inserir o compromisso
+      let { data: compromisso, error } = await supabase
         .from('compromissos')
         .insert(compromissoData)
         .select()
         .single();
 
+      // Se houver erro, tentar identificar e corrigir
       if (error) {
-        console.error('❌ [DEBUG] Erro ao criar compromisso:', error);
+        const errorMessage = error.message || '';
+        const errorCode = (error as any).code || '';
+        const errorDetails = (error as any).details || '';
+        const errorHint = (error as any).hint || '';
         
-        // Mensagens de erro mais específicas
-        if (error.message.includes('company_id')) {
-          toast.error("Erro: Empresa não identificada. Entre em contato com o suporte.");
-        } else if (error.message.includes('usuario_responsavel_id')) {
-          toast.error("Erro: Usuário responsável não identificado.");
-        } else if (error.message.includes('tipo_servico')) {
-          toast.error("Erro: Problema com o tipo de serviço. Tente novamente.");
-        } else if (error.message.includes('violates check constraint')) {
+        console.error('🔍 [DEBUG] Erro detalhado recebido:', {
+          message: errorMessage,
+          code: errorCode,
+          details: errorDetails,
+          hint: errorHint,
+          fullError: error
+        });
+        
+        // Tentar corrigir erros conhecidos
+        let shouldRetry = false;
+        const retryData = { ...compromissoData };
+        
+        // Erro de coluna não encontrada (titulo ou outros)
+        if (errorCode === 'PGRST204' || errorMessage.toLowerCase().includes('column') || errorMessage.toLowerCase().includes('titulo')) {
+          console.warn('⚠️ [DEBUG] Erro de coluna não encontrada, removendo campos problemáticos...');
+          // Remover qualquer campo que possa não existir
+          delete retryData.titulo;
+          shouldRetry = true;
+        }
+        
+        // Erro de foreign key - remover referências inválidas
+        if (errorCode === '23503') {
+          if (errorMessage.includes('agenda_id') && retryData.agenda_id) {
+            console.warn('⚠️ [DEBUG] agenda_id inválido, removendo...');
+            delete retryData.agenda_id;
+            shouldRetry = true;
+          }
+          if (errorMessage.includes('lead_id') && retryData.lead_id) {
+            console.warn('⚠️ [DEBUG] lead_id inválido, removendo...');
+            delete retryData.lead_id;
+            shouldRetry = true;
+          }
+          if (errorMessage.includes('company_id') && retryData.company_id) {
+            console.warn('⚠️ [DEBUG] company_id inválido, removendo...');
+            delete retryData.company_id;
+            shouldRetry = true;
+          }
+        }
+        
+        // Tentar novamente se identificamos o problema
+        if (shouldRetry) {
+          console.log('🔄 [DEBUG] Tentando novamente com dados corrigidos:', JSON.stringify(retryData, null, 2));
+          const retryResult = await supabase
+            .from('compromissos')
+            .insert(retryData)
+            .select()
+            .single();
+          
+          compromisso = retryResult.data;
+          error = retryResult.error;
+          
+          if (!error) {
+            console.log('✅ [DEBUG] Compromisso criado com sucesso após correção!');
+          }
+        }
+      }
+
+      if (error) {
+        const errorMessage = error.message || '';
+        const errorCode = (error as any).code || '';
+        const errorDetails = (error as any).details || '';
+        const errorHint = (error as any).hint || '';
+        
+        // Log completo do erro de forma legível
+        console.error('❌ [DEBUG] Erro ao criar compromisso:');
+        console.error('  Mensagem:', errorMessage || '(vazia)');
+        console.error('  Código:', errorCode || '(vazio)');
+        console.error('  Detalhes:', errorDetails || '(vazio)');
+        console.error('  Hint:', errorHint || '(vazio)');
+        
+        // Tentar serializar o erro completo
+        try {
+          const errorObj = {
+            message: error.message,
+            code: (error as any).code,
+            details: (error as any).details,
+            hint: (error as any).hint,
+            name: error.name,
+            stack: error.stack
+          };
+          console.error('  Erro completo (serializado):', JSON.stringify(errorObj, null, 2));
+        } catch (e) {
+          console.error('  Erro completo (objeto):', error);
+        }
+        
+        console.error('  Dados tentados:', JSON.stringify(compromissoData, null, 2));
+        
+        // Mensagens de erro mais específicas baseadas no tipo de erro
+        if (errorCode === '23503') {
+          // Foreign key violation
+          if (errorMessage.includes('company_id')) {
+            toast.error("Erro: Empresa não identificada. Entre em contato com o suporte.");
+          } else if (errorMessage.includes('usuario_responsavel_id') || errorMessage.includes('owner_id')) {
+            toast.error("Erro: Usuário responsável não identificado.");
+          } else if (errorMessage.includes('agenda_id')) {
+            toast.error("Erro: Agenda selecionada não encontrada.");
+          } else if (errorMessage.includes('lead_id')) {
+            toast.error("Erro: Lead selecionado não encontrado.");
+          } else {
+            toast.error("Erro: Referência inválida. Verifique os dados selecionados.");
+          }
+        } else if (errorCode === '23505') {
+          // Unique violation
+          toast.error("Erro: Já existe um compromisso com esses dados.");
+        } else if (errorCode === '23514') {
+          // Check constraint violation
+          toast.error("Erro: Os dados fornecidos não atendem aos requisitos.");
+        } else if (errorCode === 'PGRST204' || errorMessage.toLowerCase().includes('titulo')) {
+          toast.error("Erro: Problema com a estrutura do banco de dados. Tente novamente.");
+        } else if (errorMessage.includes('null value') || errorMessage.includes('NOT NULL')) {
+          toast.error("Erro: Campos obrigatórios não preenchidos. Verifique o formulário.");
+        } else if (errorMessage.includes('violates check constraint')) {
           toast.error("Erro: Os dados fornecidos não atendem aos requisitos.");
         } else {
-          toast.error(`Erro ao criar compromisso: ${error.message}`);
+          toast.error(`Erro ao criar compromisso: ${errorMessage || errorCode || 'Erro desconhecido'}`);
         }
         
         throw error;
@@ -931,7 +1079,7 @@ export default function Agenda() {
                 `📅 *Data:* ${format(dataHoraInicio, "dd/MM/yyyy", { locale: ptBR })}\n` +
                 `🕐 *Horário:* ${format(dataHoraInicio, "HH:mm", { locale: ptBR })} às ${format(dataHoraFim, "HH:mm", { locale: ptBR })}\n` +
                 (tipoServicoFormatado ? `📋 *Tipo:* ${tipoServicoFormatado}\n` : '') +
-                (formData.titulo ? `📝 *Título:* ${formData.titulo}\n` : '') +
+                // Título removido - coluna não existe no banco
                 (formData.observacoes ? `\n💬 *Observações:*\n${formData.observacoes}\n` : '') +
                 `\n✅ *Status:* Agendado\n\n` +
                 `Aguardamos você no dia e horário agendados!\n\n` +
@@ -1092,22 +1240,45 @@ export default function Agenda() {
       limparFormulario();
       // Realtime já atualizará a lista; evitar recarga completa
     } catch (error: any) {
-      console.error('❌ [ERRO DETALHADO] Erro ao criar compromisso:', {
-        message: error?.message,
-        details: error?.details,
-        hint: error?.hint,
-        code: error?.code,
-        formData: {
-          tipo_servico: formData.tipo_servico,
-          data: formData.data,
-          horarios: `${formData.hora_inicio} - ${formData.hora_fim}`,
-          agenda: formData.agenda_id || 'nenhuma',
-          lead: formData.lead_id || 'nenhum'
-        }
+      // Log completo do erro de forma legível no catch
+      console.error('❌ [ERRO DETALHADO] Erro ao criar compromisso:');
+      console.error('  Mensagem:', error?.message || '(vazia)');
+      console.error('  Código:', error?.code || '(vazio)');
+      console.error('  Detalhes:', error?.details || '(vazio)');
+      console.error('  Hint:', error?.hint || '(vazio)');
+      
+      // Tentar serializar o erro completo
+      try {
+        const errorObj = {
+          message: error?.message,
+          code: error?.code,
+          details: error?.details,
+          hint: error?.hint,
+          name: error?.name,
+          stack: error?.stack
+        };
+        console.error('  Erro completo (serializado):', JSON.stringify(errorObj, null, 2));
+      } catch (e) {
+        console.error('  Erro completo (objeto):', error);
+      }
+      
+      console.error('  FormData:', {
+        tipo_servico: formData.tipo_servico,
+        data: formData.data,
+        horarios: `${formData.hora_inicio} - ${formData.hora_fim}`,
+        agenda: formData.agenda_id || 'nenhuma',
+        lead: formData.lead_id || 'nenhum'
       });
       
       // Se não mostrou mensagem específica antes, mostrar genérica
-      if (!error?.message?.includes('Erro:')) {
+      // Verificar se já foi exibida uma mensagem de erro específica
+      const errorMessage = error?.message || '';
+      const errorCode = error?.code || '';
+      const jaMostrouErro = errorMessage.includes('Erro:') || 
+                           errorMessage.toLowerCase().includes('titulo') ||
+                           errorCode === 'PGRST204';
+      
+      if (!jaMostrouErro) {
         toast.error("Erro ao criar compromisso. Verifique os campos e tente novamente.");
       }
     }
@@ -1115,12 +1286,81 @@ export default function Agenda() {
 
   const atualizarStatus = async (id: string, novoStatus: string) => {
     try {
+      // Buscar dados do compromisso antes de atualizar para notificação
+      const compromissoAtual = compromissos.find(c => c.id === id);
+      
       const { error } = await supabase
         .from('compromissos')
         .update({ status: novoStatus })
         .eq('id', id);
 
       if (error) throw error;
+      
+      // Enviar notificação de cancelamento se status mudou para 'cancelado' e tiver lead
+      if (novoStatus === 'cancelado' && compromissoAtual?.lead_id) {
+        try {
+          const { data: leadData } = await supabase
+            .from('leads')
+            .select('name, phone, telefone')
+            .eq('id', compromissoAtual.lead_id)
+            .single();
+
+          if (leadData && (leadData.phone || leadData.telefone)) {
+            const telefone = leadData.phone || leadData.telefone;
+            if (telefone) {
+              // Obter company_id do usuário
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) {
+                const { data: userRole } = await supabase
+                  .from('user_roles')
+                  .select('company_id')
+                  .eq('user_id', user.id)
+                  .single();
+
+                if (userRole?.company_id) {
+                  const dataHoraInicio = new Date(compromissoAtual.data_hora_inicio);
+                  const dataHoraFim = new Date(compromissoAtual.data_hora_fim);
+                  const tipoServicoFormatado = compromissoAtual.tipo_servico 
+                    ? compromissoAtual.tipo_servico.charAt(0).toUpperCase() + compromissoAtual.tipo_servico.slice(1)
+                    : 'Compromisso';
+
+                  const mensagemCancelamento = `❌ *Compromisso Cancelado*\n\n` +
+                    `Olá ${leadData.name}! Infelizmente seu compromisso foi cancelado.\n\n` +
+                    `📅 *Data:* ${format(dataHoraInicio, "dd/MM/yyyy", { locale: ptBR })}\n` +
+                    `🕐 *Horário:* ${format(dataHoraInicio, "HH:mm", { locale: ptBR })} às ${format(dataHoraFim, "HH:mm", { locale: ptBR })}\n` +
+                    `📋 *Tipo:* ${tipoServicoFormatado}\n` +
+                    `\n❌ *Status:* Cancelado\n\n` +
+                    `Entre em contato conosco se tiver dúvidas ou desejar reagendar.\n\n` +
+                    `_Esta é uma notificação automática de cancelamento._`;
+
+                  // Normalizar telefone
+                  const normalizePhoneBR = (phone: string) => {
+                    const cleaned = phone.replace(/\D/g, '');
+                    if (cleaned.length === 10 || cleaned.length === 11) {
+                      return cleaned.length === 10 ? `55${cleaned}` : `55${cleaned}`;
+                    }
+                    return cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
+                  };
+
+                  const telefoneNormalizado = normalizePhoneBR(telefone);
+
+                  await supabase.functions.invoke('enviar-whatsapp', {
+                    body: {
+                      numero: telefoneNormalizado,
+                      mensagem: mensagemCancelamento,
+                      company_id: userRole.company_id
+                    }
+                  });
+                }
+              }
+            }
+          }
+        } catch (notifError) {
+          console.error('Erro ao enviar notificação de cancelamento:', notifError);
+          // Não bloquear a atualização se a notificação falhar
+        }
+      }
+      
       toast.success("Status atualizado!");
       // Atualização otimista; realtime confirmará
       setCompromissos(prev => prev.map(c => c.id === id ? { ...c, status: novoStatus } : c));
@@ -1151,6 +1391,71 @@ export default function Agenda() {
     } catch (error) {
       console.error('Erro ao deletar compromisso:', error);
       toast.error("Erro ao deletar compromisso");
+    }
+  };
+
+  // Função para duplicar compromisso
+  const duplicarCompromisso = async (compromisso: Compromisso) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Você precisa estar autenticado");
+        return;
+      }
+
+      // Obter company_id
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!userRole?.company_id) {
+        toast.error("Erro: Empresa não identificada");
+        return;
+      }
+
+      // Criar novo compromisso com dados do original
+      // Adicionar 1 dia à data original para facilitar
+      const dataOriginal = parseISO(compromisso.data_hora_inicio);
+      const dataFimOriginal = parseISO(compromisso.data_hora_fim);
+      const novaDataInicio = new Date(dataOriginal);
+      novaDataInicio.setDate(novaDataInicio.getDate() + 1);
+      const novaDataFim = new Date(dataFimOriginal);
+      novaDataFim.setDate(novaDataFim.getDate() + 1);
+
+      const novoCompromisso: any = {
+        agenda_id: compromisso.agenda_id || null,
+        lead_id: compromisso.lead_id || null,
+        usuario_responsavel_id: user.id,
+        owner_id: user.id,
+        company_id: userRole.company_id,
+        data_hora_inicio: novaDataInicio.toISOString(),
+        data_hora_fim: novaDataFim.toISOString(),
+        tipo_servico: compromisso.tipo_servico || 'outro',
+        status: 'agendado',
+        observacoes: compromisso.observacoes || null,
+        custo_estimado: compromisso.custo_estimado || null,
+      };
+
+      const { data: compromissoDuplicado, error } = await supabase
+        .from('compromissos')
+        .insert(novoCompromisso)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erro ao duplicar compromisso:', error);
+        toast.error("Erro ao duplicar compromisso");
+        return;
+      }
+
+      toast.success("Compromisso duplicado com sucesso!");
+      // Recarregar compromissos
+      await carregarCompromissos();
+    } catch (error) {
+      console.error('Erro ao duplicar compromisso:', error);
+      toast.error("Erro ao duplicar compromisso");
     }
   };
 
@@ -1207,6 +1512,20 @@ export default function Agenda() {
 
   // Memoizar compromissos filtrados para a lista
   const compromissosFiltrados = useMemo(() => {
+    const agora = new Date();
+    const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+    const fimHoje = new Date(hoje);
+    fimHoje.setHours(23, 59, 59, 999);
+    
+    const inicioSemana = new Date(hoje);
+    inicioSemana.setDate(hoje.getDate() - hoje.getDay()); // Domingo
+    const fimSemana = new Date(inicioSemana);
+    fimSemana.setDate(inicioSemana.getDate() + 6);
+    fimSemana.setHours(23, 59, 59, 999);
+    
+    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+    const fimMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0, 23, 59, 59, 999);
+
     return compromissos.filter((c) => {
       // Filtro de busca
       if (buscaCompromissos.trim()) {
@@ -1236,12 +1555,47 @@ export default function Agenda() {
         return false;
       }
 
+      // Filtro de período
+      if (filtroPeriodo !== "all") {
+        const dataCompromisso = parseISO(c.data_hora_inicio);
+        if (filtroPeriodo === "hoje") {
+          if (dataCompromisso < hoje || dataCompromisso > fimHoje) {
+            return false;
+          }
+        } else if (filtroPeriodo === "semana") {
+          if (dataCompromisso < inicioSemana || dataCompromisso > fimSemana) {
+            return false;
+          }
+        } else if (filtroPeriodo === "mes") {
+          if (dataCompromisso < inicioMes || dataCompromisso > fimMes) {
+            return false;
+          }
+        }
+      }
+
+      // Filtro de responsável
+      if (filtroResponsavel !== "all" && c.usuario_responsavel_id !== filtroResponsavel) {
+        return false;
+      }
+
       return true;
     }).sort((a, b) => {
       // Ordenar por data/hora (mais recentes primeiro)
       return new Date(b.data_hora_inicio).getTime() - new Date(a.data_hora_inicio).getTime();
     });
-  }, [compromissos, buscaCompromissos, filtroAgenda, filtroTipoServico]);
+  }, [compromissos, buscaCompromissos, filtroAgenda, filtroTipoServico, filtroPeriodo, filtroResponsavel]);
+
+  // Obter lista de responsáveis únicos dos compromissos
+  const responsaveisUnicos = useMemo(() => {
+    const responsaveis = new Map<string, string>();
+    compromissos.forEach(c => {
+      if (c.usuario_responsavel_id && !responsaveis.has(c.usuario_responsavel_id)) {
+        // Por enquanto usar o ID, depois pode buscar o nome do usuário
+        responsaveis.set(c.usuario_responsavel_id, c.usuario_responsavel_id);
+      }
+    });
+    return Array.from(responsaveis.entries()).map(([id, name]) => ({ id, name }));
+  }, [compromissos]);
 
   const getStatusBadge = (status: string) => {
     const badges = {
@@ -1352,15 +1706,7 @@ export default function Agenda() {
                 <DialogTitle>Novo Agendamento</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Título</Label>
-                  <Input
-                    value={formData.titulo}
-                    onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
-                    placeholder="Assunto do compromisso (opcional)"
-                  />
-                </div>
-
+                {/* Campo título removido - coluna não existe no banco de dados */}
                 <div className="space-y-2">
                   <Label>Agenda (Opcional)</Label>
                   <Select value={formData.agenda_id || "none"} onValueChange={(value) => setFormData({ ...formData, agenda_id: value === "none" ? "" : value })}>
@@ -1709,7 +2055,9 @@ export default function Agenda() {
           <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
           <TabsTrigger value="lista">Lista de Compromissos</TabsTrigger>
           <TabsTrigger value="lembretes">Lembretes</TabsTrigger>
-          <TabsTrigger value="minhas-agendas">Minhas Agendas</TabsTrigger>
+          <TabsTrigger value="minhas-agendas" onClick={() => console.log('🖱️ [Agenda] Clique na aba Minhas Agendas')}>
+            Minhas Agendas
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="visao-geral" className="space-y-4">
@@ -1869,6 +2217,14 @@ export default function Agenda() {
                                 )}
                               </div>
                               <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => duplicarCompromisso(compromisso)}
+                                  title="Duplicar compromisso"
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </Button>
                                 <EditarCompromissoDialog
                                   compromisso={compromisso}
                                   onCompromissoUpdated={carregarCompromissos}
@@ -1977,14 +2333,40 @@ export default function Agenda() {
                       <SelectItem value="outro">Outro</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
+                    <SelectTrigger className="w-full sm:w-[200px]">
+                      <SelectValue placeholder="Período" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os períodos</SelectItem>
+                      <SelectItem value="hoje">Hoje</SelectItem>
+                      <SelectItem value="semana">Esta semana</SelectItem>
+                      <SelectItem value="mes">Este mês</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {responsaveisUnicos.length > 0 && (
+                    <Select value={filtroResponsavel} onValueChange={setFiltroResponsavel}>
+                      <SelectTrigger className="w-full sm:w-[200px]">
+                        <SelectValue placeholder="Responsável" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os responsáveis</SelectItem>
+                        {responsaveisUnicos.map((resp) => (
+                          <SelectItem key={resp.id} value={resp.id}>
+                            {resp.name.substring(0, 8)}...
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
-                {(buscaCompromissos || filtroAgenda !== "all" || filtroTipoServico !== "all") && (
+                {(buscaCompromissos || filtroAgenda !== "all" || filtroTipoServico !== "all" || filtroPeriodo !== "all" || filtroResponsavel !== "all") && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Filter className="h-4 w-4" />
                     <span>
                       {compromissosFiltrados.length} de {compromissos.length} compromissos
                     </span>
-                    {(buscaCompromissos || filtroAgenda !== "all" || filtroTipoServico !== "all") && (
+                    {(buscaCompromissos || filtroAgenda !== "all" || filtroTipoServico !== "all" || filtroPeriodo !== "all" || filtroResponsavel !== "all") && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1992,6 +2374,8 @@ export default function Agenda() {
                           setBuscaCompromissos("");
                           setFiltroAgenda("all");
                           setFiltroTipoServico("all");
+                          setFiltroPeriodo("all");
+                          setFiltroResponsavel("all");
                         }}
                         className="h-6 px-2 text-xs"
                       >
@@ -2077,6 +2461,14 @@ export default function Agenda() {
                               )}
                             </div>
                             <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => duplicarCompromisso(compromisso)}
+                                title="Duplicar compromisso"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
                               <EditarCompromissoDialog
                                 compromisso={compromisso}
                                 onCompromissoUpdated={carregarCompromissos}
@@ -2285,7 +2677,14 @@ export default function Agenda() {
         </TabsContent>
 
         <TabsContent value="minhas-agendas">
-          <AgendaColaboradores />
+          {(() => {
+            console.log('📑 [Agenda] TabsContent minhas-agendas está sendo renderizado!');
+            return null;
+          })()}
+          <div style={{ border: '3px solid blue', padding: '10px', margin: '10px' }}>
+            <p style={{ color: 'blue', fontWeight: 'bold' }}>TESTE: Se você vê esta mensagem, o TabsContent está funcionando!</p>
+            <AgendaColaboradores />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
