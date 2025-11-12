@@ -588,6 +588,26 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                     {isOverdue && <span className="ml-1 text-red-500">🔴</span>}
                   </CardTitle>
                 </div>
+                
+                {/* Botão WhatsApp */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    if (leadPhone) {
+                      setConversaOpen(true);
+                    } else {
+                      toast.error("Lead sem telefone cadastrado");
+                    }
+                  }}
+                  disabled={!leadPhone}
+                  className="h-8 px-2 text-success hover:text-success hover:bg-success/10 transition-all disabled:opacity-50 flex-shrink-0"
+                  title={leadPhone ? "Ver histórico de conversas" : "Lead sem telefone cadastrado"}
+                >
+                  <MessageSquare className="h-4 w-4 mr-1" />
+                  <span className="text-xs font-medium">Conversas</span>
+                </Button>
               </div>
             ) : (
               <CardTitle className={`text-base font-semibold ${isOverdue ? 'text-red-700' : 'text-foreground'}`}>
@@ -812,46 +832,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
           </div>
         </div>
 
-        {task.lead_name && (
-          <div className="flex items-center justify-between pt-2 border-t border-border/50">
-            <Badge variant="outline" className="text-xs border-primary/20 text-primary">
-              Lead: {task.lead_name}
-            </Badge>
-            <div className="flex items-center gap-1">
-              {task.lead_id && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    if (leadPhone) {
-                      setConversaOpen(true);
-                    } else {
-                      toast.error("Lead sem telefone cadastrado");
-                    }
-                  }}
-                  disabled={!leadPhone}
-                  className="h-7 px-2 text-success hover:text-success hover:bg-success/10 transition-all disabled:opacity-50"
-                  title={leadPhone ? "Ver histórico de conversas" : "Lead sem telefone cadastrado"}
-                >
-                  <MessageSquare className="h-3.5 w-3.5 mr-1" />
-                  <span className="text-xs font-medium">Ver Conversas</span>
-                </Button>
-              )}
-              {task.lead_id && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate(`/leads`)}
-                  className="h-6 w-6 p-0 hover:bg-primary/10 text-primary transition-colors"
-                  title="Ver lead"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Seção do lead movida para o CardHeader para aparecer sempre */}
         
         <div className="flex justify-end items-center gap-1 pt-2">
           {/* Adicionar comentário - posicionado antes do sino */}
