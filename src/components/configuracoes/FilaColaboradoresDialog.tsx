@@ -19,10 +19,8 @@ interface FilaColaboradoresDialogProps {
 interface ColaboradorFila {
   id: string;
   user_id: string;
-  fila_id: string;
-  capacidade_maxima: number;
-  atendimentos_ativos: number;
-  status: "disponivel" | "ocupado" | "ausente";
+  queue_id: string;
+  created_at: string;
   profiles: {
     full_name: string;
     email: string;
@@ -41,7 +39,6 @@ export function FilaColaboradoresDialog({ open, onOpenChange, filaId }: FilaCola
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
-  const [capacidadeMaxima, setCapacidadeMaxima] = useState<number>(10);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -57,16 +54,9 @@ export function FilaColaboradoresDialog({ open, onOpenChange, filaId }: FilaCola
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from("fila_colaboradores")
-        .select(`
-          id,
-          user_id,
-          fila_id,
-          capacidade_maxima,
-          atendimentos_ativos,
-          status
-        `)
-        .eq("fila_id", filaId);
+        .from("support_queue_members")
+        .select("id, user_id, queue_id, created_at")
+        .eq("queue_id", filaId);
 
       if (error) throw error;
 
@@ -126,9 +116,9 @@ export function FilaColaboradoresDialog({ open, onOpenChange, filaId }: FilaCola
 
       // Buscar IDs dos usuários já na fila
       const { data: colaboradoresNaFila } = await supabase
-        .from("fila_colaboradores")
+        .from("support_queue_members")
         .select("user_id")
-        .eq("fila_id", filaId);
+        .eq("queue_id", filaId);
 
       const idsNaFila = new Set((colaboradoresNaFila || []).map((c: any) => c.user_id));
 
@@ -172,12 +162,10 @@ export function FilaColaboradoresDialog({ open, onOpenChange, filaId }: FilaCola
     try {
       setLoading(true);
       const { error } = await supabase
-        .from("fila_colaboradores")
+        .from("support_queue_members")
         .insert({
-          fila_id: filaId,
+          queue_id: filaId,
           user_id: selectedUserId,
-          capacidade_maxima: capacidadeMaxima,
-          status: "disponivel",
         });
 
       if (error) throw error;
@@ -189,7 +177,6 @@ export function FilaColaboradoresDialog({ open, onOpenChange, filaId }: FilaCola
 
       setShowAddForm(false);
       setSelectedUserId("");
-      setCapacidadeMaxima(10);
       await loadColaboradores();
       await loadUsuariosDisponiveis();
     } catch (error: any) {
@@ -212,7 +199,7 @@ export function FilaColaboradoresDialog({ open, onOpenChange, filaId }: FilaCola
     try {
       setLoading(true);
       const { error } = await supabase
-        .from("fila_colaboradores")
+        .from("support_queue_members")
         .delete()
         .eq("id", id);
 
@@ -234,26 +221,6 @@ export function FilaColaboradoresDialog({ open, onOpenChange, filaId }: FilaCola
       });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const atualizarStatus = async (id: string, status: "disponivel" | "ocupado" | "ausente") => {
-    try {
-      const { error } = await supabase
-        .from("fila_colaboradores")
-        .update({ status })
-        .eq("id", id);
-
-      if (error) throw error;
-
-      await loadColaboradores();
-    } catch (error: any) {
-      console.error("Erro ao atualizar status:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao atualizar status",
-        description: error.message,
-      });
     }
   };
 
@@ -295,13 +262,12 @@ export function FilaColaboradoresDialog({ open, onOpenChange, filaId }: FilaCola
                   onClick={() => {
                     setShowAddForm(false);
                     setSelectedUserId("");
-                    setCapacidadeMaxima(10);
                   }}
                 >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-2">
                   <Label>Usuário *</Label>
                   <Select value={selectedUserId} onValueChange={setSelectedUserId}>
@@ -317,16 +283,6 @@ export function FilaColaboradoresDialog({ open, onOpenChange, filaId }: FilaCola
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Capacidade Máxima</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={capacidadeMaxima}
-                    onChange={(e) => setCapacidadeMaxima(parseInt(e.target.value) || 10)}
-                  />
-                </div>
               </div>
               <div className="flex justify-end gap-2">
                 <Button
@@ -335,7 +291,6 @@ export function FilaColaboradoresDialog({ open, onOpenChange, filaId }: FilaCola
                   onClick={() => {
                     setShowAddForm(false);
                     setSelectedUserId("");
-                    setCapacidadeMaxima(10);
                   }}
                 >
                   Cancelar
@@ -361,9 +316,7 @@ export function FilaColaboradoresDialog({ open, onOpenChange, filaId }: FilaCola
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>E-mail</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Atendimentos</TableHead>
-                  <TableHead>Capacidade</TableHead>
+                  <TableHead>Adicionado em</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -373,22 +326,8 @@ export function FilaColaboradoresDialog({ open, onOpenChange, filaId }: FilaCola
                     <TableCell>{colaborador.profiles?.full_name || "-"}</TableCell>
                     <TableCell>{colaborador.profiles?.email || "-"}</TableCell>
                     <TableCell>
-                      <Select
-                        value={colaborador.status}
-                        onValueChange={(value: any) => atualizarStatus(colaborador.id, value)}
-                      >
-                        <SelectTrigger className="w-[130px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="disponivel">Disponível</SelectItem>
-                          <SelectItem value="ocupado">Ocupado</SelectItem>
-                          <SelectItem value="ausente">Ausente</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      {new Date(colaborador.created_at).toLocaleDateString('pt-BR')}
                     </TableCell>
-                    <TableCell>{colaborador.atendimentos_ativos || 0}</TableCell>
-                    <TableCell>{colaborador.capacidade_maxima || 10}</TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="ghost"

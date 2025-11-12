@@ -174,6 +174,7 @@ export default function Configuracoes() {
       
       if (companyId) {
         // Tentar com company_id primeiro
+        // @ts-ignore - Tipos complexos do Supabase causando erro de inferência
         const resultCompany = await supabase
           .from('filas_atendimento')
           .select('*')
