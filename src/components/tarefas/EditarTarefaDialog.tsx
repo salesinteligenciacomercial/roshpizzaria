@@ -49,9 +49,22 @@ interface EditarTarefaDialogProps {
 
 export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogProps) {
   const [open, setOpen] = useState(false);
+  
+  // ✅ CORRIGIDO: Normalizar prioridade para valores válidos
+  const normalizePriority = (priority: string): string => {
+    const validPriorities = ['baixa', 'media', 'alta', 'urgente'];
+    if (validPriorities.includes(priority)) return priority;
+    // Mapear valores antigos para novos
+    if (priority === 'normal' || priority === 'média') return 'media';
+    if (priority === 'low') return 'baixa';
+    if (priority === 'high') return 'alta';
+    if (priority === 'critical' || priority === 'urgent') return 'urgente';
+    return 'media'; // Padrão
+  };
+  
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || "");
-  const [priority, setPriority] = useState(task.priority);
+  const [priority, setPriority] = useState(normalizePriority(task.priority));
   const [dueDate, setDueDate] = useState(
     task.due_date ? new Date(task.due_date).toISOString().split("T")[0] : ""
   );
@@ -78,7 +91,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
       loadData();
       setTitle(task.title);
       setDescription(task.description || "");
-      setPriority(task.priority);
+      setPriority(normalizePriority(task.priority));
       setDueDate(task.due_date ? new Date(task.due_date).toISOString().split("T")[0] : "");
       setAssigneeId(task.assignee_id || "none");
       setLeadId(task.lead_id || "none");
