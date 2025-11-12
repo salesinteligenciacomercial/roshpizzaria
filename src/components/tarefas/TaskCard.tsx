@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { User, Calendar as CalendarIcon, Trash2, ExternalLink, MessageSquare, Plus, GripVertical, Bell, Play, Pause, Clock, Paperclip, Link, FileText, Image, ChevronDown, ChevronUp } from "lucide-react";
+import { User, Calendar as CalendarIcon, Trash2, ExternalLink, MessageSquare, Plus, GripVertical, Bell, Play, Pause, Clock, Paperclip, Link, FileText, Image, ChevronDown, ChevronUp, Pencil, X, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EditarTarefaDialog } from "./EditarTarefaDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -92,6 +92,8 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
   const [leadPhone, setLeadPhone] = useState<string | undefined>(undefined);
   const [leadAvatarUrl, setLeadAvatarUrl] = useState<string | null>(null);
   const [leadNome, setLeadNome] = useState<string | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
 
   // ✅ MELHORADO: Usar hook useTaskTimer para gerenciar timer
   const {
@@ -443,6 +445,68 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     }
   }, [newItem, localChecklist, task.id, task.checklist, onUpdate]);
 
+  // ✅ NOVO: Função para editar texto de item do checklist
+  const startEditingItem = useCallback((itemId: string, currentText: string) => {
+    setEditingItemId(itemId);
+    setEditingText(currentText);
+  }, []);
+
+  const cancelEditing = useCallback(() => {
+    setEditingItemId(null);
+    setEditingText("");
+  }, []);
+
+  const saveEditedItem = useCallback(async () => {
+    const text = editingText.trim();
+    if (!text) {
+      toast.error("O texto não pode estar vazio");
+      return;
+    }
+    
+    const updated = (localChecklist || []).map((i) => 
+      i.id === editingItemId ? { ...i, text } : i
+    );
+    setLocalChecklist(updated);
+    setEditingItemId(null);
+    setEditingText("");
+    
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { error } = await supabase
+        .from('tasks')
+        .update({ checklist: updated })
+        .eq('id', task.id);
+      if (error) throw error;
+      onUpdate();
+      toast.success("Item do checklist atualizado");
+    } catch (e) {
+      console.error("Erro ao editar item do checklist:", e);
+      setLocalChecklist(task.checklist || []);
+      toast.error('Erro ao editar item do checklist');
+    }
+  }, [editingText, editingItemId, localChecklist, task.id, task.checklist, onUpdate]);
+
+  // ✅ NOVO: Função para excluir item do checklist
+  const removeChecklistItem = useCallback(async (itemId: string) => {
+    const updated = (localChecklist || []).filter((i) => i.id !== itemId);
+    setLocalChecklist(updated);
+    
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { error } = await supabase
+        .from('tasks')
+        .update({ checklist: updated })
+        .eq('id', task.id);
+      if (error) throw error;
+      onUpdate();
+      toast.success("Item do checklist removido");
+    } catch (e) {
+      console.error("Erro ao remover item do checklist:", e);
+      setLocalChecklist(task.checklist || []);
+      toast.error('Erro ao remover item do checklist');
+    }
+  }, [localChecklist, task.id, task.checklist, onUpdate]);
+
   const sendReminderNow = useCallback(async () => {
     try {
       const ids = (task as any).responsaveis?.length ? (task as any).responsaveis as string[] : (task.assignee_id ? [task.assignee_id] : []);
@@ -647,10 +711,80 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
 
         <div className="mt-1 space-y-1">
           {(localChecklist || []).map((item) => (
-            <label key={item.id} className="flex items-center gap-2 text-xs p-1 rounded hover:bg-muted/40 cursor-pointer">
+            <div key={item.id} className="flex items-center gap-2 text-xs p-1 rounded hover:bg-muted/40 group">
               <Checkbox checked={!!item.done} onCheckedChange={(v: any) => toggleChecklist(item.id!, !!v)} />
-              <span className={item.done ? "line-through text-muted-foreground" : ""}>{item.text}</span>
-            </label>
+              {editingItemId === item.id ? (
+                <div className="flex items-center gap-1 flex-1">
+                  <Input
+                    value={editingText}
+                    onChange={(e) => setEditingText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        saveEditedItem();
+                      } else if (e.key === "Escape") {
+                        cancelEditing();
+                      }
+                    }}
+                    className="h-7 text-xs flex-1"
+                    autoFocus
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 text-green-600 hover:text-green-700"
+                    onClick={saveEditedItem}
+                    title="Salvar"
+                  >
+                    <Check className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                    onClick={cancelEditing}
+                    title="Cancelar"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <span className={`flex-1 ${item.done ? "line-through text-muted-foreground" : ""}`}>{item.text}</span>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEditingItem(item.id!, item.text);
+                      }}
+                      title="Editar item"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm("Tem certeza que deseja excluir este item do checklist?")) {
+                          removeChecklistItem(item.id!);
+                        }
+                      }}
+                      title="Excluir item"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
           ))}
           <div className="flex items-center gap-1 pt-1">
             <Input value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Adicionar item..." className="h-7 text-xs" />
