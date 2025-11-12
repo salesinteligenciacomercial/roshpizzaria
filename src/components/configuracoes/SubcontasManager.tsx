@@ -1,13 +1,23 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Pencil, Trash2, Users } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Users, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { NovaSubcontaDialog } from "./NovaSubcontaDialog";
 import { EditarSubcontaDialog } from "./EditarSubcontaDialog";
 import { UsuariosSubcontaDialog } from "./UsuariosSubcontaDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Subconta {
   id: string;
@@ -29,10 +39,46 @@ export function SubcontasManager() {
   const [editarSubcontaOpen, setEditarSubcontaOpen] = useState(false);
   const [usuariosDialogOpen, setUsuariosDialogOpen] = useState(false);
   const [subcontaSelecionada, setSubcontaSelecionada] = useState<Subconta | null>(null);
+  const [atualizando, setAtualizando] = useState(false);
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState<{
+    total: number;
+    updated: number;
+    skipped?: number;
+    errors: string[];
+    details: Array<{ 
+      companyId: string; 
+      companyName: string; 
+      status: string; 
+      message?: string;
+      updatesApplied?: string[];
+    }>;
+  } | null>(null);
+  const [parentCompanyId, setParentCompanyId] = useState<string | null>(null);
 
   useEffect(() => {
     carregarSubcontas();
+    carregarParentCompanyId();
   }, []);
+
+  const carregarParentCompanyId = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (userRole?.company_id) {
+        setParentCompanyId(userRole.company_id);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar parent company ID:', error);
+    }
+  };
 
   const carregarSubcontas = async () => {
     try {
@@ -111,6 +157,60 @@ export function SubcontasManager() {
     }
   };
 
+  const aplicarAtualizacoes = async () => {
+    if (!parentCompanyId) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível identificar a conta matriz.',
+      });
+      return;
+    }
+
+    setAtualizando(true);
+    setUpdateProgress(null);
+
+    try {
+      console.log('🔄 [SubcontasManager] Aplicando atualizações...');
+
+      const { data, error } = await supabase.functions.invoke('aplicar-atualizacoes-subcontas', {
+        body: {
+          parentCompanyId: parentCompanyId,
+          forceUpdate: false
+        }
+      });
+
+      if (error) throw error;
+
+      console.log('✅ [SubcontasManager] Atualizações aplicadas:', data);
+
+      setUpdateProgress({
+        total: data.total || 0,
+        updated: data.updated || 0,
+        errors: data.errors || [],
+        details: data.details || []
+      });
+
+      toast({
+        title: 'Atualizações aplicadas!',
+        description: `${data.updated} de ${data.total} subcontas foram atualizadas com sucesso.`,
+      });
+
+      // Recarregar subcontas para refletir mudanças
+      await carregarSubcontas();
+
+    } catch (error: any) {
+      console.error('❌ [SubcontasManager] Erro ao aplicar atualizações:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao aplicar atualizações',
+        description: error.message || 'Não foi possível aplicar as atualizações.',
+      });
+    } finally {
+      setAtualizando(false);
+    }
+  };
+
   const getPlanBadge = (plan: string) => {
     const variants: Record<string, any> = {
       free: 'secondary',
@@ -171,10 +271,21 @@ export function SubcontasManager() {
                 Crie e gerencie licenças de CRM para seus clientes
               </CardDescription>
             </div>
-            <Button onClick={() => setNovaSubcontaOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nova Subconta
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                onClick={() => setShowUpdateDialog(true)}
+                variant="outline"
+                disabled={atualizando || subcontas.length === 0}
+                className="border-primary/50 hover:bg-primary/10"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${atualizando ? 'animate-spin' : ''}`} />
+                Aplicar Atualizações
+              </Button>
+              <Button onClick={() => setNovaSubcontaOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nova Subconta
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -256,6 +367,129 @@ export function SubcontasManager() {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog de Confirmação de Atualização */}
+      <AlertDialog open={showUpdateDialog} onOpenChange={setShowUpdateDialog}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              Aplicar Atualizações nas Subcontas
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              <div className="space-y-3">
+                <p>
+                  Esta ação irá aplicar <strong>apenas melhorias pendentes</strong> nas subcontas ativas.
+                  O sistema é <strong>100% seguro</strong> e <strong>nunca altera dados existentes</strong>.
+                </p>
+                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded p-3">
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
+                    🔒 Garantias de Segurança:
+                  </p>
+                  <ul className="list-disc list-inside text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                    <li>Apenas adiciona dados novos (nunca altera existentes)</li>
+                    <li>Pula subcontas que já estão atualizadas</li>
+                    <li>Rastreia versões aplicadas para evitar duplicações</li>
+                    <li>Preserva todas as configurações existentes</li>
+                  </ul>
+                </div>
+                <p className="mt-3 font-medium text-foreground">
+                  Total de subcontas: <strong>{subcontas.length}</strong>
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {updateProgress && (
+            <div className="space-y-3 py-4">
+              <div className="flex items-center justify-between text-sm">
+                <span>Progresso:</span>
+                <span className="font-medium">
+                  {updateProgress.updated} de {updateProgress.total} atualizadas
+                </span>
+              </div>
+              <div className="w-full bg-secondary rounded-full h-2">
+                <div
+                  className="bg-primary h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${updateProgress.total > 0 ? (updateProgress.updated / updateProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+
+              {updateProgress.details.length > 0 && (
+                <div className="max-h-60 overflow-y-auto space-y-2 mt-4">
+                  {updateProgress.details.map((detail, index) => (
+                    <div
+                      key={index}
+                      className={`flex items-center gap-2 p-2 rounded text-sm ${
+                        detail.status === 'success'
+                          ? 'bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800'
+                          : 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800'
+                      }`}
+                    >
+                      {detail.status === 'success' ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                      )}
+                      <span className="flex-1 font-medium">{detail.companyName}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {detail.status === 'success' 
+                          ? `✅ ${detail.message || 'Atualizada'}` 
+                          : detail.status === 'skipped'
+                          ? '⏭️ Já atualizada'
+                          : '❌ Erro'}
+                      </span>
+                      {detail.updatesApplied && detail.updatesApplied.length > 0 && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {detail.updatesApplied.length} atualização(ões)
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {updateProgress.errors.length > 0 && (
+                <div className="mt-4 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
+                  <p className="text-sm font-medium text-red-900 dark:text-red-100 mb-2">
+                    Erros encontrados:
+                  </p>
+                  <ul className="text-xs text-red-700 dark:text-red-300 space-y-1">
+                    {updateProgress.errors.map((error, index) => (
+                      <li key={index}>• {error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={atualizando}>
+              {updateProgress ? 'Fechar' : 'Cancelar'}
+            </AlertDialogCancel>
+            {!updateProgress && (
+              <AlertDialogAction
+                onClick={aplicarAtualizacoes}
+                disabled={atualizando}
+                className="bg-primary hover:bg-primary/90"
+              >
+                {atualizando ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Aplicando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Aplicar Atualizações
+                  </>
+                )}
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <NovaSubcontaDialog
         open={novaSubcontaOpen}
