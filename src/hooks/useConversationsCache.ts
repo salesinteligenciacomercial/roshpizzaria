@@ -133,20 +133,20 @@ export const useConversationsCache = (companyId: string | null) => {
     }
   }, [companyId]);
 
-  // 📡 FASE 2.1: Carregar do banco (histórico completo)
+  // 📡 FASE 2.1: Carregar do banco (otimizado)
   const loadFromDatabase = useCallback(async (): Promise<Conversation[]> => {
     if (!companyId) return [];
 
     try {
-      console.log('📡 [DATABASE] Carregando histórico completo...');
+      console.log('📡 [DATABASE] Carregando histórico...');
 
-      // ⚡ CRÍTICO: Buscar ATÉ 2000 mensagens para garantir histórico completo
+      // ⚡ OTIMIZADO: Buscar apenas campos essenciais sem mídia pesada (500 mensagens recentes)
       const { data: conversasData, error } = await supabase
         .from('conversas')
-        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, midia_url, fromme, arquivo_nome')
+        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme')
         .eq('company_id', companyId)
         .order('created_at', { ascending: false })
-        .limit(2000);
+        .limit(500);
 
       if (error) throw error;
 
@@ -177,9 +177,13 @@ export const useConversationsCache = (companyId: string | null) => {
 
       // Converter para formato Conversation
       const conversations: Conversation[] = Array.from(conversasMap.entries()).map(([telefone, mensagens]) => {
-        // ⚡ TODAS as mensagens (sem limitação)
-        const messagensFormatadas: Message[] = mensagens
-          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        // ⚡ Últimas 100 mensagens por conversa (otimização)
+        const mensagensOrdenadas = mensagens
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        
+        const mensagensRecentes = mensagensOrdenadas.slice(-100);
+        
+        const messagensFormatadas: Message[] = mensagensRecentes
           .map(m => ({
             id: m.id || `msg-${Date.now()}-${Math.random()}`,
             content: m.mensagem || '',
@@ -188,8 +192,6 @@ export const useConversationsCache = (companyId: string | null) => {
             timestamp: new Date(m.created_at || Date.now()),
             delivered: true,
             read: m.status !== 'Recebida',
-            mediaUrl: m.midia_url,
-            fileName: m.arquivo_nome,
           }));
 
         // ⚡ Pegar primeiro nome_contato disponível (já está garantido pelo trigger)
@@ -222,9 +224,19 @@ export const useConversationsCache = (companyId: string | null) => {
       });
 
       return conversations;
-    } catch (error) {
-      console.error('❌ [DATABASE] Erro:', error);
-      toast.error('Erro ao carregar conversas');
+    } catch (error: any) {
+      console.error('❌ [DATABASE] Erro:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code
+      });
+      
+      // Não mostrar toast se for erro de JSON parsing (dados corrompidos)
+      if (!error?.message?.includes('JSON')) {
+        toast.error('Erro ao carregar conversas');
+      }
+      
       return [];
     }
   }, [companyId]);
