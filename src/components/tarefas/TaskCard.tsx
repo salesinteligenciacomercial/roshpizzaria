@@ -557,26 +557,40 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
               <GripVertical className="h-3 w-3 cursor-grab active:cursor-grabbing" {...attributes} {...listeners} />
             </span>
             <div className={`h-1 w-1 rounded-full ${getPriorityColor(task.priority)} animate-pulse`} />
-            {/* Foto de perfil do lead antes do nome da tarefa */}
-            {task.lead_id && (
-              <Avatar className="h-6 w-6 flex-shrink-0">
-                <AvatarImage 
-                  src={leadAvatarUrl || undefined} 
-                  alt={leadNome || task.lead_name || "Lead"}
-                  onError={() => {
-                    const nomeLead = leadNome || task.lead_name || "Lead";
-                    setLeadAvatarUrl(`https://ui-avatars.com/api/?name=${encodeURIComponent(nomeLead)}&background=10b981&color=fff&bold=true&size=128`);
-                  }}
-                />
-                <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                  {(leadNome || task.lead_name || "L")?.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
+            
+            {/* Layout com foto, nome do lead e título */}
+            {task.lead_id ? (
+              <div className="flex items-center gap-2 flex-1">
+                <Avatar className="h-10 w-10 flex-shrink-0">
+                  <AvatarImage 
+                    src={leadAvatarUrl || undefined} 
+                    alt={leadNome || task.lead_name || "Lead"}
+                    onError={() => {
+                      const nomeLead = leadNome || task.lead_name || "Lead";
+                      setLeadAvatarUrl(`https://ui-avatars.com/api/?name=${encodeURIComponent(nomeLead)}&background=10b981&color=fff&bold=true&size=128`);
+                    }}
+                  />
+                  <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                    {(leadNome || task.lead_name || "L")?.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                
+                <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                  <span className="text-sm font-medium text-foreground truncate">
+                    {leadNome || task.lead_name || "Lead"}
+                  </span>
+                  <CardTitle className={`text-xs font-normal ${isOverdue ? 'text-red-700' : 'text-muted-foreground'} truncate`}>
+                    {task.title}
+                    {isOverdue && <span className="ml-1 text-red-500">🔴</span>}
+                  </CardTitle>
+                </div>
+              </div>
+            ) : (
+              <CardTitle className={`text-base font-semibold ${isOverdue ? 'text-red-700' : 'text-foreground'}`}>
+                {task.title}
+                {isOverdue && <span className="ml-2 text-red-500">🔴</span>}
+              </CardTitle>
             )}
-            <CardTitle className={`text-base font-semibold ${isOverdue ? 'text-red-700' : 'text-foreground'}`}>
-              {task.title}
-              {isOverdue && <span className="ml-2 text-red-500">🔴</span>}
-            </CardTitle>
           </div>
           <div className="flex items-center gap-1">
             <Badge className={`${getPriorityColor(task.priority)} border-0 text-white shadow-sm`}>
