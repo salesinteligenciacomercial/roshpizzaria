@@ -59,49 +59,8 @@ export function AgendaColaboradores() {
       }
       
       console.log('✅ [AgendaColaboradores] Agendas encontradas:', data?.length || 0, data);
-      
-      // Gerar slug para agendas que não têm
-      const agendasComSlug = await Promise.all(
-        (data || []).map(async (agenda) => {
-          if (!agenda.slug) {
-            const slugGerado = gerarSlug(agenda.nome);
-            let slugFinal = slugGerado;
-            let tentativas = 0;
-            const maxTentativas = 10;
 
-            // Verificar se slug já existe
-            while (tentativas < maxTentativas) {
-              const { data: existing } = await supabase
-                .from('agendas')
-                .select('id')
-                .eq('slug', slugFinal)
-                .single();
-
-              if (!existing) break; // Slug disponível
-
-              tentativas++;
-              slugFinal = `${slugGerado}-${tentativas}`;
-            }
-
-            if (tentativas >= maxTentativas) {
-              slugFinal = `${slugGerado}-${Date.now()}`;
-            }
-
-            // Atualizar agenda com slug
-            const { error: updateError } = await supabase
-              .from('agendas')
-              .update({ slug: slugFinal })
-              .eq('id', agenda.id);
-
-            if (!updateError) {
-              return { ...agenda, slug: slugFinal };
-            }
-          }
-          return agenda;
-        })
-      );
-
-      setAgendas(agendasComSlug);
+      setAgendas(data || []);
     } catch (error) {
       console.error('Erro ao carregar agendas:', error);
       toast.error("Erro ao carregar agendas");
@@ -186,7 +145,7 @@ export function AgendaColaboradores() {
         throw error;
       }
 
-      console.log('✅ Agenda criada com slug:', { id: novaAgenda?.id, slug: novaAgenda?.slug, nome: novaAgenda?.nome });
+      console.log('✅ Agenda criada:', { id: novaAgenda?.id, nome: novaAgenda?.nome });
 
       toast.success("Agenda criada com sucesso!");
       setDialogOpen(false);
@@ -387,9 +346,7 @@ export function AgendaColaboradores() {
         {agendas.map((agenda) => {
           console.log('🎴 [AgendaColaboradores] Renderizando card da agenda:', { 
             id: agenda.id, 
-            nome: agenda.nome, 
-            slug: agenda.slug || 'SEM SLUG',
-            temSlug: !!agenda.slug 
+            nome: agenda.nome
           });
           return (
           <Card key={agenda.id} className="border-0 shadow-card">
@@ -406,21 +363,19 @@ export function AgendaColaboradores() {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  {agenda.slug && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => copiarLinkAgenda(agenda.slug!)}
-                      title="Copiar link da agenda"
-                      className="text-primary hover:text-primary hover:bg-primary/10"
-                    >
-                      {copiedSlug === agenda.slug ? (
-                        <Check className="h-4 w-4" />
-                      ) : (
-                        <Link2 className="h-4 w-4" />
-                      )}
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => copiarLinkAgenda(agenda.id)}
+                    title="Copiar link da agenda"
+                    className="text-primary hover:text-primary hover:bg-primary/10"
+                  >
+                    {copiedSlug === agenda.id ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Link2 className="h-4 w-4" />
+                    )}
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -434,34 +389,25 @@ export function AgendaColaboradores() {
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
-              {/* Link Público - SEMPRE exibir - SEM CONDIÇÕES */}
-              {/* TESTE: Este comentário deve aparecer no HTML */}
-              <div className="space-y-2 p-3 bg-muted rounded-md mb-3" style={{ border: '2px solid red' }}>
-                {(() => {
-                  const slugAtual = agenda.slug || gerarSlug(agenda.nome);
-                  console.log('🔗 [AgendaColaboradores] Renderizando link SEMPRE para:', { nome: agenda.nome, slug: slugAtual });
-                  return null; // Apenas para log
-                })()}
+              {/* Link Público */}
+              <div className="space-y-2 p-3 bg-muted rounded-md mb-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">Link Público:</span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      const slug = agenda.slug || gerarSlug(agenda.nome);
-                      copiarLinkAgenda(slug);
-                    }}
+                    onClick={() => copiarLinkAgenda(agenda.id)}
                     className="h-6 px-2 text-xs"
                   >
-                    {copiedSlug === (agenda.slug || gerarSlug(agenda.nome)) ? (
+                    {copiedSlug === agenda.id ? (
                       <>
                         <Check className="h-3 w-3 mr-1" />
                         Copiado!
                       </>
                     ) : (
                       <>
-                        <Copy className="h-3 w-3 mr-1" />
-                        Copiar
+                        <Link2 className="h-3 w-3 mr-1" />
+                        Copiar Link
                       </>
                     )}
                   </Button>
@@ -469,14 +415,9 @@ export function AgendaColaboradores() {
                 <div className="flex items-center gap-2">
                   <Link2 className="h-3 w-3 text-muted-foreground" />
                   <code className="text-xs bg-background px-2 py-1 rounded flex-1 truncate">
-                    {typeof window !== 'undefined' ? window.location.origin : ''}/agenda/{agenda.slug || gerarSlug(agenda.nome)}
+                    {typeof window !== 'undefined' ? window.location.origin : ''}/agenda/{agenda.id}
                   </code>
                 </div>
-                {!agenda.slug && (
-                  <p className="text-xs text-yellow-600 bg-yellow-50 p-2 rounded">
-                    ⚠️ Slug sendo gerado automaticamente. Recarregue a página em alguns segundos.
-                  </p>
-                )}
                 <p className="text-xs text-muted-foreground">
                   Compartilhe este link com o colaborador para visualizar sua agenda
                 </p>

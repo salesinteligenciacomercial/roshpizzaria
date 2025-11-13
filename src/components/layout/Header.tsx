@@ -92,11 +92,9 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
         return;
       }
 
-      // Get company info and role
+      // Get company info and role usando função RPC segura (sem recursão RLS)
       const { data: userRoleData, error: roleError } = await supabase
-        .from("user_roles")
-        .select("role, company_id, companies(name)")
-        .eq("user_id", user.id)
+        .rpc('get_my_user_role')
         .single();
 
       if (roleError || !userRoleData) {
@@ -123,14 +121,14 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
       
       setUserRole(roleMap[userRoleData.role] || 'Usuário');
       
-      if (userRoleData.companies) {
-        setCompanyName((userRoleData.companies as any).name);
+      if (userRoleData.company_name) {
+        setCompanyName(userRoleData.company_name);
       }
 
       console.log("✅ Dados do usuário carregados:", {
         name: profile?.full_name || user.email,
         role: userRoleData.role,
-        company: (userRoleData.companies as any)?.name
+        company: userRoleData.company_name
       });
     } catch (error) {
       console.error("❌ Erro fatal ao carregar dados do usuário:", error);

@@ -362,7 +362,7 @@ export function EditarCompromissoDialog({
       }
 
       console.log('🔐 [DEBUG] Usuário autenticado:', user.id);
-      console.log('📋 [DEBUG] Compromisso atual - owner_id:', compromisso.owner_id || compromisso.usuario_responsavel_id);
+      console.log('📋 [DEBUG] Compromisso atual - usuario_responsavel_id:', compromisso.usuario_responsavel_id);
 
       // Preparar dados de atualização
       const updateData: any = {
