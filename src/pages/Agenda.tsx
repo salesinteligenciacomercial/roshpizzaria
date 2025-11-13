@@ -1530,14 +1530,14 @@ export default function Agenda() {
       // Filtro de busca
       if (buscaCompromissos.trim()) {
         const busca = buscaCompromissos.toLowerCase();
-        // titulo não existe na tabela, usar tipo_servico
+        const titulo = (c.titulo || "").toLowerCase();
         const tipoServico = (c.tipo_servico || "").toLowerCase();
         const nomeLead = (c.lead?.name || "").toLowerCase();
         const observacoes = (c.observacoes || "").toLowerCase();
         const nomeAgenda = (c.agenda?.nome || "").toLowerCase();
         
-        if (!tipoServico.includes(busca) && 
-            !tipoServico.includes(busca) &&
+        if (!titulo.includes(busca) && 
+            !tipoServico.includes(busca) && 
             !nomeLead.includes(busca) && 
             !observacoes.includes(busca) &&
             !nomeAgenda.includes(busca)) {
@@ -2172,7 +2172,7 @@ export default function Agenda() {
                             <div className="flex justify-between items-start mb-2">
                               <div className="space-y-1 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-medium">{compromisso.tipo_servico}</span>
+                                  <span className="font-medium">{compromisso.titulo || compromisso.tipo_servico}</span>
                                   {getStatusBadge(compromisso.status)}
                                 </div>
                                 <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -2412,7 +2412,7 @@ export default function Agenda() {
                           <div className="flex justify-between items-start">
                             <div className="space-y-2 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-medium text-base">{compromisso.tipo_servico}</span>
+                                <span className="font-medium text-base">{compromisso.titulo || compromisso.tipo_servico}</span>
                                 {getStatusBadge(compromisso.status)}
                               </div>
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">

@@ -63,11 +63,11 @@ export default function AgendaPublica() {
       setLoading(true);
       setError(null);
 
-      // Buscar agenda pelo ID
+      // Buscar agenda pelo slug
       const { data: agendaData, error: agendaError } = await supabase
         .from('agendas')
         .select('*')
-        .eq('id', slug) // usando ID ao invés de slug
+        .eq('slug', slug)
         .eq('status', 'ativo')
         .single();
 
