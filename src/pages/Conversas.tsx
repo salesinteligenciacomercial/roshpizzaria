@@ -5109,11 +5109,19 @@ function Conversas() {
       console.log('✅ [COMPROMISSO] Compromisso criado com sucesso:', compromisso?.id);
 
       // ⚡ ENVIAR MENSAGEM DE CONFIRMAÇÃO IMEDIATA
+      console.log('🔍 [DEBUG-CONFIRMAÇÃO] Estado enviarConfirmacaoReuniao:', enviarConfirmacaoReuniao);
+      console.log('🔍 [DEBUG-CONFIRMAÇÃO] Lead vinculado:', leadVinculado);
+      console.log('🔍 [DEBUG-CONFIRMAÇÃO] Compromisso criado:', compromisso);
+      
       if (enviarConfirmacaoReuniao && compromisso && leadVinculado) {
         try {
           const telefone = leadVinculado.phone || leadVinculado.telefone;
+          console.log('🔍 [DEBUG-CONFIRMAÇÃO] Telefone do lead:', telefone);
+          
           if (telefone) {
             const telefoneNormalizado = normalizePhoneForWA(telefone);
+            console.log('🔍 [DEBUG-CONFIRMAÇÃO] Telefone normalizado:', telefoneNormalizado);
+            
             if (telefoneNormalizado) {
               // Mensagem de confirmação formatada e personalizada
               const tipoServicoFormatado = meetingTitle.trim()
@@ -5131,14 +5139,21 @@ function Conversas() {
                 `_Esta é uma confirmação automática do seu agendamento._`;
 
               console.log('📱 [CONFIRMAÇÃO] Enviando mensagem de confirmação imediata...');
+              console.log('📱 [CONFIRMAÇÃO] Dados do envio:', {
+                numero: telefoneNormalizado,
+                company_id: companyId,
+                mensagemLength: mensagemConfirmacao.length
+              });
               
-              const { error: confirmacaoError } = await supabase.functions.invoke('enviar-whatsapp', {
+              const { data: resultConfirmacao, error: confirmacaoError } = await supabase.functions.invoke('enviar-whatsapp', {
                 body: {
                   numero: telefoneNormalizado,
                   mensagem: mensagemConfirmacao,
                   company_id: companyId
                 }
               });
+
+              console.log('📱 [CONFIRMAÇÃO] Resposta da edge function:', { data: resultConfirmacao, error: confirmacaoError });
 
               if (confirmacaoError) {
                 console.error('❌ [CONFIRMAÇÃO] Erro ao enviar confirmação:', confirmacaoError);
@@ -5147,12 +5162,24 @@ function Conversas() {
                 console.log('✅ [CONFIRMAÇÃO] Mensagem de confirmação enviada com sucesso!');
                 toast.success("Compromisso criado e confirmação enviada ao cliente!");
               }
+            } else {
+              console.warn('⚠️ [CONFIRMAÇÃO] Telefone normalizado está vazio');
+              toast.warning("Compromisso criado, mas telefone inválido para envio.");
             }
+          } else {
+            console.warn('⚠️ [CONFIRMAÇÃO] Lead sem telefone');
+            toast.warning("Compromisso criado, mas lead sem telefone para enviar confirmação.");
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('❌ [CONFIRMAÇÃO] Erro ao enviar confirmação:', error);
-          toast.warning("Compromisso criado, mas houve erro ao enviar a confirmação.");
+          toast.error(`Erro ao enviar confirmação: ${error?.message || 'Erro desconhecido'}`);
         }
+      } else {
+        console.log('ℹ️ [CONFIRMAÇÃO] Confirmação não será enviada. Motivos:', {
+          enviarConfirmacaoReuniao,
+          temCompromisso: !!compromisso,
+          temLead: !!leadVinculado
+        });
       }
 
       // ⚡ CRIAR LEMBRETE AUTOMÁTICO
