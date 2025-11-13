@@ -1462,6 +1462,7 @@ export type Database = {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      is_user_company_admin: { Args: { _user_id: string }; Returns: boolean }
       reorder_etapas: {
         Args: { p_funil_id: string; p_order: string[] }
         Returns: undefined
