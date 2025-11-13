@@ -1372,7 +1372,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           id?: string
-          role: Database["public"]["Enums"]["app_role"]
+          role?: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
@@ -1458,13 +1458,6 @@ export type Database = {
       elevate_self_to_super_admin: { Args: never; Returns: Json }
       formatar_telefone: { Args: { telefone: string }; Returns: string }
       get_user_company_id: { Args: { _user_id: string }; Returns: string }
-      has_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
-        Returns: boolean
-      }
       reorder_etapas: {
         Args: { p_funil_id: string; p_order: string[] }
         Returns: undefined
@@ -1495,9 +1488,6 @@ export type Database = {
       app_role:
         | "super_admin"
         | "company_admin"
-        | "manager"
-        | "sales"
-        | "support"
         | "gestor"
         | "vendedor"
         | "suporte"
@@ -1631,9 +1621,6 @@ export const Constants = {
       app_role: [
         "super_admin",
         "company_admin",
-        "manager",
-        "sales",
-        "support",
         "gestor",
         "vendedor",
         "suporte",
