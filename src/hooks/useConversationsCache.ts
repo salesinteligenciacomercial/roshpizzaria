@@ -35,6 +35,7 @@ export interface Conversation {
   tags: string[];
   phoneNumber?: string;
   isGroup?: boolean;
+  avatarUrl?: string; // ⚡ Foto de perfil
 }
 
 interface CacheData {
@@ -209,6 +210,11 @@ export const useConversationsCache = (companyId: string | null) => {
 
         const isGroup = mensagens[0]?.is_group || /@g\.us$/.test(telefone);
 
+        // ⚡ Avatar placeholder - será carregado assincronamente
+        const avatarUrl = isGroup 
+          ? `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName)}&background=10b981&color=fff`
+          : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName)}&background=0ea5e9&color=fff`;
+
         return {
           id: telefone,
           contactName,
@@ -220,6 +226,7 @@ export const useConversationsCache = (companyId: string | null) => {
           tags: [],
           phoneNumber: telefone,
           isGroup,
+          avatarUrl, // ⚡ Incluir avatar
         };
       });
 

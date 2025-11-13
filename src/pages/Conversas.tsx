@@ -218,6 +218,34 @@ function Conversas() {
     updateConversation: updateCachedConversation,
     addMessage: addCachedMessage
   } = useConversationsCache(userCompanyId);
+
+  // ⚡ CARREGAR FOTOS DE PERFIL de forma assíncrona para todas as conversas
+  useEffect(() => {
+    if (!userCompanyId || cachedConversations.length === 0) return;
+
+    const loadAvatars = async () => {
+      const conversationsWithAvatars = await Promise.all(
+        cachedConversations.map(async (conv) => {
+          // Se já tem foto real (não é placeholder), não recarregar
+          if (conv.avatarUrl && !conv.avatarUrl.includes('ui-avatars.com')) {
+            return conv;
+          }
+
+          const phoneNumber = conv.phoneNumber || conv.id;
+          const profilePic = await getProfilePictureWithFallback(phoneNumber, userCompanyId, conv.contactName);
+          
+          return {
+            ...conv,
+            avatarUrl: profilePic || conv.avatarUrl
+          };
+        })
+      );
+
+      setConversations(conversationsWithAvatars);
+    };
+
+    loadAvatars();
+  }, [cachedConversations, userCompanyId]);
   
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
