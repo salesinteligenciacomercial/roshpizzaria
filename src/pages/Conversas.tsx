@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { 
@@ -892,6 +893,9 @@ function Conversas() {
   const [meetingTitle, setMeetingTitle] = useState("");
   const [meetingDatetime, setMeetingDatetime] = useState("");
   const [meetingNotes, setMeetingNotes] = useState("");
+  const [enviarConfirmacaoReuniao, setEnviarConfirmacaoReuniao] = useState(true); // ⚡ Enviar confirmação por padrão
+  const [enviarLembreteReuniao, setEnviarLembreteReuniao] = useState(true); // ⚡ Enviar lembrete por padrão
+  const [horasAntecedenciaReuniao, setHorasAntecedenciaReuniao] = useState("24"); // ⚡ 24h padrão
   const [newTag, setNewTag] = useState("");
   const [selectedFunnel, setSelectedFunnel] = useState("");
   const [newResponsavel, setNewResponsavel] = useState("");
@@ -5084,10 +5088,10 @@ function Conversas() {
       const dataHoraInicio = new Date(meetingDatetime);
       const dataHoraFim = new Date(dataHoraInicio.getTime() + 60 * 60 * 1000); // 1 hora de duração
       
-      const { error } = await supabase
+      const { data: compromisso, error } = await supabase
         .from('compromissos')
         .insert({
-          lead_id: (leadVinculado?.id || (await findOrCreateLead(selectedConv))?.id) as string,
+          lead_id: leadVinculado.id,
           usuario_responsavel_id: user.id,
           owner_id: user.id,
           company_id: companyId,
@@ -5096,15 +5100,124 @@ function Conversas() {
           tipo_servico: meetingTitle,
           observacoes: meetingNotes,
           status: 'agendado',
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+
+      console.log('✅ [COMPROMISSO] Compromisso criado com sucesso:', compromisso?.id);
+
+      // ⚡ ENVIAR MENSAGEM DE CONFIRMAÇÃO IMEDIATA
+      if (enviarConfirmacaoReuniao && compromisso && leadVinculado) {
+        try {
+          const telefone = leadVinculado.phone || leadVinculado.telefone;
+          if (telefone) {
+            const telefoneNormalizado = normalizePhoneForWA(telefone);
+            if (telefoneNormalizado) {
+              // Mensagem de confirmação formatada e personalizada
+              const tipoServicoFormatado = meetingTitle.trim()
+                ? meetingTitle.charAt(0).toUpperCase() + meetingTitle.slice(1)
+                : 'Compromisso';
+              
+              const mensagemConfirmacao = `✅ *Compromisso Confirmado!*\n\n` +
+                `Olá ${leadVinculado.name}! Seu compromisso foi agendado com sucesso.\n\n` +
+                `📅 *Data:* ${format(dataHoraInicio, "dd/MM/yyyy", { locale: ptBR })}\n` +
+                `🕐 *Horário:* ${format(dataHoraInicio, "HH:mm", { locale: ptBR })} às ${format(dataHoraFim, "HH:mm", { locale: ptBR })}\n` +
+                `📋 *Tipo:* ${tipoServicoFormatado}\n` +
+                (meetingNotes ? `\n💬 *Observações:*\n${meetingNotes}\n` : '') +
+                `\n✅ *Status:* Agendado\n\n` +
+                `Aguardamos você no dia e horário agendados!\n\n` +
+                `_Esta é uma confirmação automática do seu agendamento._`;
+
+              console.log('📱 [CONFIRMAÇÃO] Enviando mensagem de confirmação imediata...');
+              
+              const { error: confirmacaoError } = await supabase.functions.invoke('enviar-whatsapp', {
+                body: {
+                  numero: telefoneNormalizado,
+                  mensagem: mensagemConfirmacao,
+                  company_id: companyId
+                }
+              });
+
+              if (confirmacaoError) {
+                console.error('❌ [CONFIRMAÇÃO] Erro ao enviar confirmação:', confirmacaoError);
+                toast.warning("Compromisso criado, mas não foi possível enviar a confirmação imediata.");
+              } else {
+                console.log('✅ [CONFIRMAÇÃO] Mensagem de confirmação enviada com sucesso!');
+                toast.success("Compromisso criado e confirmação enviada ao cliente!");
+              }
+            }
+          }
+        } catch (error) {
+          console.error('❌ [CONFIRMAÇÃO] Erro ao enviar confirmação:', error);
+          toast.warning("Compromisso criado, mas houve erro ao enviar a confirmação.");
+        }
+      }
+
+      // ⚡ CRIAR LEMBRETE AUTOMÁTICO
+      if (enviarLembreteReuniao && compromisso) {
+        try {
+          console.log('📝 [LEMBRETE] Criando lembrete para compromisso:', compromisso.id);
+
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          // Validar e processar horas de antecedência
+          const horasAntecedencia = parseInt(horasAntecedenciaReuniao) || 24;
+          if (horasAntecedencia < 0) {
+            toast.error("As horas de antecedência não podem ser negativas");
+            return;
+          }
+
+          // Calcular data de envio do lembrete
+          const dataEnvio = new Date(dataHoraInicio);
+          dataEnvio.setHours(dataEnvio.getHours() - horasAntecedencia);
+
+          const lembreteData = {
+            compromisso_id: compromisso.id,
+            canal: 'whatsapp',
+            horas_antecedencia: horasAntecedencia,
+            mensagem: `Olá ${leadVinculado.name}! Lembramos do seu compromisso agendado para ${format(dataHoraInicio, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.`,
+            status_envio: 'pendente',
+            data_envio: dataEnvio.toISOString(),
+            destinatario: 'lead',
+            telefone_responsavel: profile?.full_name || user.email,
+            company_id: companyId,
+          };
+
+          console.log('📝 [LEMBRETE] Dados do lembrete:', { ...lembreteData, mensagem: '[oculta]' });
+
+          const { error: lembreteError } = await supabase
+            .from('lembretes')
+            .insert(lembreteData);
+
+          if (lembreteError) {
+            console.error('❌ [LEMBRETE] Erro ao criar lembrete:', lembreteError);
+            toast.warning("Compromisso criado, mas houve erro ao criar o lembrete.");
+          } else {
+            console.log('✅ [LEMBRETE] Lembrete criado com sucesso!');
+          }
+        } catch (error) {
+          console.error('❌ [LEMBRETE] Erro ao criar lembrete:', error);
+        }
+      }
 
       setMeetingTitle("");
       setMeetingDatetime("");
       setMeetingNotes("");
-      toast.success("Reunião agendada e sincronizada com Agenda!");
-      // CORREÇÃO: Recarregar reuniões após criar
+      setEnviarConfirmacaoReuniao(true); // Reset para padrão
+      setEnviarLembreteReuniao(true); // Reset para padrão
+      setHorasAntecedenciaReuniao("24"); // Reset para padrão
+      
+      if (!enviarConfirmacaoReuniao) {
+        toast.success("Reunião agendada e sincronizada com Agenda!");
+      }
+      
+      // Recarregar reuniões após criar
       await loadMeetings();
     } catch (error) {
       console.error('Erro ao agendar reunião:', error);
@@ -7503,6 +7616,59 @@ function Conversas() {
                                     onChange={(e) => setMeetingNotes(e.target.value)}
                                     placeholder="Pauta, participantes, etc..."
                                   />
+                                </div>
+                                
+                                {/* ⚡ OPÇÃO DE ENVIAR CONFIRMAÇÃO IMEDIATA */}
+                                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                                  <div className="space-y-0.5">
+                                    <Label className="text-sm font-medium">Enviar confirmação por WhatsApp</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                      Envia automaticamente a confirmação do agendamento
+                                    </p>
+                                  </div>
+                                  <Switch
+                                    checked={enviarConfirmacaoReuniao}
+                                    onCheckedChange={setEnviarConfirmacaoReuniao}
+                                  />
+                                </div>
+
+                                {/* ⚡ OPÇÃO DE CRIAR LEMBRETE AUTOMÁTICO */}
+                                <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
+                                  <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                      <Label className="text-sm font-medium">Criar lembrete automático</Label>
+                                      <p className="text-xs text-muted-foreground">
+                                        Envia lembrete antes do compromisso
+                                      </p>
+                                    </div>
+                                    <Switch
+                                      checked={enviarLembreteReuniao}
+                                      onCheckedChange={setEnviarLembreteReuniao}
+                                    />
+                                  </div>
+                                  
+                                  {enviarLembreteReuniao && (
+                                    <div>
+                                      <Label className="text-xs">Enviar com antecedência de</Label>
+                                      <Select
+                                        value={horasAntecedenciaReuniao}
+                                        onValueChange={setHorasAntecedenciaReuniao}
+                                      >
+                                        <SelectTrigger className="h-9">
+                                          <SelectValue placeholder="Selecionar" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="1">1 hora antes</SelectItem>
+                                          <SelectItem value="2">2 horas antes</SelectItem>
+                                          <SelectItem value="4">4 horas antes</SelectItem>
+                                          <SelectItem value="8">8 horas antes</SelectItem>
+                                          <SelectItem value="12">12 horas antes</SelectItem>
+                                          <SelectItem value="24">24 horas antes</SelectItem>
+                                          <SelectItem value="48">48 horas antes</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  )}
                                 </div>
                                 <Button 
                                   onClick={async () => {
