@@ -1011,25 +1011,14 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       </Dialog>
 
       {/* Conversa Popup */}
-      {task.lead_id && task.lead_name && (
-        <>
-          {console.log("🔍 Renderizando ConversaPopup:", { 
-            conversaOpen, 
-            leadId: task.lead_id, 
-            leadName: leadNome || task.lead_name,
-            leadPhone: leadPhone || ""
-          })}
-          <ConversaPopup
-            open={conversaOpen}
-            onOpenChange={(open) => {
-              console.log("🔄 ConversaPopup onOpenChange:", open);
-              setConversaOpen(open);
-            }}
-            leadId={task.lead_id}
-            leadName={leadNome || task.lead_name}
-            leadPhone={leadPhone || ""}
-          />
-        </>
+      {task.lead_id && (
+        <ConversaPopup
+          open={conversaOpen}
+          onOpenChange={setConversaOpen}
+          leadId={task.lead_id}
+          leadName={leadNome || task.lead_name || "Lead"}
+          leadPhone={leadPhone || ""}
+        />
       )}
     </Card>
   );
