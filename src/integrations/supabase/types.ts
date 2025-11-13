@@ -1475,6 +1475,7 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      is_super_admin: { Args: never; Returns: boolean }
       reorder_etapas: {
         Args: { p_funil_id: string; p_order: string[] }
         Returns: undefined
