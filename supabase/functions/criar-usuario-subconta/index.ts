@@ -65,9 +65,9 @@ serve(async (req) => {
     }
 
     const userRole = role || 'company_admin';
-    const allowedRoles = new Set(['company_admin', 'gestor', 'vendedor', 'suporte', 'user']);
+    const allowedRoles = new Set(['company_admin', 'gestor', 'vendedor', 'suporte']);
     if (!allowedRoles.has(userRole)) {
-      return new Response(JSON.stringify({ error: 'Perfil inválido' }), { 
+      return new Response(JSON.stringify({ error: 'Perfil inválido. Use: company_admin, gestor, vendedor ou suporte' }), { 
         status: 400, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });

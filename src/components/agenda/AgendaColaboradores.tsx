@@ -19,6 +19,7 @@ interface Agenda {
   tempo_medio_servico: number;
   disponibilidade: any;
   responsavel_id?: string;
+  slug?: string;
 }
 
 export function AgendaColaboradores() {

@@ -322,13 +322,12 @@ export default function Agenda() {
 
   // Form states para novo compromisso
   const [formData, setFormData] = useState({
-    titulo: "",
     agenda_id: "",
     lead_id: "",
     data: format(new Date(), "yyyy-MM-dd"),
     hora_inicio: "09:00",
     hora_fim: "10:00",
-    tipo_servico: "", // Opcional - pode ficar vazio
+    tipo_servico: "",
     observacoes: "",
     custo_estimado: "",
     enviar_lembrete: true,
@@ -754,7 +753,6 @@ export default function Agenda() {
 
       console.log('✅ [DEBUG] company_id obtido:', userRole.company_id);
       console.log('📋 [DEBUG] Dados do formulário:', {
-        titulo: formData.titulo,
         tipo_servico: formData.tipo_servico,
         data: formData.data,
         hora_inicio: formData.hora_inicio,
@@ -1463,13 +1461,12 @@ export default function Agenda() {
   const limparFormulario = () => {
     console.log('🧹 [DEBUG] Limpando formulário de agendamento');
     setFormData({
-      titulo: "",
       agenda_id: "",
       lead_id: "",
       data: format(new Date(), "yyyy-MM-dd"),
       hora_inicio: "09:00",
       hora_fim: "10:00",
-      tipo_servico: "", // Limpar para forçar nova seleção
+      tipo_servico: "",
       observacoes: "",
       custo_estimado: "",
       enviar_lembrete: true,
@@ -1531,14 +1528,12 @@ export default function Agenda() {
       // Filtro de busca
       if (buscaCompromissos.trim()) {
         const busca = buscaCompromissos.toLowerCase();
-        const titulo = (c.titulo || "").toLowerCase();
         const tipoServico = (c.tipo_servico || "").toLowerCase();
         const nomeLead = (c.lead?.name || "").toLowerCase();
         const observacoes = (c.observacoes || "").toLowerCase();
         const nomeAgenda = (c.agenda?.nome || "").toLowerCase();
         
-        if (!titulo.includes(busca) && 
-            !tipoServico.includes(busca) && 
+        if (!tipoServico.includes(busca) && 
             !nomeLead.includes(busca) && 
             !observacoes.includes(busca) &&
             !nomeAgenda.includes(busca)) {
@@ -2173,7 +2168,7 @@ export default function Agenda() {
                             <div className="flex justify-between items-start mb-2">
                               <div className="space-y-1 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-medium">{compromisso.titulo || compromisso.tipo_servico}</span>
+                                  <span className="font-medium">{compromisso.tipo_servico}</span>
                                   {getStatusBadge(compromisso.status)}
                                 </div>
                                 <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -2413,7 +2408,7 @@ export default function Agenda() {
                           <div className="flex justify-between items-start">
                             <div className="space-y-2 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-medium text-base">{compromisso.titulo || compromisso.tipo_servico}</span>
+                                <span className="font-medium text-base">{compromisso.tipo_servico}</span>
                                 {getStatusBadge(compromisso.status)}
                               </div>
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -2575,7 +2570,7 @@ export default function Agenda() {
                               <div className="space-y-1 flex-1">
                                 <div className="flex items-center gap-2">
                                   <span className="font-medium">
-                                    {lembrete.compromisso?.titulo || lembrete.compromisso?.tipo_servico || 'Compromisso'}
+                                    {lembrete.compromisso?.tipo_servico || 'Compromisso'}
                                   </span>
                                   <Badge variant={
                                     lembrete.status_envio === 'enviado' ? 'default' :

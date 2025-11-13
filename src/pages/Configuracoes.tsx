@@ -280,7 +280,7 @@ export default function Configuracoes() {
     nome: "",
     email: "",
     setor: "",
-    funcao: "",
+    funcao: "company_admin", // Default para company_admin ao invés de user
     capacidadeMaxima: 10,
   });
 
@@ -453,7 +453,7 @@ export default function Configuracoes() {
         companyId: currentCompany.id,
         email: novoColaborador.email,
         nome: novoColaborador.nome,
-        role: novoColaborador.funcao
+        role: novoColaborador.funcao || 'company_admin'
       });
       
       const { data, error } = await supabase.functions.invoke('criar-usuario-subconta', {
@@ -461,7 +461,7 @@ export default function Configuracoes() {
           companyId: currentCompany.id,
           email: novoColaborador.email.trim().toLowerCase(),
           full_name: novoColaborador.nome.trim(),
-          role: novoColaborador.funcao,
+          role: novoColaborador.funcao || 'company_admin', // Garantir que sempre tem um valor válido
         },
       });
       
@@ -487,7 +487,7 @@ export default function Configuracoes() {
       });
       
       // Limpar formulário
-      setNovoColaborador({ nome: "", email: "", setor: "", funcao: "", capacidadeMaxima: 10 });
+      setNovoColaborador({ nome: "", email: "", setor: "", funcao: "company_admin", capacidadeMaxima: 10 });
       
       // Recarregar lista
       await carregarColaboradores();
@@ -706,7 +706,7 @@ export default function Configuracoes() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="funcao">Perfil</Label>
+                    <Label htmlFor="funcao">Perfil *</Label>
                     <Select
                       value={novoColaborador.funcao}
                       onValueChange={(value) => {
@@ -721,7 +721,6 @@ export default function Configuracoes() {
                         <SelectItem value="gestor">Gestor</SelectItem>
                         <SelectItem value="vendedor">Vendedor</SelectItem>
                         <SelectItem value="suporte">Suporte</SelectItem>
-                        <SelectItem value="user">Usuário</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

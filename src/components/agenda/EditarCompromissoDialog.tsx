@@ -56,7 +56,6 @@ interface Compromisso {
   status: string;
   observacoes?: string;
   custo_estimado?: number;
-  usuario_responsavel_id?: string;
 }
 
 interface Lead {
