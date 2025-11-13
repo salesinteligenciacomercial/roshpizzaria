@@ -460,17 +460,10 @@ export default function Agenda() {
     avatarFetchingRef.current.add(lead.id);
 
     try {
-      // Obter company_id se ainda não tiver
+      // Obter company_id via RPC
       if (!companyIdRef.current) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: userRole } = await supabase
-            .from('user_roles')
-            .select('company_id')
-            .eq('user_id', user.id)
-            .single();
-          companyIdRef.current = userRole?.company_id || null;
-        }
+        const { data: companyId } = await supabase.rpc('get_my_company_id');
+        companyIdRef.current = companyId || null;
       }
 
       const telefoneNormalizado = normalizePhoneBR(telefone);
@@ -734,24 +727,16 @@ export default function Agenda() {
       console.log('🔍 [DEBUG] Criando compromisso para usuário:', user.id);
 
       // Obter company_id do usuário ANTES de criar compromisso
-      const { data: userRole, error: userRoleError } = await supabase
-        .from('user_roles')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .single();
+      // Obter company_id via RPC
+      const { data: companyId, error: companyError } = await supabase.rpc('get_my_company_id');
 
-      if (userRoleError) {
-        console.error('❌ [DEBUG] Erro ao buscar user_role:', userRoleError);
-        throw new Error(`Erro ao obter informações da empresa: ${userRoleError.message}`);
-      }
-
-      if (!userRole || !userRole.company_id) {
-        console.error('❌ [DEBUG] userRole ou company_id não encontrado:', { userRole });
+      if (companyError || !companyId) {
+        console.error('❌ [DEBUG] Erro ao obter company_id:', companyError);
         toast.error("Erro: Usuário não está associado a nenhuma empresa. Por favor, entre em contato com o administrador.");
         throw new Error("Usuário não está associado a nenhuma empresa. company_id é obrigatório.");
       }
 
-      console.log('✅ [DEBUG] company_id obtido:', userRole.company_id);
+      console.log('✅ [DEBUG] company_id obtido:', companyId);
       console.log('📋 [DEBUG] Dados do formulário:', {
         tipo_servico: formData.tipo_servico,
         data: formData.data,
@@ -902,10 +887,8 @@ export default function Agenda() {
         compromissoData.lead_id = null; // Explicitamente null se vazio
       }
       
-      // company_id é opcional mas recomendado
-      if (userRole.company_id) {
-        compromissoData.company_id = userRole.company_id;
-      }
+      // company_id é obrigatório
+      compromissoData.company_id = companyId;
       
       // status tem default 'agendado', mas vamos definir explicitamente
       compromissoData.status = 'agendado';
@@ -1090,7 +1073,7 @@ export default function Agenda() {
                 body: {
                   numero: telefone,
                   mensagem: mensagemConfirmacao,
-                  company_id: userRole.company_id
+                  company_id: companyId
                 }
               });
 
@@ -1155,7 +1138,7 @@ export default function Agenda() {
         console.log('📝 [DEBUG] Criando lembrete para compromisso:', compromisso.id);
 
         // Validar que company_id existe (já obtido anteriormente)
-        if (!userRole.company_id) {
+        if (!companyId) {
           console.error('❌ [DEBUG] company_id não disponível para criar lembrete');
           toast.error("Erro: Não foi possível criar o lembrete. Usuário não está associado a uma empresa.");
           throw new Error("company_id é obrigatório para criar lembretes.");
@@ -1189,7 +1172,7 @@ export default function Agenda() {
           data_envio: dataEnvio.toISOString(),
           destinatario: formData.destinatario_lembrete,
           telefone_responsavel: profile?.full_name || user?.email,
-          company_id: userRole.company_id, // Usar company_id validado
+          company_id: companyId, // Usar company_id validado
         };
 
         console.log('📝 [DEBUG] Dados do lembrete:', { ...lembreteData, mensagem: '[oculta]' });
@@ -1310,13 +1293,10 @@ export default function Agenda() {
               // Obter company_id do usuário
               const { data: { user } } = await supabase.auth.getUser();
               if (user) {
-                const { data: userRole } = await supabase
-                  .from('user_roles')
-                  .select('company_id')
-                  .eq('user_id', user.id)
-                  .single();
+                // Obter company_id via RPC
+                const { data: cancelCompanyId } = await supabase.rpc('get_my_company_id');
 
-                if (userRole?.company_id) {
+                if (cancelCompanyId) {
                   const dataHoraInicio = new Date(compromissoAtual.data_hora_inicio);
                   const dataHoraFim = new Date(compromissoAtual.data_hora_fim);
                   const tipoServicoFormatado = compromissoAtual.tipo_servico 
@@ -1347,7 +1327,7 @@ export default function Agenda() {
                     body: {
                       numero: telefoneNormalizado,
                       mensagem: mensagemCancelamento,
-                      company_id: userRole.company_id
+                      company_id: cancelCompanyId
                     }
                   });
                 }
@@ -1402,14 +1382,10 @@ export default function Agenda() {
         return;
       }
 
-      // Obter company_id
-      const { data: userRole } = await supabase
-        .from('user_roles')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .single();
+      // Obter company_id via RPC
+      const { data: duplicateCompanyId, error: companyError } = await supabase.rpc('get_my_company_id');
 
-      if (!userRole?.company_id) {
+      if (companyError || !duplicateCompanyId) {
         toast.error("Erro: Empresa não identificada");
         return;
       }
@@ -1428,7 +1404,7 @@ export default function Agenda() {
         lead_id: compromisso.lead_id || null,
         usuario_responsavel_id: user.id,
         owner_id: user.id,
-        company_id: userRole.company_id,
+        company_id: duplicateCompanyId,
         data_hora_inicio: novaDataInicio.toISOString(),
         data_hora_fim: novaDataFim.toISOString(),
         tipo_servico: compromisso.tipo_servico || 'outro',

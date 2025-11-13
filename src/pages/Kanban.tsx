@@ -232,9 +232,14 @@ export default function KanbanPage() {
   // Atualiza apenas os leads sem recarregar a página
   const refreshLeads = async () => {
     try {
+      // Obter company_id
+      const { data: companyId } = await supabase.rpc('get_my_company_id');
+      if (!companyId) return;
+
       const { data: leadsData, error: leadsError } = await supabase
         .from("leads")
         .select("*")
+        .eq('company_id', companyId)
         .order("created_at", { ascending: false });
       if (leadsError) throw leadsError;
       setLeads((leadsData || []).map(lead => ({
@@ -250,7 +255,15 @@ export default function KanbanPage() {
   // Atualiza funis
   const refreshFunis = async () => {
     try {
-      const { data: funisData, error } = await supabase.from('funis').select('*').order('criado_em');
+      // Obter company_id
+      const { data: companyId } = await supabase.rpc('get_my_company_id');
+      if (!companyId) return;
+
+      const { data: funisData, error } = await supabase
+        .from('funis')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('criado_em');
       if (error) throw error;
       const loaded = funisData || [];
       setFunis(loaded);
@@ -266,7 +279,15 @@ export default function KanbanPage() {
   // Atualiza etapas
   const refreshEtapas = async () => {
     try {
-      const { data: etapasData, error } = await supabase.from('etapas').select('*').order('posicao');
+      // Obter company_id
+      const { data: companyId } = await supabase.rpc('get_my_company_id');
+      if (!companyId) return;
+
+      const { data: etapasData, error } = await supabase
+        .from('etapas')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('posicao');
       if (error) throw error;
       setEtapas(etapasData || []);
     } catch (err) {
