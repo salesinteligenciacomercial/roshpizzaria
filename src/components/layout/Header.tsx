@@ -71,51 +71,31 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
       
       if (userError || !user) {
         console.error("❌ Erro ao obter usuário:", userError);
-        console.log("🚪 Forçando logout - usuário não encontrado");
-        await handleLogout();
+        // ⚠️ NÃO forçar logout aqui - apenas definir valores padrão
+        setUserName("Usuário");
+        setUserRole("Usuário");
         return;
       }
 
       console.log("✅ Usuário autenticado:", user.email);
 
-      // Get user profile
-      const { data: profile, error: profileError } = await supabase
+      // Get user profile (opcional, não bloquear login se falhar)
+      const { data: profile } = await supabase
         .from("profiles")
         .select("full_name")
         .eq("id", user.id)
-        .single();
-      
-      if (profileError) {
-        console.error("❌ Erro ao obter profile:", profileError);
-        console.log("🚪 Forçando logout - profile não encontrado");
-        await handleLogout();
-        return;
-      }
+        .maybeSingle();
 
-      // Get company info and role - usando maybeSingle para evitar erro se não encontrar
-      const { data: userRoleData, error: roleError } = await supabase
+      // Get company info and role (opcional, não bloquear login se falhar)
+      const { data: userRoleData } = await supabase
         .from("user_roles")
         .select("role, company_id")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (roleError) {
-        console.error("❌ Erro ao buscar role:", roleError);
-        console.log("🚪 Forçando logout - erro ao buscar role");
-        await handleLogout();
-        return;
-      }
-
-      if (!userRoleData) {
-        console.error("❌ Nenhuma role encontrada para o usuário");
-        console.log("🚪 Forçando logout - usuário sem role atribuída");
-        await handleLogout();
-        return;
-      }
-
       // Buscar company separadamente (mais robusto)
       let companyName = "Sem empresa";
-      if (userRoleData.company_id) {
+      if (userRoleData?.company_id) {
         const { data: companyData } = await supabase
           .from("companies")
           .select("name")
@@ -127,7 +107,7 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
         }
       }
 
-      // ✅ Só define os dados se tudo estiver OK
+      // ✅ Definir dados com valores padrão se algo falhar
       if (profile?.full_name) {
         setUserName(profile.full_name);
       } else {
@@ -137,26 +117,25 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
       // Mapear role para português
       const roleMap: Record<string, string> = {
         'super_admin': 'Super Administrador',
+        'company_admin': 'Administrador da Empresa',
         'admin': 'Administrador',
         'moderator': 'Moderador',
         'user': 'Usuário Padrão'
       };
       
-      setUserRole(roleMap[userRoleData.role] || 'Usuário');
-      
-      // Set company name
+      setUserRole(userRoleData?.role ? roleMap[userRoleData.role] || 'Usuário' : 'Usuário');
       setCompanyName(companyName);
-      
 
       console.log("✅ Dados do usuário carregados:", {
         name: profile?.full_name || user.email,
-        role: userRoleData.role,
+        role: userRoleData?.role || 'sem role',
         company: companyName
       });
     } catch (error) {
-      console.error("❌ Erro fatal ao carregar dados do usuário:", error);
-      console.log("🚪 Forçando logout - erro fatal");
-      await handleLogout();
+      console.error("❌ Erro ao carregar dados do usuário:", error);
+      // ⚠️ NÃO forçar logout - apenas usar valores padrão
+      setUserName("Usuário");
+      setUserRole("Usuário");
     } finally {
       setLoading(false);
     }
