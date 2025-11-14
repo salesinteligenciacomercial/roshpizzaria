@@ -7327,13 +7327,12 @@ function Conversas() {
                                       type="datetime-local"
                                       value={scheduledDatetime}
                                       onChange={(e) => setScheduledDatetime(e.target.value)}
-                                      min={new Date().toISOString().slice(0, 16)}
                                     />
                                     <p className="text-xs text-muted-foreground">
-                                      ⚡ Agende para qualquer momento futuro - sem tempo mínimo!
+                                      ⚡ Agende para qualquer momento futuro - sem limite de tempo!
                                     </p>
                                     <p className="text-xs text-primary/70">
-                                      💡 Pode agendar para daqui a 5 minutos, 1 hora, ou dias
+                                      💡 Pode agendar para daqui a 5 minutos, 1 hora, dias ou meses
                                     </p>
                                   </div>
                                   <Button onClick={scheduleMessage} className="w-full">
