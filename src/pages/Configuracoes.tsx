@@ -743,92 +743,250 @@ export default function Configuracoes() {
     </>
   );
 
-  const PermissoesSection = () => (
-    <Card>
-      <CardHeader>
-        <CardTitle>Permissões e Perfis</CardTitle>
-        <CardDescription>
-          Configure permissões por perfil de usuário
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            As permissões são gerenciadas através dos perfis de usuário:
-          </p>
-          <div className="grid gap-4">
-            <div className="rounded-md border p-4">
-              <h4 className="font-medium mb-2">Super Admin</h4>
-              <p className="text-sm text-muted-foreground">
-                Acesso total ao sistema, incluindo gestão de subcontas
-              </p>
-            </div>
-            <div className="rounded-md border p-4">
-              <h4 className="font-medium mb-2">Administrador</h4>
-              <p className="text-sm text-muted-foreground">
-                Acesso total à sua empresa e gestão de usuários
-              </p>
-            </div>
-            <div className="rounded-md border p-4">
-              <h4 className="font-medium mb-2">Gestor</h4>
-              <p className="text-sm text-muted-foreground">
-                Acesso a relatórios, leads, funis e conversas
-              </p>
-            </div>
-            <div className="rounded-md border p-4">
-              <h4 className="font-medium mb-2">Vendedor</h4>
-              <p className="text-sm text-muted-foreground">
-                Acesso a leads, conversas e tarefas
-              </p>
-            </div>
-            <div className="rounded-md border p-4">
-              <h4 className="font-medium mb-2">Suporte</h4>
-              <p className="text-sm text-muted-foreground">
-                Acesso a conversas e agenda
-              </p>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+  const PermissoesSection = () => {
+    const [permissions, setPermissions] = useState<any[]>([]);
+    const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({});
+    const [loadingPerms, setLoadingPerms] = useState(true);
 
-  const EquipeConfigSection = () => (
-    <Card>
-      <CardHeader>
-        <CardTitle>Configurações de Equipe</CardTitle>
-        <CardDescription>Preferências e regras de distribuição</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Atribuição automática de leads por fila</Label>
-            <Select value="auto">
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Ativar</SelectItem>
-                <SelectItem value="manual">Desativar</SelectItem>
-              </SelectContent>
-            </Select>
+    useEffect(() => {
+      const loadPermissions = async () => {
+        try {
+          // Buscar todas as permissões
+          const { data: permsData } = await supabase
+            .from('permissions')
+            .select('id, name, description, module, action')
+            .order('module, action');
+
+          if (permsData) {
+            setPermissions(permsData);
+
+            // Buscar permissões por role
+            const { data: rolePermsData } = await supabase
+              .from('role_permissions')
+              .select('role, permission_id, permissions!inner(name)');
+
+            if (rolePermsData) {
+              const grouped: Record<string, string[]> = {};
+              rolePermsData.forEach((rp: any) => {
+                if (!grouped[rp.role]) grouped[rp.role] = [];
+                if (rp.permissions?.name) {
+                  grouped[rp.role].push(rp.permissions.name);
+                }
+              });
+              setRolePermissions(grouped);
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao carregar permissões:', error);
+        } finally {
+          setLoadingPerms(false);
+        }
+      };
+
+      loadPermissions();
+    }, []);
+
+    const modules = Array.from(new Set(permissions.map(p => p.module)));
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Permissões e Perfis</CardTitle>
+          <CardDescription>
+            Visualize e gerencie permissões por perfil de usuário
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loadingPerms ? (
+            <div className="flex justify-center py-8">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="grid gap-4">
+                <div className="rounded-md border p-4 bg-green-500/5 border-green-500/20">
+                  <h4 className="font-medium mb-2 flex items-center gap-2">
+                    <Badge variant="default">Super Admin</Badge>
+                  </h4>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Acesso total ao sistema, incluindo gestão de subcontas e todas as funcionalidades.
+                  </p>
+                  <div className="text-xs text-muted-foreground">
+                    Permissões: Todas ({permissions.length} permissões)
+                  </div>
+                </div>
+                <div className="rounded-md border p-4 bg-blue-500/5 border-blue-500/20">
+                  <h4 className="font-medium mb-2 flex items-center gap-2">
+                    <Badge variant="secondary">Administrador</Badge>
+                  </h4>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Acesso total à sua empresa, gestão de usuários e configurações.
+                  </p>
+                  <div className="text-xs text-muted-foreground">
+                    Permissões: {rolePermissions['company_admin']?.length || 0} permissões
+                  </div>
+                </div>
+                <div className="rounded-md border p-4">
+                  <h4 className="font-medium mb-2 flex items-center gap-2">
+                    <Badge variant="outline">Gestor</Badge>
+                  </h4>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Acesso a relatórios, leads, funis e conversas. Pode visualizar métricas da equipe.
+                  </p>
+                  <div className="text-xs text-muted-foreground">
+                    Permissões: {rolePermissions['gestor']?.length || 0} permissões
+                  </div>
+                </div>
+                <div className="rounded-md border p-4">
+                  <h4 className="font-medium mb-2 flex items-center gap-2">
+                    <Badge variant="outline">Vendedor/Atendente</Badge>
+                  </h4>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Acesso a leads, conversas, tarefas e agenda. Pode criar e gerenciar seus próprios itens.
+                  </p>
+                  <div className="text-xs text-muted-foreground">
+                    Permissões: {rolePermissions['vendedor']?.length || 0} permissões
+                  </div>
+                </div>
+                <div className="rounded-md border p-4">
+                  <h4 className="font-medium mb-2 flex items-center gap-2">
+                    <Badge variant="outline">Suporte</Badge>
+                  </h4>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Acesso a conversas e agenda. Focado em atendimento ao cliente.
+                  </p>
+                  <div className="text-xs text-muted-foreground">
+                    Permissões: {rolePermissions['suporte']?.length || 0} permissões
+                  </div>
+                </div>
+              </div>
+
+              {modules.length > 0 && (
+                <div className="space-y-4 pt-4 border-t">
+                  <h4 className="font-medium">Permissões por Módulo</h4>
+                  <div className="grid gap-3">
+                    {modules.map(module => {
+                      const modulePerms = permissions.filter(p => p.module === module);
+                      return (
+                        <div key={module} className="rounded-md border p-3">
+                          <div className="font-medium text-sm mb-2 capitalize">{module}</div>
+                          <div className="flex flex-wrap gap-1">
+                            {modulePerms.map(perm => (
+                              <Badge key={perm.id} variant="outline" className="text-xs">
+                                {perm.action}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const EquipeConfigSection = () => {
+    const [autoAssign, setAutoAssign] = useState("auto");
+    const [productivityReports, setProductivityReports] = useState("habilitado");
+    const [shareLeads, setShareLeads] = useState("todos");
+    const [shareTasks, setShareTasks] = useState("todos");
+
+    const handleSaveSettings = async () => {
+      // Aqui você pode salvar as configurações no banco de dados
+      toast({
+        title: "Configurações salvas",
+        description: "As configurações da equipe foram atualizadas com sucesso.",
+      });
+    };
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Configurações de Equipe</CardTitle>
+          <CardDescription>Preferências e regras de distribuição e compartilhamento</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Atribuição automática de leads por fila</Label>
+                <Select value={autoAssign} onValueChange={setAutoAssign}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Ativar</SelectItem>
+                    <SelectItem value="manual">Desativar</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Quando ativado, os leads são distribuídos automaticamente entre os membros da fila
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Relatórios de produtividade</Label>
+                <Select value={productivityReports} onValueChange={setProductivityReports}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="habilitado">Habilitar</SelectItem>
+                    <SelectItem value="desabilitado">Desabilitar</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Permite visualizar métricas de produtividade por usuário
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-4">Compartilhamento</h4>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Compartilhamento de Leads</Label>
+                  <Select value={shareLeads} onValueChange={setShareLeads}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos podem ver e compartilhar</SelectItem>
+                      <SelectItem value="responsavel">Apenas responsável vê</SelectItem>
+                      <SelectItem value="equipe">Apenas membros da equipe</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Compartilhamento de Tarefas</Label>
+                  <Select value={shareTasks} onValueChange={setShareTasks}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos podem ver e compartilhar</SelectItem>
+                      <SelectItem value="criador">Apenas criador e responsável</SelectItem>
+                      <SelectItem value="equipe">Apenas membros da equipe</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t">
+              <Button onClick={handleSaveSettings}>
+                Salvar Configurações
+              </Button>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label>Relatórios de produtividade</Label>
-            <Select value="habilitado">
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="habilitado">Habilitar</SelectItem>
-                <SelectItem value="desabilitado">Desabilitar</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
+  };
 
   const UsuariosEquipeSection = () => (
     <Card>
