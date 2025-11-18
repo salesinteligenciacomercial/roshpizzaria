@@ -92,43 +92,43 @@ export default function Conversas() {
     conv.numero.includes(searchTerm)
   );
 
-  const abrirConversa = (conversa: Conversa) => {
+  const abrirConversa = async (conversa: Conversa) => {
     // Tentar encontrar o lead pelo telefone
     const telefoneLimpo = conversa.telefone_formatado.replace(/\D/g, "");
     
-    // Buscar lead pelo telefone
-    supabase
-      .from("leads")
-      .select("id, name, phone, telefone")
-      .or(`phone.ilike.%${telefoneLimpo}%,telefone.ilike.%${telefoneLimpo}%`)
-      .limit(1)
-      .single()
-      .then(({ data: lead }) => {
-        if (lead) {
-          setSelectedConversa({
-            id: lead.id,
-            name: lead.name || conversa.nome_contato,
-            phone: lead.phone || lead.telefone || conversa.numero,
-          });
-        } else {
-          // Se não encontrar lead, criar um temporário
-          setSelectedConversa({
-            id: conversa.id,
-            name: conversa.nome_contato,
-            phone: conversa.numero,
-          });
-        }
-        setShowConversaDialog(true);
-      })
-      .catch(() => {
-        // Se não encontrar lead, usar dados da conversa
+    try {
+      // Buscar lead pelo telefone
+      const { data: lead } = await supabase
+        .from("leads")
+        .select("id, name, phone, telefone")
+        .or(`phone.ilike.%${telefoneLimpo}%,telefone.ilike.%${telefoneLimpo}%`)
+        .limit(1)
+        .single();
+
+      if (lead) {
+        setSelectedConversa({
+          id: lead.id,
+          name: lead.name || conversa.nome_contato,
+          phone: lead.phone || lead.telefone || conversa.numero,
+        });
+      } else {
+        // Se não encontrar lead, criar um temporário
         setSelectedConversa({
           id: conversa.id,
           name: conversa.nome_contato,
           phone: conversa.numero,
         });
-        setShowConversaDialog(true);
+      }
+    } catch {
+      // Se não encontrar lead, usar dados da conversa
+      setSelectedConversa({
+        id: conversa.id,
+        name: conversa.nome_contato,
+        phone: conversa.numero,
       });
+    }
+    
+    setShowConversaDialog(true);
   };
 
   return (

@@ -435,9 +435,9 @@ export function ConversaPopup({
       toast.success('Conversa excluída com sucesso');
       setMessages([]);
       emitGlobalEvent({ 
-        type: 'conversation-deleted', 
+        type: 'conversation-updated', 
         source: 'conversa-popup', 
-        data: { numero: telefoneNormalizado } 
+        data: { numero: telefoneNormalizado, deleted: true } 
       });
     } catch (err) {
       console.error('Erro ao excluir conversa:', err);

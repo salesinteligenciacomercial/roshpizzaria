@@ -163,6 +163,10 @@ export function DisparoEmMassa() {
     if (!companyId) return;
 
     try {
+      // Temporariamente desabilitado - tabela campanhas precisa ser criada
+      console.warn("⚠️ Funcionalidade de campanhas desabilitada - tabela não existe");
+      setCampanhas([]);
+      /*
       const { data, error } = await supabase
         .from("campanhas")
         .select("*")
@@ -181,6 +185,7 @@ export function DisparoEmMassa() {
         throw error;
       }
       setCampanhas(data || []);
+      */
     } catch (error: any) {
       console.error("Erro ao carregar campanhas:", error);
       // Não mostrar erro se for apenas tabela não encontrada
@@ -282,6 +287,12 @@ export function DisparoEmMassa() {
     setSending(true);
 
     try {
+      // Temporariamente desabilitado - tabela campanhas precisa ser criada
+      toast.warning("Funcionalidade de campanhas em massa desabilitada - entre em contato com suporte");
+      setSending(false);
+      return;
+      
+      /*
       // Criar campanha no banco
       const { data: campanha, error: campanhaError } = await supabase
         .from("campanhas")
@@ -297,7 +308,7 @@ export function DisparoEmMassa() {
 
       if (campanhaError) {
         // Se a tabela não existir, mostrar mensagem clara
-        if (campanhaError.message?.includes("Could not find the table") || 
+        if (campanhaError.message?.includes("Could not find the table") ||
             (campanhaError.message?.includes("relation") && campanhaError.message?.includes("does not exist"))) {
           toast.error("Tabela de campanhas não encontrada. Execute a migration no Supabase SQL Editor.");
           console.error("❌ Execute este SQL no Supabase SQL Editor:");
@@ -409,10 +420,11 @@ CREATE TABLE IF NOT EXISTS public.campanhas (
       
       // Recarregar campanhas
       carregarCampanhas();
+      */
 
     } catch (error: any) {
       console.error("Erro ao enviar campanha:", error);
-      toast.error(`Erro ao enviar campanha: ${error.message}`);
+      // toast.error(`Erro ao enviar campanha: ${error.message}`);
     } finally {
       setSending(false);
       setStatsEnvio({
