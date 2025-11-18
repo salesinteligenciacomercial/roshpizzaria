@@ -376,7 +376,7 @@ export function UsuariosSubcontaDialog({ company, open, onOpenChange }: Usuarios
       if (editFormData.role && editFormData.role !== editingUser.role) {
         const { error: roleError } = await supabase
           .from("user_roles")
-          .update({ role: editFormData.role })
+          .update({ role: editFormData.role as "company_admin" | "gestor" | "super_admin" | "suporte" | "vendedor" })
           .eq("id", editingUser.id);
 
         if (roleError) {

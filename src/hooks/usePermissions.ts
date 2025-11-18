@@ -66,7 +66,7 @@ export function usePermissions() {
       if (!user) return false;
 
       // Usar função do banco de dados para verificar permissão
-      const { data, error } = await supabase.rpc('has_permission', {
+      const { data, error } = await supabase.rpc('user_has_permission', {
         _user_id: user.id,
         _permission_name: permissionName
       });
