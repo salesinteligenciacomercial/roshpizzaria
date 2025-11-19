@@ -1862,7 +1862,7 @@ function Conversas() {
               }
               
               // 🚫 CORREÇÃO: Ignorar mensagens enviadas por mim (já foram adicionadas localmente)
-              if (novaConversa.fromme === true || novaConversa.status === 'Enviada') {
+              if (novaConversa.fromme === true) {
                 console.log('⏭️ [REALTIME] Mensagem própria ignorada (já adicionada localmente)');
                 return;
               }
@@ -1903,7 +1903,7 @@ function Conversas() {
                     mediaUrl: novaConversa.midia_url, fileName: novaConversa.arquivo_nome
                   }],
                   lastMessage: novaConversa.mensagem,
-                  unread: (novaConversa.fromme === true || novaConversa.status === 'Enviada') ? 0 : 1,
+                  unread: (novaConversa.fromme === true) ? 0 : 1,
                   tags: [], 
                   phoneNumber: phoneNumberParaGrupo // ⚡ CORREÇÃO: Usar numero do grupo para grupos
                 };
@@ -2053,8 +2053,8 @@ function Conversas() {
                       msg.tipo_mensagem === 'audio' ? 'audio' :
                       msg.tipo_mensagem === 'video' ? 'video' :
                       msg.tipo_mensagem === 'document' ? 'pdf' : 'text',
-                // CORREÇÃO: fromme = true OU status = 'Enviada' = mensagem do usuário
-                sender: (msg.fromme === true || msg.status === 'Enviada') ? 'user' : 'contact',
+                // ✅ CORREÇÃO: Usar APENAS fromme para determinar lado da mensagem
+                sender: (msg.fromme === true) ? 'user' : 'contact',
                 timestamp: new Date(msg.created_at),
                 delivered: msg.status === 'Enviada',
                 read: msg.status === 'Lida',
@@ -2450,8 +2450,8 @@ function Conversas() {
                   messages: [{
                     id: novaConversa.id,
                     content: novaConversa.mensagem,
-                    // CORREÇÃO: fromme = true OU status = 'Enviada' = mensagem do usuário
-                    sender: (novaConversa.fromme === true || novaConversa.status === 'Enviada') ? 'user' : 'contact',
+                    // ✅ CORREÇÃO: Usar APENAS fromme para determinar lado da mensagem
+                    sender: (novaConversa.fromme === true) ? 'user' : 'contact',
                     timestamp: new Date(novaConversa.created_at),
                     delivered: true,
                     type: (novaConversa.tipo_mensagem === 'audio' ? 'audio' : 
@@ -2466,7 +2466,7 @@ function Conversas() {
                   }],
                   lastMessage: novaConversa.mensagem,
                   // CORREÇÃO: Só marcar como não lida se for mensagem do contato
-                  unread: (novaConversa.fromme === true || novaConversa.status === 'Enviada') ? 0 : 1,
+                  unread: (novaConversa.fromme === true) ? 0 : 1,
                   tags: [],
                   valor: null,
                   anotacoes: null,
@@ -2573,7 +2573,7 @@ function Conversas() {
                         messages: mensagensAtualizadas, // Usar mensagens atualizadas (com ID do banco)
                         lastMessage: novaConvFormatted.lastMessage,
                         status: statusPreservado, // ⚡ PRESERVAR status (especialmente 'resolved')
-                        unread: isOpen ? 0 : ((novaConversa.fromme === true || novaConversa.status === 'Enviada') ? conversaExistente.unread : conversaExistente.unread),
+                        unread: isOpen ? 0 : ((novaConversa.fromme === true) ? conversaExistente.unread : conversaExistente.unread),
                         avatarUrl: novoNomeValido ? novaConvFormatted.avatarUrl : conversaExistente.avatarUrl,
                       };
                       
@@ -2632,7 +2632,7 @@ function Conversas() {
                       if (conversaExistente.status === 'resolved') {
                         // Se estava finalizada e chegou nova mensagem do CONTATO, reabrir (mudar para waiting)
                         // Se foi mensagem do USUÁRIO, manter como resolved
-                        if (novaConversa.fromme !== true && novaConversa.status !== 'Enviada') {
+                        if (novaConversa.fromme !== true) {
                           novoStatus = 'waiting'; // Nova mensagem do contato = reabrir conversa
                           console.log('🔄 Conversa finalizada reaberta - nova mensagem do contato recebida');
                         } else {
@@ -2640,7 +2640,7 @@ function Conversas() {
                         }
                       } else {
                         // Se não estava finalizada, atualizar status normalmente
-                        novoStatus = (novaConversa.fromme === true || novaConversa.status === 'Enviada') ? 'answered' : 'waiting';
+                        novoStatus = (novaConversa.fromme === true) ? 'answered' : 'waiting';
                       }
                       
                       updated[existingIndex] = {
@@ -2650,7 +2650,7 @@ function Conversas() {
                         lastMessage: novaConvFormatted.lastMessage,
                         status: novoStatus, // ⚡ PRESERVAR ou atualizar status corretamente
                         // CORREÇÃO: Só aumentar unread se for mensagem recebida do contato (não enviada pelo usuário)
-                        unread: isOpen ? 0 : ((novaConversa.fromme === true || novaConversa.status === 'Enviada') ? conversaExistente.unread : conversaExistente.unread + 1),
+                        unread: isOpen ? 0 : ((novaConversa.fromme === true) ? conversaExistente.unread : conversaExistente.unread + 1),
                         avatarUrl: novoNomeValido ? novaConvFormatted.avatarUrl : conversaExistente.avatarUrl, // Atualizar avatar se nome foi atualizado
                       };
                       
@@ -2917,8 +2917,8 @@ function Conversas() {
                               conversaAtualizada.tipo_mensagem === 'video' ? 'video' :
                               conversaAtualizada.tipo_mensagem === 'pdf' || (conversaAtualizada.tipo_mensagem === 'document' && conversaAtualizada.mensagem?.includes('[Documento:')) ? 'pdf' :
                               conversaAtualizada.tipo_mensagem === 'document' ? 'document' : 'text') as Message["type"],
-                        // CORREÇÃO: fromme = true OU status = 'Enviada' = mensagem do usuário
-                        sender: (conversaAtualizada.fromme === true || conversaAtualizada.status === 'Enviada') ? 'user' as const : 'contact' as const,
+                        // ✅ CORREÇÃO: Usar APENAS fromme para determinar lado da mensagem
+                        sender: (conversaAtualizada.fromme === true) ? 'user' as const : 'contact' as const,
                         timestamp: new Date(conversaAtualizada.created_at || conversaAtualizada.updated_at),
                         delivered: true,
                         read: conversaAtualizada.status === 'Lida',
@@ -3513,7 +3513,7 @@ function Conversas() {
             id: m.id || `msg-${Date.now()}-${Math.random()}`,
             content: m.mensagem || '',
             type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem || 'text') as any,
-            sender: (m.fromme === true || m.status === 'Enviada') ? "user" : "contact",
+            sender: (m.fromme === true) ? "user" : "contact",
             timestamp: new Date(m.created_at || Date.now()),
             delivered: true,
             read: m.status !== 'Recebida',
@@ -3552,7 +3552,7 @@ function Conversas() {
           channel: "whatsapp" as const,
           status: statusConversa,
           lastMessage: messagensFormatadas[messagensFormatadas.length - 1]?.content || '',
-          unread: mensagens.filter(m => m.status === 'Recebida' && m.fromme !== true).length,
+          unread: mensagens.filter(m => m.fromme !== true).length,
           messages: messagensFormatadas,
           tags: [],
           phoneNumber: telefone,
@@ -3938,7 +3938,7 @@ function Conversas() {
             id: m.id || `msg-${Date.now()}-${Math.random()}`,
             content: m.mensagem || '',
             type: (m.tipo_mensagem === 'texto' ? 'text' : (m.tipo_mensagem || 'text')) as any,
-            sender: ((m.fromme === true || m.status === 'Enviada') ? "user" : "contact") as "user" | "contact",
+            sender: (m.fromme === true ? "user" : "contact") as "user" | "contact",
             timestamp: new Date(m.created_at || Date.now()),
             delivered: true,
             read: m.status !== 'Recebida',
