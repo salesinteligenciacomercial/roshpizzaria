@@ -34,7 +34,7 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
     enviar_confirmacao: false,
     notificar_responsavel: true,
     enviar_lembrete: true,
-    horas_antecedencia: "24",
+    horas_antecedencia: "",
     destinatario_lembrete: "lead" as "lead" | "responsavel" | "ambos"
   });
 
@@ -238,30 +238,38 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
         try {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('full_name')
+            .select('full_name, phone')
             .eq('id', session.user.id)
             .single();
 
-          // Validar e processar horas de antecedência
-          const horasAntecedencia = parseInt(formData.horas_antecedencia) || 24;
-          if (horasAntecedencia < 0) {
-            console.warn('⚠️ [LEMBRETE] Horas de antecedência negativas, usando padrão 24h');
-            // Não bloquear, apenas usar valor padrão
+          // Validar e processar tempo de antecedência (aceita horas e minutos via decimais)
+          if (!formData.horas_antecedencia || formData.horas_antecedencia.trim() === '') {
+            toast.error("Por favor, informe o tempo de antecedência para o lembrete");
+            return;
+          }
+          
+          const tempoAntecedencia = parseFloat(formData.horas_antecedencia);
+          if (isNaN(tempoAntecedencia) || tempoAntecedencia < 0) {
+            toast.error("O tempo de antecedência deve ser um número positivo");
+            return;
           }
 
-          // Calcular data de envio do lembrete
+          // Calcular data de envio do lembrete (tempo em horas, pode ser decimal para minutos)
           const dataEnvio = new Date(inicio);
-          dataEnvio.setHours(dataEnvio.getHours() - horasAntecedencia);
+          dataEnvio.setTime(dataEnvio.getTime() - (tempoAntecedencia * 60 * 60 * 1000)); // Converter horas para milissegundos
+
+          // Obter telefone do responsável (phone do profile, não nome/email)
+          const telefoneResponsavel = profile?.phone || null;
 
           const lembreteData = {
             compromisso_id: compromissoCriado.id,
             canal: 'whatsapp',
-            horas_antecedencia: horasAntecedencia,
+            horas_antecedencia: tempoAntecedencia,
             mensagem: `Olá! Lembramos do seu compromisso agendado para ${format(inicio, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.`,
             status_envio: 'pendente',
             data_envio: dataEnvio.toISOString(),
             destinatario: formData.destinatario_lembrete,
-            telefone_responsavel: profile?.full_name || session.user.email,
+            telefone_responsavel: telefoneResponsavel, // CORRIGIDO: usar phone do profile, não nome/email
             company_id: companyId,
           };
 
@@ -308,7 +316,7 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
         enviar_confirmacao: false,
         notificar_responsavel: true,
         enviar_lembrete: true,
-        horas_antecedencia: "24",
+        horas_antecedencia: "",
         destinatario_lembrete: "lead"
       });
     } catch (error: any) {
@@ -445,12 +453,12 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-sm">Horas de antecedência</Label>
+                  <Label className="text-sm">Tempo de antecedência</Label>
                   <Input
                     type="number"
                     min="0"
-                    step="1"
-                    placeholder="Ex: 24"
+                    step="0.01"
+                    placeholder="Ex: 0.25 (15 min), 1 (1 hora), 24 (24 horas)"
                     value={formData.horas_antecedencia}
                     onChange={(e) => {
                       const value = e.target.value;
@@ -461,7 +469,7 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
                     className="h-9"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Digite quantas horas antes do compromisso enviar o lembrete (ex: 1, 3, 24, 48)
+                    Digite o tempo antes do compromisso para enviar o lembrete. Use valores decimais para minutos: 0.083 (5 min), 0.167 (10 min), 0.25 (15 min), 0.5 (30 min), 1 (1 hora), 24 (24 horas)
                   </p>
                 </div>
               </>

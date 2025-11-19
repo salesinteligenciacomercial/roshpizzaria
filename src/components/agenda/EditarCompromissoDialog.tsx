@@ -501,13 +501,35 @@ export function EditarCompromissoDialog({
                   .single();
 
                 if (userRole?.company_id) {
-                  await supabase.functions.invoke('enviar-whatsapp', {
+                  const { error: envioError } = await supabase.functions.invoke('enviar-whatsapp', {
                     body: {
                       numero: telefoneNormalizado,
                       mensagem: mensagemAlteracao,
                       company_id: userRole.company_id
                     }
                   });
+
+                  // Salvar mensagem no CRM para ficar visível
+                  if (!envioError) {
+                    try {
+                      await supabase.from('conversas').insert({
+                        numero: telefoneNormalizado,
+                        telefone_formatado: telefoneNormalizado,
+                        mensagem: mensagemAlteracao,
+                        origem: 'WhatsApp',
+                        status: 'Enviada',
+                        tipo_mensagem: 'text',
+                        nome_contato: leadData.name,
+                        company_id: userRole.company_id,
+                        fromme: true,
+                        created_at: new Date().toISOString()
+                      });
+                      console.log('✅ Mensagem de atualização salva no CRM');
+                    } catch (dbError) {
+                      console.error('❌ Erro ao salvar mensagem de atualização no CRM:', dbError);
+                      // Não bloquear o processo se falhar ao salvar no CRM
+                    }
+                  }
                 }
               }
             }

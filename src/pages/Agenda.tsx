@@ -331,7 +331,7 @@ export default function Agenda() {
     observacoes: "",
     custo_estimado: "",
     enviar_lembrete: true,
-    horas_antecedencia: "24",
+    horas_antecedencia: "",
     destinatario_lembrete: "lead",
     enviar_confirmacao: false, // Nova opção: enviar confirmação imediata
     notificar_responsavel: true, // Nova opção: notificar responsável via push
@@ -1164,32 +1164,40 @@ export default function Agenda() {
 
         const { data: profile } = await supabase
           .from('profiles')
-          .select('full_name')
+          .select('full_name, phone')
           .eq('id', user.id)
           .single();
 
-        // Validar e processar horas de antecedência
-        const horasAntecedencia = parseInt(formData.horas_antecedencia) || 24;
-        if (horasAntecedencia < 0) {
-          toast.error("As horas de antecedência não podem ser negativas");
+        // Validar e processar tempo de antecedência (aceita horas e minutos via decimais)
+        if (!formData.horas_antecedencia || formData.horas_antecedencia.trim() === '') {
+          toast.error("Por favor, informe o tempo de antecedência para o lembrete");
+          return;
+        }
+        
+        const tempoAntecedencia = parseFloat(formData.horas_antecedencia);
+        if (isNaN(tempoAntecedencia) || tempoAntecedencia < 0) {
+          toast.error("O tempo de antecedência deve ser um número positivo");
           return;
         }
 
-        // Calcular data de envio do lembrete
+        // Calcular data de envio do lembrete (tempo em horas, pode ser decimal para minutos)
         const dataEnvio = new Date(dataHoraInicio);
-        dataEnvio.setHours(dataEnvio.getHours() - horasAntecedencia);
+        dataEnvio.setTime(dataEnvio.getTime() - (tempoAntecedencia * 60 * 60 * 1000)); // Converter horas para milissegundos
 
         const leadSelecionado = leads.find(l => l.id === formData.lead_id);
+
+        // Obter telefone do responsável (phone do profile, não nome/email)
+        const telefoneResponsavel = profile?.phone || null;
 
         const lembreteData = {
           compromisso_id: compromisso.id,
           canal: 'whatsapp',
-          horas_antecedencia: horasAntecedencia,
+          horas_antecedencia: tempoAntecedencia,
           mensagem: `Olá! Lembramos do seu compromisso agendado para ${format(dataHoraInicio, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.`,
           status_envio: 'pendente',
           data_envio: dataEnvio.toISOString(),
           destinatario: formData.destinatario_lembrete,
-          telefone_responsavel: profile?.full_name || user?.email,
+          telefone_responsavel: telefoneResponsavel, // CORRIGIDO: usar phone do profile, não nome/email
           company_id: userRole.company_id, // Usar company_id validado
         };
 
@@ -1344,13 +1352,35 @@ export default function Agenda() {
 
                   const telefoneNormalizado = normalizePhoneBR(telefone);
 
-                  await supabase.functions.invoke('enviar-whatsapp', {
+                  const { error: envioError } = await supabase.functions.invoke('enviar-whatsapp', {
                     body: {
                       numero: telefoneNormalizado,
                       mensagem: mensagemCancelamento,
                       company_id: userRole.company_id
                     }
                   });
+
+                  // Salvar mensagem no CRM para ficar visível
+                  if (!envioError) {
+                    try {
+                      await supabase.from('conversas').insert({
+                        numero: telefoneNormalizado,
+                        telefone_formatado: telefoneNormalizado,
+                        mensagem: mensagemCancelamento,
+                        origem: 'WhatsApp',
+                        status: 'Enviada',
+                        tipo_mensagem: 'text',
+                        nome_contato: leadData.name,
+                        company_id: userRole.company_id,
+                        fromme: true,
+                        created_at: new Date().toISOString()
+                      });
+                      console.log('✅ Mensagem de cancelamento salva no CRM');
+                    } catch (dbError) {
+                      console.error('❌ Erro ao salvar mensagem de cancelamento no CRM:', dbError);
+                      // Não bloquear o processo se falhar ao salvar no CRM
+                    }
+                  }
                 }
               }
             }
@@ -1472,7 +1502,7 @@ export default function Agenda() {
       observacoes: "",
       custo_estimado: "",
       enviar_lembrete: true,
-      horas_antecedencia: "24",
+      horas_antecedencia: "",
       destinatario_lembrete: "lead",
       enviar_confirmacao: false,
       notificar_responsavel: true,
@@ -1939,23 +1969,23 @@ export default function Agenda() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Horas de antecedência</Label>
+                      <Label>Tempo de antecedência</Label>
                       <Input
                         type="number"
                         min="0"
-                        step="1"
-                        placeholder="Ex: 24"
+                        step="0.01"
+                        placeholder="Ex: 0.25 (15 min), 1 (1 hora), 24 (24 horas)"
                         value={formData.horas_antecedencia}
                         onChange={(e) => {
                           const value = e.target.value;
-                          // Permitir apenas números positivos
+                          // Permitir apenas números positivos (decimais para minutos)
                           if (value === '' || (!isNaN(Number(value)) && Number(value) >= 0)) {
                             setFormData({...formData, horas_antecedencia: value});
                           }
                         }}
                       />
                       <p className="text-xs text-muted-foreground">
-                        Digite quantas horas antes do compromisso enviar o lembrete (ex: 1, 3, 24, 48)
+                        Digite o tempo antes do compromisso para enviar o lembrete. Use valores decimais para minutos: 0.083 (5 min), 0.167 (10 min), 0.25 (15 min), 0.5 (30 min), 1 (1 hora), 24 (24 horas)
                       </p>
                     </div>
                   </>
