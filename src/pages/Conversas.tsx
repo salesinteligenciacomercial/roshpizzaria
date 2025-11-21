@@ -2830,10 +2830,6 @@ function Conversas() {
           }
           
           leadsData = allLeads;
-          
-          if (!leadsResult.error && leadsResult.data) {
-            leadsData = leadsResult.data;
-          }
         }
       }
       

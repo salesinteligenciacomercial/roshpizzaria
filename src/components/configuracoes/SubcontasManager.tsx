@@ -190,40 +190,23 @@ export function SubcontasManager() {
       const masterCompanyId = masterCompany.id;
       console.log('✅ Conta mestre identificada:', masterCompanyId, masterCompany.name);
 
-      // Tentar usar a função RPC primeiro
-      console.log('📞 Tentando função RPC get_my_subcontas()...');
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_my_subcontas');
-
-      if (!rpcError && rpcData) {
-        const subcontasData = Array.isArray(rpcData) ? rpcData : (rpcData ? [rpcData] : []);
-        if (subcontasData.length > 0) {
-          console.log('✅ Subcontas carregadas via RPC:', subcontasData.length);
-          setSubcontas(subcontasData);
-          return;
-        }
-      }
-
-      if (rpcError) {
-        console.warn('⚠️ Erro na função RPC, tentando Edge Function:', rpcError);
+      // Usar Edge Function para buscar subcontas
+      try {
+        console.log('📞 Chamando Edge Function get-subcontas...');
+        const { data: edgeData, error: edgeError } = await supabase.functions.invoke('get-subcontas');
         
-        // Tentar usar Edge Function como fallback
-        try {
-          console.log('📞 Chamando Edge Function get-subcontas...');
-          const { data: edgeData, error: edgeError } = await supabase.functions.invoke('get-subcontas');
-          
-          if (!edgeError && edgeData?.data) {
-            const edgeSubcontas = Array.isArray(edgeData.data) ? edgeData.data : [];
-            if (edgeSubcontas.length > 0) {
-              console.log('✅ Subcontas carregadas via Edge Function:', edgeSubcontas.length);
-              setSubcontas(edgeSubcontas);
-              return;
-            }
-          } else if (edgeError) {
-            console.warn('⚠️ Erro na Edge Function (continuando com fallback direto):', edgeError);
+        if (!edgeError && edgeData?.data) {
+          const edgeSubcontas = Array.isArray(edgeData.data) ? edgeData.data : [];
+          if (edgeSubcontas.length > 0) {
+            console.log('✅ Subcontas carregadas via Edge Function:', edgeSubcontas.length);
+            setSubcontas(edgeSubcontas);
+            return;
           }
-        } catch (edgeErr) {
-          console.warn('⚠️ Erro ao chamar Edge Function:', edgeErr);
+        } else if (edgeError) {
+          console.warn('⚠️ Erro na Edge Function (continuando com fallback direto):', edgeError);
         }
+      } catch (edgeErr) {
+        console.warn('⚠️ Erro ao chamar Edge Function:', edgeErr);
       }
 
       // DIAGNÓSTICO: Verificar todas as empresas primeiro
