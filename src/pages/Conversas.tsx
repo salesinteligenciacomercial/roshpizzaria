@@ -28,7 +28,6 @@ import { CountdownTimer } from "@/components/conversas/CountdownTimer";
 import { ConversationHeader } from "@/components/conversas/ConversationHeader";
 import { ConversationListItem } from "@/components/conversas/ConversationListItem";
 import { MessageItem } from "@/components/conversas/MessageItem";
-import { ForceMenuPosition } from "@/components/conversas/ForceMenuPosition";
 import { AudioRecorder } from "@/components/conversas/AudioRecorder";
 import { MediaUpload } from "@/components/conversas/MediaUpload";
 import { NovaConversaDialog } from "@/components/conversas/NovaConversaDialog";
@@ -6423,33 +6422,7 @@ function Conversas() {
           overflow-y: auto !important;
           overflow-x: hidden !important;
         }
-        /* FORÇAR POSICIONAMENTO FIXO - CORREÇÃO DEFINITIVA */
-        [data-radix-popper-content-wrapper] {
-          position: fixed !important;
-        }
-        [data-radix-popper-content-wrapper][data-side="left"] {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-          transform: translateX(-9999px) !important;
-        }
-        [data-radix-popper-content-wrapper][data-side="right"] {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-          transform: translateX(9999px) !important;
-        }
-        [data-radix-popper-content-wrapper][data-side="top"] {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-          transform: translateY(-9999px) !important;
-        }
       `}</style>
-      <ForceMenuPosition />
       <div className="flex h-screen w-full bg-background overflow-hidden" style={{ overflowX: 'hidden', maxWidth: '100vw', width: '100vw', boxSizing: 'border-box' }}>
         {/* Sidebar esquerda - tema cinza claro */}
       <div className="w-[380px] flex-shrink-0 bg-muted/30 border-r border-border flex flex-col">

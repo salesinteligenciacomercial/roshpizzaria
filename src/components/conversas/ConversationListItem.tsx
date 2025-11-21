@@ -8,6 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 
 interface ConversationListItemProps {
@@ -147,13 +148,15 @@ function ConversationListItemComponent({
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent 
-                  align="end" 
-                  side="bottom"
-                  sideOffset={4}
-                  className="w-56 bg-background border border-border shadow-lg"
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <DropdownMenuPortal>
+                  <DropdownMenuContent 
+                    align="end" 
+                    side="bottom"
+                    sideOffset={4}
+                    alignOffset={0}
+                    className="w-56 bg-background border border-border shadow-lg z-[9999]"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                   <DropdownMenuItem 
                     onClick={(e) => {
                       e.stopPropagation();
@@ -195,7 +198,8 @@ function ConversationListItemComponent({
                     <Trash2 className="h-4 w-4 mr-2" />
                     Excluir conversa
                   </DropdownMenuItem>
-                </DropdownMenuContent>
+                  </DropdownMenuContent>
+                </DropdownMenuPortal>
               </DropdownMenu>
             </div>
           </div>
