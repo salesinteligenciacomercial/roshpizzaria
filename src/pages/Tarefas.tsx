@@ -144,7 +144,7 @@ const SortableColumn = React.memo(function SortableColumn({
     <div 
       ref={setNodeRef} 
       style={style}
-      className="min-w-[220px] flex-shrink-0 relative group"
+      className="min-w-[300px] flex-shrink-0 relative group"
     >
       {/* Drag handle - igual ao funil */}
       <div
@@ -1391,7 +1391,7 @@ export default function Tarefas() {
               ))}
             {/* Botão para adicionar nova coluna - apenas admin pode criar colunas */}
             {canManageTaskStructure && (
-              <div className="min-w-[200px] flex-shrink-0">
+              <div className="min-w-[280px] flex-shrink-0">
                 <AdicionarColunaDialog
                   boardId={selectedBoard}
                   currentColumnsCount={columnsFiltradas.length}
@@ -1406,7 +1406,7 @@ export default function Tarefas() {
             easing: 'cubic-bezier(0.2, 0, 0, 1)',
           }}>
             {activeTaskId ? (
-              <div className="min-w-[200px] max-w-[220px] pointer-events-none opacity-90">
+              <div className="min-w-[280px] max-w-[320px] pointer-events-none opacity-90">
                 <div className="rounded-md border bg-card p-4 shadow-lg">
                   <div className="font-semibold">{tasks.find(t => t.id === activeTaskId)?.title}</div>
                   <div className="text-xs text-muted-foreground mt-1">Arrastando…</div>

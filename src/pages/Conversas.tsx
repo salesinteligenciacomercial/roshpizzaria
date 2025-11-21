@@ -2829,6 +2829,10 @@ function Conversas() {
           }
           
           leadsData = allLeads;
+          
+          if (!leadsResult.error && leadsResult.data) {
+            leadsData = leadsResult.data;
+          }
         }
       }
       
@@ -6349,82 +6353,8 @@ function Conversas() {
   };
 
   return (
-    <>
-      <style>{`
-        /* Remover TODAS as barras de rolagem horizontal de forma definitiva */
-        /* Esconder scrollbar horizontal em todos os navegadores */
-        ::-webkit-scrollbar:horizontal {
-          display: none !important;
-          height: 0 !important;
-        }
-        ::-webkit-scrollbar-thumb:horizontal {
-          display: none !important;
-        }
-        * {
-          scrollbar-width: none !important; /* Firefox */
-          -ms-overflow-style: none !important; /* IE/Edge */
-        }
-        *::-webkit-scrollbar:horizontal {
-          display: none !important;
-          height: 0 !important;
-          width: 0 !important;
-        }
-        /* Forçar overflow-x hidden em todos os containers da página de conversas */
-        body, html {
-          overflow-x: hidden !important;
-          max-width: 100vw !important;
-          width: 100vw !important;
-        }
-        /* Containers principais */
-        #messages-scroll-container,
-        #messages-scroll-container *,
-        .messages-scroll-area,
-        .messages-scroll-area *,
-        [class*="flex-1"],
-        [class*="flex-col"],
-        [class*="overflow"] {
-          overflow-x: hidden !important;
-          max-width: 100% !important;
-          box-sizing: border-box !important;
-        }
-        /* Área de chat completa */
-        [class*="flex"][class*="h-screen"],
-        [class*="flex-1"][class*="flex"][class*="col"] {
-          overflow-x: hidden !important;
-          max-width: 100% !important;
-        }
-        /* Input area e containers de mensagens */
-        [class*="bg-background"][class*="border-t"],
-        [class*="space-y-2"] {
-          overflow-x: hidden !important;
-          max-width: 100% !important;
-        }
-        /* CORREÇÃO CRÍTICA: Forçar menu dropdown a abrir APENAS abaixo e à direita */
-        /* Bloquear qualquer tentativa de abrir à esquerda, acima ou à direita */
-        [data-radix-popper-content-wrapper][data-side="left"],
-        [data-radix-popper-content-wrapper][data-side="right"],
-        [data-radix-popper-content-wrapper][data-side="top"] {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-        }
-        /* Permitir APENAS abaixo e alinhado à direita */
-        [data-radix-popper-content-wrapper][data-side="bottom"][data-align="end"] {
-          display: block !important;
-          visibility: visible !important;
-          opacity: 1 !important;
-          pointer-events: auto !important;
-        }
-        /* Garantir que o menu tenha scroll quando necessário */
-        [data-radix-popper-content-wrapper] [role="menu"] {
-          max-height: 300px !important;
-          overflow-y: auto !important;
-          overflow-x: hidden !important;
-        }
-      `}</style>
-      <div className="flex h-screen w-full bg-background overflow-hidden" style={{ overflowX: 'hidden', maxWidth: '100vw', width: '100vw', boxSizing: 'border-box' }}>
-        {/* Sidebar esquerda - tema cinza claro */}
+    <div className="flex h-screen w-full bg-background overflow-hidden">
+      {/* Sidebar esquerda - tema cinza claro */}
       <div className="w-[380px] flex-shrink-0 bg-muted/30 border-r border-border flex flex-col">
         {/* Header */}
         <div className="p-4 bg-background border-b border-border">
@@ -6715,10 +6645,10 @@ function Conversas() {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ overflowX: 'hidden', maxWidth: 'calc(100vw - 380px)', width: '100%', boxSizing: 'border-box', flexShrink: 1, height: '100vh', maxHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {selectedConv ? (
           <>
-            <div className="flex-shrink-0 z-50" style={{ position: 'sticky', top: 0 }}>
+            <div className="sticky top-0 z-50 flex-shrink-0">
               <ConversationHeader
               contactName={selectedConv.contactName}
               channel={selectedConv.channel}
@@ -6742,9 +6672,9 @@ function Conversas() {
               />
             </div>
 
-            <div className="flex flex-1 min-h-0 overflow-hidden" style={{ overflowX: 'hidden', maxWidth: '100%', width: '100%', boxSizing: 'border-box', position: 'relative', display: 'flex', flexDirection: 'column', flex: '1 1 0%', minHeight: 0 }}>
+            <div className="flex flex-1 min-h-0 overflow-hidden">
               {/* Messages Area */}
-              <div className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ overflowX: 'hidden', maxWidth: '100%', width: '100%', boxSizing: 'border-box', position: 'relative', display: 'flex', flexDirection: 'column', flex: '1 1 0%', minHeight: 0 }}>
+              <div className="flex-1 flex flex-col overflow-hidden min-w-0">
                 {/* Messages - Área de scroll sem barra lateral visível */}
                 <div 
                   id="messages-scroll-container"
@@ -6752,15 +6682,7 @@ function Conversas() {
                   style={{ 
                     backgroundImage: "url('data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d9d9d9' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')",
                     scrollbarWidth: 'none',
-                    msOverflowStyle: 'none',
-                    overflowX: 'hidden',
-                    overflowY: 'auto',
-                    maxWidth: '100%',
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    position: 'relative',
-                    flex: '1 1 0%',
-                    minHeight: 0
+                    msOverflowStyle: 'none'
                   } as React.CSSProperties}
                 >
                   {/* Indicador de histórico */}
@@ -6778,7 +6700,7 @@ function Conversas() {
                     </div>
                   )}
                   
-                  <div className="space-y-2 min-h-[200px]" style={{ overflowX: 'hidden', maxWidth: '100%', width: '100%', boxSizing: 'border-box' }}>
+                  <div className="space-y-2 min-h-[200px]">
                      {selectedConv.messages.length === 0 ? (
                       <div className="text-center text-muted-foreground py-8">
                         Nenhuma mensagem ainda
@@ -6815,7 +6737,7 @@ function Conversas() {
                 </div>
 
                 {/* Input Area */}
-                <div className="bg-background border-t border-border p-4 flex-shrink-0" style={{ overflowX: 'hidden', maxWidth: '100%', width: '100%', boxSizing: 'border-box', position: 'sticky', bottom: 0, zIndex: 20, backgroundColor: 'var(--background)' }}>
+                <div className="bg-background border-t border-border p-4">
                   {replyingTo && (
                     <div className="mb-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
                       <div className="flex items-center justify-between">
@@ -6841,7 +6763,7 @@ function Conversas() {
                       </div>
                     </div>
                   )}
-                  <div className="flex items-center gap-2" style={{ overflowX: 'hidden', maxWidth: '100%', width: '100%', boxSizing: 'border-box', position: 'relative', zIndex: 10 }}>
+                  <div className="flex items-center gap-2">
                     <MediaUpload onFileSelected={handleSendMedia as any} />
                     <Input
                       placeholder="Escreva sua mensagem..."
@@ -6849,7 +6771,6 @@ function Conversas() {
                       onChange={(e) => setMessageInput(e.target.value)}
                       onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
                       className="flex-1"
-                      style={{ overflowX: 'hidden', maxWidth: '100%', boxSizing: 'border-box', pointerEvents: 'auto', opacity: 1, visibility: 'visible' }}
                     />
                     <AudioRecorder onSendAudio={handleSendAudio} />
                     <Button 
@@ -6869,8 +6790,8 @@ function Conversas() {
 
               {/* Info Panel */}
               {showInfoPanel && (
-                <div className="w-[340px] bg-background border-l border-border flex flex-col overflow-hidden" style={{ overflowX: 'hidden', maxWidth: '340px', width: '340px', boxSizing: 'border-box', flexShrink: 0 }}>
-                  <div className="p-6 space-y-6 flex-1 overflow-y-auto" style={{ overflowX: 'hidden', maxWidth: '100%', width: '100%', boxSizing: 'border-box' }}>
+                <div className="w-[340px] bg-background border-l border-border flex flex-col overflow-hidden">
+                  <div className="p-6 space-y-6 flex-1 overflow-y-auto">
                     {/* Contact Info */}
                     <div className="text-center">
                       <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
@@ -8755,8 +8676,7 @@ function Conversas() {
           />
         </>
       )}
-      </div>
-    </>
+    </div>
   );
 }
 

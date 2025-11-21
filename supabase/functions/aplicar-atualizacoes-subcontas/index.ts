@@ -66,7 +66,7 @@ const AVAILABLE_UPDATES: UpdateDefinition[] = [
   }
 ];
 
-const CURRENT_SYSTEM_VERSION = '1.0.2';
+const CURRENT_SYSTEM_VERSION = '1.0.1';
 
 serve(async (req) => {
   // Handle CORS
@@ -151,12 +151,12 @@ serve(async (req) => {
 
     console.log('✅ [APLICAR-ATUALIZACOES] Validações OK, buscando subcontas...');
 
-    // Buscar TODAS as subcontas (não apenas ativas) para aplicar atualizações
+    // Buscar todas as subcontas ativas
     const { data: subcontas, error: subcontasError } = await supabaseAdmin
       .from('companies')
       .select('id, name, status')
-      .eq('parent_company_id', parentCompanyId);
-      // Removido .eq('status', 'active') para aplicar em TODAS as subcontas
+      .eq('parent_company_id', parentCompanyId)
+      .eq('status', 'active');
 
     if (subcontasError) {
       console.error('❌ [APLICAR-ATUALIZACOES] Erro ao buscar subcontas:', subcontasError);
@@ -228,15 +228,8 @@ serve(async (req) => {
           // Se forceUpdate, aplicar todas
           if (forceUpdate) return true;
           
-          // Verificar se a atualização específica já foi aplicada (não apenas pela versão)
-          // Usar um formato mais específico: update.id + update.version
-          const updateKey = `${update.id}@${update.version}`;
-          const appliedUpdateKeys = currentSettings.applied_update_ids || [];
-          
           // Se já foi aplicada, pular
-          if (appliedUpdateKeys.includes(updateKey) || appliedVersions.includes(update.version)) {
-            // Verificar se realmente foi aplicada verificando os dados
-            // Se forceUpdate não está ativo, ainda assim verificar se precisa reaplicar
+          if (appliedVersions.includes(update.version)) {
             return false;
           }
           
@@ -410,13 +403,9 @@ serve(async (req) => {
 
         // Atualizar settings com versões aplicadas (MERGE, não sobrescreve)
         const newVersions = [...new Set([...appliedVersions, ...pendingUpdates.map(u => u.version)])];
-        const appliedUpdateKeys = currentSettings.applied_update_ids || [];
-        const newUpdateKeys = [...new Set([...appliedUpdateKeys, ...pendingUpdates.map(u => `${u.id}@${u.version}`)])];
-        
         const updatedSettings = {
           ...currentSettings, // Preserva todas as configurações existentes
           applied_updates: newVersions,
-          applied_update_ids: newUpdateKeys, // Rastrear atualizações específicas aplicadas
           last_update_applied: new Date().toISOString(),
           system_version: CURRENT_SYSTEM_VERSION
         };

@@ -554,9 +554,9 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     >
       <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       
-      <CardHeader className="relative pb-2 px-3 pt-3">
-        <div className="flex items-start justify-between gap-1.5">
-          <div className="flex items-center gap-1.5 flex-1">
+      <CardHeader className="relative pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <span className="text-muted-foreground/70">
               <GripVertical className="h-3 w-3 cursor-grab active:cursor-grabbing" {...attributes} {...listeners} />
             </span>
@@ -564,8 +564,8 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
             
             {/* Layout com foto, nome do lead e título */}
             {task.lead_id ? (
-              <div className="flex items-center gap-1.5 flex-1">
-                <Avatar className="h-8 w-8 flex-shrink-0">
+              <div className="flex items-center gap-2 flex-1">
+                <Avatar className="h-10 w-10 flex-shrink-0">
                   <AvatarImage 
                     src={leadAvatarUrl || undefined} 
                     alt={leadNome || task.lead_name || "Lead"}
@@ -580,7 +580,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                 </Avatar>
                 
                 <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                  <span className="text-xs font-medium text-foreground truncate">
+                  <span className="text-sm font-medium text-foreground truncate">
                     {leadNome || task.lead_name || "Lead"}
                   </span>
                   <CardTitle className={`text-xs font-normal ${isOverdue ? 'text-red-700' : 'text-muted-foreground'} truncate`}>
@@ -589,7 +589,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                   </CardTitle>
                 </div>
                 
-                {/* Botão WhatsApp - Compacto */}
+                {/* Botão WhatsApp */}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -609,10 +609,11 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                     }
                   }}
                   disabled={!leadPhone}
-                  className="h-7 px-1.5 text-success hover:text-success hover:bg-success/10 transition-all disabled:opacity-50 flex-shrink-0"
+                  className="h-8 px-2 text-success hover:text-success hover:bg-success/10 transition-all disabled:opacity-50 flex-shrink-0"
                   title={leadPhone ? "Ver histórico de conversas" : "Lead sem telefone cadastrado"}
                 >
-                  <MessageSquare className="h-3.5 w-3.5" />
+                  <MessageSquare className="h-4 w-4 mr-1" />
+                  <span className="text-xs font-medium">Conversas</span>
                 </Button>
               </div>
             ) : (

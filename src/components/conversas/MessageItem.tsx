@@ -185,12 +185,11 @@ function MessageItemComponent({
   return (
     <div
       className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"} animate-fade-in group`}
-      style={{ maxWidth: '100%', width: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <div className="relative" style={{ maxWidth: '100%', boxSizing: 'border-box' }}>
+      <div className="relative">
         {/* Reply indicator */}
         {message.replyTo && repliedMessage && (
           <div className="text-xs mb-1 px-3 py-2 bg-muted/70 rounded-t-lg border-l-4 border-blue-500">
@@ -214,12 +213,6 @@ function MessageItemComponent({
               ? "bg-[#d9fdd3] text-foreground"
               : "bg-white text-foreground"
           }`}
-          style={{ 
-            maxWidth: 'min(500px, calc(100% - 48px))',
-            wordWrap: 'break-word',
-            overflowWrap: 'break-word',
-            boxSizing: 'border-box'
-          }}
         >
           {/* Nome do responsável que enviou (apenas para mensagens da equipe) */}
           {message.sender === "user" && message.sentBy && (
@@ -245,8 +238,8 @@ function MessageItemComponent({
           </div>
           {/* Text Message */}
           {message.type === "text" && (
-            <div className="max-w-full" style={{ wordWrap: 'break-word', overflowWrap: 'break-word', maxWidth: '100%' }}>
-              <p className="text-sm break-words overflow-wrap-anywhere" style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}>{message.content}</p>
+            <div className="max-w-full">
+              <p className="text-sm break-words overflow-wrap-anywhere">{message.content}</p>
               {message.edited && (
                 <span className="text-[10px] text-muted-foreground italic"> (editado)</span>
               )}
@@ -265,7 +258,7 @@ function MessageItemComponent({
                   src={mediaUrl || message.mediaUrl}
                   alt="Imagem"
                   className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
-                  style={{ maxHeight: '400px', maxWidth: 'min(300px, calc(100% - 24px))', width: 'auto', height: 'auto' }}
+                  style={{ maxHeight: '400px', maxWidth: '300px' }}
                   onClick={() => onImageClick?.(mediaUrl || message.mediaUrl || '', `imagem-${message.id}`)}
                   onError={(e) => {
                     console.error('❌ [MESSAGE-ITEM] Erro ao carregar imagem:', message.id);

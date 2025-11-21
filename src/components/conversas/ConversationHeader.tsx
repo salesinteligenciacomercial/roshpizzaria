@@ -115,12 +115,12 @@ import { useEffect, useState } from "react";
    };
 
   return (
-    <div className="w-full bg-background border-b border-border shadow-sm backdrop-blur-sm" style={{ overflowX: 'hidden', maxWidth: '100%', width: '100%', boxSizing: 'border-box', position: 'relative' } as React.CSSProperties}>
-       <div className="p-4 space-y-3" style={{ overflowX: 'hidden', maxWidth: '100%', width: '100%', boxSizing: 'border-box' } as React.CSSProperties}>
-         <div className="flex items-center justify-between" style={{ overflowX: 'hidden', maxWidth: '100%', width: '100%', boxSizing: 'border-box', flexWrap: 'wrap', gap: '8px' } as React.CSSProperties}>
-           <div className="flex items-center gap-3" style={{ minWidth: 0, flexShrink: 0 }}>
+    <div className="w-full bg-background border-b border-border shadow-sm backdrop-blur-sm">
+       <div className="p-4 space-y-3">
+         <div className="flex items-center justify-between">
+           <div className="flex items-center gap-3">
               {/* Avatar do Lead com Indicador de Status Online/Offline */}
-              <div className="relative" style={{ flexShrink: 0 }}>
+              <div className="relative">
                 <Avatar className="h-14 w-14 border-2 border-primary/20">
                   <AvatarImage src={avatarUrl} alt={contactName} />
                   <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold text-lg">
@@ -139,9 +139,9 @@ import { useEffect, useState } from "react";
                 )}
               </div>
               {/* Nome e Canal */}
-              <div className="flex flex-col" style={{ minWidth: 0, flex: 1 }}>
-                <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
-                  <h2 className="font-bold text-lg text-foreground truncate" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <h2 className="font-bold text-lg text-foreground">
                     {contactName}
                   </h2>
                   {getSyncStatusBadge()}
@@ -172,7 +172,7 @@ import { useEffect, useState } from "react";
              </div>
             </div>
              {/* Ações */}
-             <div className="flex items-center gap-1" style={{ flexShrink: 0 }}>
+             <div className="flex items-center gap-1">
               {/* Botão Restaurar Conversa */}
               {isContactInactive && onRestoreConversation && (
                 <Button
@@ -273,10 +273,10 @@ import { useEffect, useState } from "react";
          </div>
          {/* Informações do Lead */}
          {(tags.length > 0 || funnelStage || produto || valor || responsavel) && (
-           <div className="space-y-2 pt-2 border-t border-border/50" style={{ overflowX: 'hidden', maxWidth: '100%', width: '100%', boxSizing: 'border-box' } as React.CSSProperties}>
+           <div className="space-y-2 pt-2 border-t border-border/50">
              {/* Tags */}
              {tags.length > 0 && (
-               <div className="flex flex-wrap gap-1.5" style={{ overflowX: 'hidden', maxWidth: '100%', width: '100%', boxSizing: 'border-box' } as React.CSSProperties}>
+               <div className="flex flex-wrap gap-1.5">
                  {tags.map((tag, index) => (
                    <Badge 
                      key={index} 
@@ -289,7 +289,7 @@ import { useEffect, useState } from "react";
                </div>
              )}
              {/* Dados do Lead */}
-             <div className="flex items-center gap-2 flex-wrap" style={{ overflowX: 'hidden', maxWidth: '100%', width: '100%', boxSizing: 'border-box' } as React.CSSProperties}>
+             <div className="flex items-center gap-2 flex-wrap">
                {funnelStage && (
                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/10 rounded-md">
                    <span className="text-xs font-medium text-purple-700">📊 {funnelStage}</span>

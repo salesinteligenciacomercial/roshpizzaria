@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquare, Instagram, Facebook, MoreVertical, Edit, UserPlus, Trash2 } from "lucide-react";
@@ -8,7 +8,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 
 interface ConversationListItemProps {
@@ -50,8 +49,6 @@ function ConversationListItemComponent({
   onCreateLead,
   onDeleteConversation,
 }: ConversationListItemProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-
   const getChannelIcon = () => {
     switch (channel) {
       case "whatsapp":
@@ -78,19 +75,31 @@ function ConversationListItemComponent({
     e.stopPropagation();
   };
 
+
+  // ⚡ GARANTIA: O botão sempre será renderizado, mesmo sem callbacks
+  // Os callbacks são opcionais, mas o botão deve sempre aparecer
+  const hasAnyCallback = !!(onEditName || onCreateLead || onDeleteConversation);
+  
+  console.log('🎨 [RENDER] ConversationListItem:', {
+    contactName,
+    hasAvatar: !!avatarUrl,
+    avatarUrl: avatarUrl?.substring(0, 50),
+    hasCallbacks: {
+      onEditName: !!onEditName,
+      onCreateLead: !!onCreateLead,
+      onDeleteConversation: !!onDeleteConversation
+    },
+    hasAnyCallback,
+    showingButton: true // SEMPRE TRUE - botão sempre visível
+  });
+
   return (
     <div
       className={`relative p-4 border-b border-border cursor-pointer transition-colors hover:bg-muted/50 ${
         isSelected ? "bg-muted/70" : ""
       }`}
       onClick={onClick}
-      style={{ 
-        position: 'relative', 
-        overflow: 'visible', 
-        zIndex: 1,
-        paddingBottom: '16px', // Garantir espaço suficiente para o botão não ser cortado
-        paddingTop: '16px'
-      }}
+      style={{ position: 'relative', overflow: 'visible' }}
     >
       <div className="flex gap-3 items-start">
         <Avatar className="h-12 w-12 flex-shrink-0">
@@ -100,8 +109,8 @@ function ConversationListItemComponent({
           </AvatarFallback>
         </Avatar>
         
-        <div className="flex-1 min-w-0" style={{ overflow: 'visible', position: 'relative' }}>
-          <div className="flex items-start justify-between mb-1 gap-2" style={{ overflow: 'visible', position: 'relative' }}>
+        <div className="flex-1 min-w-0" style={{ overflow: 'visible' }}>
+          <div className="flex items-start justify-between mb-1 gap-2" style={{ overflow: 'visible' }}>
             <div className="flex items-center gap-2 flex-1 min-w-0">
               {getChannelIcon()}
               <span className="font-medium text-sm text-foreground truncate">
@@ -110,19 +119,15 @@ function ConversationListItemComponent({
             </div>
             
             {/* HORÁRIO, BADGE E MENU */}
-            {/* ⚡ CORREÇÃO CRÍTICA: Garantir que o container do menu sempre seja visível em TODOS os filtros */}
-            {/* ⚡ CORREÇÃO: Adicionar padding/margin para evitar que o botão seja cortado pela linha */}
+            {/* ⚡ CORREÇÃO: Garantir que o container do menu sempre seja visível em todos os filtros */}
             <div 
               className="flex items-center gap-1.5 flex-shrink-0" 
               style={{ 
                 position: 'relative', 
-                zIndex: 1000,
+                zIndex: 100,
                 overflow: 'visible',
                 minWidth: '120px',
-                justifyContent: 'flex-end',
-                pointerEvents: 'auto',
-                marginBottom: '0', // Garantir que não seja cortado
-                paddingBottom: '0'
+                justifyContent: 'flex-end'
               }}
             >
               <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -137,70 +142,125 @@ function ConversationListItemComponent({
                 </Badge>
               )}
               
-              <DropdownMenu modal={false} open={menuOpen} onOpenChange={setMenuOpen}>
-                <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 hover:bg-accent hover:text-accent-foreground"
-                    onClick={handleMenuClick}
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuPortal>
+              {/* BOTÃO DE MENU - SEMPRE VISÍVEL EM TODOS OS FILTROS */}
+              {/* ⚡ CORREÇÃO: Botão sempre renderizado e visível, independente de filtro ou callbacks */}
+              <div 
+                className="flex-shrink-0" 
+                style={{ 
+                  position: 'relative', 
+                  zIndex: 100,
+                  minWidth: '32px',
+                  minHeight: '32px',
+                  overflow: 'visible',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 hover:bg-accent hover:text-accent-foreground shrink-0 flex-shrink-0"
+                      style={{ 
+                        opacity: 1, 
+                        visibility: 'visible', 
+                        display: 'flex',
+                        position: 'relative',
+                        zIndex: 101,
+                        minWidth: '32px',
+                        minHeight: '32px',
+                        flexShrink: 0,
+                        pointerEvents: 'auto',
+                        cursor: 'pointer'
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        console.log('🔘 Menu clicado!', { conversationId, leadId, hasAnyCallback, filter: 'all' });
+                      }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                      }}
+                    >
+                      <MoreVertical 
+                        className="h-4 w-4 flex-shrink-0" 
+                        style={{ 
+                          color: 'currentColor',
+                          display: 'block',
+                          opacity: 1,
+                          visibility: 'visible',
+                          pointerEvents: 'auto',
+                          width: '16px',
+                          height: '16px'
+                        }} 
+                      />
+                    </Button>
+                  </DropdownMenuTrigger>
                   <DropdownMenuContent 
                     align="end" 
                     side="bottom"
-                    sideOffset={4}
-                    alignOffset={0}
-                    className="w-56 bg-background border border-border shadow-lg z-[9999]"
+                    className="w-56 z-[99999] bg-background border border-border shadow-lg"
+                    style={{ zIndex: 99999 }}
                     onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
                   >
-                  <DropdownMenuItem 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onEditName) {
-                        onEditName();
-                        setMenuOpen(false);
-                      }
-                    }}
-                    className="cursor-pointer"
-                    disabled={!onEditName}
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Editar nome
-                  </DropdownMenuItem>
-                  {!leadId && onCreateLead && (
-                    <DropdownMenuItem 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCreateLead();
-                        setMenuOpen(false);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <UserPlus className="h-4 w-4 mr-2" />
-                      Adicionar ao CRM
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onDeleteConversation) {
-                        onDeleteConversation();
-                        setMenuOpen(false);
-                      }
-                    }}
-                    className="text-destructive cursor-pointer"
-                    disabled={!onDeleteConversation}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Excluir conversa
-                  </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenuPortal>
-              </DropdownMenu>
+                      {/* ⚡ SEMPRE mostrar opção de editar nome */}
+                      <DropdownMenuItem 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          console.log('✏️ Editar nome', conversationId);
+                          if (onEditName) {
+                            onEditName();
+                          } else {
+                            console.warn('⚠️ onEditName não está definido');
+                          }
+                        }}
+                        className="cursor-pointer"
+                        disabled={!onEditName}
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Editar nome
+                      </DropdownMenuItem>
+                      {/* ⚡ Mostrar "Adicionar ao CRM" apenas se não tiver lead e tiver callback */}
+                      {!leadId && onCreateLead && (
+                        <DropdownMenuItem 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            console.log('➕ Adicionar ao CRM', conversationId);
+                            onCreateLead();
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <UserPlus className="h-4 w-4 mr-2" />
+                          Adicionar ao CRM
+                        </DropdownMenuItem>
+                      )}
+                      {/* ⚡ SEMPRE mostrar opção de excluir conversa */}
+                      <DropdownMenuItem 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          console.log('🗑️ Excluir conversa', conversationId);
+                          if (onDeleteConversation) {
+                            onDeleteConversation();
+                          } else {
+                            console.warn('⚠️ onDeleteConversation não está definido');
+                          }
+                        }}
+                        className="text-destructive cursor-pointer"
+                        disabled={!onDeleteConversation}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Excluir conversa
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </div>
           
@@ -255,4 +315,6 @@ function ConversationListItemComponent({
   );
 }
 
+// MELHORIA: Memoizar componente para otimização de performance (MICRO-PROMPT 4)
+// CORREÇÃO: Remover memoização que pode causar problemas de renderização
 export const ConversationListItem = ConversationListItemComponent;
