@@ -72,7 +72,14 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
 
       console.log('📥 [NOVA-SUBCONTA] Resposta:', { data, error });
 
-      if (error) {
+      // Verificar se a subconta foi criada mesmo com erro (pode ter sido criada parcialmente)
+      let subcontaCriada = false;
+      if (data?.success || data?.companyId) {
+        subcontaCriada = true;
+        console.log('✅ [NOVA-SUBCONTA] Subconta criada com sucesso (mesmo com possível erro)');
+      }
+
+      if (error && !subcontaCriada) {
         console.error('❌ [NOVA-SUBCONTA] Erro da função:', error);
         
         // Verificar se é erro de email duplicado
@@ -87,11 +94,17 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
       // Armazenar credenciais para exibição
       if (data?.credentials) {
         setCredenciaisCriadas(data.credentials);
+      } else if (subcontaCriada) {
+        // Se foi criada mas não tem credenciais, criar objeto básico
+        setCredenciaisCriadas({
+          email: formData.email,
+          senha: 'Senha definida durante criação'
+        });
       }
 
       toast({
         title: "Subconta criada com sucesso!",
-        description: `Licença criada para ${formData.name}`,
+        description: `Licença criada para ${formData.name}${subcontaCriada ? '. Recarregando lista...' : ''}`,
       });
 
       // Limpar formulário
@@ -106,7 +119,15 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
         max_leads: 1000,
       });
 
-      if (onSuccess) onSuccess();
+      // Sempre chamar onSuccess para recarregar a lista, mesmo se houve erro parcial
+      // Isso garante que a subconta criada apareça na lista
+      if (onSuccess) {
+        console.log('🔄 [NOVA-SUBCONTA] Recarregando lista de subcontas...');
+        // Aguardar um pouco para garantir que o banco processou
+        setTimeout(() => {
+          onSuccess();
+        }, 1000);
+      }
     } catch (error: any) {
       console.error('❌ [NOVA-SUBCONTA] Erro completo:', error);
       toast({
