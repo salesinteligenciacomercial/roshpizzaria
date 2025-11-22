@@ -46,9 +46,8 @@ export const useConversationsLoader = () => {
         userCompanyId = userRole.company_id;
       }
       
-      const INITIAL_LIMIT = 30; // Limite de conversas a serem exibidas inicialmente
-      // ⚡ MELHORIA CRÍTICA: Aumentar drasticamente o limite para garantir histórico completo
-      const MESSAGES_TO_FETCH = append ? 1000 : 2000; // Buscar TODAS as mensagens disponíveis
+      // ⚡ CORREÇÃO CRÍTICA: Remover limite para exibir TODAS as conversas
+      const MESSAGES_TO_FETCH = append ? 5000 : 10000; // Buscar TODAS as mensagens disponíveis
       
       console.log(`📊 [LOAD] Carregando histórico completo: até ${MESSAGES_TO_FETCH} mensagens...`);
       
@@ -100,11 +99,10 @@ export const useConversationsLoader = () => {
         // MELHORIA: Não limitar mais - carregar TODAS as mensagens disponíveis
       });
 
-      // Buscar leads
+      // Buscar leads - ⚡ CORREÇÃO: Remover limite para carregar TODOS os leads vinculados
       const telefonesUnicos = Array.from(conversasMap.keys())
         .map(tel => tel.replace(/[^0-9]/g, ''))
-        .filter(tel => tel.length >= 10)
-        .slice(0, 30);
+        .filter(tel => tel.length >= 10);
       
       let leadsData: any[] = [];
       if (telefonesUnicos.length > 0) {
@@ -112,7 +110,7 @@ export const useConversationsLoader = () => {
           .from('leads')
           .select('id, phone, name, telefone')
           .eq('company_id', userCompanyId)
-          .limit(50);
+          .limit(1000); // ⚡ CORREÇÃO: Aumentar limite para carregar TODOS os leads
         
         if (!leadsResult.error && leadsResult.data) {
           leadsData = leadsResult.data.filter(lead => {
@@ -140,9 +138,8 @@ export const useConversationsLoader = () => {
         }
       });
 
-      // Criar conversas
+      // Criar conversas - ⚡ CORREÇÃO CRÍTICA: Remover .slice() para exibir TODAS as conversas
       const novasConversas: Conversation[] = Array.from(conversasMap.entries())
-        .slice(0, INITIAL_LIMIT)
         .map(([telefone, mensagens]) => {
           const leadInfo = leadsMap.get(telefone);
           
@@ -216,8 +213,9 @@ export const useConversationsLoader = () => {
         });
 
       setLoadingConversations(false);
-      setHasMoreConversations(conversasMap.size > INITIAL_LIMIT);
+      setHasMoreConversations(false); // ⚡ CORREÇÃO: Todas as conversas são carregadas de uma vez
       
+      console.log(`✅ [LOAD] ${novasConversas.length} conversas carregadas no CRM`);
       return novasConversas;
     } catch (error) {
       console.error('❌ Erro ao carregar conversas:', error);
