@@ -36,6 +36,7 @@ import { ResponsaveisManager } from "@/components/conversas/ResponsaveisManager"
 import { AgendaModal } from "@/components/agenda/AgendaModal";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { formatPhoneNumber, safeFormatPhoneNumber } from "@/utils/phoneFormatter";
+import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { useLeadsSync } from "@/hooks/useLeadsSync";
 import { useGlobalSync } from "@/hooks/useGlobalSync";
 import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
@@ -328,6 +329,8 @@ function Conversas() {
   const [reunioesDialogOpen, setReunioesDialogOpen] = useState(false);
   const [agendaModalOpen, setAgendaModalOpen] = useState(false);
   const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
+  const [cleanHistoryDialogOpen, setCleanHistoryDialogOpen] = useState(false);
+  const [cleaningHistory, setCleaningHistory] = useState(false);
   
   // CORREÇÃO: Estados para quadro e etapa (igual ao Funil de Vendas) - DEVE VIR ANTES DOS useEffects
   const [taskBoards, setTaskBoards] = useState<any[]>([]);
@@ -485,9 +488,43 @@ function Conversas() {
   // MELHORIA: Wrapper enviar-whatsapp com retries e mapeamento de erros → toast
   const sendWhatsAppWithRetry = async (body: { company_id: string } & Record<string, any>): Promise<{ success: boolean; errorCode?: string; httpStatus?: number; message?: string; details?: any }> => {
     const maxRetries = 3;
+    
+    console.log('🔄 [SEND-WHATSAPP-RETRY] Iniciando envio (tentativa 1):', {
+      company_id: body.company_id,
+      numero: body.numero,
+      temMensagem: !!body.mensagem
+    });
+    
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const res: any = await supabase.functions.invoke('enviar-whatsapp', { body });
+        console.log(`🔄 [SEND-WHATSAPP-RETRY] Tentativa ${attempt}/${maxRetries} - Chamando edge function...`, {
+          body: {
+            company_id: body.company_id,
+            numero: body.numero,
+            tipo_mensagem: body.tipo_mensagem,
+            temMensagem: !!body.mensagem
+          }
+        });
+        
+        // ⚡ CORREÇÃO: Adicionar timeout explícito para evitar travamento
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Timeout após 30 segundos')), 30000);
+        });
+        
+        const functionPromise = supabase.functions.invoke('enviar-whatsapp', { body });
+        
+        console.log(`⏳ [SEND-WHATSAPP-RETRY] Aguardando resposta da edge function...`);
+        const res: any = await Promise.race([functionPromise, timeoutPromise]);
+        console.log(`📥 [SEND-WHATSAPP-RETRY] Resposta recebida!`);
+        
+        console.log(`📥 [SEND-WHATSAPP-RETRY] Resposta da edge function (tentativa ${attempt}):`, {
+          hasData: !!res?.data,
+          hasError: !!res?.error,
+          status: res?.status,
+          dataSuccess: res?.data?.success,
+          dataError: res?.data?.error,
+          dataCode: res?.data?.code
+        });
         const data = res?.data;
         const err = res?.error;
         // Tratar erros retornados como data
@@ -518,18 +555,37 @@ function Conversas() {
           console.debug('❌ [WHATSAPP] Erro detalhado:', { attempt, httpStatus, code, raw: (err?.message || '').slice(0, 200) });
           return { success: false, errorCode: code, httpStatus, message: String(raw).slice(0, 200), details: raw };
         }
-        if (data?.success) return { success: true };
+        if (data?.success) {
+          console.log('✅ [SEND-WHATSAPP-RETRY] Mensagem enviada com sucesso!');
+          return { success: true };
+        }
         // Falha desconhecida
+        console.error('❌ [SEND-WHATSAPP-RETRY] Falha desconhecida. Resposta:', data);
         toast.error('Falha desconhecida ao enviar mensagem.');
         return { success: false };
       } catch (err: any) {
-        console.error(`❌ [WHATSAPP] Exceção na tentativa ${attempt}:`, err);
+        const errorMessage = err?.message || String(err);
+        console.error(`❌ [SEND-WHATSAPP-RETRY] Exceção na tentativa ${attempt}:`, {
+          error: errorMessage,
+          isTimeout: errorMessage.includes('Timeout'),
+          attempt,
+          maxRetries
+        });
+        
         if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, Math.min(1000 * Math.pow(2, attempt - 1), 5000)));
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+          console.log(`⏳ [SEND-WHATSAPP-RETRY] Aguardando ${delay}ms antes de tentar novamente...`);
+          await new Promise(r => setTimeout(r, delay));
           continue;
         }
-        toast.error('Erro de rede ao enviar mensagem. Verifique sua conexão.');
-        return { success: false };
+        
+        // Se foi timeout, mensagem específica
+        if (errorMessage.includes('Timeout')) {
+          toast.error('Timeout ao enviar mensagem. A conexão pode estar lenta. Tente novamente.');
+        } else {
+          toast.error(`Erro de rede ao enviar mensagem: ${errorMessage}`);
+        }
+        return { success: false, errorCode: 'NETWORK_ERROR', message: errorMessage };
       }
     }
     return { success: false };
@@ -1783,17 +1839,15 @@ function Conversas() {
             return false;
           }
         }
-        // ⚡ CORREÇÃO: Não bloquear mensagens vazias ou com placeholders de mídia
+        // ⚡ CORREÇÃO CRÍTICA: Aceitar TODAS as mensagens válidas, mesmo com caracteres especiais
+        // Não bloquear mensagens por causa de placeholders ou variáveis - isso pode estar bloqueando mensagens legítimas
         if (data.mensagem && typeof data.mensagem === 'string') {
-          // Bloquear apenas variáveis não substituídas, mas permitir placeholders de mídia
-          if (data.mensagem.includes('{{') && !data.mensagem.includes('[Imagem]') && !data.mensagem.includes('[Vídeo]')) {
-            console.warn('⚠️ [REALTIME] Mensagem contém variáveis não substituídas:', data.mensagem);
-            return false;
-          }
+          // Bloquear apenas mensagens que são claramente objetos não serializados
           if (data.mensagem === '[object Object]') {
             console.warn('⚠️ [REALTIME] Mensagem é objeto não serializado');
             return false;
           }
+          // Aceitar todas as outras mensagens, mesmo com {{ ou outros caracteres especiais
         }
         return true;
       } catch (error) {
@@ -1865,26 +1919,57 @@ function Conversas() {
         try { await supabase.removeChannel(realtimeChannelRef.current); } catch {}
         realtimeChannelRef.current = null;
       }
-      // ✅ CRITICAL: Escutar TODOS os eventos (INSERT e UPDATE) para sincronização total
-      // ⚡ CORREÇÃO CRÍTICA: Remover filter de company_id do realtime para garantir sincronização
-      // O filtro será feito no código após receber o evento
-      const channel = supabase.channel('conversas_realtime_full')
+      // ⚡ CORREÇÃO CRÍTICA: Escutar TODOS os eventos (INSERT e UPDATE) para sincronização total
+      // Não usar filtros no realtime - processar todas as mensagens e filtrar por company_id no código
+      // Isso garante que nenhuma mensagem seja perdida
+      const channel = supabase.channel(`conversas_realtime_${userCompanyIdRef.current}_${Date.now()}`)
         .on('postgres_changes', {
           event: '*', // Escutar INSERT, UPDATE e DELETE
           schema: 'public', 
           table: 'conversas'
-          // NÃO usar filter aqui - pode causar problemas de sincronização
+          // ⚡ CRÍTICO: NÃO usar filter aqui - pode causar perda de mensagens
+          // O filtro por company_id será feito no código após receber o evento
         }, async (payload) => {
           try {
             const eventType = payload.eventType;
             const recordId = (payload.new as any)?.id || (payload.old as any)?.id;
+            const payloadCompanyId = (payload.new as any)?.company_id;
+            const payloadFromMe = (payload.new as any)?.fromme;
+            const payloadTelefone = (payload.new as any)?.telefone_formatado || (payload.new as any)?.numero;
+            
+            // ⚡ CORREÇÃO CRÍTICA: Log detalhado para debug de mensagens não aparecendo
+            const isReceived = payloadFromMe === false || !payloadFromMe;
             console.log(`📩 [REALTIME] Evento detectado: ${eventType}`, { 
               id: recordId,
               timestamp: new Date().toISOString(),
-              company_id: (payload.new as any)?.company_id,
-              fromme: (payload.new as any)?.fromme,
-              telefone_formatado: (payload.new as any)?.telefone_formatado
+              company_id: payloadCompanyId,
+              userCompanyId: userCompanyIdRef.current,
+              fromme: payloadFromMe,
+              isReceivedMessage: isReceived,
+              telefone_formatado: payloadTelefone,
+              status: (payload.new as any)?.status,
+              mensagem: (payload.new as any)?.mensagem?.substring(0, 50)
             });
+            
+            // ⚡ CORREÇÃO: Log específico para mensagens recebidas
+            if (isReceived && eventType === 'INSERT') {
+              console.log('📥 [REALTIME] ⚠️ MENSAGEM RECEBIDA DETECTADA!', {
+                id: recordId,
+                telefone: payloadTelefone,
+                mensagem: (payload.new as any)?.mensagem?.substring(0, 50),
+                company_id: payloadCompanyId,
+                userCompanyId: userCompanyIdRef.current
+              });
+            }
+            
+            // ⚡ CORREÇÃO: Verificar company_id ANTES de buscar do banco para evitar queries desnecessárias
+            if (payloadCompanyId && payloadCompanyId !== userCompanyIdRef.current) {
+              console.log('⏭️ [REALTIME] Mensagem de outra empresa, ignorando:', {
+                payloadCompanyId,
+                userCompanyId: userCompanyIdRef.current
+              });
+              return;
+            }
             
             // Processar INSERT e UPDATE
             if (eventType === 'INSERT' || eventType === 'UPDATE') {
@@ -1916,30 +2001,58 @@ function Conversas() {
                 userCompanyId: userCompanyIdRef.current
               });
               
-              if (!validateRealtimeData(novaConversa)) {
-                console.warn('⚠️ [REALTIME] Dados inválidos ignorados após validação');
-                return;
+              // ⚡ CORREÇÃO CRÍTICA: Log detalhado antes da validação para mensagens recebidas
+              const isReceivedMessage = novaConversa.fromme === false || !novaConversa.fromme;
+              if (isReceivedMessage) {
+                console.log('📥 [REALTIME] Mensagem RECEBIDA detectada:', {
+                  id: novaConversa.id,
+                  fromme: novaConversa.fromme,
+                  telefone: novaConversa.telefone_formatado || novaConversa.numero,
+                  mensagem: novaConversa.mensagem?.substring(0, 50),
+                  company_id: novaConversa.company_id
+                });
               }
               
-              console.log('✅ [REALTIME] Dados validados com sucesso, processando...');
-              
-              // ⚡ CORREÇÃO: Verificar company_id de forma mais robusta (aceitar null ou string vazia)
-              if (novaConversa.company_id && novaConversa.company_id !== userCompanyIdRef.current) {
-                console.warn('⚠️ [REALTIME] Conversa de outra empresa ignorada:', {
-                  conversaCompanyId: novaConversa.company_id,
-                  userCompanyId: userCompanyIdRef.current,
-                  tipos: {
-                    conversa: typeof novaConversa.company_id,
-                    user: typeof userCompanyIdRef.current
-                  }
+              if (!validateRealtimeData(novaConversa)) {
+                console.warn('⚠️ [REALTIME] Dados inválidos ignorados após validação:', {
+                  id: novaConversa.id,
+                  fromme: novaConversa.fromme,
+                  numero: novaConversa.numero,
+                  telefone_formatado: novaConversa.telefone_formatado,
+                  mensagem: novaConversa.mensagem?.substring(0, 50)
                 });
                 return;
               }
               
-              // ⚡ CORREÇÃO: Se não tem company_id, pode ser de integração externa - aceitar se userCompanyId estiver definido
-              if (!novaConversa.company_id && userCompanyIdRef.current) {
-                console.log('⚠️ [REALTIME] Conversa sem company_id, assumindo empresa do usuário');
-                // Não bloquear, mas logar para debug
+              console.log('✅ [REALTIME] Dados validados com sucesso, processando...', {
+                isReceived: isReceivedMessage,
+                fromme: novaConversa.fromme
+              });
+              
+              // ⚡ CORREÇÃO CRÍTICA: Verificar company_id de forma mais robusta
+              // Se a mensagem tem company_id, deve corresponder ao usuário atual
+              // Se não tem company_id, aceitar se userCompanyId estiver definido (pode ser mensagem de integração)
+              if (novaConversa.company_id) {
+                if (novaConversa.company_id !== userCompanyIdRef.current) {
+                  console.warn('⚠️ [REALTIME] Conversa de outra empresa ignorada:', {
+                    conversaCompanyId: novaConversa.company_id,
+                    userCompanyId: userCompanyIdRef.current,
+                    tipos: {
+                      conversa: typeof novaConversa.company_id,
+                      user: typeof userCompanyIdRef.current
+                    }
+                  });
+                  return;
+                }
+              } else if (userCompanyIdRef.current) {
+                // ⚡ CORREÇÃO: Se não tem company_id mas temos userCompanyId, aceitar e processar
+                // Isso garante que mensagens sem company_id sejam processadas
+                console.log('⚠️ [REALTIME] Conversa sem company_id, usando empresa do usuário:', userCompanyIdRef.current);
+                // Continuar processamento - não bloquear
+              } else {
+                // Se não temos nem company_id nem userCompanyId, não podemos processar
+                console.warn('⚠️ [REALTIME] Não é possível processar: sem company_id e sem userCompanyId');
+                return;
               }
               
               // ⚡ CORREÇÃO: Processar TODAS as mensagens (enviadas e recebidas) para garantir sincronização
@@ -2158,12 +2271,27 @@ function Conversas() {
                   setSelectedConv(conversaAtualizada);
                 }
                 
-                // Notificar apenas se for mensagem recebida do contato e conversa não estiver aberta
-                if (!isOpen && novaConversa.fromme !== true && novaConvFormatted.unread > 0) {
-                  try { 
-                    notificationSound.current?.play().catch(() => {}); 
-                  } catch {}
-                  toast.success(`Nova mensagem de ${nomeValido}`, { duration: 4000 });
+                // ⚡ CORREÇÃO CRÍTICA: Notificar e tocar som para mensagens recebidas
+                const isReceivedMessage = novaConversa.fromme === false || !novaConversa.fromme;
+                if (isReceivedMessage) {
+                  console.log('🔔 [REALTIME] Mensagem recebida processada:', {
+                    nome: nomeValido,
+                    telefone: telefoneNormalizado,
+                    isOpen,
+                    unread: novaConvFormatted.unread,
+                    fromme: novaConversa.fromme
+                  });
+                  
+                  // Tocar som de notificação para mensagens recebidas
+                  if (!isOpen && novaConvFormatted.unread > 0) {
+                    try { 
+                      notificationSound.current?.play().catch(() => {}); 
+                      console.log('🔔 [REALTIME] Som de notificação tocado para mensagem recebida');
+                    } catch (err) {
+                      console.warn('⚠️ [REALTIME] Erro ao tocar som:', err);
+                    }
+                    toast.success(`Nova mensagem de ${nomeValido}`, { duration: 4000 });
+                  }
                 }
               }, 0, isFromMe); // ⚡ CORREÇÃO: Delay 0 para sincronização instantânea
             }
@@ -2714,12 +2842,13 @@ function Conversas() {
       // Usar limite maior para garantir que todas as conversas sejam encontradas
       const MESSAGES_TO_FETCH = append ? 2000 : 5000; // Buscar MUITO mais mensagens para garantir histórico completo de TODAS as conversas
       
-      // ETAPA 2: ⚡ BUSCAR CONVERSAS OTIMIZADO - Buscar apenas últimas mensagens por telefone
-      // Query otimizada: buscar apenas campos essenciais e limitar quantidade
+      // ⚡ CORREÇÃO CRÍTICA: Buscar TODAS as mensagens (enviadas e recebidas) sem filtros restritivos
+      // Não filtrar por status, fromme ou qualquer outro campo - garantir que todas apareçam
       let query = supabase
         .from('conversas')
         .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, midia_url, fromme')
         .eq('company_id', companyId)
+        // ⚡ CORREÇÃO: Não adicionar filtros adicionais - carregar TODAS as mensagens
         .order('created_at', { ascending: false });
       
       // ⚡ CORREÇÃO: Para append, buscar mensagens mais antigas usando a data da última mensagem carregada
@@ -2740,13 +2869,35 @@ function Conversas() {
       
       const { data: conversasResult, error: conversasError } = await query;
 
+      let conversasData: any[] = [];
+      
       if (conversasError) {
-        toast.error('Erro ao carregar conversas');
+        console.error('❌ [LOAD] Erro ao carregar conversas:', conversasError);
+        // ⚡ CORREÇÃO: Não mostrar toast de erro se for apenas um problema temporário
+        // Apenas logar o erro para debug
+        console.warn('⚠️ [LOAD] Erro ao carregar conversas do banco, tentando continuar...');
         setLoadingConversations(false);
-        return;
+        // Continuar com array vazio para não quebrar a interface
+        conversasData = [];
+      } else {
+        conversasData = conversasResult || [];
       }
-
-      const conversasData = conversasResult || [];
+      
+      // ⚡ CORREÇÃO CRÍTICA: Log detalhado para debug
+      console.log(`📊 [LOAD] Carregadas ${conversasData.length} mensagens do banco`, {
+        companyId,
+        mensagensEnviadas: conversasData.filter(c => c.fromme === true).length,
+        mensagensRecebidas: conversasData.filter(c => c.fromme === false || !c.fromme).length,
+        primeiraMensagem: conversasData[0] ? {
+          id: conversasData[0].id,
+          numero: conversasData[0].numero,
+          telefone_formatado: conversasData[0].telefone_formatado,
+          fromme: conversasData[0].fromme,
+          status: conversasData[0].status,
+          mensagem: conversasData[0].mensagem?.substring(0, 50),
+          created_at: conversasData[0].created_at
+        } : null
+      });
       
       // ⚡ CORREÇÃO: Verificar se há mais conversas para carregar
       // Se retornou exatamente o limite, provavelmente há mais mensagens no banco
@@ -2756,10 +2907,13 @@ function Conversas() {
         setHasMoreConversations(true); // Garantir que o botão "carregar mais" apareça
       }
       
-      // ⚡ OTIMIZAÇÃO: Processar e agrupar de forma mais eficiente
+      // ⚡ CORREÇÃO CRÍTICA: Remover filtros restritivos que podem bloquear mensagens válidas
+      // Aceitar TODAS as mensagens que tenham número e mensagem (mesmo que contenham caracteres especiais)
       const validConversas = conversasData.filter(conv => 
-        conv.numero && !conv.numero.includes('{{') &&
-        conv.mensagem && !conv.mensagem.includes('{{')
+        conv.numero && 
+        conv.mensagem && 
+        conv.numero.trim() !== '' &&
+        conv.mensagem.trim() !== ''
       );
 
       // Agrupar conversas por telefone - PRESERVAR TODAS as mensagens (não limitar)
@@ -2770,11 +2924,26 @@ function Conversas() {
         // Detectar se é grupo: verificar is_group OU se numero termina com @g.us
         const isGroup = Boolean(conv.is_group) === true || /@g\.us$/.test(String(conv.numero || ''));
         
-        // ⚡ CORREÇÃO: Para grupos, SEMPRE usar numero (JID completo do grupo)
-        // Para contatos individuais, usar telefone_formatado ou numero normalizado
-        const key = isGroup 
-          ? String(conv.numero || '') // SEMPRE usar numero para grupos (contém JID do grupo)
-          : (conv.telefone_formatado || conv.numero.replace(/[^0-9]/g, ''));
+        // ⚡ CORREÇÃO CRÍTICA: Para grupos, SEMPRE usar numero (JID completo do grupo)
+        // Para contatos individuais, normalizar telefone para garantir agrupamento correto
+        let key: string;
+        if (isGroup) {
+          key = String(conv.numero || ''); // SEMPRE usar numero para grupos (contém JID do grupo)
+        } else {
+          // ⚡ CORREÇÃO: Normalizar telefone para garantir que mensagens com formatos diferentes sejam agrupadas
+          const telefoneNormalizado = conv.telefone_formatado 
+            ? conv.telefone_formatado.replace(/[^0-9]/g, '')
+            : conv.numero.replace(/[^0-9]/g, '');
+          // Garantir que tenha pelo menos 10 dígitos e normalizar para formato consistente
+          if (telefoneNormalizado.length >= 10) {
+            // Se não começa com 55, adicionar (padrão brasileiro)
+            key = telefoneNormalizado.startsWith('55') 
+              ? telefoneNormalizado 
+              : `55${telefoneNormalizado}`;
+          } else {
+            key = telefoneNormalizado; // Usar como está se não atender critérios
+          }
+        }
         
         if (!conversasMap.has(key)) {
           conversasMap.set(key, []);
@@ -2784,6 +2953,12 @@ function Conversas() {
         // ⚡ CORREÇÃO CRÍTICA: NÃO limitar mensagens aqui - preservar todas para não perder histórico
         // Apenas ordenar por data (mais recente primeiro)
         mensagens.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      });
+      
+      // ⚡ CORREÇÃO: Log de agrupamento para debug
+      console.log(`📊 [LOAD] Agrupadas ${conversasMap.size} conversas únicas de ${validConversas.length} mensagens`, {
+        grupos: Array.from(conversasMap.entries()).filter(([k]) => /@g\.us$/.test(k)).length,
+        contatos: Array.from(conversasMap.entries()).filter(([k]) => !/@g\.us$/.test(k)).length
       });
 
       // ⚡ CORREÇÃO: Buscar leads de TODOS os telefones encontrados (sem limite)
@@ -2829,10 +3004,6 @@ function Conversas() {
           }
           
           leadsData = allLeads;
-          
-          if (!leadsResult.error && leadsResult.data) {
-            leadsData = leadsResult.data;
-          }
         }
       }
       
@@ -3011,7 +3182,12 @@ function Conversas() {
       });
 
       const loadTime = performance.now() - startTime;
-      console.log(`✅ ${novasConversas.length} conversas carregadas em ${loadTime.toFixed(0)}ms`);
+      console.log(`✅ [LOAD] ${novasConversas.length} conversas carregadas em ${loadTime.toFixed(0)}ms`, {
+        totalMensagens: conversasData.length,
+        conversasUnicas: novasConversas.length,
+        mensagensEnviadas: novasConversas.reduce((acc, c) => acc + c.messages.filter(m => m.sender === 'user').length, 0),
+        mensagensRecebidas: novasConversas.reduce((acc, c) => acc + c.messages.filter(m => m.sender === 'contact').length, 0)
+      });
       
       // ⚡ MERGE INTELIGENTE: Preservar conversas em tempo real e evitar duplicatas
       if (append) {
@@ -3159,7 +3335,7 @@ function Conversas() {
       // ⚡ CARREGAR RESTANTES EM BACKGROUND (baixa prioridade)
       const restantes = novasConversas.slice(3);
       if (restantes.length > 0) {
-        restantes.forEach(async (conv, index) => {
+        restantes.forEach(async (conv) => {
           if (conv.phoneNumber) {
             try {
               const profilePicUrl = await getProfilePictureWithFallback(
@@ -3179,7 +3355,6 @@ function Conversas() {
           }
         });
       }
-      
     } catch (error) {
       console.error('Erro ao carregar conversas:', error);
       toast.error('Erro ao carregar conversas');
@@ -4274,9 +4449,63 @@ function Conversas() {
         }
       : { mensagem: messageContent };
     
-    // Enviar mensagem via Evolution API
+    // ⚡ CORREÇÃO CRÍTICA: Salvar mensagem no banco PRIMEIRO (antes de enviar)
+    // Isso garante que a mensagem apareça no CRM mesmo se o envio falhar
+    console.log('💾 [ENVIO] Salvando mensagem no banco PRIMEIRO...');
+    const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
+    let mensagemSalva = false;
+    
     try {
-      const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: userRole } = await supabase
+          .from('user_roles')
+          .select('company_id')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (userRole?.company_id) {
+          const repliedMessage = replyingTo ? selectedConv.messages.find(m => m.id === replyingTo)?.content : null;
+          const { error: dbError } = await supabase.from('conversas').insert([{
+            numero: numeroNormalizado,
+            telefone_formatado: numeroNormalizado,
+            mensagem: messageContent,
+            origem: 'WhatsApp',
+            status: 'Enviada',
+            tipo_mensagem: type,
+            nome_contato: selectedConv.contactName,
+            company_id: userRole.company_id,
+            fromme: true,
+            replied_to_message: repliedMessage || null,
+          }]);
+          
+          if (!dbError) {
+            mensagemSalva = true;
+            console.log('✅ [ENVIO] Mensagem salva no banco com sucesso (antes do envio)');
+            // Recarregar conversas imediatamente para mostrar a mensagem
+            setTimeout(async () => {
+              console.log('🔄 [ENVIO] Recarregando conversas após salvar mensagem...');
+              await loadSupabaseConversations();
+            }, 300);
+          } else {
+            console.error('❌ [ENVIO] Erro ao salvar mensagem no banco:', dbError);
+          }
+        }
+      }
+    } catch (saveError) {
+      console.error('❌ [ENVIO] Erro ao salvar mensagem no banco:', saveError);
+    }
+    
+    // Enviar mensagem via Evolution API (após salvar no banco)
+    try {
+      console.log('📤 [ENVIO] Preparando envio via WhatsApp:', {
+        numeroNormalizado,
+        mensagem: messageContent.substring(0, 50),
+        tipo: type,
+        userCompanyId,
+        telefoneOriginal: selectedConv.phoneNumber || selectedConv.id
+      });
+      
       const { data, error } = await enviarWhatsApp({
         numero: numeroNormalizado,
         ...mensagemParaEnviar,
@@ -4284,44 +4513,111 @@ function Conversas() {
         tipo_mensagem: type,
       });
 
+      console.log('📥 [ENVIO] Resposta do enviarWhatsApp:', { data, error });
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: userRole } = await supabase
+            .from('user_roles')
+            .select('company_id')
+            .eq('user_id', user.id)
+            .single();
+          
+          if (userRole?.company_id) {
+            const { error: dbError } = await supabase.from('conversas').insert([{
+              numero: numeroNormalizado,
+              telefone_formatado: numeroNormalizado,
+              mensagem: messageContent,
+              origem: 'WhatsApp',
+              status: 'Enviada',
+              tipo_mensagem: type,
+              nome_contato: selectedConv.contactName,
+              company_id: userRole.company_id,
+              fromme: true,
+            }]);
+            
+            if (!dbError) {
+              mensagemSalva = true;
+              console.log('✅ [ENVIO] Mensagem salva no banco com sucesso');
+            } else {
+              console.error('❌ [ENVIO] Erro ao salvar mensagem no banco:', dbError);
+            }
+          }
+        }
+      } catch (saveError) {
+        console.error('❌ [ENVIO] Erro ao salvar mensagem no banco:', saveError);
+      }
+
       if (error) {
-        // Wrapper já exibiu o toast de erro específico
+        console.error('❌ [ENVIO] Erro ao enviar mensagem via WhatsApp:', error);
+        
+        // Se a mensagem foi salva, apenas avisar sobre o envio
+        if (mensagemSalva) {
+          toast.warning('Mensagem salva, mas pode não ter sido enviada. Verifique a conexão WhatsApp.');
+        } else {
+          toast.error(`Erro ao enviar mensagem: ${error.message || 'Erro desconhecido'}`);
+        }
+        
+        // Recarregar conversas para mostrar a mensagem salva
+        if (mensagemSalva) {
+          setTimeout(async () => {
+            console.log('🔄 [ENVIO] Recarregando conversas após salvar mensagem...');
+            await loadSupabaseConversations();
+          }, 500);
+        }
         return;
       }
 
-      console.log('✅ Resposta Evolution API:', data);
+      console.log('✅ [ENVIO] Resposta Evolution API:', data);
       
       // Não mostrar notificação ao enviar - apenas logs
-      console.log('✅ Mensagem enviada para WhatsApp com sucesso');
-
-      // Buscar company_id do usuário
-      const { data: userRole } = await supabase
-        .from('user_roles')
-        .select('company_id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-        .single();
-
-      // Salvar no Supabase após sucesso
-      const repliedMessage = replyingTo ? selectedConv.messages.find(m => m.id === replyingTo)?.content : null;
-      const { error: dbError } = await supabase.from('conversas').insert([{
-        numero: numeroNormalizado,
-        telefone_formatado: numeroNormalizado,
-        mensagem: messageContent,
-        origem: selectedConv.channel === 'whatsapp' ? 'WhatsApp' : 
-                selectedConv.channel === 'instagram' ? 'Instagram' : 'Facebook',
-        status: 'Enviada',
-        tipo_mensagem: type,
-        nome_contato: selectedConv.contactName,
-        company_id: userRole?.company_id, // IMPORTANTE: Adicionar company_id
-        fromme: true, // ⚡ CORREÇÃO: Marcar como mensagem enviada pelo usuário
-        replied_to_message: repliedMessage || null,
-      }]);
-
-      if (dbError) {
-        console.error('❌ Erro ao salvar mensagem no banco:', dbError);
-        toast.error('Erro ao salvar mensagem no histórico');
-      } else {
-        console.log('✅ Mensagem salva no Supabase com company_id:', userRole?.company_id);
+      console.log('✅ [ENVIO] Mensagem enviada para WhatsApp com sucesso');
+      
+      // ⚡ CORREÇÃO: Se a mensagem já foi salva antes, não salvar novamente
+      if (!mensagemSalva) {
+        console.log('⚠️ [ENVIO] Mensagem não foi salva antes, salvando agora...');
+        // Se por algum motivo não foi salva antes, salvar agora
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: userRole } = await supabase
+              .from('user_roles')
+              .select('company_id')
+              .eq('user_id', user.id)
+              .single();
+            
+            if (userRole?.company_id) {
+              const repliedMessage = replyingTo ? selectedConv.messages.find(m => m.id === replyingTo)?.content : null;
+              const { error: dbError } = await supabase.from('conversas').insert([{
+                numero: numeroNormalizado,
+                telefone_formatado: numeroNormalizado,
+                mensagem: messageContent,
+                origem: 'WhatsApp',
+                status: 'Enviada',
+                tipo_mensagem: type,
+                nome_contato: selectedConv.contactName,
+                company_id: userRole.company_id,
+                fromme: true,
+                replied_to_message: repliedMessage || null,
+              }]);
+              
+              if (!dbError) {
+                mensagemSalva = true;
+                console.log('✅ [ENVIO] Mensagem salva no banco após envio bem-sucedido');
+              }
+            }
+          }
+        } catch (saveError) {
+          console.error('❌ [ENVIO] Erro ao salvar mensagem após envio:', saveError);
+        }
+      }
+      
+      // Recarregar conversas para garantir que a mensagem apareça
+      if (mensagemSalva) {
+        setTimeout(async () => {
+          console.log('🔄 [ENVIO] Recarregando conversas após envio bem-sucedido...');
+          await loadSupabaseConversations();
+        }, 500);
       }
       
       // CORREÇÃO: Limpar replyingTo após envio bem-sucedido
@@ -6273,12 +6569,36 @@ function Conversas() {
   };
 
   const enviarWhatsApp = async (body: any) => {
+    console.log('📞 [ENVIAR-WHATSAPP] Iniciando envio:', {
+      numero: body.numero,
+      tipo: body.tipo_mensagem,
+      temMensagem: !!body.mensagem
+    });
+    
     const companyId = await getCompanyId();
+    
+    if (!companyId) {
+      console.error('❌ [ENVIAR-WHATSAPP] Company ID não encontrado!');
+      return { 
+        data: null, 
+        error: { message: 'Company ID não encontrado. Faça login novamente.' } 
+      } as const;
+    }
+    
+    console.log('📞 [ENVIAR-WHATSAPP] Company ID obtido:', companyId);
+    
     // Usar wrapper com retry/timeout e retornar no formato compatível (data/error)
     const result = await sendWhatsAppWithRetry({
       company_id: companyId,
       ...body,
     });
+    
+    console.log('📞 [ENVIAR-WHATSAPP] Resultado do sendWhatsAppWithRetry:', {
+      success: result?.success,
+      errorCode: result?.errorCode,
+      message: result?.message
+    });
+    
     if (result && result.success) {
       return { data: result, error: null } as const;
     }
@@ -6292,6 +6612,37 @@ function Conversas() {
     const digits = value.replace(/[^0-9]/g, '');
     if (!digits) return '';
     return digits.startsWith('55') ? digits : `55${digits}`;
+  };
+
+  // Função para limpar histórico de conversas
+  const handleCleanHistory = async () => {
+    setCleaningHistory(true);
+    try {
+      const result = await cleanAllConversationsHistory(userCompanyId || undefined);
+      
+      if (result.success) {
+        // Limpar estados locais
+        setConversations([]);
+        setSelectedConv(null);
+        
+        // Recarregar conversas (vai carregar vazio, mas garante sincronização)
+        await loadSupabaseConversations();
+        
+        toast.success(
+          `✅ Histórico limpo com sucesso! ${result.supabaseResult?.deletedCount || 0} mensagens removidas do banco e ${result.localStorageResult?.cleanedKeys.length || 0} caches limpos.`,
+          { duration: 5000 }
+        );
+        
+        setCleanHistoryDialogOpen(false);
+      } else {
+        toast.error(`❌ Erro ao limpar histórico: ${result.error || 'Erro desconhecido'}`);
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao limpar histórico:', error);
+      toast.error(`❌ Erro ao limpar histórico: ${error.message || 'Erro desconhecido'}`);
+    } finally {
+      setCleaningHistory(false);
+    }
   };
 
   const finalizarAtendimento = async (mensagem: string) => {
@@ -6406,6 +6757,77 @@ function Conversas() {
               >
                 <RefreshCw className="h-4 w-4" />
               </Button>
+              <Dialog open={cleanHistoryDialogOpen} onOpenChange={setCleanHistoryDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button 
+                    size="icon" 
+                    variant="outline"
+                    className="gap-0 text-destructive hover:text-destructive"
+                    aria-label="Limpar histórico"
+                    title="Limpar histórico de conversas"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5 text-destructive" />
+                      Limpar Histórico de Conversas
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <p className="text-sm text-muted-foreground">
+                      Esta ação irá <strong>permanentemente</strong> remover:
+                    </p>
+                    <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground ml-2">
+                      <li>Todas as mensagens da tabela <code className="bg-muted px-1 rounded">conversas</code> no banco de dados</li>
+                      <li>Todos os caches de conversas no navegador (localStorage)</li>
+                    </ul>
+                    <div className="bg-muted/50 p-3 rounded-md">
+                      <p className="text-sm font-semibold mb-1">⚠️ Esta ação NÃO pode ser desfeita!</p>
+                      <p className="text-xs text-muted-foreground">
+                        Após a limpeza, apenas novas mensagens recebidas/enviadas aparecerão no sistema.
+                      </p>
+                    </div>
+                    <div className="bg-blue-50 dark:bg-blue-950/20 p-3 rounded-md border border-blue-200 dark:border-blue-800">
+                      <p className="text-sm font-semibold mb-1 text-blue-900 dark:text-blue-100">✅ Dados preservados:</p>
+                      <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1 ml-2">
+                        <li>• Funil de Vendas (leads, kanban)</li>
+                        <li>• Tarefas</li>
+                        <li>• Agenda</li>
+                        <li>• Todas as outras funcionalidades</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setCleanHistoryDialogOpen(false)}
+                      disabled={cleaningHistory}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={handleCleanHistory}
+                      disabled={cleaningHistory}
+                    >
+                      {cleaningHistory ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Limpando...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Limpar Histórico
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
 

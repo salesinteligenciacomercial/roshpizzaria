@@ -74,7 +74,11 @@ function transformEvolutionPayload(body: any) {
   const fromMe = data.key.fromMe === true;
   const status = fromMe ? 'Enviada' : 'Recebida';
   
-  console.log(`📱 Mensagem ${status} - fromMe: ${fromMe}`);
+  console.log(`📱 Mensagem ${status} - fromMe: ${fromMe}`, {
+    remoteJid: data.key.remoteJid,
+    fromMe: data.key.fromMe,
+    messageId: data.key.id
+  });
 
   // Ignorar apenas status/broadcast
   if (remoteJid.includes('@broadcast') || remoteJid.includes('status@')) {
@@ -496,6 +500,25 @@ serve(async (req) => {
       console.log('👥 Usando JID do grupo como nome');
     }
     
+    // ⚡ LOG CRÍTICO: Detectar mensagem recebida antes de salvar
+    const isReceivedMessage = validatedData.fromMe !== true;
+    if (isReceivedMessage) {
+      console.log('📥 [WEBHOOK] ⚠️ MENSAGEM RECEBIDA DETECTADA!', {
+        numero: validatedData.numero,
+        numeroLimpo,
+        nome_contato: nomeContatoFinal,
+        mensagem: validatedData.mensagem?.substring(0, 50),
+        company_id: companyId,
+        lead_id: leadId,
+        fromMe: validatedData.fromMe
+      });
+    } else {
+      console.log('📤 [WEBHOOK] Mensagem enviada detectada', {
+        numero: validatedData.numero,
+        fromMe: validatedData.fromMe
+      });
+    }
+    
     // Salvar conversa no Supabase com telefone normalizado e STATUS correto
     const { data, error } = await supabase
       .from('conversas')
@@ -519,7 +542,11 @@ serve(async (req) => {
       .single();
 
     if (error) {
-      console.error('❌ Erro ao salvar conversa:', error);
+      console.error('❌ Erro ao salvar conversa:', error, {
+        isReceived: isReceivedMessage,
+        fromMe: validatedData.fromMe,
+        company_id: companyId
+      });
       
       // Map database errors to user-friendly messages
       let errorMessage = 'Erro ao processar conversa';
@@ -539,7 +566,21 @@ serve(async (req) => {
       );
     }
 
-    console.log('✅ Conversa salva com sucesso');
+    // ⚡ LOG CRÍTICO: Confirmar que mensagem recebida foi salva
+    if (isReceivedMessage) {
+      console.log('✅ [WEBHOOK] Mensagem RECEBIDA salva com sucesso!', {
+        id: data.id,
+        numero: validatedData.numero,
+        fromme: data.fromme,
+        status: data.status,
+        company_id: data.company_id
+      });
+    } else {
+      console.log('✅ [WEBHOOK] Mensagem enviada salva com sucesso', {
+        id: data.id,
+        fromme: data.fromme
+      });
+    }
 
     // ROTEAMENTO AUTOMÁTICO: tentar atribuir conversa a um colaborador disponível (apenas para contatos)
     if (!isGroup && numeroLimpo) {
