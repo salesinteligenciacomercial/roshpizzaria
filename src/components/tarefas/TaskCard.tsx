@@ -1170,9 +1170,6 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                       {c.created_at && (
                         <span className="text-[10px] text-muted-foreground mt-1 block">
                           {new Date(c.created_at).toLocaleString('pt-BR')}
-                          {c.updated_at && c.updated_at !== c.created_at && (
-                            <span className="ml-2">(editado)</span>
-                          )}
                         </span>
                       )}
                     </>

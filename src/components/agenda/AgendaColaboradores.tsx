@@ -96,7 +96,7 @@ export function AgendaColaboradores() {
 
       const { data: novaAgenda, error } = await supabase
         .from('agendas')
-        .insert({
+        .insert([{
           nome: formData.nome,
           tipo: formData.tipo,
           status: 'ativo',
@@ -105,10 +105,10 @@ export function AgendaColaboradores() {
           disponibilidade: {
             dias: formData.dias_semana,
             periodos: formData.horarioComercial,
-          },
+          } as any,
           owner_id: user.id,
           company_id: userRole.company_id,
-        })
+        }])
         .select()
         .single();
 

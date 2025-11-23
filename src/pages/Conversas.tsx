@@ -667,10 +667,11 @@ function Conversas() {
     
     let filtered = conversations;
 
-    // ⚡ CORREÇÃO: Aplicar filtro de status corretamente
+    // ⚡ CORREÇÃO CRÍTICA: Aplicar filtro de status corretamente
     if (filter === "all") {
-      // No filtro "Todos", mostrar TODAS as conversas INDIVIDUAIS (excluir grupos)
-      filtered = filtered.filter((conv) => conv.isGroup !== true);
+      // ⚡ CORREÇÃO: No filtro "Todos", mostrar TODAS as conversas (INDIVIDUAIS E GRUPOS)
+      // Anteriormente estava excluindo grupos, o que causava mensagens de grupos não aparecerem
+      filtered = filtered; // Não filtrar nada - mostrar tudo
     } else if (filter === "group") {
       // No filtro "Grupos", mostrar APENAS grupos (não aparecem em outros filtros)
       filtered = filtered.filter((conv) => conv.isGroup === true);
@@ -5424,7 +5425,8 @@ function Conversas() {
       setMeetingNotes("");
       setEnviarConfirmacaoReuniao(true); // Reset para padrão
       setEnviarLembreteReuniao(true); // Reset para padrão
-      setHorasAntecedenciaReuniao("24"); // Reset para padrão
+      setHorasAntecedenciaReuniaoHoras("0"); // Reset para padrão
+      setHorasAntecedenciaReuniaoMinutos("0"); // Reset para padrão
       
       if (!enviarConfirmacaoReuniao) {
         toast.success("Reunião agendada e sincronizada com Agenda!");
@@ -8531,44 +8533,46 @@ function Conversas() {
                                   {enviarLembreteReuniao && (
                                     <div className="space-y-2">
                                       <Label className="text-xs">Enviar com antecedência de</Label>
-                                      <div className="flex items-center gap-2">
-                                        <div className="flex-1">
-                                          <Label className="text-xs text-muted-foreground mb-1 block">Horas</Label>
-                                          <Select
-                                            value={horasAntecedenciaReuniaoHoras}
-                                            onValueChange={setHorasAntecedenciaReuniaoHoras}
-                                          >
-                                            <SelectTrigger className="h-9">
-                                              <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              {Array.from({ length: 25 }, (_, i) => (
-                                                <SelectItem key={i} value={i.toString()}>
-                                                  {i} {i === 1 ? 'hora' : 'horas'}
-                                                </SelectItem>
-                                              ))}
-                                            </SelectContent>
-                                          </Select>
-                                        </div>
-                                        <div className="flex-1">
-                                          <Label className="text-xs text-muted-foreground mb-1 block">Minutos</Label>
-                                          <Select
-                                            value={horasAntecedenciaReuniaoMinutos}
-                                            onValueChange={setHorasAntecedenciaReuniaoMinutos}
-                                          >
-                                            <SelectTrigger className="h-9">
-                                              <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              {[0, 5, 10, 15, 20, 30, 45].map((min) => (
-                                                <SelectItem key={min} value={min.toString()}>
-                                                  {min} {min === 1 ? 'minuto' : 'minutos'}
-                                                </SelectItem>
-                                              ))}
-                                            </SelectContent>
-                                          </Select>
-                                        </div>
-                                      </div>
+                                       <div className="flex items-center gap-2">
+                                         <div className="flex-1">
+                                           <Label className="text-xs text-muted-foreground mb-1 block">Horas</Label>
+                                           <Select
+                                             value={horasAntecedenciaReuniaoHoras}
+                                             onValueChange={(value) => {
+                                               setHorasAntecedenciaReuniaoHoras(value);
+                                             }}
+                                           >
+                                             <SelectTrigger className="h-9">
+                                               <SelectValue />
+                                             </SelectTrigger>
+                                             <SelectContent>
+                                               {Array.from({ length: 25 }, (_, i) => (
+                                                 <SelectItem key={i} value={i.toString()}>
+                                                   {i} {i === 1 ? 'hora' : 'horas'}
+                                                 </SelectItem>
+                                               ))}
+                                             </SelectContent>
+                                           </Select>
+                                         </div>
+                                         <div className="flex-1">
+                                           <Label className="text-xs text-muted-foreground mb-1 block">Minutos</Label>
+                                           <Select
+                                             value={horasAntecedenciaReuniaoMinutos}
+                                             onValueChange={setHorasAntecedenciaReuniaoMinutos}
+                                           >
+                                             <SelectTrigger className="h-9">
+                                               <SelectValue />
+                                             </SelectTrigger>
+                                             <SelectContent>
+                                               {[0, 5, 10, 15, 20, 30, 45].map((min) => (
+                                                 <SelectItem key={min} value={min.toString()}>
+                                                   {min} {min === 1 ? 'minuto' : 'minutos'}
+                                                 </SelectItem>
+                                               ))}
+                                             </SelectContent>
+                                           </Select>
+                                         </div>
+                                       </div>
                                     </div>
                                   )}
                                 </div>

@@ -18,18 +18,19 @@ interface Lembrete {
   telefone_responsavel?: string;
   tentativas?: number;
   proxima_tentativa?: string;
-  compromisso: {
-    id: string;
-    data_hora_inicio: string;
-    tipo_servico: string;
-    lead_id: string;
-    company_id?: string;
-    lead: {
-      name: string;
-      phone?: string;
-      telefone?: string;
-    };
-  };
+      compromisso: {
+        id: string;
+        data_hora_inicio: string;
+        tipo_servico: string;
+        lead_id: string;
+        company_id?: string;
+        usuario_responsavel_id?: string;
+        lead: {
+          name: string;
+          phone?: string;
+          telefone?: string;
+        };
+      };
 }
 
 serve(async (req) => {

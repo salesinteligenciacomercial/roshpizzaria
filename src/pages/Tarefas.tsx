@@ -1403,12 +1403,6 @@ export default function Tarefas() {
                 align="end"
                 className="z-[99999] bg-background border shadow-lg"
                 style={{ zIndex: 99999 }}
-                onOpenAutoFocus={(e) => {
-                  console.log('📋 [Tarefas] Menu dropdown aberto');
-                  console.log('📋 [Tarefas] selectedBoard no menu:', selectedBoard);
-                  console.log('📋 [Tarefas] isAdmin:', isAdmin);
-                  console.log('📋 [Tarefas] canManageTaskStructure:', canManageTaskStructure);
-                }}
                 onClick={(e) => e.stopPropagation()}
               >
                 {!selectedBoard ? (

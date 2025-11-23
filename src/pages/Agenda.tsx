@@ -682,8 +682,8 @@ export default function Agenda() {
 
       if (agenda) {
         // Carregar horário comercial
-        if (agenda.disponibilidade?.periodos) {
-          setHorarioComercial(agenda.disponibilidade.periodos);
+        if ((agenda.disponibilidade as any)?.periodos) {
+          setHorarioComercial((agenda.disponibilidade as any).periodos);
         } else if (agenda.disponibilidade) {
           // Converter formato antigo para novo
           setHorarioComercial(converterHorarioAntigo(agenda.disponibilidade));
@@ -693,8 +693,8 @@ export default function Agenda() {
         if (agenda.tempo_medio_servico) {
           setTempoMedioPadrao(agenda.tempo_medio_servico);
         }
-        if (agenda.disponibilidade?.canal_lembrete_padrao) {
-          setCanalLembretePadrao(agenda.disponibilidade.canal_lembrete_padrao);
+        if ((agenda.disponibilidade as any)?.canal_lembrete_padrao) {
+          setCanalLembretePadrao((agenda.disponibilidade as any).canal_lembrete_padrao);
         }
       }
     } catch (error) {
@@ -1155,10 +1155,10 @@ export default function Agenda() {
 
             // Buscar lead se houver para personalizar mensagem
             const leadSelecionado = leads.find(l => l.id === formData.lead_id);
-            const nomeLead = leadSelecionado?.name || leadSelecionado?.nome || 'Cliente';
+            const leadNome = leadSelecionado?.name || 'Cliente';
 
             // Mensagem personalizada do lembrete
-            const mensagemLembrete = `Olá ${nomeLead}! Lembramos do seu compromisso agendado para ${format(dataHoraInicio, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.`;
+            const mensagemLembrete = `Olá ${leadNome}! Lembramos do seu compromisso agendado para ${format(dataHoraInicio, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.`;
 
             // Preparar dados do lembrete - usar NUMERIC para horas_antecedencia
             const lembreteData = {
@@ -1249,7 +1249,7 @@ export default function Agenda() {
               console.log('✅ [LEMBRETE] Lembrete criado automaticamente e sincronizado:', lembreteCriado?.id);
               console.log('📅 [LEMBRETE] Data de envio calculada:', dataEnvio.toISOString());
               console.log('📅 [LEMBRETE] Data do compromisso:', dataHoraInicio.toISOString());
-              console.log('⏰ [LEMBRETE] Antecedência:', tempoAntecedencia, 'horas');
+              console.log('⏰ [LEMBRETE] Antecedência:', tempoAntecedenciaDecimal, 'horas');
               console.log('🔗 [LEMBRETE] Vinculado ao compromisso:', compromisso.id);
             }
           }
@@ -1307,7 +1307,7 @@ export default function Agenda() {
                     origem: 'WhatsApp',
                     status: 'Enviada',
                     tipo_mensagem: 'text',
-                    nome_contato: leadSelecionado.name || leadSelecionado.nome,
+                    nome_contato: leadSelecionado.name,
                     company_id: userRole.company_id,
                     lead_id: formData.lead_id,
                     fromme: true,
@@ -1960,10 +1960,10 @@ export default function Agenda() {
 
                       if (agendaExistente) {
                         // Atualizar agenda existente
-                        const { error } = await supabase
-                          .from('agendas')
-                          .update({
-                            disponibilidade,
+            const { error } = await supabase
+              .from('agendas')
+              .update({
+                disponibilidade: disponibilidade as any,
                             tempo_medio_servico: tempoMedioPadrao,
                             updated_at: new Date().toISOString(),
                           })
@@ -1977,9 +1977,9 @@ export default function Agenda() {
                           .insert({
                             nome: 'Agenda Principal',
                             tipo: 'principal',
-                            owner_id: user.id,
-                            company_id: userRole.company_id,
-                            disponibilidade,
+                owner_id: user.id,
+                company_id: userRole.company_id,
+                disponibilidade: disponibilidade as any,
                             tempo_medio_servico: tempoMedioPadrao,
                             capacidade_simultanea: 1,
                             status: 'ativo',
