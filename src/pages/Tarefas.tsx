@@ -137,14 +137,26 @@ const SortableColumn = React.memo(function SortableColumn({
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: isDragging ? 'none' : transition,
+    opacity: isDragging ? 0.7 : 1,
   };
 
   return (
     <div 
       ref={setNodeRef} 
-      style={style}
-      className="min-w-[300px] flex-shrink-0 relative group"
+      style={{
+        ...style,
+        width: isDragging ? '330px' : '330px',
+        minWidth: '330px',
+        maxWidth: '330px',
+        flexShrink: 0,
+        flexGrow: 0,
+        position: 'relative',
+        boxSizing: 'border-box',
+      }}
+      className={`relative group ${isDragging ? 'z-[100]' : ''}`}
+      data-column-id={column.id}
+      data-sortable-column="true"
     >
       {/* Drag handle - igual ao funil */}
       <div
@@ -271,22 +283,55 @@ export default function Tarefas() {
   const [tasksPerColumn, setTasksPerColumn] = useState<Record<string, number>>({});
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
   const [editarQuadroOpen, setEditarQuadroOpen] = useState(false);
+  const [excluirQuadroOpen, setExcluirQuadroOpen] = useState(false);
+  const [activeColumnId, setActiveColumnId] = useState<string | null>(null); // ✅ Rastrear coluna sendo arrastada
+  const activeColumnIdRef = useRef<string | null>(null); // ✅ Ref para acessar no realtime
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMovingRef = useRef(false); // ✅ NOVO: Bloquear operações concorrentes
 
   const TASKS_PER_PAGE = 20; // ✅ OTIMIZAÇÃO: Aumentado de 10 para 20
   const INITIAL_LOAD_LIMIT = 50; // ✅ OTIMIZAÇÃO: Limitar carga inicial
 
-  // Verificar permissão de gerenciar estrutura de tarefas
+  // ✅ CRÍTICO: Se for admin, SEMPRE permitir gerenciar estrutura
+  // Este useEffect tem prioridade máxima e executa sempre que isAdmin mudar
   useEffect(() => {
+    if (isAdmin) {
+      console.log('🔐 [Tarefas] Usuário é admin, garantindo permissão para gerenciar estrutura');
+      setCanManageTaskStructure(true);
+    }
+  }, [isAdmin]);
+
+  // Verificar permissão de gerenciar estrutura de tarefas (apenas se NÃO for admin)
+  useEffect(() => {
+    // ✅ CRÍTICO: Se for admin, não fazer verificação (já foi definido como true no useEffect anterior)
+    if (isAdmin) {
+      return; // Não fazer nada, já está definido como true
+    }
+    
+    // Só verificar permissão se NÃO for admin
     const checkPermission = async () => {
+      // ✅ Verificar novamente antes de fazer a chamada (pode ter virado admin)
       if (isAdmin) {
-        setCanManageTaskStructure(true);
         return;
       }
-      const canManage = await canManageStructure('tarefas');
-      setCanManageTaskStructure(canManage);
+      
+      try {
+        const canManage = await canManageStructure('tarefas');
+        console.log('🔐 [Tarefas] Permissão para gerenciar estrutura:', canManage);
+        // ✅ Só atualizar se ainda não for admin (pode ter mudado durante a verificação)
+        if (!isAdmin) {
+          setCanManageTaskStructure(canManage);
+        }
+      } catch (error) {
+        console.error('❌ [Tarefas] Erro ao verificar permissão:', error);
+        // Em caso de erro, permitir por padrão para não bloquear funcionalidades
+        // Mas só se não for admin (para não sobrescrever)
+        if (!isAdmin) {
+          setCanManageTaskStructure(true);
+        }
+      }
     };
+    
     checkPermission();
   }, [isAdmin, canManageStructure]);
 
@@ -455,9 +500,12 @@ export default function Tarefas() {
     const columnsChannel = supabase
       .channel('task_columns_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'task_columns' }, (payload: any) => {
-        // 🔒 Não recarregar se houver operação de drag em andamento
-        if (isMovingRef.current) {
-          console.log('[REALTIME] 🔒 Ignorando update de coluna durante drag');
+        // 🔒 Não recarregar se houver operação de drag em andamento OU coluna sendo arrastada
+        if (isMovingRef.current || activeColumnIdRef.current) {
+          console.log('[REALTIME] 🔒 Ignorando update de coluna durante drag', { 
+            isMoving: isMovingRef.current, 
+            activeColumn: activeColumnIdRef.current 
+          });
           return;
         }
         console.log('[REALTIME] 📡 Recarregando colunas após mudança');
@@ -539,10 +587,14 @@ export default function Tarefas() {
       setLoading(true);
       
       const { data: boardsData } = await supabase.from("task_boards").select("*").order("criado_em");
+      console.log('📋 [Tarefas] Boards carregados:', boardsData?.length || 0, boardsData);
       setBoards(boardsData || []);
       
       if (!selectedBoard && boardsData && boardsData.length > 0) {
+        console.log('📋 [Tarefas] Selecionando primeiro board:', boardsData[0].id, boardsData[0].nome);
         setSelectedBoard(boardsData[0].id);
+      } else {
+        console.log('📋 [Tarefas] Board já selecionado ou sem boards:', selectedBoard);
       }
 
       // ✅ CRÍTICO: Ordenar colunas por posição - filtrar por board selecionado
@@ -692,17 +744,89 @@ export default function Tarefas() {
     // Verificar se estamos arrastando uma coluna
     if (activeData?.type === 'column') {
       console.log('[Drag&Drop] 🔄 Detectado drag de COLUNA');
-      const overId = String(over.id);
+      
+      // ✅ MELHORADO: Detectar se está sobre outra coluna ou sobre um elemento dentro de uma coluna
+      const overData: any = (over as any).data?.current || {};
+      let overColumnId: string | null = null;
+      
+      // Prioridade 1: Se over.id é o ID de uma coluna válida
+      const isValidColumnId = columnsFiltradas.some(c => c.id === String(over.id));
+      if (isValidColumnId) {
+        overColumnId = String(over.id);
+        console.log('[Drag&Drop] ✅ Destino: coluna direta:', overColumnId);
+      }
+      // Prioridade 2: Se over.data tem columnId (quando solta sobre tarefa dentro da coluna)
+      else if (overData?.columnId) {
+        overColumnId = overData.columnId;
+        console.log('[Drag&Drop] ✅ Destino: coluna via data.columnId:', overColumnId);
+      }
+      // Prioridade 3: Tentar encontrar coluna pai pelo elemento DOM (buscar elemento pai)
+      else {
+        // Tentar encontrar elemento com data-column-id no elemento ou nos pais
+        let element: HTMLElement | null = document.querySelector(`[data-column-id]`);
+        if (!element) {
+          // Se não encontrar, tentar pelo ID do over
+          const overElement = document.elementFromPoint(
+            (over.rect?.left || 0) + (over.rect?.width || 0) / 2,
+            (over.rect?.top || 0) + (over.rect?.height || 0) / 2
+          ) as HTMLElement;
+          
+          if (overElement) {
+            // Procurar elemento pai com data-column-id
+            let parent = overElement.closest('[data-column-id]') as HTMLElement;
+            if (parent) {
+              const columnId = parent.getAttribute('data-column-id');
+              if (columnId && columnsFiltradas.some(c => c.id === columnId)) {
+                overColumnId = columnId;
+                console.log('[Drag&Drop] ✅ Destino: coluna via DOM parent:', overColumnId);
+              }
+            }
+          }
+        }
+      }
+      
+      if (!overColumnId) {
+        console.error('[Drag&Drop] ❌ Não foi possível identificar coluna destino');
+        console.log('[Drag&Drop] 📊 Dados disponíveis:', {
+          overId: over.id,
+          overData,
+          availableColumns: columnsFiltradas.map(c => c.id)
+        });
+        setActiveTaskId(null);
+        return;
+      }
+      
+      const overId = overColumnId;
       
       if (activeId === overId) {
         console.log('[Drag&Drop] ℹ️ Drop na mesma posição, ignorando');
+        setActiveTaskId(null);
         return;
       }
       
       const oldIndex = columnsFiltradas.findIndex(c => c.id === activeId);
       const newIndex = columnsFiltradas.findIndex(c => c.id === overId);
       
-      console.log('[Drag&Drop] 📍 Índices:', { oldIndex, newIndex, total: columnsFiltradas.length });
+      console.log('[Drag&Drop] 📍 Índices:', { 
+        oldIndex, 
+        newIndex, 
+        total: columnsFiltradas.length,
+        activeId,
+        overId,
+        columnsIds: columnsFiltradas.map(c => ({ id: c.id, nome: c.nome, posicao: c.posicao }))
+      });
+      
+      if (oldIndex === -1 || newIndex === -1) {
+        console.error('[Drag&Drop] ❌ Índices inválidos:', { 
+          oldIndex, 
+          newIndex,
+          activeId,
+          overId,
+          columnsFiltradas: columnsFiltradas.map(c => ({ id: c.id, nome: c.nome }))
+        });
+        setActiveTaskId(null);
+        return;
+      }
       
       if (oldIndex !== -1 && newIndex !== -1) {
         try {
@@ -724,19 +848,51 @@ export default function Tarefas() {
           console.log('[Drag&Drop] 🎨 Atualizando UI imediatamente...');
           
           // ✅ CRÍTICO: Atualizar estado ANTES de persistir no banco
+          // ✅ IMPORTANTE: Usar função de atualização que garante ordem correta
           setColumns(prev => {
-            // Criar um mapa das novas posições
+            // Filtrar apenas colunas do board atual
+            const boardColumns = prev.filter(col => col.board_id === selectedBoard);
+            const otherColumns = prev.filter(col => col.board_id !== selectedBoard);
+            
+            // Criar um mapa das novas posições baseado na ordem reordenada
             const newPositions = new Map(updatedColumnsWithPosition.map(c => [c.id, c.posicao]));
             
-            // Atualizar todas as colunas com as novas posições
-            return prev.map(col => {
+            // Atualizar colunas do board atual com as novas posições
+            const updatedBoardColumns = boardColumns.map(col => {
               const newPosition = newPositions.get(col.id);
               if (newPosition !== undefined) {
                 return { ...col, posicao: newPosition };
               }
               return col;
-            }).sort((a, b) => a.posicao - b.posicao); // ✅ Ordenar por posição
+            });
+            
+            // ✅ CRÍTICO: Ordenar ANTES de retornar para garantir ordem correta
+            updatedBoardColumns.sort((a, b) => a.posicao - b.posicao);
+            
+            // Retornar colunas atualizadas + outras colunas
+            return [...updatedBoardColumns, ...otherColumns];
           });
+          
+          // ✅ FORÇAR re-render imediato para garantir que a UI atualize
+          // Usar requestAnimationFrame para garantir que a atualização aconteça no próximo frame
+          requestAnimationFrame(() => {
+            setColumns(current => {
+              const boardCols = current.filter(col => col.board_id === selectedBoard);
+              const others = current.filter(col => col.board_id !== selectedBoard);
+              boardCols.sort((a, b) => a.posicao - b.posicao);
+              return [...boardCols, ...others];
+            });
+          });
+          
+          // ✅ DUPLA GARANTIA: Forçar novamente após um pequeno delay
+          setTimeout(() => {
+            setColumns(current => {
+              const boardCols = current.filter(col => col.board_id === selectedBoard);
+              const others = current.filter(col => col.board_id !== selectedBoard);
+              boardCols.sort((a, b) => a.posicao - b.posicao);
+              return [...boardCols, ...others];
+            });
+          }, 100);
           
           // 💾 Atualizar posições no banco de dados
           console.log('[Drag&Drop] 💾 Atualizando posições no banco...');
@@ -761,25 +917,37 @@ export default function Tarefas() {
           console.log('[Drag&Drop] ✅ Colunas reordenadas com sucesso no banco!');
           toast.success("Ordem das colunas atualizada!");
           
+          // ✅ NÃO recarregar dados - manter a ordem atualizada no estado
+          // O estado local já está correto, não precisa recarregar
+          
           // ✅ Aguardar um pouco antes de desbloquear realtime
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => setTimeout(resolve, 500));
           
         } catch (error) {
           console.error('[Drag&Drop] ❌ Erro ao reordenar colunas:', error);
           toast.error("Erro ao atualizar ordem das colunas");
-          // Recarregar dados em caso de erro
+          // Recarregar dados em caso de erro para restaurar estado
           console.log('[Drag&Drop] 🔄 Recarregando dados após erro...');
           await carregarDados();
         } finally {
-          // 🔓 Desbloquear após delay maior
-          console.log('[Drag&Drop] 🔓 Desbloqueando realtime após 2 segundos...');
+          // 🔓 Desbloquear após delay maior para garantir que o realtime não interfira
+          console.log('[Drag&Drop] 🔓 Desbloqueando realtime após 3 segundos...');
           setTimeout(() => {
             isMovingRef.current = false;
             console.log('[Drag&Drop] ✓ Realtime desbloqueado');
-          }, 2000); // ✅ Aumentado para 2s para garantir persistência
+          }, 3000); // ✅ Aumentado para 3s para garantir persistência completa
         }
+        
+        // ✅ Limpar estados após drag de coluna
+        setActiveTaskId(null);
+        setActiveColumnId(null);
+        activeColumnIdRef.current = null;
+        return;
       } else {
         console.error('[Drag&Drop] ❌ Índices inválidos:', { oldIndex, newIndex });
+        setActiveTaskId(null);
+        setActiveColumnId(null);
+        activeColumnIdRef.current = null;
       }
       return;
     }
@@ -1150,33 +1318,41 @@ export default function Tarefas() {
               <option key={tag} value={tag}>{tag}</option>
             ))}
           </select>
-          {canManageTaskStructure && (
-            <Dialog open={dialogNovoBoard} onOpenChange={setDialogNovoBoard}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Novo Quadro
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Criar Novo Quadro</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label>Nome do Quadro</Label>
-                    <Input 
-                      value={novoBoardNome} 
-                      onChange={(e) => setNovoBoardNome(e.target.value)} 
-                      placeholder="Ex: Projeto Q1 2024"
-                    />
+          {(isAdmin || canManageTaskStructure) && (
+            <>
+              <Button 
+                variant="outline"
+                onClick={() => setDialogNovoBoard(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Novo Quadro
+              </Button>
+              <Dialog open={dialogNovoBoard} onOpenChange={setDialogNovoBoard}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Criar Novo Quadro</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Nome do Quadro</Label>
+                      <Input 
+                        value={novoBoardNome} 
+                        onChange={(e) => setNovoBoardNome(e.target.value)} 
+                        placeholder="Ex: Projeto Q1 2024"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            criarNovoBoard();
+                          }
+                        }}
+                      />
+                    </div>
+                    <Button onClick={criarNovoBoard} className="w-full">
+                      Criar
+                    </Button>
                   </div>
-                  <Button onClick={criarNovoBoard} className="w-full">
-                    Criar
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </DialogContent>
+              </Dialog>
+            </>
           )}
         </div>
       </div>
@@ -1186,8 +1362,11 @@ export default function Tarefas() {
           <Label>Quadro</Label>
           <div className="flex items-center gap-2 mt-2">
             <select 
-              value={selectedBoard} 
-              onChange={(e) => setSelectedBoard(e.target.value)} 
+              value={selectedBoard || ""} 
+              onChange={(e) => {
+                console.log('📋 [Tarefas] Board selecionado:', e.target.value);
+                setSelectedBoard(e.target.value);
+              }} 
               className="flex-1 max-w-xs p-2 border rounded-md"
             >
               {boards.map((board) => (
@@ -1197,37 +1376,94 @@ export default function Tarefas() {
               ))}
             </select>
             
-            {selectedBoard && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {canManageTaskStructure && (
-                    <>
-                      <DropdownMenuItem onClick={() => setEditarQuadroOpen(true)}>
-                        <Pencil className="mr-2 h-4 w-4" />
-                        Editar Quadro
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setEditarQuadroOpen(true)}>
-                        <Settings className="mr-2 h-4 w-4" />
-                        Gerenciar Colunas
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem 
-                        onClick={() => setEditarQuadroOpen(true)}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Excluir Quadro
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  disabled={!selectedBoard}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🔘 [Tarefas] Botão de três pontos clicado');
+                    console.log('🔘 [Tarefas] canManageTaskStructure:', canManageTaskStructure);
+                    console.log('🔘 [Tarefas] isAdmin:', isAdmin);
+                    console.log('🔘 [Tarefas] selectedBoard:', selectedBoard);
+                    console.log('🔘 [Tarefas] boards:', boards);
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  className="z-10"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent 
+                align="end"
+                className="z-[99999] bg-background border shadow-lg"
+                style={{ zIndex: 99999 }}
+                onOpenAutoFocus={(e) => {
+                  console.log('📋 [Tarefas] Menu dropdown aberto');
+                  console.log('📋 [Tarefas] selectedBoard no menu:', selectedBoard);
+                  console.log('📋 [Tarefas] isAdmin:', isAdmin);
+                  console.log('📋 [Tarefas] canManageTaskStructure:', canManageTaskStructure);
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {!selectedBoard ? (
+                  <DropdownMenuItem disabled>
+                    Selecione um quadro primeiro
+                  </DropdownMenuItem>
+                ) : (isAdmin || canManageTaskStructure) ? (
+                  <>
+                    <DropdownMenuItem 
+                      onClick={(e) => {
+                        console.log('✏️ [Tarefas] Editar Quadro clicado');
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditarQuadroOpen(true);
+                      }}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Editar Quadro
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={(e) => {
+                        console.log('⚙️ [Tarefas] Gerenciar Colunas clicado');
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditarQuadroOpen(true);
+                      }}
+                    >
+                      <Settings className="mr-2 h-4 w-4" />
+                      Gerenciar Colunas
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={(e) => {
+                        console.log('🗑️ [Tarefas] Excluir Quadro clicado');
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditarQuadroOpen(true);
+                        // Pequeno delay para garantir que o dialog de edição seja montado primeiro
+                        setTimeout(() => {
+                          setExcluirQuadroOpen(true);
+                        }, 100);
+                      }}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Excluir Quadro
+                    </DropdownMenuItem>
+                  </>
+                ) : (
+                  <DropdownMenuItem disabled>
+                    Sem permissão para gerenciar quadros
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       )}
@@ -1236,9 +1472,26 @@ export default function Tarefas() {
         <EditarQuadroDialog
           boardId={selectedBoard}
           boardNome={boards.find((b) => b.id === selectedBoard)?.nome || ""}
-          onUpdated={carregarDados}
+          onUpdated={() => {
+            console.log('🔄 [Tarefas] Recarregando dados após atualização do quadro');
+            carregarDados();
+          }}
           open={editarQuadroOpen}
-          onOpenChange={setEditarQuadroOpen}
+          onOpenChange={(open) => {
+            console.log('📝 [Tarefas] Dialog de edição:', open ? 'aberto' : 'fechado');
+            setEditarQuadroOpen(open);
+            if (!open) {
+              // Se fechar o dialog de edição, também fechar o dialog de exclusão
+              setExcluirQuadroOpen(false);
+            }
+          }}
+          openDeleteDialog={excluirQuadroOpen}
+          onDeleteDialogChange={(open) => {
+            console.log('🗑️ [Tarefas] Dialog de exclusão:', open ? 'aberto' : 'fechado');
+            setExcluirQuadroOpen(open);
+            // Se o dialog de exclusão for fechado sem excluir, manter o dialog de edição aberto
+            // para que o usuário possa fazer outras ações se desejar
+          }}
         />
       )}
 
@@ -1338,7 +1591,7 @@ export default function Tarefas() {
         </div>
       ) : boards.length === 0 ? (
         <div className="text-center py-12">
-          {canManageTaskStructure ? (
+          {(isAdmin || canManageTaskStructure) ? (
             <Button onClick={() => setDialogNovoBoard(true)}>
               <Plus className="mr-2" />
               Criar Primeiro Quadro
@@ -1350,7 +1603,7 @@ export default function Tarefas() {
       ) : columnsFiltradas.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted-foreground mb-4">Nenhuma coluna criada ainda</p>
-          {canManageTaskStructure ? (
+          {(isAdmin || canManageTaskStructure) ? (
             <p className="text-sm text-muted-foreground">
               Crie colunas como "A Fazer", "Em Progresso", "Concluído"
             </p>
@@ -1390,7 +1643,7 @@ export default function Tarefas() {
                 />
               ))}
             {/* Botão para adicionar nova coluna - apenas admin pode criar colunas */}
-            {canManageTaskStructure && (
+            {(isAdmin || canManageTaskStructure) && (
               <div className="min-w-[280px] flex-shrink-0">
                 <AdicionarColunaDialog
                   boardId={selectedBoard}

@@ -94,6 +94,9 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
   const [leadNome, setLeadNome] = useState<string | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
+  const [showCommentInput, setShowCommentInput] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
 
   // ✅ MELHORADO: Usar hook useTaskTimer para gerenciar timer
   const {
@@ -282,6 +285,70 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       toast.error("Erro ao salvar comentário");
     }
   }, [newComment, localComments, task.id, task.comments, onUpdate]);
+
+  const editComment = useCallback(async (commentId: string) => {
+    const text = editingCommentText.trim();
+    if (!text) {
+      setEditingCommentId(null);
+      setEditingCommentText("");
+      return;
+    }
+
+    const updated = (localComments || []).map((c: any) => {
+      const commentIdToCheck = c.id || (typeof c === 'string' ? null : c.id);
+      if (commentIdToCheck === commentId) {
+        return {
+          ...c,
+          text: text,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return c;
+    });
+
+    setLocalComments(updated);
+    setEditingCommentId(null);
+    setEditingCommentText("");
+
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { error } = await supabase
+        .from('tasks')
+        .update({ comments: updated })
+        .eq('id', task.id);
+      if (error) throw error;
+      onUpdate();
+      toast.success("Comentário editado");
+    } catch (e) {
+      console.error("Erro ao editar comentário:", e);
+      setLocalComments(task.comments || []);
+      toast.error("Erro ao salvar alterações");
+    }
+  }, [editingCommentText, localComments, task.id, task.comments, onUpdate]);
+
+  const deleteComment = useCallback(async (commentId: string) => {
+    const updated = (localComments || []).filter((c: any) => {
+      const commentIdToCheck = c.id || (typeof c === 'string' ? null : c.id);
+      return commentIdToCheck !== commentId;
+    });
+
+    setLocalComments(updated);
+
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { error } = await supabase
+        .from('tasks')
+        .update({ comments: updated })
+        .eq('id', task.id);
+      if (error) throw error;
+      onUpdate();
+      toast.success("Comentário excluído");
+    } catch (e) {
+      console.error("Erro ao excluir comentário:", e);
+      setLocalComments(task.comments || []);
+      toast.error("Erro ao excluir comentário");
+    }
+  }, [localComments, task.id, task.comments, onUpdate]);
 
   const formatTime = useCallback((seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -588,33 +655,6 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                     {isOverdue && <span className="ml-1 text-red-500">🔴</span>}
                   </CardTitle>
                 </div>
-                
-                {/* Botão WhatsApp */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    console.log("🔍 Clique no botão WhatsApp:", { 
-                      leadPhone, 
-                      leadId: task.lead_id, 
-                      leadName: leadNome || task.lead_name 
-                    });
-                    if (leadPhone) {
-                      console.log("✅ Abrindo popup de conversa");
-                      setConversaOpen(true);
-                    } else {
-                      console.log("❌ Lead sem telefone");
-                      toast.error("Lead sem telefone cadastrado");
-                    }
-                  }}
-                  disabled={!leadPhone}
-                  className="h-8 px-2 text-success hover:text-success hover:bg-success/10 transition-all disabled:opacity-50 flex-shrink-0"
-                  title={leadPhone ? "Ver histórico de conversas" : "Lead sem telefone cadastrado"}
-                >
-                  <MessageSquare className="h-4 w-4 mr-1" />
-                  <span className="text-xs font-medium">Conversas</span>
-                </Button>
               </div>
             ) : (
               <CardTitle className={`text-base font-semibold ${isOverdue ? 'text-red-700' : 'text-foreground'}`}>
@@ -623,20 +663,30 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
               </CardTitle>
             )}
           </div>
-          <div className="flex items-center gap-1">
-            <Badge className={`${getPriorityColor(task.priority)} border-0 text-white shadow-sm`}>
-              {task.priority}
-            </Badge>
-            {/* ✅ BACKUP: Botão de expandir/recolher - Se retroceder, verificar este botão Chevron */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
-              onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
-              title={isExpanded ? 'Recolher' : 'Expandir'}
-            >
-              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            </Button>
+          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+            <div className="flex items-center gap-1.5">
+              <Badge className={`${getPriorityColor(task.priority)} border-0 text-white shadow-sm`}>
+                {task.priority}
+              </Badge>
+              {/* ✅ BACKUP: Botão de expandir/recolher - Se retroceder, verificar este botão Chevron */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
+                title={isExpanded ? 'Recolher' : 'Expandir'}
+              >
+                {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </Button>
+            </div>
+            {task.due_date && (
+              <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md ${
+                isOverdue ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-muted/50 text-muted-foreground'
+              }`}>
+                <CalendarIcon className="h-3 w-3" />
+                <span className="font-medium">{new Date(task.due_date).toLocaleDateString("pt-BR")}</span>
+              </div>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -662,12 +712,6 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
               +{(task as any).responsaveis.length - (task.assignee_id ? 1 : 0)} resp.
             </div>
           )}
-          {task.due_date && (
-            <div className="flex items-center gap-1.5 text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
-              <CalendarIcon className="h-3 w-3" />
-              <span className="font-medium">{new Date(task.due_date).toLocaleDateString("pt-BR")}</span>
-            </div>
-          )}
           {Array.isArray(localComments) && localComments.length > 0 && (
             <div className="flex items-center gap-1.5 text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
               <MessageSquare className="h-3 w-3" />
@@ -691,6 +735,37 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
             )}
           </div>
         </div>
+
+        {/* Botão Conversas - MOVIDO DO HEADER PARA CÁ */}
+        {task.lead_id && leadPhone && (
+          <div className="flex items-center justify-start pt-2 border-t border-border/50">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                console.log("🔍 Clique no botão WhatsApp:", { 
+                  leadPhone, 
+                  leadId: task.lead_id, 
+                  leadName: leadNome || task.lead_name 
+                });
+                if (leadPhone) {
+                  console.log("✅ Abrindo popup de conversa");
+                  setConversaOpen(true);
+                } else {
+                  console.log("❌ Lead sem telefone");
+                  toast.error("Lead sem telefone cadastrado");
+                }
+              }}
+              disabled={!leadPhone}
+              className="w-full h-8 text-success border-success/30 hover:bg-success/10 hover:text-success transition-all disabled:opacity-50"
+              title={leadPhone ? "Ver histórico de conversas" : "Lead sem telefone cadastrado"}
+            >
+              <MessageSquare className="h-3.5 w-3.5 mr-2" />
+              <span className="text-xs font-medium">Ver Conversas</span>
+            </Button>
+          </div>
+        )}
         
         {Array.isArray(localChecklist) && localChecklist.length > 0 && (
           <div className="text-xs text-muted-foreground">
@@ -841,19 +916,68 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
 
         {/* Seção do lead movida para o CardHeader para aparecer sempre */}
         
-        <div className="flex justify-end items-center gap-1 pt-2">
-          {/* Adicionar comentário - posicionado antes do sino */}
-          <div className="flex items-center gap-1">
-            <Input
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Adicionar comentário..."
-              className="h-7 text-xs w-40"
-            />
-            <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={addComment} title="Adicionar comentário">
-              <MessageSquare className="h-3 w-3" />
+        <div className="flex justify-end items-center gap-1 pt-2 flex-wrap">
+          {/* Adicionar comentário - apenas botão para não sair do card */}
+          {showCommentInput ? (
+            <div className="flex items-center gap-1 flex-1 min-w-0">
+              <Input
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    addComment();
+                    setShowCommentInput(false);
+                  } else if (e.key === 'Escape') {
+                    setShowCommentInput(false);
+                    setNewComment("");
+                  }
+                }}
+                placeholder="Comentário..."
+                className="h-7 text-xs flex-1 min-w-0"
+                autoFocus
+              />
+              <Button 
+                type="button" 
+                size="sm" 
+                variant="ghost" 
+                className="h-7 w-7 p-0 flex-shrink-0" 
+                onClick={() => {
+                  addComment();
+                  setShowCommentInput(false);
+                }} 
+                title="Adicionar"
+              >
+                <Check className="h-3.5 w-3.5" />
+              </Button>
+              <Button 
+                type="button" 
+                size="sm" 
+                variant="ghost" 
+                className="h-7 w-7 p-0 flex-shrink-0" 
+                onClick={() => {
+                  setShowCommentInput(false);
+                  setNewComment("");
+                }} 
+                title="Cancelar"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <Button 
+              type="button" 
+              size="sm" 
+              variant="ghost" 
+              className="h-7 w-7 p-0 flex-shrink-0" 
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowCommentInput(true);
+              }} 
+              title="Adicionar comentário"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
             </Button>
-          </div>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -956,17 +1080,102 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
             </div>
             {localComments.map((c, idx) => {
               // Extrair texto do comentário, seja string ou objeto
+              const commentId = c.id || (typeof c === 'string' ? `comment-${idx}` : c.id || `comment-${idx}`);
               const commentText = typeof c === 'string' ? c : (c.text || JSON.stringify(c));
+              const isEditing = editingCommentId === commentId;
               
               return (
-                <div key={c.id || idx} className="bg-muted/30 p-2.5 rounded-md border border-border/30">
-                  <p className="text-xs text-foreground leading-relaxed break-words">
-                    {commentText}
-                  </p>
-                  {c.created_at && (
-                    <span className="text-[10px] text-muted-foreground mt-1 block">
-                      {new Date(c.created_at).toLocaleString('pt-BR')}
-                    </span>
+                <div key={commentId} className="bg-muted/30 p-2.5 rounded-md border border-border/30 group hover:bg-muted/40 transition-colors">
+                  {isEditing ? (
+                    <div className="space-y-2">
+                      <Input
+                        value={editingCommentText}
+                        onChange={(e) => setEditingCommentText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            editComment(commentId);
+                          } else if (e.key === 'Escape') {
+                            setEditingCommentId(null);
+                            setEditingCommentText("");
+                          }
+                        }}
+                        className="h-8 text-xs"
+                        autoFocus
+                      />
+                      <div className="flex items-center gap-1 justify-end">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
+                          onClick={() => editComment(commentId)}
+                          title="Salvar"
+                        >
+                          <Check className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
+                          onClick={() => {
+                            setEditingCommentId(null);
+                            setEditingCommentText("");
+                          }}
+                          title="Cancelar"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs text-foreground leading-relaxed break-words flex-1">
+                          {commentText}
+                        </p>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingCommentId(commentId);
+                              setEditingCommentText(commentText);
+                            }}
+                            title="Editar comentário"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm("Tem certeza que deseja excluir este comentário?")) {
+                                deleteComment(commentId);
+                              }
+                            }}
+                            title="Excluir comentário"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      {c.created_at && (
+                        <span className="text-[10px] text-muted-foreground mt-1 block">
+                          {new Date(c.created_at).toLocaleString('pt-BR')}
+                          {c.updated_at && c.updated_at !== c.created_at && (
+                            <span className="ml-2">(editado)</span>
+                          )}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               );

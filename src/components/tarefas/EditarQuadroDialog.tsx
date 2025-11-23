@@ -37,9 +37,11 @@ interface EditarQuadroDialogProps {
   onUpdated: () => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  openDeleteDialog?: boolean;
+  onDeleteDialogChange?: (open: boolean) => void;
 }
 
-export function EditarQuadroDialog({ boardId, boardNome, onUpdated, open: controlledOpen, onOpenChange: controlledOnOpenChange }: EditarQuadroDialogProps) {
+export function EditarQuadroDialog({ boardId, boardNome, onUpdated, open: controlledOpen, onOpenChange: controlledOnOpenChange, openDeleteDialog: controlledDeleteOpen, onDeleteDialogChange: controlledDeleteOnOpenChange }: EditarQuadroDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [columns, setColumns] = useState<Column[]>([]);
   const [novoNomeQuadro, setNovoNomeQuadro] = useState(boardNome);
@@ -50,11 +52,15 @@ export function EditarQuadroDialog({ boardId, boardNome, onUpdated, open: contro
   const [corEditada, setCorEditada] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteColumnId, setDeleteColumnId] = useState<string | null>(null);
-  const [deleteBoardDialogOpen, setDeleteBoardDialogOpen] = useState(false);
+  const [internalDeleteBoardDialogOpen, setInternalDeleteBoardDialogOpen] = useState(false);
   
   // Use controlled state if provided, otherwise use internal state
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
   const setOpen = controlledOnOpenChange || setInternalOpen;
+  
+  // Use controlled delete dialog state if provided, otherwise use internal state
+  const deleteBoardDialogOpen = controlledDeleteOpen !== undefined ? controlledDeleteOpen : internalDeleteBoardDialogOpen;
+  const setDeleteBoardDialogOpen = controlledDeleteOnOpenChange || setInternalDeleteBoardDialogOpen;
 
   useEffect(() => {
     if (open) {
@@ -62,6 +68,24 @@ export function EditarQuadroDialog({ boardId, boardNome, onUpdated, open: contro
       setNovoNomeQuadro(boardNome);
     }
   }, [open, boardId, boardNome]);
+
+  // Se o dialog de exclusão for aberto externamente, abrir o dialog de edição também para mostrar o contexto
+  useEffect(() => {
+    if (deleteBoardDialogOpen && !open) {
+      setOpen(true);
+    }
+  }, [deleteBoardDialogOpen, open, setOpen]);
+
+  // Quando o dialog de edição for aberto e houver uma solicitação para abrir o dialog de exclusão, abrir automaticamente
+  useEffect(() => {
+    if (open && controlledDeleteOpen && !deleteBoardDialogOpen) {
+      // Pequeno delay para garantir que o dialog de edição esteja totalmente renderizado
+      const timer = setTimeout(() => {
+        setDeleteBoardDialogOpen(true);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [open, controlledDeleteOpen, deleteBoardDialogOpen, setDeleteBoardDialogOpen]);
 
   const carregarColunas = async () => {
     const { data } = await supabase
@@ -197,7 +221,11 @@ export function EditarQuadroDialog({ boardId, boardNome, onUpdated, open: contro
       });
       toast.success("Quadro excluído!");
       setDeleteBoardDialogOpen(false);
-      setOpen(false);
+      if (controlledOpen === undefined) {
+        setOpen(false);
+      } else if (controlledOnOpenChange) {
+        controlledOnOpenChange(false);
+      }
       onUpdated();
     } catch (error) {
       toast.error("Erro ao excluir quadro");
