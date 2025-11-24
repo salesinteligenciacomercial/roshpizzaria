@@ -1932,6 +1932,38 @@ function Conversas() {
             const payloadCompanyId = (payload.new as any)?.company_id;
             const payloadFromMe = (payload.new as any)?.fromme;
             const payloadTelefone = (payload.new as any)?.telefone_formatado || (payload.new as any)?.numero;
+            const payloadNumero = (payload.new as any)?.numero;
+            const payloadNomeContato = (payload.new as any)?.nome_contato;
+            
+            // ⚡ BLOQUEIO DE DUPLICATAS: Detectar e bloquear mensagens de números @lid quando existe número real
+            const temLid = payloadNumero && String(payloadNumero).includes('@lid');
+            
+            if (temLid && payloadNomeContato) {
+              console.log('🚫 [REALTIME] Detectado número @lid, verificando duplicata...', {
+                numero: payloadNumero,
+                telefone_formatado: payloadTelefone,
+                nome: payloadNomeContato
+              });
+              
+              // Buscar se existe conversa com o mesmo nome mas sem @lid
+              const { data: conversaReal } = await supabase
+                .from('conversas')
+                .select('id, numero, telefone_formatado')
+                .eq('company_id', userCompanyIdRef.current || '')
+                .eq('nome_contato', payloadNomeContato)
+                .not('numero', 'like', '%@lid%')
+                .limit(1)
+                .maybeSingle();
+              
+              if (conversaReal) {
+                console.log('🚫 [REALTIME] BLOQUEADO: Conversa duplicada (@lid) ignorada. Conversa real já existe:', {
+                  lidNumero: payloadNumero,
+                  realNumero: conversaReal.numero,
+                  nome: payloadNomeContato
+                });
+                return; // Bloquear esta mensagem - conversa real já existe
+              }
+            }
             
             // ⚡ CORREÇÃO CRÍTICA: Log detalhado para debug de mensagens não aparecendo
             const isReceived = payloadFromMe === false || !payloadFromMe;
@@ -3278,46 +3310,92 @@ function Conversas() {
       
       console.log(`📊 [LOAD] ${conversasData.length} mensagens processadas, ${conversasMap.size} conversas únicas, ${leadsData.length} leads encontrados`);
       
-      // ⚡ CORREÇÃO CRÍTICA: Deduplicar conversas com @lid e números reais
-      // Agrupar por telefone normalizado SEM considerar @lid, prefixos DDD duplicados, etc
+      // ⚡ CORREÇÃO CRÍTICA: Deduplicar conversas ANTES de criar leads
+      // Estratégia: Agrupar por NOME DE CONTATO primeiro, depois por telefone normalizado
+      // Isso garante que mensagens do mesmo contato com números diferentes sejam mescladas
+      
+      // ETAPA 1: Criar mapa de nome -> telefones para detectar duplicatas por nome
+      const nomeParaTelefones = new Map<string, Set<string>>();
+      
+      conversasMap.forEach((msgs, key) => {
+        // Pegar nome do contato (ignorar nomes genéricos)
+        const nomesProibidos = ['jeohvah lima', 'jeohvah i.a', 'jeova costa de lima', 'jeo', key];
+        const nomeContato = msgs.find(m => {
+          const nome = m.nome_contato?.trim().toLowerCase();
+          return nome && nome !== key && !nomesProibidos.includes(nome);
+        })?.nome_contato?.trim();
+        
+        if (nomeContato && nomeContato !== key) {
+          if (!nomeParaTelefones.has(nomeContato)) {
+            nomeParaTelefones.set(nomeContato, new Set());
+          }
+          nomeParaTelefones.get(nomeContato)!.add(key);
+        }
+      });
+      
+      // ETAPA 2: Detectar telefones que devem ser mesclados (mesmo nome)
+      const telefoneMergeMap = new Map<string, string>(); // telefone duplicado -> telefone correto
+      
+      nomeParaTelefones.forEach((telefones, nome) => {
+        if (telefones.size > 1) {
+          const telefonesArray = Array.from(telefones);
+          
+          // Priorizar: 1) Telefone sem @lid, 2) Telefone mais curto (sem DDD duplicado)
+          const telefoneCorreto = telefonesArray.sort((a, b) => {
+            const aLimpo = a.replace(/[^0-9]/g, '');
+            const bLimpo = b.replace(/[^0-9]/g, '');
+            
+            // Se um tem @lid e outro não, priorizar sem @lid
+            const aTemLid = conversasMap.get(a)?.some(m => m.numero?.includes('@lid')) || false;
+            const bTemLid = conversasMap.get(b)?.some(m => m.numero?.includes('@lid')) || false;
+            
+            if (aTemLid && !bTemLid) return 1; // b vem primeiro (sem @lid)
+            if (!aTemLid && bTemLid) return -1; // a vem primeiro (sem @lid)
+            
+            // Se ambos têm ou não têm @lid, priorizar o mais curto (sem DDD duplicado)
+            return aLimpo.length - bLimpo.length;
+          })[0];
+          
+          // Mapear todos os outros telefones para o correto
+          telefonesArray.forEach(tel => {
+            if (tel !== telefoneCorreto) {
+              telefoneMergeMap.set(tel, telefoneCorreto);
+              console.log(`🔗 [DEDUP] Mesclando "${tel}" → "${telefoneCorreto}" (nome: "${nome}")`);
+            }
+          });
+        }
+      });
+      
+      // ETAPA 3: Mesclar conversas baseado no mapa
       const conversasDeduplicadas = new Map<string, any[]>();
       
       conversasMap.forEach((msgs, key) => {
-        // Normalizar chave removendo prefixos duplicados e variações de @lid
-        // Ex: 5515578500694049 -> 558781404486 (se for a mesma pessoa)
-        // A estratégia: remover prefixos duplicados do DDD
-        let normalizedKey = key.replace(/[^0-9]/g, '');
+        // Se este telefone deve ser mesclado com outro, usar o telefone correto
+        const telefoneCorreto = telefoneMergeMap.get(key) || key;
         
-        // Detectar e corrigir prefixo DDD duplicado (ex: 5515 -> 55)
-        // Se começa com 55 seguido de outro 1 ou 2 dígitos do DDD, remover a duplicata
-        if (normalizedKey.startsWith('5515') || 
-            normalizedKey.startsWith('5511') ||
-            normalizedKey.startsWith('5521') ||
-            normalizedKey.startsWith('5527') ||
-            normalizedKey.startsWith('5581') ||
-            normalizedKey.startsWith('5587')) {
-          // Remover os primeiros 4 dígitos e adicionar apenas 55
-          normalizedKey = '55' + normalizedKey.substring(4);
+        if (!conversasDeduplicadas.has(telefoneCorreto)) {
+          conversasDeduplicadas.set(telefoneCorreto, []);
         }
         
-        // Mesclar mensagens com a mesma chave normalizada
-        if (!conversasDeduplicadas.has(normalizedKey)) {
-          conversasDeduplicadas.set(normalizedKey, []);
-        }
-        
-        const existingMsgs = conversasDeduplicadas.get(normalizedKey)!;
-        existingMsgs.push(...msgs);
+        conversasDeduplicadas.get(telefoneCorreto)!.push(...msgs);
       });
       
-      // Substituir conversasMap pelas conversas deduplicadas
+      // ETAPA 4: Substituir conversasMap pelas conversas deduplicadas
       conversasMap.clear();
       conversasDeduplicadas.forEach((msgs, key) => {
-        // Ordenar por data
-        msgs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        conversasMap.set(key, msgs);
+        // Ordenar por data e remover mensagens duplicadas (mesmo ID)
+        const uniqueMsgs = Array.from(new Map(msgs.map(m => [m.id, m])).values());
+        uniqueMsgs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        conversasMap.set(key, uniqueMsgs);
       });
       
-      console.log(`🔄 [DEDUP] Conversas deduplicadas: ${conversasDeduplicadas.size} (era ${conversasMap.size})`);
+      console.log(`🔄 [DEDUP] Conversas deduplicadas: ${conversasMap.size} conversas finais`, {
+        telefonesMesclados: telefoneMergeMap.size,
+        detalhes: Array.from(telefoneMergeMap.entries()).map(([dup, correto]) => ({
+          duplicado: dup,
+          correto: correto
+        }))
+      });
       
       // Criar mapa de leads para buscar nomes
       const leadsMap = new Map<string, { name: string; leadId: string }>();
