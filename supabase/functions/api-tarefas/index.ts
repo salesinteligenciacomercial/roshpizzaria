@@ -24,6 +24,7 @@ const createTaskSchema = z.object({
   title: z.string().trim().min(2, 'Título muito curto').max(200, 'Título muito longo'),
   description: z.string().max(2000, 'Descrição muito longa').nullable().optional(),
   assignee_id: z.string().uuid('ID de responsável inválido').nullable().optional(),
+  responsaveis: z.array(z.string().uuid('ID de responsável inválido')).optional(),
   lead_id: z.string().uuid('ID de lead inválido').nullable().optional(),
   column_id: z.string().uuid('ID de coluna inválido').nullable().optional(),
   board_id: z.string().uuid('ID de board inválido').nullable().optional(),
@@ -51,6 +52,7 @@ const editTaskSchema = z.object({
   priority: z.enum(['baixa', 'media', 'alta', 'urgente']).optional(),
   due_date: z.string().datetime().nullable().optional(),
   assignee_id: z.string().uuid('ID de responsável inválido').nullable().optional(),
+  responsaveis: z.array(z.string().uuid('ID de responsável inválido')).optional(),
   lead_id: z.string().uuid('ID de lead inválido').nullable().optional(),
   tags: z.array(z.string()).optional(),
   checklist: z.array(z.object({ id: z.string().optional(), text: z.string(), done: z.boolean() })).optional(),
@@ -253,11 +255,12 @@ serve(async (req) => {
         });
 
         // SOLUÇÃO DEFINITIVA: Usar apenas campos que DEFINITIVAMENTE existem
-        // Baseado na estrutura real da tabela tasks (sem attachments, tags, comments, responsaveis)
+        // Baseado na estrutura real da tabela tasks
         const taskInsert: any = {
           title: validatedData.title,
           description: validatedData.description || null,
           assignee_id: validatedData.assignee_id || null,
+          responsaveis: validatedData.responsaveis || [],
           lead_id: validatedData.lead_id || null,
           column_id: validatedData.column_id || null,
           board_id: validatedData.board_id || null,
@@ -476,6 +479,7 @@ serve(async (req) => {
         if (validatedData.priority !== undefined) updateData.priority = validatedData.priority;
         if (validatedData.due_date !== undefined) updateData.due_date = validatedData.due_date;
         if (validatedData.assignee_id !== undefined) updateData.assignee_id = validatedData.assignee_id;
+        if (validatedData.responsaveis !== undefined) updateData.responsaveis = validatedData.responsaveis;
         if (validatedData.lead_id !== undefined) updateData.lead_id = validatedData.lead_id;
         if (validatedData.tags !== undefined) updateData.tags = validatedData.tags;
         if (validatedData.checklist !== undefined) updateData.checklist = validatedData.checklist;

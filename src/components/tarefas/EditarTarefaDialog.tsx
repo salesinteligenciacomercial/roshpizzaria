@@ -37,6 +37,7 @@ interface Task {
   description: string | null;
   priority: string;
   assignee_id: string | null;
+  responsaveis?: string[];
   due_date: string | null;
   lead_id: string | null;
   checklist?: { id?: string; text: string; done: boolean }[];
@@ -73,6 +74,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
   );
   const [assigneeId, setAssigneeId] = useState(task.assignee_id || "none");
   const [leadId, setLeadId] = useState(task.lead_id || "none");
+  const [responsaveis, setResponsaveis] = useState<string[]>(task.responsaveis || []);
   const [users, setUsers] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -99,6 +101,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
       setDueDate(task.due_date ? new Date(task.due_date).toISOString().split("T")[0] : "");
       setAssigneeId(task.assignee_id || "none");
       setLeadId(task.lead_id || "none");
+      setResponsaveis(task.responsaveis || []);
       setChecklist(task.checklist || []);
       setTags(task.tags || []);
       setComments(task.comments || []);
@@ -169,6 +172,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
               priority,
               due_date: dueDateIso,
               assignee_id: assigneeId === 'none' ? null : assigneeId,
+              responsaveis,
               lead_id: leadId === 'none' ? null : leadId,
               checklist,
               tags,
@@ -207,6 +211,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
           priority,
           due_date: dueDateIso,
           assignee_id: assigneeId === 'none' ? null : assigneeId,
+          responsaveis,
           lead_id: leadId === 'none' ? null : leadId,
           checklist: checklist && checklist.length > 0 ? checklist : null,
           tags: tags && tags.length > 0 ? tags : null,
@@ -528,6 +533,36 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Responsáveis Adicionais (múltiplos)</Label>
+                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-auto p-3 border rounded-md bg-muted/10">
+                  {users.length === 0 ? (
+                    <p className="text-xs text-muted-foreground col-span-2">Carregando usuários...</p>
+                  ) : (
+                    users.map((u) => (
+                      <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/30 p-1.5 rounded transition-colors">
+                        <Checkbox
+                          checked={responsaveis.includes(u.id)}
+                          onCheckedChange={(checked) => {
+                            setResponsaveis((prev) => 
+                              checked 
+                                ? [...prev, u.id] 
+                                : prev.filter(id => id !== u.id)
+                            );
+                          }}
+                        />
+                        <span className="flex-1 truncate">{u.full_name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                {responsaveis.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {responsaveis.length} responsável(is) adicional(is) selecionado(s)
+                  </p>
+                )}
               </div>
 
               <div>

@@ -1271,6 +1271,7 @@ export type Database = {
           lead_id: string | null
           owner_id: string
           priority: string
+          responsaveis: string[] | null
           status: string
           tags: string[] | null
           tempo_gasto: number | null
@@ -1294,6 +1295,7 @@ export type Database = {
           lead_id?: string | null
           owner_id: string
           priority?: string
+          responsaveis?: string[] | null
           status?: string
           tags?: string[] | null
           tempo_gasto?: number | null
@@ -1317,6 +1319,7 @@ export type Database = {
           lead_id?: string | null
           owner_id?: string
           priority?: string
+          responsaveis?: string[] | null
           status?: string
           tags?: string[] | null
           tempo_gasto?: number | null
