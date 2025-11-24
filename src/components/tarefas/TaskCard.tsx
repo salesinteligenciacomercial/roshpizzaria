@@ -615,7 +615,9 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     <Card
       ref={setNodeRef}
       style={style}
-      className={`group relative mb-3 border-0 shadow-card hover:shadow-lg transition-all duration-300 overflow-hidden ${
+      {...attributes}
+      {...listeners}
+      className={`group relative mb-3 border-0 shadow-card hover:shadow-lg transition-all duration-300 overflow-hidden cursor-grab active:cursor-grabbing ${
         isOverdue ? 'ring-2 ring-red-500/50 border-red-200' : ''
       }`}
     >
@@ -624,9 +626,6 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       <CardHeader className="relative pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 flex-1">
-            <span className="text-muted-foreground/70">
-              <GripVertical className="h-3 w-3 cursor-grab active:cursor-grabbing" {...attributes} {...listeners} />
-            </span>
             <div className={`h-1 w-1 rounded-full ${getPriorityColor(task.priority)} animate-pulse`} />
             
             {/* Layout com foto, nome do lead e título */}
@@ -673,6 +672,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0"
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
                 title={isExpanded ? 'Recolher' : 'Expandir'}
               >
@@ -742,8 +742,9 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
             <Button
               variant="outline"
               size="sm"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { 
-                e.stopPropagation(); 
+                e.stopPropagation();
                 console.log("🔍 Clique no botão WhatsApp:", { 
                   leadPhone, 
                   leadId: task.lead_id, 
@@ -788,7 +789,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
 
         {/* Attachments Section */}
         {attachments.length > 0 && (
-          <div className="space-y-1">
+          <div className="space-y-1" onPointerDown={(e) => e.stopPropagation()}>
             <div className="text-xs text-muted-foreground flex items-center gap-1">
               <Paperclip className="h-3 w-3" />
               Anexos ({attachments.length})
@@ -831,7 +832,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
 
         <div className="mt-1 space-y-1">
           {(localChecklist || []).map((item) => (
-            <div key={item.id} className="flex items-center gap-2 text-xs p-1 rounded hover:bg-muted/40 group">
+            <div key={item.id} className="flex items-center gap-2 text-xs p-1 rounded hover:bg-muted/40 group" onPointerDown={(e) => e.stopPropagation()}>
               <Checkbox checked={!!item.done} onCheckedChange={(v: any) => toggleChecklist(item.id!, !!v)} />
               {editingItemId === item.id ? (
                 <div className="flex items-center gap-1 flex-1">
@@ -906,7 +907,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
               )}
             </div>
           ))}
-          <div className="flex items-center gap-1 pt-1">
+          <div className="flex items-center gap-1 pt-1" onPointerDown={(e) => e.stopPropagation()}>
             <Input value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Adicionar item..." className="h-7 text-xs" />
             <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={addChecklistItem}>
               <Plus className="h-3 w-3" />
@@ -916,7 +917,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
 
         {/* Seção do lead movida para o CardHeader para aparecer sempre */}
         
-        <div className="flex justify-end items-center gap-1 pt-2 flex-wrap">
+        <div className="flex justify-end items-center gap-1 pt-2 flex-wrap" onPointerDown={(e) => e.stopPropagation()}>
           {/* Adicionar comentário - apenas botão para não sair do card */}
           {showCommentInput ? (
             <div className="flex items-center gap-1 flex-1 min-w-0">
@@ -968,7 +969,8 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
               type="button" 
               size="sm" 
               variant="ghost" 
-              className="h-7 w-7 p-0 flex-shrink-0" 
+              className="h-7 w-7 p-0 flex-shrink-0"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 setShowCommentInput(true);
@@ -981,6 +983,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
           <Button
             variant="ghost"
             size="sm"
+            onPointerDown={(e) => e.stopPropagation()}
             className="h-6 w-6 p-0"
             onClick={(e) => { e.stopPropagation(); sendReminderNow(); }}
             title="Enviar lembrete via WhatsApp"
@@ -993,6 +996,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
               variant="ghost"
               size="sm"
               className="h-6 w-6 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); pauseTimer(); }}
               title="Pausar timer"
             >
@@ -1003,6 +1007,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
               variant="ghost"
               size="sm"
               className="h-6 w-6 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); startTimer(); }}
               title="Iniciar timer"
             >
@@ -1016,6 +1021,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                 variant="ghost"
                 size="sm"
                 className="h-6 w-6 p-0"
+                onPointerDown={(e) => e.stopPropagation()}
                 title="Adicionar anexo"
               >
                 <Paperclip className="h-3 w-3" />
@@ -1045,6 +1051,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
               <Button
                 variant="ghost"
                 size="sm"
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
                 className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
               >
@@ -1073,7 +1080,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
 
         {/* Lista de comentários abaixo do botão de comentário */}
         {Array.isArray(localComments) && localComments.length > 0 && (
-          <div className="mt-3 space-y-2 pt-3 border-t border-border/50">
+          <div className="mt-3 space-y-2 pt-3 border-t border-border/50" onPointerDown={(e) => e.stopPropagation()}>
             <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
               <MessageSquare className="h-3 w-3" />
               Comentários ({localComments.length})
