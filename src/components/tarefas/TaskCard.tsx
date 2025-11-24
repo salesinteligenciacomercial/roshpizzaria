@@ -627,12 +627,12 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       
       <CardHeader className="relative pb-3">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-1 flex-1">
+          <div className="flex items-center gap-0.5 flex-1">
             <div className={`h-1 w-1 rounded-full ${getPriorityColor(task.priority)} animate-pulse`} />
             
             {/* Layout com foto, nome do lead e título */}
             {task.lead_id ? (
-              <div className="flex items-center gap-1.5 flex-1">
+              <div className="flex items-center gap-2 flex-1">
                 <Avatar className="h-10 w-10 flex-shrink-0">
                   <AvatarImage 
                     src={leadAvatarUrl || undefined} 
