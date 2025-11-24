@@ -234,12 +234,18 @@ serve(async (req) => {
 
               // Determinar quais telefones enviar baseado no destinatário
               if (destinatario === 'lead' || destinatario === 'ambos') {
-                // Primeiro tentar pegar o telefone da tabela leads
-                let leadTelefone = lembrete.compromisso.lead.phone || lembrete.compromisso.lead.telefone;
+                // PRIORIDADE 1: Telefone salvo diretamente no lembrete
+                let leadTelefone = lembrete.telefone_responsavel;
                 
-                // Se não encontrou, buscar telefone nas conversas do lead
+                // PRIORIDADE 2: Se não encontrou, buscar no lead através do compromisso
+                if (!leadTelefone) {
+                  leadTelefone = lembrete.compromisso.lead.phone || lembrete.compromisso.lead.telefone;
+                  console.log(`📱 Telefone do lead obtido do compromisso: ${leadTelefone || 'não encontrado'}`);
+                }
+                
+                // PRIORIDADE 3: Se ainda não encontrou, buscar telefone nas conversas do lead
                 if (!leadTelefone && lembrete.compromisso.lead_id) {
-                  console.log(`🔍 Telefone não encontrado na tabela leads, buscando nas conversas para lead ${lembrete.compromisso.lead_id}`);
+                  console.log(`🔍 Telefone não encontrado nas tabelas leads/lembretes, buscando nas conversas para lead ${lembrete.compromisso.lead_id}`);
                   
                   const { data: conversa } = await supabase
                     .from('conversas')
@@ -267,8 +273,16 @@ serve(async (req) => {
               }
 
             if (destinatario === 'responsavel' || destinatario === 'ambos') {
-              if (lembrete.telefone_responsavel) {
+              // Para responsável, o telefone deve estar em telefone_responsavel
+              // Mas apenas se destinatario não for 'lead'
+              if (destinatario === 'responsavel' && lembrete.telefone_responsavel) {
                 telefones.push(lembrete.telefone_responsavel);
+                console.log(`📱 Telefone do responsável adicionado: ${lembrete.telefone_responsavel}`);
+              } else if (destinatario === 'ambos' && lembrete.telefone_responsavel) {
+                // Para 'ambos', o telefone_responsavel só é usado para o responsável
+                // (o telefone do lead já foi adicionado acima)
+                telefones.push(lembrete.telefone_responsavel);
+                console.log(`📱 Telefone do responsável adicionado (ambos): ${lembrete.telefone_responsavel}`);
               }
             }
 
