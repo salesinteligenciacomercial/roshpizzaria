@@ -70,6 +70,18 @@ function transformEvolutionPayload(body: any) {
   // Extrair JID remoto (contato ou grupo)
   const remoteJid = data.key.remoteJid as string;
   
+  // ⚡ CORREÇÃO CRÍTICA: Detectar @lid (Local ID temporário do WhatsApp)
+  // Quando o WhatsApp usa @lid, o número NÃO é confiável
+  const isLid = remoteJid.includes('@lid');
+  
+  if (isLid) {
+    console.log('⚠️ [WEBHOOK] Detectado @lid (número temporário não confiável):', {
+      remoteJid,
+      pushName: data.pushName,
+      fromMe: data.key.fromMe
+    });
+  }
+  
   // DETECTAR SE A MENSAGEM FOI ENVIADA PELO USUÁRIO (fromMe) OU RECEBIDA
   const fromMe = data.key.fromMe === true;
   const status = fromMe ? 'Enviada' : 'Recebida';
@@ -87,10 +99,16 @@ function transformEvolutionPayload(body: any) {
 
   const isGroup = /@g\.us$/.test(remoteJid);
   
-  // Determinar campo numero a retornar: JID completo para grupos, número normalizado para contatos
+  // ⚡ CORREÇÃO CRÍTICA: Para @lid, NÃO extrair número do remoteJid
+  // O @lid é um identificador temporário não confiável
   let numero: string;
   if (isGroup) {
     numero = remoteJid; // usar JID completo para grupos
+  } else if (isLid) {
+    // Para @lid: usar o pushName como identificador temporário
+    // O número real será encontrado buscando pelo nome do contato
+    numero = remoteJid; // Manter o JID completo para referência
+    console.log('⚠️ [WEBHOOK] Usando JID @lid como referência temporária:', numero);
   } else {
     // contato: limpar e normalizar
     const cleaned = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '').replace(/[^0-9]/g, '');
@@ -458,34 +476,69 @@ serve(async (req) => {
 
     // Se temos company_id, buscar lead apenas nessa company
     if (companyId && !isGroup && numeroLimpo) {
-      // Preparar variações do número para busca (com e sem código do país)
-      const numeroVariations = [numeroLimpo];
-      if (numeroLimpo.startsWith('55') && numeroLimpo.length === 13) {
-        // Se tem código do país, também buscar sem ele
-        numeroVariations.push(numeroLimpo.substring(2));
-      } else if (!numeroLimpo.startsWith('55') && numeroLimpo.length >= 10) {
-        // Se não tem código do país, também buscar com ele
-        numeroVariations.push(`55${numeroLimpo}`);
+      // ⚡ CORREÇÃO CRÍTICA: Se o número veio de @lid, buscar TAMBÉM por nome
+      const isLidNumber = validatedData.numero.includes('@lid');
+      
+      if (isLidNumber && validatedData.nome_contato) {
+        console.log('🔍 [WEBHOOK] Buscando lead por NOME (número @lid não confiável):', {
+          nome: validatedData.nome_contato,
+          numeroLid: numeroLimpo
+        });
+        
+        // Buscar por nome primeiro (mais confiável para @lid)
+        const { data: leadByName, error: nameSearchError } = await supabase
+          .from('leads')
+          .select('id, company_id, phone, telefone')
+          .eq('company_id', companyId)
+          .ilike('name', validatedData.nome_contato)
+          .limit(1)
+          .maybeSingle();
+        
+        if (leadByName && !nameSearchError) {
+          leadId = leadByName.id;
+          // Usar o número REAL do lead ao invés do @lid
+          numeroLimpo = leadByName.phone || leadByName.telefone || numeroLimpo;
+          console.log('✅ [WEBHOOK] Lead encontrado por NOME:', {
+            leadId,
+            nome: validatedData.nome_contato,
+            numeroReal: numeroLimpo
+          });
+        } else {
+          console.log('⚠️ [WEBHOOK] Lead não encontrado por nome, tentando por número...');
+        }
       }
       
-      const telefoneConditions = numeroVariations.map(n => `telefone.eq.${n}`).join(',');
-      const phoneConditions = numeroVariations.map(n => `phone.eq.${n}`).join(',');
-      
-      const { data: existingLead, error: leadSearchError } = await supabase
-        .from('leads')
-        .select('id, company_id')
-        .eq('company_id', companyId)
-        .or(`${telefoneConditions},${phoneConditions}`)
-        .limit(1)
-        .maybeSingle(); // Usar maybeSingle() ao invés de single() para não retornar erro se não encontrar
-      
-      if (existingLead && !leadSearchError) {
-        leadId = existingLead.id;
-        console.log('📌 Lead encontrado na company:', { leadId, companyId, numeroBuscado: numeroLimpo });
-      } else if (leadSearchError) {
-        console.warn('⚠️ Erro ao buscar lead:', leadSearchError);
-      } else {
-        console.log('ℹ️ Lead não encontrado para o número:', numeroLimpo, 'na company:', companyId);
+      // Se não encontrou por nome ou não é @lid, buscar por número
+      if (!leadId && numeroLimpo) {
+        // Preparar variações do número para busca (com e sem código do país)
+        const numeroVariations = [numeroLimpo];
+        if (numeroLimpo.startsWith('55') && numeroLimpo.length === 13) {
+          // Se tem código do país, também buscar sem ele
+          numeroVariations.push(numeroLimpo.substring(2));
+        } else if (!numeroLimpo.startsWith('55') && numeroLimpo.length >= 10) {
+          // Se não tem código do país, também buscar com ele
+          numeroVariations.push(`55${numeroLimpo}`);
+        }
+        
+        const telefoneConditions = numeroVariations.map(n => `telefone.eq.${n}`).join(',');
+        const phoneConditions = numeroVariations.map(n => `phone.eq.${n}`).join(',');
+        
+        const { data: existingLead, error: leadSearchError } = await supabase
+          .from('leads')
+          .select('id, company_id')
+          .eq('company_id', companyId)
+          .or(`${telefoneConditions},${phoneConditions}`)
+          .limit(1)
+          .maybeSingle(); // Usar maybeSingle() ao invés de single() para não retornar erro se não encontrar
+        
+        if (existingLead && !leadSearchError) {
+          leadId = existingLead.id;
+          console.log('📌 Lead encontrado na company:', { leadId, companyId, numeroBuscado: numeroLimpo });
+        } else if (leadSearchError) {
+          console.warn('⚠️ Erro ao buscar lead:', leadSearchError);
+        } else {
+          console.log('ℹ️ Lead não encontrado para o número:', numeroLimpo, 'na company:', companyId);
+        }
       }
     } else if (!isGroup && numeroLimpo) {
       // ✅ CORREÇÃO DEFINITIVA: Buscar lead com TODAS as variações possíveis do número
@@ -534,6 +587,32 @@ serve(async (req) => {
       }
     }
 
+    // ⚡ CORREÇÃO CRÍTICA: Se ainda não tem company_id mas é mensagem recebida
+    // E veio de @lid, tentar buscar lead por NOME em QUALQUER company
+    if (!companyId && validatedData.fromMe !== true && validatedData.numero.includes('@lid') && validatedData.nome_contato) {
+      console.log('🔍 [WEBHOOK] Tentando encontrar lead por NOME em qualquer company (@lid sem company):', {
+        nome: validatedData.nome_contato
+      });
+      
+      const { data: leadByName } = await supabase
+        .from('leads')
+        .select('id, company_id, phone, telefone')
+        .ilike('name', validatedData.nome_contato)
+        .limit(1)
+        .maybeSingle();
+      
+      if (leadByName) {
+        companyId = leadByName.company_id;
+        leadId = leadByName.id;
+        numeroLimpo = leadByName.phone || leadByName.telefone || numeroLimpo;
+        console.log('✅ [WEBHOOK] Lead e company encontrados por NOME:', {
+          leadId,
+          companyId,
+          numeroReal: numeroLimpo
+        });
+      }
+    }
+    
     // Se ainda não encontrou company, tentar fallback adicional
     if (!companyId) {
       console.warn('⚠️ Company não identificada pelas formas padrão, tentando fallback...');
