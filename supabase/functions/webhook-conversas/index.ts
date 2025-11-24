@@ -500,11 +500,13 @@ serve(async (req) => {
           // ✅ USAR O NÚMERO REAL DO LEAD - NUNCA USAR @LID
           numeroReal = leadByName.phone || leadByName.telefone;
           if (numeroReal) {
+            // ⚡ CRÍTICO: SUBSTITUIR numeroLimpo pelo número REAL
             numeroLimpo = numeroReal;
-            console.log('✅ [WEBHOOK @LID] Lead encontrado por NOME - USANDO NÚMERO REAL:', {
+            console.log('✅ [WEBHOOK @LID] Lead encontrado por NOME - SUBSTITUINDO número @lid pelo REAL:', {
               leadId,
               nome: leadByName.name,
-              numeroReal: numeroLimpo,
+              numeroAnterior: validatedData.numero,
+              numeroREAL: numeroLimpo,
               lidDescartado: validatedData.numero
             });
           }
@@ -621,12 +623,14 @@ serve(async (req) => {
         // ✅ USAR O NÚMERO REAL DO LEAD - NUNCA USAR @LID
         const numeroReal = leadByName.phone || leadByName.telefone;
         if (numeroReal) {
+          // ⚡ CRÍTICO: SUBSTITUIR numeroLimpo pelo número REAL
           numeroLimpo = numeroReal;
-          console.log('✅ [WEBHOOK @LID SEM COMPANY] Lead e company encontrados por NOME - USANDO NÚMERO REAL:', {
+          console.log('✅ [WEBHOOK @LID SEM COMPANY] Lead e company encontrados por NOME - SUBSTITUINDO número @lid pelo REAL:', {
             leadId,
             companyId,
             nome: leadByName.name,
-            numeroReal: numeroLimpo,
+            numeroAnterior: validatedData.numero,
+            numeroREAL: numeroLimpo,
             lidDescartado: validatedData.numero
           });
         }
