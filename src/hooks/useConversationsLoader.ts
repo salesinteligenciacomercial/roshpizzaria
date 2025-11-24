@@ -85,18 +85,26 @@ export const useConversationsLoader = () => {
         conv.mensagem && !conv.mensagem.includes('{{')
       );
 
-      // Agrupar conversas por telefone
+      // Agrupar conversas por telefone - CORREÇÃO: Normalizar sempre para evitar duplicatas
       const conversasMap = new Map<string, any[]>();
       validConversas.forEach(conv => {
         const isGroup = conv.is_group || /@g\.us$/.test(conv.numero || '');
-        const key = isGroup ? conv.numero : (conv.telefone_formatado || conv.numero.replace(/[^0-9]/g, ''));
+        
+        // ✅ CORREÇÃO CRÍTICA: Normalizar telefone SEMPRE da mesma forma
+        let key: string;
+        if (isGroup) {
+          key = conv.numero; // Grupos mantêm o ID original
+        } else {
+          // Para contatos individuais, SEMPRE normalizar removendo caracteres especiais
+          const telefoneNormalizado = (conv.telefone_formatado || conv.numero || '').replace(/[^0-9]/g, '');
+          key = telefoneNormalizado;
+        }
         
         if (!conversasMap.has(key)) {
           conversasMap.set(key, []);
         }
         const mensagens = conversasMap.get(key)!;
         mensagens.push(conv);
-        // MELHORIA: Não limitar mais - carregar TODAS as mensagens disponíveis
       });
 
       // Buscar leads - ⚡ CORREÇÃO: Remover limite para carregar TODOS os leads vinculados
