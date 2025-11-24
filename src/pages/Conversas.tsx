@@ -657,7 +657,7 @@ function Conversas() {
     ).length;
   }, [conversations]);
 
-  // MELHORIA: useMemo para filtros e buscas - otimização de performance
+  // ✅ FILTROS CORRIGIDOS: Implementação conforme especificação do usuário
   const filteredConversations = useMemo(() => {
     console.log('🔍 [DEBUG] Filtrando conversas:', {
       total: conversations.length,
@@ -667,44 +667,44 @@ function Conversas() {
     
     let filtered = conversations;
 
-    // ⚡ CORREÇÃO CRÍTICA: Aplicar filtro de status corretamente
+    // Aplicar filtro de status conforme especificação
     if (filter === "all") {
-      // ⚡ CORREÇÃO: No filtro "Todos", mostrar TODAS as conversas (INDIVIDUAIS E GRUPOS)
-      // Anteriormente estava excluindo grupos, o que causava mensagens de grupos não aparecerem
+      // ✅ Filtro "Todos": Mostrar TODAS as conversas (individuais e grupos)
       filtered = filtered; // Não filtrar nada - mostrar tudo
     } else if (filter === "group") {
-      // No filtro "Grupos", mostrar APENAS grupos (não aparecem em outros filtros)
+      // ✅ Filtro "Grupos": Mostrar APENAS grupos
       filtered = filtered.filter((conv) => conv.isGroup === true);
     } else if (filter === "waiting") {
-      // Filtro "Aguardando": mensagens recebidas recentemente (não respondidas)
-      // Última mensagem deve ser do contato (não do usuário)
+      // ✅ Filtro "Aguardando": Contatos que enviaram mensagem e ainda não foram respondidos
+      // Critérios: última mensagem é do contato (sender === 'contact') + não está finalizada
       filtered = filtered.filter((conv) => {
         if (conv.isGroup === true) return false; // Excluir grupos
         if (conv.status === 'resolved') return false; // Excluir finalizadas
         
-        // Verificar se a última mensagem é do contato (não respondida)
+        // Verificar se a última mensagem é do contato (aguardando resposta)
         const lastMessage = conv.messages?.[conv.messages.length - 1];
         if (!lastMessage) return false;
         
-        // Se última mensagem é do contato = aguardando resposta
+        // ✅ Se última mensagem é do contato = aguardando resposta
         return lastMessage.sender === 'contact';
       });
     } else if (filter === "answered") {
-      // Filtro "Respondidos": conversas que foram respondidas
-      // Última mensagem deve ser do usuário OU status é answered
+      // ✅ Filtro "Respondidos": Conversas que estavam aguardando e foram respondidas
+      // Critérios: última mensagem é do usuário (sender === 'user') + não está finalizada
+      // Quando responder uma conversa que estava em "aguardando", ela vai IMEDIATAMENTE para "respondidos"
       filtered = filtered.filter((conv) => {
         if (conv.isGroup === true) return false; // Excluir grupos
         if (conv.status === 'resolved') return false; // Excluir finalizadas
         
-        // Verificar se a última mensagem é do usuário (respondida)
+        // Verificar se a última mensagem é do usuário (foi respondida)
         const lastMessage = conv.messages?.[conv.messages.length - 1];
         if (!lastMessage) return false;
         
-        // Se última mensagem é do usuário = foi respondida
-        return lastMessage.sender === 'user' || conv.status === 'answered';
+        // ✅ Se última mensagem é do usuário = foi respondida
+        return lastMessage.sender === 'user';
       });
     } else if (filter === "resolved") {
-      // Filtro "Finalizados": conversas que foram finalizadas
+      // ✅ Filtro "Finalizados": Conversas marcadas como finalizadas com o botão "Finalizar atendimento"
       filtered = filtered.filter((conv) => {
         if (conv.isGroup === true) return false; // Excluir grupos
         return conv.status === 'resolved';
