@@ -751,20 +751,52 @@ serve(async (req) => {
       console.error('❌ [CRÍTICO] Tentando salvar mensagem recebida SEM company_id - pode falhar se banco exigir');
     }
     
+    // ⚡ LOG ANTES DE SALVAR para debug
+    console.log('💾 [WEBHOOK] TENTANDO SALVAR CONVERSA:', {
+      isReceivedMessage,
+      fromMe: validatedData.fromMe,
+      insertData: {
+        ...insertData,
+        mensagem: insertData.mensagem?.substring(0, 50) + '...'
+      }
+    });
+    
     // Salvar conversa no Supabase com telefone normalizado e STATUS correto
     const { data, error } = await supabase
       .from('conversas')
       .insert([insertData])
       .select()
       .single();
+    
+    // ⚡ LOG APÓS INSERÇÃO para debug
+    console.log('💾 [WEBHOOK] RESULTADO DA INSERÇÃO:', {
+      sucesso: !error,
+      erro: error?.message,
+      errorCode: error?.code,
+      data: data ? { id: data.id, fromme: data.fromme } : null
+    });
 
     if (error) {
-      console.error('❌ Erro ao salvar conversa:', error, {
+      console.error('❌ [CRÍTICO] Erro ao salvar conversa:', error, {
         isReceived: isReceivedMessage,
         fromMe: validatedData.fromMe,
         company_id: companyId,
+        lead_id: leadId,
+        telefone_formatado: insertData.telefone_formatado,
+        nome_contato: insertData.nome_contato,
         errorMessage: error.message,
-        errorCode: error.code
+        errorDetails: error.details,
+        errorHint: error.hint,
+        errorCode: error.code,
+        insertData: {
+          numero: insertData.numero,
+          telefone_formatado: insertData.telefone_formatado,
+          nome_contato: insertData.nome_contato,
+          company_id: insertData.company_id,
+          lead_id: insertData.lead_id,
+          fromme: insertData.fromme,
+          status: insertData.status
+        }
       });
       
       // ⚡ CORREÇÃO CRÍTICA: Se erro for por falta de company_id e for mensagem recebida,
