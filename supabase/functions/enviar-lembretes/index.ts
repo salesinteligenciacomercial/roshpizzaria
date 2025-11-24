@@ -227,18 +227,44 @@ serve(async (req) => {
             continue;
           }
 
-          // Enviar mensagem via edge function enviar-whatsapp
-          if (lembrete.canal === 'whatsapp') {
-            const destinatario = lembrete.destinatario || 'lead';
-            const telefones: string[] = [];
+            // Enviar mensagem via edge function enviar-whatsapp
+            if (lembrete.canal === 'whatsapp') {
+              const destinatario = lembrete.destinatario || 'lead';
+              const telefones: string[] = [];
 
-            // Determinar quais telefones enviar baseado no destinatário
-            if (destinatario === 'lead' || destinatario === 'ambos') {
-              const leadTelefone = lembrete.compromisso.lead.phone || lembrete.compromisso.lead.telefone;
-              if (leadTelefone) {
-                telefones.push(leadTelefone);
+              // Determinar quais telefones enviar baseado no destinatário
+              if (destinatario === 'lead' || destinatario === 'ambos') {
+                // Primeiro tentar pegar o telefone da tabela leads
+                let leadTelefone = lembrete.compromisso.lead.phone || lembrete.compromisso.lead.telefone;
+                
+                // Se não encontrou, buscar telefone nas conversas do lead
+                if (!leadTelefone && lembrete.compromisso.lead_id) {
+                  console.log(`🔍 Telefone não encontrado na tabela leads, buscando nas conversas para lead ${lembrete.compromisso.lead_id}`);
+                  
+                  const { data: conversa } = await supabase
+                    .from('conversas')
+                    .select('numero, telefone_formatado')
+                    .eq('lead_id', lembrete.compromisso.lead_id)
+                    .not('numero', 'is', null)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .single();
+                  
+                  if (conversa) {
+                    leadTelefone = conversa.telefone_formatado || conversa.numero;
+                    console.log(`✅ Telefone encontrado nas conversas: ${leadTelefone}`);
+                  } else {
+                    console.log(`❌ Nenhum telefone encontrado nas conversas para lead ${lembrete.compromisso.lead_id}`);
+                  }
+                }
+                
+                if (leadTelefone) {
+                  telefones.push(leadTelefone);
+                  console.log(`📱 Telefone do lead adicionado: ${leadTelefone}`);
+                } else {
+                  console.error(`❌ Nenhum telefone disponível para o lead do compromisso ${lembrete.compromisso_id}`);
+                }
               }
-            }
 
             if (destinatario === 'responsavel' || destinatario === 'ambos') {
               if (lembrete.telefone_responsavel) {
