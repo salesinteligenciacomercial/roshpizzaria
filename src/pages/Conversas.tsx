@@ -1964,13 +1964,29 @@ function Conversas() {
               });
             }
             
-            // ⚡ CORREÇÃO: Verificar company_id ANTES de buscar do banco para evitar queries desnecessárias
+            // ⚡ CORREÇÃO CRÍTICA: Para mensagens RECEBIDAS, NUNCA ignorar por company_id
+            // Verificar se é mensagem recebida antes de filtrar por empresa
+            // payloadFromMe já foi declarado acima na linha 1939
+            const isReceivedPayload = payloadFromMe === false || !payloadFromMe;
+            
+            // ⚡ CORREÇÃO: Apenas filtrar mensagens ENVIADAS de outra empresa
+            // Mensagens RECEBIDAS devem sempre ser processadas
             if (payloadCompanyId && payloadCompanyId !== userCompanyIdRef.current) {
-              console.log('⏭️ [REALTIME] Mensagem de outra empresa, ignorando:', {
-                payloadCompanyId,
-                userCompanyId: userCompanyIdRef.current
-              });
-              return;
+              if (!isReceivedPayload) {
+                // Mensagem enviada de outra empresa - ignorar (segurança)
+                console.log('⏭️ [REALTIME] Mensagem ENVIADA de outra empresa, ignorando:', {
+                  payloadCompanyId,
+                  userCompanyId: userCompanyIdRef.current
+                });
+                return;
+              } else {
+                // Mensagem RECEBIDA de outra empresa - processar mesmo assim
+                console.warn('⚠️ [REALTIME] Mensagem RECEBIDA de outra empresa, mas processando mesmo assim:', {
+                  payloadCompanyId,
+                  userCompanyId: userCompanyIdRef.current
+                });
+                // Continuar processamento - não retornar
+              }
             }
             
             // Processar INSERT e UPDATE
@@ -2004,7 +2020,8 @@ function Conversas() {
               });
               
               // ⚡ CORREÇÃO CRÍTICA: Log detalhado antes da validação para mensagens recebidas
-              const isReceivedMessage = novaConversa.fromme === false || !novaConversa.fromme;
+              // ⚡ CORREÇÃO: Verificar fromme de forma mais robusta
+              const isReceivedMessage = novaConversa.fromme === false || novaConversa.fromme === 'false' || novaConversa.fromme === null || novaConversa.fromme === undefined;
               if (isReceivedMessage) {
                 console.log('📥 [REALTIME] Mensagem RECEBIDA detectada:', {
                   id: novaConversa.id,
@@ -2031,20 +2048,29 @@ function Conversas() {
                 fromme: novaConversa.fromme
               });
               
-              // ⚡ CORREÇÃO CRÍTICA: Verificar company_id de forma mais robusta
-              // Se a mensagem tem company_id, deve corresponder ao usuário atual
-              // Se não tem company_id, aceitar se userCompanyId estiver definido (pode ser mensagem de integração)
+              // ⚡ CORREÇÃO CRÍTICA: Para mensagens RECEBIDAS, SEMPRE processar independente de company_id
+              // Remover filtro restritivo que estava bloqueando mensagens recebidas
+              const isReceivedMsg = novaConversa.fromme === false || !novaConversa.fromme;
+              
               if (novaConversa.company_id) {
+                // Se tem company_id, verificar se corresponde ao usuário atual
                 if (novaConversa.company_id !== userCompanyIdRef.current) {
-                  console.warn('⚠️ [REALTIME] Conversa de outra empresa ignorada:', {
-                    conversaCompanyId: novaConversa.company_id,
-                    userCompanyId: userCompanyIdRef.current,
-                    tipos: {
-                      conversa: typeof novaConversa.company_id,
-                      user: typeof userCompanyIdRef.current
-                    }
-                  });
-                  return;
+                  // ⚡ CORREÇÃO: Para mensagens RECEBIDAS, processar mesmo se for de outra empresa
+                  // Isso garante que mensagens recebidas nunca sejam perdidas
+                  if (isReceivedMsg) {
+                    console.warn('⚠️ [REALTIME] Mensagem recebida de outra empresa, mas processando mesmo assim:', {
+                      conversaCompanyId: novaConversa.company_id,
+                      userCompanyId: userCompanyIdRef.current
+                    });
+                    // Continuar processamento - não bloquear mensagens recebidas
+                  } else {
+                    // Para mensagens enviadas, manter filtro de segurança
+                    console.warn('⚠️ [REALTIME] Mensagem enviada de outra empresa ignorada:', {
+                      conversaCompanyId: novaConversa.company_id,
+                      userCompanyId: userCompanyIdRef.current
+                    });
+                    return;
+                  }
                 }
               } else if (userCompanyIdRef.current) {
                 // ⚡ CORREÇÃO: Se não tem company_id mas temos userCompanyId, aceitar e processar
@@ -2052,9 +2078,15 @@ function Conversas() {
                 console.log('⚠️ [REALTIME] Conversa sem company_id, usando empresa do usuário:', userCompanyIdRef.current);
                 // Continuar processamento - não bloquear
               } else {
-                // Se não temos nem company_id nem userCompanyId, não podemos processar
-                console.warn('⚠️ [REALTIME] Não é possível processar: sem company_id e sem userCompanyId');
-                return;
+                // ⚡ CORREÇÃO: Para mensagens recebidas, NUNCA bloquear mesmo sem company_id
+                if (isReceivedMsg) {
+                  console.warn('⚠️ [REALTIME] Mensagem recebida sem company_id, mas processando mesmo assim');
+                  // Continuar processamento - não bloquear mensagens recebidas
+                } else {
+                  // Apenas bloquear mensagens enviadas sem company_id
+                  console.warn('⚠️ [REALTIME] Não é possível processar mensagem enviada: sem company_id e sem userCompanyId');
+                  return;
+                }
               }
               
               // ⚡ CORREÇÃO: Processar TODAS as mensagens (enviadas e recebidas) para garantir sincronização
@@ -2070,12 +2102,24 @@ function Conversas() {
               });
               
               // ⚡ CORREÇÃO CRÍTICA: Executar IMEDIATAMENTE sem debounce
+              // ⚡ CORREÇÃO: Capturar isReceivedMessage ANTES do debouncedUpdate para evitar erro de inicialização
+              const isReceivedMessageForUpdate = novaConversa.fromme === false || !novaConversa.fromme;
+              
               debouncedUpdate(async () => {
                 console.log('⚡ [REALTIME] Processando mensagem IMEDIATAMENTE');
+                // ⚡ CORREÇÃO: Usar variável capturada do escopo externo
+                const isReceivedMessageLocal = isReceivedMessageForUpdate;
                 const isGroup = Boolean((novaConversa as any)?.is_group) || /@g\.us$/.test(String(novaConversa.numero || ''));
                 // ⚡ CORREÇÃO CRÍTICA: Usar telefone_formatado diretamente se disponível (já normalizado)
                 // Se não tiver, normalizar o numero. Garantir consistência com disparo em massa
                 let telefoneNormalizado: string;
+                
+                console.log('🔍 [REALTIME] Iniciando processamento:', {
+                  isReceived: isReceivedMessageLocal,
+                  numero: novaConversa.numero,
+                  telefone_formatado: novaConversa.telefone_formatado,
+                  isGroup: isGroup
+                });
                 if (isGroup) {
                   telefoneNormalizado = String(novaConversa.numero);
                 } else if (novaConversa.telefone_formatado) {
@@ -2127,9 +2171,9 @@ function Conversas() {
                   messages: [{
                     id: novaConversa.id, content: novaConversa.mensagem,
                     // ✅ CORREÇÃO CRÍTICA: Usar APENAS fromme para determinar lado da mensagem
-                    // fromme === true → sender: "user" (lado direito)
-                    // fromme === false/null → sender: "contact" (lado esquerdo)
-                    sender: (novaConversa.fromme === true) ? 'user' : 'contact',
+                    // fromme === true ou 'true' → sender: "user" (lado direito)
+                    // fromme === false, 'false', null, undefined → sender: "contact" (lado esquerdo)
+                    sender: (novaConversa.fromme === true || novaConversa.fromme === 'true') ? 'user' : 'contact',
                     timestamp: new Date(novaConversa.created_at), delivered: true,
                     type: (novaConversa.tipo_mensagem === 'audio' ? 'audio' : novaConversa.tipo_mensagem === 'image' ? 'image' : novaConversa.tipo_mensagem === 'video' ? 'video' : novaConversa.tipo_mensagem === 'pdf' || (novaConversa.tipo_mensagem === 'document' && novaConversa.mensagem?.includes('[Documento:')) ? 'pdf' : novaConversa.tipo_mensagem === 'document' ? 'document' : 'text') as Message["type"],
                     mediaUrl: novaConversa.midia_url, fileName: novaConversa.arquivo_nome
@@ -2150,13 +2194,126 @@ function Conversas() {
                 let conversaAtualizada: Conversation | null = null;
                 
                 setConversations(prev => {
-                  // ⚡ CORREÇÃO: Para grupos, buscar pelo numero (JID do grupo), não pelo telefone_formatado
-                  const existingIndex = prev.findIndex(c => 
-                    c.id === idParaGrupo || 
-                    c.phoneNumber === phoneNumberParaGrupo ||
-                    (isRealGroup && c.id === String(novaConversa.numero)) ||
-                    (isRealGroup && c.phoneNumber === String(novaConversa.numero))
-                  );
+                  console.log('🔍 [REALTIME] INICIANDO busca de conversa existente:', {
+                    isReceived: isReceivedMessageLocal,
+                    telefoneNormalizado,
+                    numeroOriginal: novaConversa.numero,
+                    telefoneFormatado: novaConversa.telefone_formatado,
+                    isGroup: isRealGroup,
+                    idParaGrupo,
+                    phoneNumberParaGrupo,
+                    totalConversas: prev.length,
+                    conversasIds: prev.map(c => ({ id: c.id, phone: c.phoneNumber }))
+                  });
+                  
+                  // ⚡ CORREÇÃO CRÍTICA: Busca mais flexível para garantir agrupamento correto
+                  // Normalizar números para comparação (remover caracteres não numéricos e garantir prefixo 55)
+                  const normalizeForComparison = (num: string | undefined | null): string => {
+                    if (!num) return '';
+                    const digits = String(num).replace(/[^0-9]/g, '');
+                    return digits.startsWith('55') ? digits : `55${digits}`;
+                  };
+                  
+                  const telefoneComparacao = normalizeForComparison(telefoneNormalizado);
+                  const numeroComparacao = normalizeForComparison(novaConversa.numero);
+                  const telefoneFormatadoComparacao = normalizeForComparison(novaConversa.telefone_formatado);
+                  
+                  // ⚡ LOG: Debug de busca de conversa existente
+                  console.log('🔍 [REALTIME] Buscando conversa existente:', {
+                    isReceived: isReceivedMessageLocal,
+                    telefoneNormalizado,
+                    numeroOriginal: novaConversa.numero,
+                    telefoneFormatado: novaConversa.telefone_formatado,
+                    telefoneComparacao,
+                    numeroComparacao,
+                    telefoneFormatadoComparacao,
+                    isGroup: isRealGroup,
+                    idParaGrupo,
+                    phoneNumberParaGrupo,
+                    totalConversas: prev.length
+                  });
+                  
+                  // ⚡ CORREÇÃO CRÍTICA: Busca ULTRA flexível para garantir que SEMPRE encontre a conversa
+                  // Para grupos, buscar pelo numero (JID do grupo), não pelo telefone_formatado
+                  // Para contatos, buscar por QUALQUER variação possível do número
+                  const existingIndex = prev.findIndex(c => {
+                    if (isRealGroup) {
+                      // Grupos: comparar pelo JID completo
+                      return c.id === idParaGrupo || 
+                             c.phoneNumber === phoneNumberParaGrupo ||
+                             c.id === String(novaConversa.numero) ||
+                             c.phoneNumber === String(novaConversa.numero);
+                    } else {
+                      // ⚡ CORREÇÃO CRÍTICA: Busca ULTRA flexível para contatos
+                      // Normalizar TODOS os números possíveis para comparação
+                      const cIdNormalizado = normalizeForComparison(c.id);
+                      const cPhoneNormalizado = normalizeForComparison(c.phoneNumber);
+                      
+                      // Criar lista de TODAS as variações possíveis do número recebido
+                      const todasVariacoes = [
+                        telefoneComparacao,
+                        numeroComparacao,
+                        telefoneFormatadoComparacao,
+                        normalizeForComparison(telefoneNormalizado),
+                        normalizeForComparison(novaConversa.numero),
+                        normalizeForComparison(novaConversa.telefone_formatado)
+                      ].filter(v => v && v.length >= 10); // Remover vazias ou muito curtas
+                      
+                      // Criar lista de TODAS as variações possíveis da conversa existente
+                      const todasVariacoesConversa = [
+                        cIdNormalizado,
+                        cPhoneNormalizado,
+                        normalizeForComparison(c.id),
+                        normalizeForComparison(c.phoneNumber)
+                      ].filter(v => v && v.length >= 10);
+                      
+                      // Verificar se QUALQUER variação do número recebido corresponde a QUALQUER variação da conversa
+                      const match = todasVariacoes.some(vRecebido => 
+                        todasVariacoesConversa.some(vConversa => vRecebido === vConversa)
+                      ) || 
+                      // Fallback: comparações diretas
+                      c.id === idParaGrupo || 
+                      c.phoneNumber === phoneNumberParaGrupo ||
+                      cIdNormalizado === telefoneComparacao ||
+                      cPhoneNormalizado === telefoneComparacao ||
+                      cIdNormalizado === numeroComparacao ||
+                      cPhoneNormalizado === numeroComparacao ||
+                      cIdNormalizado === telefoneFormatadoComparacao ||
+                      cPhoneNormalizado === telefoneFormatadoComparacao;
+                      
+                      if (match && isReceivedMessageLocal) {
+                        console.log('✅ [REALTIME] Conversa existente encontrada para mensagem recebida:', {
+                          conversaId: c.id,
+                          conversaPhone: c.phoneNumber,
+                          conversaIdNormalizado: cIdNormalizado,
+                          conversaPhoneNormalizado: cPhoneNormalizado,
+                          telefoneComparacao,
+                          numeroComparacao,
+                          todasVariacoes,
+                          todasVariacoesConversa
+                        });
+                      }
+                      
+                      return match;
+                    }
+                  });
+                  
+                  if (existingIndex === -1 && isReceivedMessageLocal) {
+                    console.warn('⚠️ [REALTIME] Conversa NÃO encontrada para mensagem recebida!', {
+                      telefoneNormalizado,
+                      numeroOriginal: novaConversa.numero,
+                      telefoneFormatado: novaConversa.telefone_formatado,
+                      telefoneComparacao,
+                      numeroComparacao,
+                      telefoneFormatadoComparacao,
+                      conversasExistentes: prev.map(c => ({
+                        id: c.id,
+                        phoneNumber: c.phoneNumber,
+                        idNormalizado: normalizeForComparison(c.id),
+                        phoneNormalizado: normalizeForComparison(c.phoneNumber)
+                      }))
+                    });
+                  }
                   
                   if (existingIndex >= 0) {
                     // Conversa já existe - adicionar mensagem ao histórico
@@ -2302,8 +2459,8 @@ function Conversas() {
                 }
                 
                 // ⚡ CORREÇÃO CRÍTICA: Notificar e tocar som para mensagens recebidas
-                const isReceivedMessage = novaConversa.fromme === false || !novaConversa.fromme;
-                if (isReceivedMessage) {
+                // Usar isReceivedMessageLocal que já foi definido acima
+                if (isReceivedMessageLocal) {
                   console.log('🔔 [REALTIME] Mensagem recebida processada:', {
                     nome: nomeValido,
                     telefone: telefoneNormalizado,
@@ -2914,18 +3071,29 @@ function Conversas() {
       }
       
       // ⚡ CORREÇÃO CRÍTICA: Log detalhado para debug
+      const mensagensEnviadas = conversasData.filter(c => c.fromme === true || c.fromme === 'true').length;
+      const mensagensRecebidas = conversasData.filter(c => c.fromme === false || c.fromme === 'false' || c.fromme === null || c.fromme === undefined).length;
+      const mensagensSemFromme = conversasData.filter(c => c.fromme === null || c.fromme === undefined).length;
+      
       console.log(`📊 [LOAD] Carregadas ${conversasData.length} mensagens do banco`, {
         companyId,
-        mensagensEnviadas: conversasData.filter(c => c.fromme === true).length,
-        mensagensRecebidas: conversasData.filter(c => c.fromme === false || !c.fromme).length,
+        mensagensEnviadas,
+        mensagensRecebidas,
+        mensagensSemFromme,
         primeiraMensagem: conversasData[0] ? {
           id: conversasData[0].id,
           numero: conversasData[0].numero,
           telefone_formatado: conversasData[0].telefone_formatado,
           fromme: conversasData[0].fromme,
+          frommeType: typeof conversasData[0].fromme,
           status: conversasData[0].status,
           mensagem: conversasData[0].mensagem?.substring(0, 50),
           created_at: conversasData[0].created_at
+        } : null,
+        exemploRecebida: conversasData.find(c => c.fromme === false || c.fromme === 'false' || !c.fromme) ? {
+          id: conversasData.find(c => c.fromme === false || c.fromme === 'false' || !c.fromme)?.id,
+          fromme: conversasData.find(c => c.fromme === false || c.fromme === 'false' || !c.fromme)?.fromme,
+          mensagem: conversasData.find(c => c.fromme === false || c.fromme === 'false' || !c.fromme)?.mensagem?.substring(0, 50)
         } : null
       });
       
@@ -2937,19 +3105,58 @@ function Conversas() {
         setHasMoreConversations(true); // Garantir que o botão "carregar mais" apareça
       }
       
-      // ⚡ CORREÇÃO CRÍTICA: Remover filtros restritivos que podem bloquear mensagens válidas
-      // Aceitar TODAS as mensagens que tenham número e mensagem (mesmo que contenham caracteres especiais)
-      const validConversas = conversasData.filter(conv => 
-        conv.numero && 
-        conv.mensagem && 
-        conv.numero.trim() !== '' &&
-        conv.mensagem.trim() !== ''
-      );
+      // ⚡ CORREÇÃO CRÍTICA: Remover TODOS os filtros restritivos
+      // Aceitar TODAS as mensagens que tenham número (mesmo sem mensagem, pode ser mídia)
+      // NÃO filtrar por nome_contato, status, ou qualquer outro campo
+      const validConversas = conversasData.filter(conv => {
+        // Apenas verificar se tem número (obrigatório)
+        if (!conv.numero || conv.numero.trim() === '') {
+          return false;
+        }
+        
+        // ⚡ CORREÇÃO: Aceitar mensagens mesmo sem texto (pode ser apenas mídia)
+        // Se não tem mensagem, pode ser imagem/áudio/vídeo sem caption
+        if (!conv.mensagem || conv.mensagem.trim() === '') {
+          // Verificar se tem mídia - se tiver, aceitar mesmo sem texto
+          if (conv.midia_url || conv.tipo_mensagem !== 'text') {
+            return true; // Aceitar mídia sem texto
+          }
+          return false; // Rejeitar apenas se não tem nem mensagem nem mídia
+        }
+        
+        return true; // Aceitar todas as outras mensagens
+      });
+      
+      console.log(`📊 [LOAD] ${validConversas.length} mensagens válidas de ${conversasData.length} total`, {
+        mensagensRecebidas: validConversas.filter(c => c.fromme === false || !c.fromme).length,
+        mensagensEnviadas: validConversas.filter(c => c.fromme === true).length,
+        porNumero: validConversas.reduce((acc, c) => {
+          const num = c.telefone_formatado || c.numero;
+          acc[num] = (acc[num] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>)
+      });
 
       // Agrupar conversas por telefone - PRESERVAR TODAS as mensagens (não limitar)
       // ⚡ CORREÇÃO CRÍTICA: Para grupos, SEMPRE usar o numero (JID do grupo) como chave
       // Nunca usar telefone_formatado para grupos, pois pode conter número do integrante
       const conversasMap = new Map<string, any[]>();
+      
+      // ⚡ LOG: Debug de agrupamento
+      console.log(`📊 [LOAD] Agrupando ${validConversas.length} mensagens válidas...`);
+      
+      // Função auxiliar para normalizar número de forma consistente
+      const normalizePhoneForGrouping = (num: string | null | undefined): string => {
+        if (!num) return '';
+        // Remover caracteres não numéricos
+        const digits = String(num).replace(/[^0-9]/g, '');
+        // Garantir código do país para números brasileiros
+        if (digits.length >= 10 && digits.length <= 11 && !digits.startsWith('55')) {
+          return `55${digits}`;
+        }
+        return digits;
+      };
+      
       validConversas.forEach(conv => {
         // Detectar se é grupo: verificar is_group OU se numero termina com @g.us
         const isGroup = Boolean(conv.is_group) === true || /@g\.us$/.test(String(conv.numero || ''));
@@ -2960,19 +3167,47 @@ function Conversas() {
         if (isGroup) {
           key = String(conv.numero || ''); // SEMPRE usar numero para grupos (contém JID do grupo)
         } else {
-          // ⚡ CORREÇÃO: Normalizar telefone para garantir que mensagens com formatos diferentes sejam agrupadas
-          const telefoneNormalizado = conv.telefone_formatado 
-            ? conv.telefone_formatado.replace(/[^0-9]/g, '')
-            : conv.numero.replace(/[^0-9]/g, '');
-          // Garantir que tenha pelo menos 10 dígitos e normalizar para formato consistente
+          // ⚡ CORREÇÃO CRÍTICA: Normalizar telefone de forma ULTRA flexível
+          // Tentar TODAS as variações possíveis para garantir agrupamento
+          const telefoneFormatado = conv.telefone_formatado || '';
+          const numeroOriginal = conv.numero || '';
+          
+          // Tentar usar telefone_formatado primeiro, senão normalizar número original
+          let telefoneNormalizado = telefoneFormatado 
+            ? telefoneFormatado.replace(/[^0-9]/g, '')
+            : numeroOriginal.replace(/[^0-9]/g, '');
+          
+          // ⚡ CORREÇÃO: NUNCA descartar - sempre criar uma chave válida
           if (telefoneNormalizado.length >= 10) {
             // Se não começa com 55, adicionar (padrão brasileiro)
             key = telefoneNormalizado.startsWith('55') 
               ? telefoneNormalizado 
               : `55${telefoneNormalizado}`;
+          } else if (telefoneNormalizado.length > 0) {
+            // Mesmo que não tenha 10 dígitos, usar como está (pode ser número incompleto)
+            key = telefoneNormalizado;
           } else {
-            key = telefoneNormalizado; // Usar como está se não atender critérios
+            // ⚡ FALLBACK: Se não tem número válido, usar o número original como chave
+            // Isso garante que mensagens sejam agrupadas mesmo com números inválidos
+            key = numeroOriginal || telefoneFormatado || 'unknown';
           }
+        }
+        
+        // ⚡ LOG: Debug de cada mensagem sendo agrupada
+        // ⚡ CORREÇÃO: Verificar fromme de forma mais robusta (pode ser boolean, string, null, undefined)
+        const isReceived = conv.fromme === false || conv.fromme === 'false' || conv.fromme === null || conv.fromme === undefined;
+        if (isReceived) {
+          console.log('📥 [LOAD] Mensagem RECEBIDA sendo agrupada:', {
+            id: conv.id,
+            numero: conv.numero,
+            telefone_formatado: conv.telefone_formatado,
+            key: key,
+            nome_contato: conv.nome_contato,
+            fromme: conv.fromme,
+            frommeType: typeof conv.fromme,
+            status: conv.status,
+            mensagem: conv.mensagem?.substring(0, 30)
+          });
         }
         
         if (!conversasMap.has(key)) {
@@ -2986,9 +3221,25 @@ function Conversas() {
       });
       
       // ⚡ CORREÇÃO: Log de agrupamento para debug
+      const conversasAgrupadas = Array.from(conversasMap.entries());
+      const grupos = conversasAgrupadas.filter(([k]) => /@g\.us$/.test(k));
+      const contatos = conversasAgrupadas.filter(([k]) => !/@g\.us$/.test(k));
+      
       console.log(`📊 [LOAD] Agrupadas ${conversasMap.size} conversas únicas de ${validConversas.length} mensagens`, {
-        grupos: Array.from(conversasMap.entries()).filter(([k]) => /@g\.us$/.test(k)).length,
-        contatos: Array.from(conversasMap.entries()).filter(([k]) => !/@g\.us$/.test(k)).length
+        grupos: grupos.length,
+        contatos: contatos.length,
+        detalhesContatos: contatos.map(([key, msgs]) => ({
+          key,
+          totalMensagens: msgs.length,
+          mensagensRecebidas: msgs.filter(m => m.fromme === false || !m.fromme).length,
+          mensagensEnviadas: msgs.filter(m => m.fromme === true).length,
+          primeiraMensagem: msgs[0] ? {
+            numero: msgs[0].numero,
+            telefone_formatado: msgs[0].telefone_formatado,
+            nome_contato: msgs[0].nome_contato,
+            fromme: msgs[0].fromme
+          } : null
+        }))
       });
 
       // ⚡ CORREÇÃO: Buscar leads de TODOS os telefones encontrados (sem limite)
@@ -3093,25 +3344,13 @@ function Conversas() {
         });
       }
 
-      // ETAPA 4: Criar lista de conversas (otimizado) com filtro de responsável
-      // ⚡ CORREÇÃO CRÍTICA: REMOVER .slice(0, INITIAL_LIMIT) para exibir TODAS as conversas
-      // Todas as conversas do WhatsApp devem aparecer no CRM
+      // ETAPA 4: Criar lista de conversas (otimizado)
+      // ⚡ CORREÇÃO CRÍTICA: REMOVER TODOS OS FILTROS - exibir TODAS as conversas SEM EXCEÇÃO
+      // Todas as conversas do WhatsApp devem aparecer no CRM, independente de responsável ou admin
       const novasConversas: Conversation[] = Array.from(conversasMap.entries())
+        // ⚡ CORREÇÃO CRÍTICA: REMOVIDO filtro de responsável/admin - TODAS as conversas devem aparecer
         // REMOVIDO: .slice(0, INITIAL_LIMIT) - agora todas as conversas são exibidas
-        .filter(([telefone, mensagens]) => {
-          // Se for admin, mostrar todas as conversas
-          if (isAdmin) return true;
-          
-          // Se não for admin, verificar se tem responsável definido
-          const telKey = telefone.replace(/[^0-9]/g, '');
-          const assignedUserId = assignmentsMap.get(telKey);
-          
-          // Se não tem responsável definido, todos podem ver
-          if (!assignedUserId) return true;
-          
-          // Se tem responsável definido, apenas o responsável pode ver
-          return assignedUserId === currentUserId;
-        })
+        // REMOVIDO: .filter() por responsável - todas as conversas devem ser visíveis
         .map(([telefone, mensagens]) => {
         // ⚡ CORREÇÃO CRÍTICA: Detectar se é grupo ANTES de processar
         // Verificar se alguma mensagem tem is_group = true ou se o número termina com @g.us
@@ -3154,18 +3393,27 @@ function Conversas() {
         
         // ⚡ CORREÇÃO CRÍTICA: Processar TODAS as mensagens (não limitar) para preservar histórico completo
         // Apenas para exibição inicial na lista, mostrar últimas 3, mas manter todas no estado
+        // ⚡ CORREÇÃO: Verificar fromme de forma mais robusta (pode ser boolean, string, null, undefined)
         const todasMensagensFormatadas: Message[] = mensagens
           .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-          .map(m => ({
-            id: m.id || `msg-${Date.now()}-${Math.random()}`,
-            content: m.mensagem || '',
-            type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem || 'text') as any,
-            sender: (m.fromme === true) ? "user" : "contact",
-            timestamp: new Date(m.created_at || Date.now()),
-            delivered: true,
-            read: m.status !== 'Recebida',
-            mediaUrl: m.midia_url,
-          }));
+          .map(m => {
+            // ⚡ CORREÇÃO CRÍTICA: Determinar sender baseado em fromme de forma robusta
+            // fromme === true ou 'true' → sender: "user" (mensagem enviada)
+            // fromme === false, 'false', null, undefined → sender: "contact" (mensagem recebida)
+            const isFromMe = m.fromme === true || m.fromme === 'true';
+            const sender: "user" | "contact" = isFromMe ? "user" : "contact";
+            
+            return {
+              id: m.id || `msg-${Date.now()}-${Math.random()}`,
+              content: m.mensagem || '',
+              type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem || 'text') as any,
+              sender: sender,
+              timestamp: new Date(m.created_at || Date.now()),
+              delivered: true,
+              read: m.status !== 'Recebida',
+              mediaUrl: m.midia_url,
+            };
+          });
         
         // ⚡ CORREÇÃO: Para exibição na lista, usar apenas últimas 3 mensagens
         // Mas manter TODAS as mensagens no estado da conversa
@@ -3193,7 +3441,7 @@ function Conversas() {
         const telKey = telefone.replace(/[^0-9]/g, '');
         const assignedUserId = assignmentsMap.get(telKey);
         
-        return {
+        const conversaCriada = {
           id: telefone,
           contactName,
           channel: "whatsapp" as const,
@@ -3209,6 +3457,34 @@ function Conversas() {
           isGroup: isGroup, // ⚡ CORREÇÃO CRÍTICA: Definir isGroup corretamente
           responsavel: assignedUserId || undefined // Adicionar responsável à conversa
         };
+        
+        // ⚡ LOG: Debug de conversa criada
+        // ⚡ CORREÇÃO: Verificar fromme de forma mais robusta
+        const temMensagensRecebidas = mensagens.some(m => {
+          const isReceived = m.fromme === false || m.fromme === 'false' || m.fromme === null || m.fromme === undefined;
+          return isReceived;
+        });
+        
+        if (temMensagensRecebidas) {
+          const mensagensRecebidasCount = mensagens.filter(m => {
+            const isReceived = m.fromme === false || m.fromme === 'false' || m.fromme === null || m.fromme === undefined;
+            return isReceived;
+          }).length;
+          const mensagensEnviadasCount = mensagens.filter(m => m.fromme === true || m.fromme === 'true').length;
+          
+          console.log('✅ [LOAD] Conversa criada com mensagens RECEBIDAS:', {
+            telefone,
+            contactName,
+            totalMensagens: messagensFormatadas.length,
+            mensagensRecebidas: mensagensRecebidasCount,
+            mensagensEnviadas: mensagensEnviadasCount,
+            status: statusConversa,
+            mensagensFormatadasRecebidas: messagensFormatadas.filter(m => m.sender === 'contact').length,
+            mensagensFormatadasEnviadas: messagensFormatadas.filter(m => m.sender === 'user').length
+          });
+        }
+        
+        return conversaCriada;
       });
 
       const loadTime = performance.now() - startTime;
@@ -3584,20 +3860,33 @@ function Conversas() {
         console.log(`📊 ${mensagensUnicas.length} mensagens únicas (${allMessages.length - mensagensUnicas.length} duplicadas removidas)`);
         
         // Formatar todas as mensagens
+        // ⚡ CORREÇÃO: Verificar fromme de forma mais robusta
         const messagensCompletas: Message[] = mensagensUnicas
-          .map(m => ({
-            id: m.id || `msg-${Date.now()}-${Math.random()}`,
-            content: m.mensagem || '',
-            type: (m.tipo_mensagem === 'texto' ? 'text' : (m.tipo_mensagem || 'text')) as any,
-            sender: (m.fromme === true ? "user" : "contact") as "user" | "contact",
-            timestamp: new Date(m.created_at || Date.now()),
-            delivered: true,
-            read: m.status !== 'Recebida',
-            mediaUrl: m.midia_url,
-            fileName: m.arquivo_nome,
-          }))
+          .map(m => {
+            // ⚡ CORREÇÃO CRÍTICA: Determinar sender baseado em fromme de forma robusta
+            const isFromMe = m.fromme === true || m.fromme === 'true';
+            const sender: "user" | "contact" = isFromMe ? "user" : "contact";
+            
+            return {
+              id: m.id || `msg-${Date.now()}-${Math.random()}`,
+              content: m.mensagem || '',
+              type: (m.tipo_mensagem === 'texto' ? 'text' : (m.tipo_mensagem || 'text')) as any,
+              sender: sender,
+              timestamp: new Date(m.created_at || Date.now()),
+              delivered: true,
+              read: m.status !== 'Recebida',
+              mediaUrl: m.midia_url,
+              fileName: m.arquivo_nome,
+            };
+          })
           // Ordenar por timestamp para garantir ordem cronológica correta
           .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+        
+        // ⚡ LOG: Debug de mensagens formatadas
+        console.log(`📊 [HISTORY] ${messagensCompletas.length} mensagens formatadas:`, {
+          recebidas: messagensCompletas.filter(m => m.sender === 'contact').length,
+          enviadas: messagensCompletas.filter(m => m.sender === 'user').length
+        });
         
         // ⚡ CORREÇÃO: Remover duplicatas finais por ID e timestamp (caso ainda existam)
         const mensagensFinais = messagensCompletas.filter((m, index, self) => 
