@@ -179,6 +179,28 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
           // Mensagem personalizada do lembrete
           const mensagemLembrete = `Olá ${lead.nome}! Lembramos do seu compromisso agendado para ${format(inicio, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.`;
 
+          // Normalizar telefone do lead para garantir formato correto
+          const telefoneLead = lead.telefone ? normalizePhoneBR(lead.telefone) : null;
+          
+          console.log('📞 [LEMBRETE] Telefone do lead normalizado:', {
+            original: lead.telefone,
+            normalizado: telefoneLead,
+            destinatario: formData.destinatario_lembrete || 'lead'
+          });
+
+          // LÓGICA DE DESTINATÁRIO:
+          // - Quando destinatario='lead': salvar telefone do lead em telefone_responsavel
+          // - Quando destinatario='responsavel': telefone_responsavel fica null (será buscado na edge function)
+          // - Quando destinatario='ambos': salvar telefone do responsável (lead será buscado via compromisso)
+          const destinatarioLembrete = formData.destinatario_lembrete || 'lead';
+          let telefoneParaLembrete = null;
+          
+          if (destinatarioLembrete === 'lead') {
+            // Para lead, salvar diretamente o telefone normalizado
+            telefoneParaLembrete = telefoneLead;
+          }
+          // Para 'responsavel' e 'ambos', o telefone do responsável será buscado dinamicamente na edge function
+
           const lembreteData = {
             compromisso_id: compromissoCriado.id,
             canal: 'whatsapp',
@@ -186,8 +208,8 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
             mensagem: mensagemLembrete,
             status_envio: 'pendente',
             data_envio: dataEnvio.toISOString(),
-            destinatario: formData.destinatario_lembrete || 'lead',
-            telefone_responsavel: null,
+            destinatario: destinatarioLembrete,
+            telefone_responsavel: telefoneParaLembrete,
             company_id: companyId,
           };
 
@@ -196,6 +218,8 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
             data_envio: lembreteData.data_envio,
             horas_antecedencia: lembreteData.horas_antecedencia,
             destinatario: lembreteData.destinatario,
+            telefone_salvo: lembreteData.telefone_responsavel,
+            telefone_lead_disponivel: telefoneLead,
             data_compromisso: inicio.toISOString()
           });
 
