@@ -29,52 +29,50 @@ const CONVERSATION_CACHE_KEYS = [
 /**
  * Limpa todas as mensagens da tabela conversas no Supabase
  * Mantém a estrutura da tabela intacta
+ * ⚠️ DELETA TODAS AS CONVERSAS do owner_id do usuário (todas as empresas)
  */
-export const cleanSupabaseConversations = async (companyId?: string): Promise<{ success: boolean; deletedCount?: number; error?: string }> => {
+export const cleanSupabaseConversations = async (): Promise<{ success: boolean; deletedCount?: number; error?: string }> => {
   try {
-    // Se não foi fornecido companyId, buscar do usuário atual
-    let currentCompanyId = companyId;
+    const { data: { user } } = await supabase.auth.getUser();
     
-    if (!currentCompanyId) {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        return { success: false, error: "Usuário não autenticado" };
-      }
-      
-      const { data: userRole, error: roleError } = await supabase
-        .from('user_roles')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
-      if (roleError || !userRole?.company_id) {
-        return { success: false, error: "Erro ao buscar company_id" };
-      }
-      
-      currentCompanyId = userRole.company_id;
+    if (!user) {
+      return { success: false, error: "Usuário não autenticado" };
     }
     
-    // Contar quantas mensagens serão deletadas (opcional, para feedback)
+    // Buscar TODAS as company_ids que o usuário tem acesso
+    const { data: userCompanies, error: companiesError } = await supabase
+      .from('user_roles')
+      .select('company_id')
+      .eq('user_id', user.id);
+    
+    if (companiesError || !userCompanies || userCompanies.length === 0) {
+      return { success: false, error: "Erro ao buscar empresas do usuário" };
+    }
+    
+    const companyIds = userCompanies.map(ur => ur.company_id);
+    
+    // Contar quantas mensagens serão deletadas
     const { count } = await supabase
       .from('conversas')
       .select('*', { count: 'exact', head: true })
-      .eq('company_id', currentCompanyId);
+      .in('company_id', companyIds);
     
     const totalMessages = count || 0;
     
-    // Deletar todas as mensagens da empresa
+    console.log(`🧹 Deletando ${totalMessages} conversas de ${companyIds.length} empresa(s)...`);
+    
+    // Deletar TODAS as conversas de TODAS as empresas do usuário
     const { error: deleteError } = await supabase
       .from('conversas')
       .delete()
-      .eq('company_id', currentCompanyId);
+      .in('company_id', companyIds);
     
     if (deleteError) {
       console.error('❌ Erro ao limpar conversas:', deleteError);
       return { success: false, error: deleteError.message };
     }
     
-    console.log(`✅ ${totalMessages} mensagens deletadas da tabela conversas`);
+    console.log(`✅ ${totalMessages} mensagens deletadas da tabela conversas (todas as empresas)`);
     return { success: true, deletedCount: totalMessages };
     
   } catch (error: any) {
@@ -212,7 +210,7 @@ export const diagnoseSystemHealth = async (companyId?: string): Promise<{
 
 /**
  * Função principal: limpa todo o histórico de conversas
- * - Limpa tabela conversas no Supabase
+ * - Limpa tabela conversas no Supabase (TODAS as empresas do usuário)
  * - Limpa todos os caches do localStorage
  * - ⚠️ GARANTE que não afeta outras funcionalidades
  */
@@ -224,15 +222,15 @@ export const cleanAllConversationsHistory = async (companyId?: string): Promise<
   error?: string;
 }> => {
   try {
-    console.log('🧹 Iniciando limpeza do histórico de conversas...');
+    console.log('🧹 Iniciando limpeza TOTAL do histórico de conversas (todas as empresas)...');
     
     // ⚡ DIAGNÓSTICO ANTES: Verificar estado do sistema antes da limpeza
     console.log('🔍 Verificando estado do sistema antes da limpeza...');
     const diagnosisBefore = await diagnoseSystemHealth(companyId);
     console.log('📊 Estado antes:', diagnosisBefore);
     
-    // 1. Limpar Supabase (APENAS tabela conversas)
-    const supabaseResult = await cleanSupabaseConversations(companyId);
+    // 1. Limpar Supabase (TODAS as conversas de TODAS as empresas do usuário)
+    const supabaseResult = await cleanSupabaseConversations();
     if (!supabaseResult.success) {
       return {
         success: false,
