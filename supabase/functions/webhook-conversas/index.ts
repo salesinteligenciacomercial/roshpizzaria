@@ -464,16 +464,30 @@ serve(async (req) => {
         console.log('ℹ️ Lead não encontrado para o número:', numeroLimpo, 'na company:', companyId);
       }
     } else if (!isGroup && numeroLimpo) {
-      // Se não temos company, tentar encontrar lead em qualquer company
-      // Preparar variações do número para busca (com e sem código do país)
+      // ✅ CORREÇÃO DEFINITIVA: Buscar lead com TODAS as variações possíveis do número
+      // Isso resolve o problema de números salvos com formatos diferentes
       const numeroVariations = [numeroLimpo];
+      
+      // Remover possível DDI duplicado (5515... -> 15...)
+      if (numeroLimpo.startsWith('5515') && numeroLimpo.length > 12) {
+        numeroVariations.push(numeroLimpo.substring(2)); // Remove os dois primeiros 55
+      }
+      
+      // Se tem código do país (55), também buscar sem ele
       if (numeroLimpo.startsWith('55') && numeroLimpo.length === 13) {
-        // Se tem código do país, também buscar sem ele
-        numeroVariations.push(numeroLimpo.substring(2));
+        numeroVariations.push(numeroLimpo.substring(2)); // Remove 55
       } else if (!numeroLimpo.startsWith('55') && numeroLimpo.length >= 10) {
         // Se não tem código do país, também buscar com ele
         numeroVariations.push(`55${numeroLimpo}`);
       }
+      
+      // Adicionar variação sem DDD (últimos 8 ou 9 dígitos)
+      if (numeroLimpo.length >= 10) {
+        const somenteNumero = numeroLimpo.slice(-9); // Últimos 9 dígitos (com 9 inicial do celular)
+        numeroVariations.push(somenteNumero);
+      }
+      
+      console.log('🔍 Buscando lead com variações:', numeroVariations);
       
       const telefoneConditions = numeroVariations.map(n => `telefone.eq.${n}`).join(',');
       const phoneConditions = numeroVariations.map(n => `phone.eq.${n}`).join(',');

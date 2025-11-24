@@ -4820,8 +4820,10 @@ function Conversas() {
         
         if (userRole?.company_id) {
           const repliedMessage = replyingTo ? selectedConv.messages.find(m => m.id === replyingTo)?.content : null;
+          // ✅ CORREÇÃO: Usar número ORIGINAL do lead (não normalizado) para manter consistência com webhook
+          const numeroOriginal = selectedConv.phoneNumber || selectedConv.id;
           const { error: dbError } = await supabase.from('conversas').insert([{
-            numero: numeroNormalizado,
+            numero: numeroOriginal,
             telefone_formatado: numeroNormalizado,
             mensagem: messageContent,
             origem: 'WhatsApp',
@@ -4908,8 +4910,10 @@ function Conversas() {
             
             if (userRole?.company_id) {
               const repliedMessage = replyingTo ? selectedConv.messages.find(m => m.id === replyingTo)?.content : null;
+              // ✅ CORREÇÃO: Usar número ORIGINAL do lead (não normalizado) para manter consistência com webhook
+              const numeroOriginal = selectedConv.phoneNumber || selectedConv.id;
               const { error: dbError } = await supabase.from('conversas').insert([{
-                numero: numeroNormalizado,
+                numero: numeroOriginal,
                 telefone_formatado: numeroNormalizado,
                 mensagem: messageContent,
                 origem: 'WhatsApp',
