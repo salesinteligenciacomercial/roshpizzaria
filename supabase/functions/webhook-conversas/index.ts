@@ -476,11 +476,12 @@ serve(async (req) => {
 
     // Se temos company_id, buscar lead apenas nessa company
     if (companyId && !isGroup && numeroLimpo) {
-      // ⚡ CORREÇÃO CRÍTICA: Se o número veio de @lid, buscar TAMBÉM por nome
+      // ⚡ CORREÇÃO CRÍTICA: Se o número veio de @lid, buscar SEMPRE por nome e usar número REAL
       const isLidNumber = validatedData.numero.includes('@lid');
+      let numeroReal: string | null = null;
       
       if (isLidNumber && validatedData.nome_contato) {
-        console.log('🔍 [WEBHOOK] Buscando lead por NOME (número @lid não confiável):', {
+        console.log('🔍 [WEBHOOK @LID] Buscando lead por NOME (número @lid não confiável):', {
           nome: validatedData.nome_contato,
           numeroLid: numeroLimpo
         });
@@ -488,7 +489,7 @@ serve(async (req) => {
         // Buscar por nome primeiro (mais confiável para @lid)
         const { data: leadByName, error: nameSearchError } = await supabase
           .from('leads')
-          .select('id, company_id, phone, telefone')
+          .select('id, company_id, phone, telefone, name')
           .eq('company_id', companyId)
           .ilike('name', validatedData.nome_contato)
           .limit(1)
@@ -496,15 +497,28 @@ serve(async (req) => {
         
         if (leadByName && !nameSearchError) {
           leadId = leadByName.id;
-          // Usar o número REAL do lead ao invés do @lid
-          numeroLimpo = leadByName.phone || leadByName.telefone || numeroLimpo;
-          console.log('✅ [WEBHOOK] Lead encontrado por NOME:', {
-            leadId,
-            nome: validatedData.nome_contato,
-            numeroReal: numeroLimpo
-          });
+          // ✅ USAR O NÚMERO REAL DO LEAD - NUNCA USAR @LID
+          numeroReal = leadByName.phone || leadByName.telefone;
+          if (numeroReal) {
+            numeroLimpo = numeroReal;
+            console.log('✅ [WEBHOOK @LID] Lead encontrado por NOME - USANDO NÚMERO REAL:', {
+              leadId,
+              nome: leadByName.name,
+              numeroReal: numeroLimpo,
+              lidDescartado: validatedData.numero
+            });
+          }
         } else {
-          console.log('⚠️ [WEBHOOK] Lead não encontrado por nome, tentando por número...');
+          console.log('⚠️ [WEBHOOK @LID] Lead não encontrado por nome');
+          // Se não encontrou lead com @lid, NÃO criar nova conversa
+          console.log('🚫 [WEBHOOK @LID] Bloqueando criação de conversa com número @lid não confiável');
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              message: 'Número @lid sem lead correspondente - mensagem ignorada para evitar duplicação' 
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
       }
       
@@ -590,13 +604,13 @@ serve(async (req) => {
     // ⚡ CORREÇÃO CRÍTICA: Se ainda não tem company_id mas é mensagem recebida
     // E veio de @lid, tentar buscar lead por NOME em QUALQUER company
     if (!companyId && validatedData.fromMe !== true && validatedData.numero.includes('@lid') && validatedData.nome_contato) {
-      console.log('🔍 [WEBHOOK] Tentando encontrar lead por NOME em qualquer company (@lid sem company):', {
+      console.log('🔍 [WEBHOOK @LID SEM COMPANY] Tentando encontrar lead por NOME em qualquer company:', {
         nome: validatedData.nome_contato
       });
       
       const { data: leadByName } = await supabase
         .from('leads')
-        .select('id, company_id, phone, telefone')
+        .select('id, company_id, phone, telefone, name')
         .ilike('name', validatedData.nome_contato)
         .limit(1)
         .maybeSingle();
@@ -604,12 +618,28 @@ serve(async (req) => {
       if (leadByName) {
         companyId = leadByName.company_id;
         leadId = leadByName.id;
-        numeroLimpo = leadByName.phone || leadByName.telefone || numeroLimpo;
-        console.log('✅ [WEBHOOK] Lead e company encontrados por NOME:', {
-          leadId,
-          companyId,
-          numeroReal: numeroLimpo
-        });
+        // ✅ USAR O NÚMERO REAL DO LEAD - NUNCA USAR @LID
+        const numeroReal = leadByName.phone || leadByName.telefone;
+        if (numeroReal) {
+          numeroLimpo = numeroReal;
+          console.log('✅ [WEBHOOK @LID SEM COMPANY] Lead e company encontrados por NOME - USANDO NÚMERO REAL:', {
+            leadId,
+            companyId,
+            nome: leadByName.name,
+            numeroReal: numeroLimpo,
+            lidDescartado: validatedData.numero
+          });
+        }
+      } else {
+        // Se não encontrou lead com @lid, NÃO criar nova conversa
+        console.log('🚫 [WEBHOOK @LID] Bloqueando criação de conversa com número @lid não confiável (sem company)');
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: 'Número @lid sem lead correspondente - mensagem ignorada para evitar duplicação' 
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     }
     
