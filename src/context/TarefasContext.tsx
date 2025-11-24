@@ -51,10 +51,13 @@ export function TarefasProvider({ children }: { children: React.ReactNode }) {
           .in('id', task.responsaveis);
         
         if (profiles) {
-          responsaveis_names = task.responsaveis.map((id: string) => {
-            const profile = profiles.find(p => p.id === id);
-            return profile?.full_name || 'Usuário';
-          });
+          // Mapear mantendo a ordem dos IDs
+          responsaveis_names = task.responsaveis
+            .map((id: string) => {
+              const profile = profiles.find(p => p.id === id);
+              return profile?.full_name || 'Usuário';
+            })
+            .filter((name: string) => name !== 'Usuário'); // Remove usuários não encontrados
         }
       }
       

@@ -705,16 +705,19 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
           {(task.assignee_name || (task.responsaveis_names && task.responsaveis_names.length > 0)) && (
             <div className="flex items-center gap-1.5 text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
               <User className="h-3 w-3" />
-              <div className="flex gap-1 items-center">
+              <div className="flex gap-1 items-center flex-wrap">
                 {task.assignee_name && (
                   <span className="font-medium">{task.assignee_name}</span>
                 )}
                 {task.responsaveis_names && task.responsaveis_names.length > 0 && (
                   <>
                     {task.assignee_name && <span className="text-muted-foreground">, </span>}
-                    <span className="font-medium">
-                      {task.responsaveis_names.join(', ')}
-                    </span>
+                    {task.responsaveis_names.map((name, idx) => (
+                      <span key={idx} className="font-medium">
+                        {name}
+                        {idx < task.responsaveis_names!.length - 1 && ', '}
+                      </span>
+                    ))}
                   </>
                 )}
               </div>
