@@ -435,11 +435,15 @@ export function SubcontasManager() {
                       className={`flex items-center gap-2 p-2 rounded text-sm ${
                         detail.status === 'success'
                           ? 'bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800'
+                          : detail.status === 'skipped'
+                          ? 'bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800'
                           : 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800'
                       }`}
                     >
                       {detail.status === 'success' ? (
                         <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      ) : detail.status === 'skipped' ? (
+                        <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                       ) : (
                         <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
                       )}
@@ -448,7 +452,7 @@ export function SubcontasManager() {
                         {detail.status === 'success' 
                           ? `✅ ${detail.message || 'Atualizada'}` 
                           : detail.status === 'skipped'
-                          ? '⏭️ Já atualizada'
+                          ? '✅ Já atualizada'
                           : '❌ Erro'}
                       </span>
                       {detail.updatesApplied && detail.updatesApplied.length > 0 && (
