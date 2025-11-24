@@ -4421,10 +4421,7 @@ function Conversas() {
         .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
         .single();
 
-      // ⚡ CORREÇÃO: Criar URL blob temporária para exibição imediata
-      const blobUrl = URL.createObjectURL(file);
-      
-      // ⚡ CORREÇÃO: Criar data URL para salvar no banco (compatível com getMediaUrl)
+      // ⚡ CORREÇÃO: Criar data URL para salvar no banco e exibição
       const dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -4452,7 +4449,7 @@ function Conversas() {
         toast.error('Erro ao salvar mensagem no histórico');
       }
 
-      // ⚡ CORREÇÃO: Usar blob URL para exibição imediata, mas também ter o ID do banco
+      // ⚡ CORREÇÃO: Usar data URL para exibição imediata e permanente
       const newMessage: Message = {
         id: (inserted?.id || Date.now()).toString(),
         content: caption || tipoMensagem[type] || 'Arquivo enviado',
@@ -4461,7 +4458,7 @@ function Conversas() {
         timestamp: new Date(),
         delivered: true,
         read: false,
-        mediaUrl: blobUrl, // URL blob temporária para exibição imediata
+        mediaUrl: dataUrl, // ⚡ CORREÇÃO: Usar data URL permanente
         fileName: file.name,
         mimeType: file.type,
         sentBy: userName || "Você", // Adicionar quem enviou
@@ -4579,6 +4576,15 @@ function Conversas() {
 
       console.log('✅ Áudio enviado com sucesso');
 
+      // ⚡ CORREÇÃO: Converter áudio para data URL para salvar no banco
+      const audioDataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          resolve(reader.result as string);
+        };
+        reader.readAsDataURL(audioBlob);
+      });
+
       // Salvar no Supabase e obter ID para manter sincronizado
       const { data: userRole } = await supabase
         .from('user_roles')
@@ -4594,9 +4600,10 @@ function Conversas() {
         tipo_mensagem: 'audio',
         nome_contato: selectedConv.contactName,
         arquivo_nome: 'audio.ogg',
+        midia_url: audioDataUrl, // ⚡ CORREÇÃO: Salvar data URL do áudio
         company_id: userRole?.company_id,
         fromme: true, // ⚡ CORREÇÃO: Marcar como mensagem enviada pelo usuário
-      }]).select('id').single();
+      }]).select('id, midia_url').single();
       if (dbError) {
         console.error('❌ Erro ao salvar mensagem no banco:', dbError);
         toast.error('Erro ao salvar mensagem no histórico');
@@ -4610,7 +4617,7 @@ function Conversas() {
         timestamp: new Date(),
         delivered: true,
         read: false,
-        mediaUrl: URL.createObjectURL(audioBlob),
+        mediaUrl: audioDataUrl, // ⚡ CORREÇÃO: Usar data URL permanente
         sentBy: userName || "Você", // Adicionar quem enviou
       };
 
