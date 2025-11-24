@@ -627,6 +627,18 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       
       <CardHeader className="relative pb-3">
         <div className="flex items-start justify-between gap-2">
+          {/* Botão de expandir/minimizar movido para o início (esquerda) */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 flex-shrink-0"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
+            title={isExpanded ? 'Recolher' : 'Expandir'}
+          >
+            {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </Button>
+
           <div className="flex items-center gap-0.5 flex-1">
             <div className={`h-1 w-1 rounded-full ${getPriorityColor(task.priority)} animate-pulse`} />
             
@@ -686,22 +698,11 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
               </div>
             )}
           </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <Badge className={`${getPriorityColor(task.priority)} border-0 text-white shadow-sm`}>
-              {task.priority}
-            </Badge>
-            {/* ✅ BACKUP: Botão de expandir/recolher - Se retroceder, verificar este botão Chevron */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
-              title={isExpanded ? 'Recolher' : 'Expandir'}
-            >
-              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            </Button>
-          </div>
+          
+          {/* Badge de prioridade no final (direita) */}
+          <Badge className={`${getPriorityColor(task.priority)} border-0 text-white shadow-sm flex-shrink-0`}>
+            {task.priority}
+          </Badge>
         </div>
       </CardHeader>
       
