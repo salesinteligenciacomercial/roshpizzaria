@@ -7032,7 +7032,7 @@ function Conversas() {
         .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
         .single();
 
-      // CORREÇÃO: Inserir mensagem de finalização com status Resolvida
+      // CORREÇÃO: Inserir mensagem de finalização com status Resolvida e fromme: true
       await supabase.from('conversas').insert([{
         numero: numeroNormalizado,
         telefone_formatado: numeroNormalizado,
@@ -7042,6 +7042,7 @@ function Conversas() {
         tipo_mensagem: 'text',
         nome_contato: selectedConv.contactName,
         company_id: userRole?.company_id,
+        fromme: true, // ⚡ CRÍTICO: Marcar como mensagem enviada para aparecer no lado direito
       }]);
 
       // CORREÇÃO: Atualizar TODAS as mensagens anteriores desta conversa para status Resolvida
