@@ -87,19 +87,27 @@ export const useConversationsLoader = () => {
         conv.company_id === userCompanyId // Garantir que apenas mensagens da empresa do usuário sejam processadas
       );
 
-      // Agrupar conversas por telefone - CORREÇÃO: Normalizar sempre para evitar duplicatas
+      // ⚡ CORREÇÃO DEFINITIVA: Agrupar conversas por telefone normalizado para eliminar duplicação
       const conversasMap = new Map<string, any[]>();
       validConversas.forEach(conv => {
         const isGroup = conv.is_group || /@g\.us$/.test(conv.numero || '');
         
-        // ✅ CORREÇÃO CRÍTICA: Normalizar telefone SEMPRE da mesma forma
+        // ✅ NORMALIZAÇÃO RIGOROSA: SEMPRE usar o mesmo critério de chave
         let key: string;
         if (isGroup) {
           key = conv.numero; // Grupos mantêm o ID original
         } else {
-          // Para contatos individuais, SEMPRE normalizar removendo caracteres especiais
-          const telefoneNormalizado = (conv.telefone_formatado || conv.numero || '').replace(/[^0-9]/g, '');
-          key = telefoneNormalizado;
+          // Para contatos individuais: normalizar AMBOS telefone_formatado e numero
+          const tel1 = (conv.telefone_formatado || '').replace(/[^0-9]/g, '');
+          const tel2 = (conv.numero || '').replace(/[^0-9]/g, '');
+          
+          // Usar o telefone mais longo (mais completo) como chave
+          key = tel1.length >= tel2.length ? tel1 : tel2;
+          
+          // Se não tem telefone válido, usar numero original
+          if (!key) {
+            key = conv.numero;
+          }
         }
         
         if (!conversasMap.has(key)) {
@@ -148,34 +156,36 @@ export const useConversationsLoader = () => {
         }
       });
 
-      // Criar conversas - ⚡ CORREÇÃO CRÍTICA: Remover .slice() para exibir TODAS as conversas
+      // Criar conversas - ⚡ CORREÇÃO DEFINITIVA: Priorizar nome do lead e unificar nomes variantes
       const novasConversas: Conversation[] = Array.from(conversasMap.entries())
         .map(([telefone, mensagens]) => {
           const leadInfo = leadsMap.get(telefone);
           
+          // ⚡ PRIORIDADE 1: Nome do lead cadastrado no CRM (mais confiável)
           let contactName = leadInfo?.name;
           
-          const nomesProibidos = [
-            'jeohvah lima', 
-            'jeohvah i.a', 
-            'jeova costa de lima',
-            'jeo',
-            telefone
-          ];
-          
-          if (!contactName || contactName === telefone) {
-            const nomeMensagem = mensagens.find(m => {
-              const nomeMsg = m.nome_contato?.trim().toLowerCase();
-              return nomeMsg && 
-                     nomeMsg !== telefone && 
-                     !nomesProibidos.includes(nomeMsg);
-            })?.nome_contato;
+          // Se não tem lead ou nome é igual ao telefone, buscar melhor nome nas mensagens
+          if (!contactName || contactName === telefone || contactName.trim() === '') {
+            // ⚡ PRIORIDADE 2: Buscar o nome mais completo nas mensagens (ignorando variações)
+            const nomesEncontrados = mensagens
+              .map(m => m.nome_contato?.trim())
+              .filter(nome => {
+                if (!nome || nome === telefone) return false;
+                const nomeLower = nome.toLowerCase();
+                // Ignorar nomes genéricos ou variações de teste
+                const nomesInvalidos = ['jeohvah', 'jeo', 'test', 'teste', 'user'];
+                return !nomesInvalidos.some(invalido => nomeLower.includes(invalido));
+              });
             
-            if (nomeMensagem) {
-              contactName = nomeMensagem;
+            // Pegar o nome mais longo (geralmente é o mais completo)
+            if (nomesEncontrados.length > 0) {
+              contactName = nomesEncontrados.reduce((longest, current) => 
+                (current?.length || 0) > (longest?.length || 0) ? current : longest
+              );
             }
           }
           
+          // ⚡ FALLBACK: Se ainda não tem nome, usar telefone
           if (!contactName || contactName.trim() === '') {
             contactName = telefone;
           }
