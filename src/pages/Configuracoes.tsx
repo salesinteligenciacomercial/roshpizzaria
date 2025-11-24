@@ -49,6 +49,8 @@ export default function Configuracoes() {
   const { toast } = useToast();
   const { canAccess, isAdmin, loading: permissionsLoading } = usePermissions();
   const [isCleaningHistory, setIsCleaningHistory] = useState(false);
+  const [cleaningProgress, setCleaningProgress] = useState(0);
+  const [cleaningStats, setCleaningStats] = useState({ deleted: 0, total: 0 });
   const [openaiKey, setOpenaiKey] = useState("");
   const [audimaToken, setAudimaToken] = useState("");
   const [elevenlabsKey, setElevenlabsKey] = useState("");
@@ -476,8 +478,14 @@ export default function Configuracoes() {
     }
 
     setIsCleaningHistory(true);
+    setCleaningProgress(0);
+    setCleaningStats({ deleted: 0, total: 0 });
+    
     try {
-      const result = await cleanAllConversationsHistory();
+      const result = await cleanAllConversationsHistory(undefined, (progress, deleted, total) => {
+        setCleaningProgress(progress);
+        setCleaningStats({ deleted, total });
+      });
       
       if (result.success) {
         toast({
@@ -498,6 +506,8 @@ export default function Configuracoes() {
         variant: "destructive",
       });
     } finally {
+      setCleaningProgress(0);
+      setCleaningStats({ deleted: 0, total: 0 });
       setIsCleaningHistory(false);
     }
   };
@@ -1368,7 +1378,10 @@ export default function Configuracoes() {
                   disabled={isCleaningHistory}
                 >
                   {isCleaningHistory ? (
-                    <>Limpando...</>
+                    <div className="flex items-center gap-2">
+                      <span>Limpando... {cleaningProgress}%</span>
+                      <span className="text-xs opacity-70">({cleaningStats.deleted}/{cleaningStats.total})</span>
+                    </div>
                   ) : (
                     <>
                       <Trash2 className="h-4 w-4 mr-2" />
