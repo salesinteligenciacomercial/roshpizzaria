@@ -30,6 +30,7 @@ const CONVERSATION_CACHE_KEYS = [
  * Limpa todas as mensagens da tabela conversas no Supabase
  * Mantém a estrutura da tabela intacta
  * ⚠️ DELETA TODAS AS CONVERSAS do owner_id do usuário (todas as empresas)
+ * ⚡ Usa deleção em lotes para evitar timeout
  */
 export const cleanSupabaseConversations = async (): Promise<{ success: boolean; deletedCount?: number; error?: string }> => {
   try {
@@ -59,21 +60,57 @@ export const cleanSupabaseConversations = async (): Promise<{ success: boolean; 
     
     const totalMessages = count || 0;
     
-    console.log(`🧹 Deletando ${totalMessages} conversas de ${companyIds.length} empresa(s)...`);
+    console.log(`🧹 Deletando ${totalMessages} conversas de ${companyIds.length} empresa(s) em lotes...`);
     
-    // Deletar TODAS as conversas de TODAS as empresas do usuário
-    const { error: deleteError } = await supabase
-      .from('conversas')
-      .delete()
-      .in('company_id', companyIds);
+    // Deletar em lotes para evitar timeout
+    const BATCH_SIZE = 1000;
+    let deletedTotal = 0;
+    let hasMore = true;
     
-    if (deleteError) {
-      console.error('❌ Erro ao limpar conversas:', deleteError);
-      return { success: false, error: deleteError.message };
+    while (hasMore) {
+      // Buscar IDs de um lote
+      const { data: batch, error: fetchError } = await supabase
+        .from('conversas')
+        .select('id')
+        .in('company_id', companyIds)
+        .limit(BATCH_SIZE);
+      
+      if (fetchError) {
+        console.error('❌ Erro ao buscar lote:', fetchError);
+        return { success: false, error: fetchError.message };
+      }
+      
+      if (!batch || batch.length === 0) {
+        hasMore = false;
+        break;
+      }
+      
+      // Deletar lote
+      const batchIds = batch.map(c => c.id);
+      const { error: deleteError } = await supabase
+        .from('conversas')
+        .delete()
+        .in('id', batchIds);
+      
+      if (deleteError) {
+        console.error('❌ Erro ao deletar lote:', deleteError);
+        return { success: false, error: deleteError.message };
+      }
+      
+      deletedTotal += batch.length;
+      console.log(`📊 Progresso: ${deletedTotal}/${totalMessages} conversas deletadas`);
+      
+      // Se deletou menos que o tamanho do lote, não há mais registros
+      if (batch.length < BATCH_SIZE) {
+        hasMore = false;
+      }
+      
+      // Pequena pausa entre lotes para não sobrecarregar o banco
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
     
-    console.log(`✅ ${totalMessages} mensagens deletadas da tabela conversas (todas as empresas)`);
-    return { success: true, deletedCount: totalMessages };
+    console.log(`✅ ${deletedTotal} mensagens deletadas da tabela conversas (todas as empresas)`);
+    return { success: true, deletedCount: deletedTotal };
     
   } catch (error: any) {
     console.error('❌ Erro ao limpar conversas do Supabase:', error);
