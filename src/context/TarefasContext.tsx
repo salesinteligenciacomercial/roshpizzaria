@@ -7,6 +7,9 @@ export interface Tarefa {
   description?: string | null;
   priority: 'baixa' | 'media' | 'alta' | 'urgente';
   assignee_id?: string | null;
+  assignee_name?: string;
+  responsaveis?: string[];
+  responsaveis_names?: string[];
   due_date?: string | null;
   lead_id?: string | null;
   column_id?: string | null;
@@ -30,9 +33,40 @@ export function TarefasProvider({ children }: { children: React.ReactNode }) {
   const recarregar = useCallback(async () => {
     const { data } = await supabase
       .from('tasks')
-      .select('*')
+      .select(`
+        *,
+        assignee:assignee_id(id, full_name),
+        lead:lead_id(id, name)
+      `)
       .order('created_at', { ascending: false });
-    setTarefas((data as any) || []);
+    
+    // Buscar nomes dos responsáveis múltiplos
+    const tasksWithNames = await Promise.all((data || []).map(async (task: any) => {
+      let responsaveis_names: string[] = [];
+      
+      if (task.responsaveis && task.responsaveis.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', task.responsaveis);
+        
+        if (profiles) {
+          responsaveis_names = task.responsaveis.map((id: string) => {
+            const profile = profiles.find(p => p.id === id);
+            return profile?.full_name || 'Usuário';
+          });
+        }
+      }
+      
+      return {
+        ...task,
+        assignee_name: task.assignee?.full_name,
+        lead_name: task.lead?.name,
+        responsaveis_names
+      };
+    }));
+    
+    setTarefas(tasksWithNames as any);
   }, []);
 
   useEffect(() => {

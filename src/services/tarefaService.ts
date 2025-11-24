@@ -6,6 +6,7 @@ export interface TarefaPayload {
   priority?: 'baixa' | 'media' | 'alta' | 'urgente';
   due_date?: string | null; // ISO
   assignee_id?: string | null;
+  responsaveis?: string[];
   lead_id?: string | null;
   column_id?: string | null;
   board_id?: string | null;

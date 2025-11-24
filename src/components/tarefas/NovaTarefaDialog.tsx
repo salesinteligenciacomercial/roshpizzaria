@@ -366,11 +366,10 @@ export function NovaTarefaDialog({
             <div className="grid grid-cols-2 gap-2 max-h-32 overflow-auto p-2 border rounded-md">
               {users.map((u) => (
                 <label key={u.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={responsaveis.includes(u.id)}
-                    onChange={(e) => {
-                      setResponsaveis((prev) => e.target.checked ? [...prev, u.id] : prev.filter(id => id !== u.id));
+                    onCheckedChange={(checked) => {
+                      setResponsaveis((prev) => checked ? [...prev, u.id] : prev.filter(id => id !== u.id));
                     }}
                   />
                   {u.full_name}

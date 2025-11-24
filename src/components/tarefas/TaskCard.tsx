@@ -58,6 +58,8 @@ interface Task {
   priority: string;
   assignee_id: string | null;
   assignee_name?: string;
+  responsaveis?: string[];
+  responsaveis_names?: string[];
   due_date: string | null;
   lead_id: string | null;
   lead_name?: string;
@@ -699,11 +701,24 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
           </p>
         )}
         
-        <div className="flex items-center gap-4 text-xs">
-          {task.assignee_name && (
+        <div className="flex items-center gap-4 text-xs flex-wrap">
+          {(task.assignee_name || (task.responsaveis_names && task.responsaveis_names.length > 0)) && (
             <div className="flex items-center gap-1.5 text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
               <User className="h-3 w-3" />
-              <span className="font-medium">{task.assignee_name}</span>
+              <div className="flex gap-1 items-center">
+                {task.assignee_name && (
+                  <span className="font-medium">{task.assignee_name}</span>
+                )}
+                {task.responsaveis_names && task.responsaveis_names.length > 0 && (
+                  <>
+                    {task.assignee_name && <span className="text-muted-foreground">+</span>}
+                    <span className="font-medium">
+                      {task.responsaveis_names.slice(0, 2).join(', ')}
+                      {task.responsaveis_names.length > 2 && ` +${task.responsaveis_names.length - 2}`}
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           )}
           {Array.isArray(localComments) && localComments.length > 0 && (
