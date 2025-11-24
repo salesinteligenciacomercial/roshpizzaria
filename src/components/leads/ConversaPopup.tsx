@@ -485,6 +485,7 @@ export function ConversaPopup({
           tipo_mensagem: type,
           nome_contato: leadName,
           company_id: companyId,
+          fromme: true, // ✅ CORREÇÃO: Definir fromme como true para mensagens enviadas
           replied_to_message: replyingTo ? messages.find(m => m.id === replyingTo)?.content || null : null,
         },
       ]);
