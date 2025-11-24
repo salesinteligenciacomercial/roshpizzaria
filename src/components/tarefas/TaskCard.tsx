@@ -619,7 +619,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       style={style}
       {...attributes}
       {...listeners}
-      className={`group relative mb-3 border-0 shadow-card hover:shadow-lg transition-all duration-300 overflow-hidden cursor-grab active:cursor-grabbing w-[320px] ${
+      className={`group relative mb-3 border-0 shadow-card hover:shadow-lg transition-all duration-300 overflow-hidden cursor-grab active:cursor-grabbing ${
         isOverdue ? 'ring-2 ring-red-500/50 border-red-200' : ''
       }`}
     >
@@ -627,44 +627,13 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       
       <CardHeader className="relative pb-3">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex flex-col gap-3">
-            {/* Título no topo */}
-            <div className="flex items-start justify-between gap-2">
-              <CardTitle className={`text-base font-semibold flex-1 ${isOverdue ? 'text-red-700' : 'text-foreground'}`}>
-                {task.title}
-                {isOverdue && <span className="ml-1 text-red-500">🔴</span>}
-              </CardTitle>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <Badge className={`${getPriorityColor(task.priority)} border-0 text-white shadow-sm`}>
-                  {task.priority}
-                </Badge>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
-                  title={isExpanded ? 'Recolher' : 'Expandir'}
-                >
-                  {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                </Button>
-              </div>
-            </div>
-
-            {/* Data abaixo do título */}
-            {task.due_date && (
-              <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md self-start ${
-                isOverdue ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-muted/50 text-muted-foreground'
-              }`}>
-                <CalendarIcon className="h-3 w-3" />
-                <span className="font-medium">{new Date(task.due_date).toLocaleDateString("pt-BR")}</span>
-              </div>
-            )}
-
-            {/* Lead info - avatar e nome centralizados */}
-            {task.lead_id && (
-              <div className="flex items-center gap-2">
-                <Avatar className="h-8 w-8 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-1">
+            <div className={`h-1 w-1 rounded-full ${getPriorityColor(task.priority)} animate-pulse`} />
+            
+            {/* Layout com foto, nome do lead e título */}
+            {task.lead_id ? (
+              <div className="flex items-center gap-2 flex-1">
+                <Avatar className="h-10 w-10 flex-shrink-0">
                   <AvatarImage 
                     src={leadAvatarUrl || undefined} 
                     alt={leadNome || task.lead_name || "Lead"}
@@ -677,11 +646,61 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                     {(leadNome || task.lead_name || "L")?.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <span className="text-sm text-muted-foreground font-medium truncate">
-                  {leadNome || task.lead_name || "Lead"}
-                </span>
+                
+                <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                  <span className="text-sm font-medium text-foreground truncate">
+                    {leadNome || task.lead_name || "Lead"}
+                  </span>
+                  <CardTitle className={`text-xs font-normal ${isOverdue ? 'text-red-700' : 'text-muted-foreground'} truncate`}>
+                    {task.title}
+                    {isOverdue && <span className="ml-1 text-red-500">🔴</span>}
+                  </CardTitle>
+                  
+                  {/* Data movida para abaixo do título */}
+                  {task.due_date && (
+                    <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md self-start mt-1 ${
+                      isOverdue ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-muted/50 text-muted-foreground'
+                    }`}>
+                      <CalendarIcon className="h-3 w-3" />
+                      <span className="font-medium">{new Date(task.due_date).toLocaleDateString("pt-BR")}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                <CardTitle className={`text-base font-semibold ${isOverdue ? 'text-red-700' : 'text-foreground'}`}>
+                  {task.title}
+                  {isOverdue && <span className="ml-2 text-red-500">🔴</span>}
+                </CardTitle>
+                
+                {/* Data movida para abaixo do título */}
+                {task.due_date && (
+                  <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md self-start ${
+                    isOverdue ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-muted/50 text-muted-foreground'
+                  }`}>
+                    <CalendarIcon className="h-3 w-3" />
+                    <span className="font-medium">{new Date(task.due_date).toLocaleDateString("pt-BR")}</span>
+                  </div>
+                )}
               </div>
             )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <Badge className={`${getPriorityColor(task.priority)} border-0 text-white shadow-sm`}>
+              {task.priority}
+            </Badge>
+            {/* ✅ BACKUP: Botão de expandir/recolher - Se retroceder, verificar este botão Chevron */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
+              title={isExpanded ? 'Recolher' : 'Expandir'}
+            >
+              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </Button>
           </div>
         </div>
       </CardHeader>
