@@ -1498,6 +1498,7 @@ export type Database = {
           role: Database["public"]["Enums"]["app_role"]
         }[]
       }
+      has_role: { Args: { _role: string; _user_id: string }; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       reorder_etapas: {
         Args: { p_funil_id: string; p_order: string[] }
