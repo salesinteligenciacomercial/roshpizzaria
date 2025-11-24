@@ -711,10 +711,9 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                 )}
                 {task.responsaveis_names && task.responsaveis_names.length > 0 && (
                   <>
-                    {task.assignee_name && <span className="text-muted-foreground">+</span>}
+                    {task.assignee_name && <span className="text-muted-foreground">, </span>}
                     <span className="font-medium">
-                      {task.responsaveis_names.slice(0, 2).join(', ')}
-                      {task.responsaveis_names.length > 2 && ` +${task.responsaveis_names.length - 2}`}
+                      {task.responsaveis_names.join(', ')}
                     </span>
                   </>
                 )}
