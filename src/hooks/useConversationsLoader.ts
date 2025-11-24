@@ -53,7 +53,7 @@ export const useConversationsLoader = () => {
       
       let query = supabase
         .from('conversas')
-        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, midia_url, fromme')
+        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, midia_url, fromme, company_id')
         .eq('company_id', userCompanyId)
         .order('created_at', { ascending: false });
       
@@ -80,9 +80,11 @@ export const useConversationsLoader = () => {
 
       const conversasData = conversasResult || [];
       
+      // ⚡ CORREÇÃO CRÍTICA: Validar company_id para evitar duplicação
       const validConversas = conversasData.filter(conv => 
         conv.numero && !conv.numero.includes('{{') &&
-        conv.mensagem && !conv.mensagem.includes('{{')
+        conv.mensagem && !conv.mensagem.includes('{{') &&
+        conv.company_id === userCompanyId // Garantir que apenas mensagens da empresa do usuário sejam processadas
       );
 
       // Agrupar conversas por telefone - CORREÇÃO: Normalizar sempre para evitar duplicatas

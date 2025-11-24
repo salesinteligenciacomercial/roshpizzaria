@@ -4715,11 +4715,14 @@ function Conversas() {
       timestamp: new Date().toISOString()
     });
 
-    // Validar e formatar número
+    // Validar e formatar número - usar phoneNumber prioritariamente
     try {
-      const formattedPhone = formatPhoneNumber(selectedConv.id);
+      const phoneToValidate = selectedConv.phoneNumber || selectedConv.id;
+      const formattedPhone = formatPhoneNumber(phoneToValidate);
+      console.log('✅ [VALIDAÇÃO] Número validado:', formattedPhone);
     } catch (error: any) {
-      toast.error(error.message);
+      console.error('❌ [VALIDAÇÃO] Erro ao validar número:', error);
+      toast.error('Número de telefone inválido. Selecione outra conversa ou atualize a página.');
       return;
     }
 
