@@ -869,6 +869,12 @@ serve(async (req) => {
     
     // 🔥 VALIDAÇÃO FINAL CRÍTICA: BLOQUEAR salvamento se telefone_formatado ainda contém @lid
     const telefoneFormatadoFinal = isGroup ? null : numeroLimpo;
+    
+    // 🔥 CRÍTICO: Substituir TAMBÉM o campo 'numero' original para remover @lid
+    const numeroFinal = validatedData.numero.includes('@lid') && numeroLimpo 
+      ? numeroLimpo 
+      : validatedData.numero;
+    
     if (telefoneFormatadoFinal && (telefoneFormatadoFinal.includes('@lid') || telefoneFormatadoFinal.length < 10)) {
       console.error('🚫 [WEBHOOK] BLOQUEIO FINAL - telefone_formatado ainda contém @lid ou é inválido:', {
         telefone_formatado: telefoneFormatadoFinal,
@@ -956,8 +962,8 @@ serve(async (req) => {
     // criar um objeto de inserção sem company_id (se o banco permitir) ou usar null
     // Isso garante que mensagens recebidas NUNCA sejam perdidas
     const insertData: any = {
-      numero: validatedData.numero,
-      telefone_formatado: isGroup ? null : numeroLimpo, // Grupos: null
+      numero: numeroFinal, // 🔥 CRÍTICO: Usar numeroFinal (sem @lid) ao invés de validatedData.numero
+      telefone_formatado: telefoneFormatadoFinal,
       mensagem: validatedData.mensagem,
       origem: validatedData.origem,
       status: validatedData.status, // Usar status detectado (Enviada ou Recebida)
