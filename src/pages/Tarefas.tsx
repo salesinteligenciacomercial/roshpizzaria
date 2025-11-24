@@ -284,6 +284,7 @@ export default function Tarefas() {
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
   const [editarQuadroOpen, setEditarQuadroOpen] = useState(false);
   const [excluirQuadroOpen, setExcluirQuadroOpen] = useState(false);
+  const [dropdownMenuOpen, setDropdownMenuOpen] = useState(false);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null); // ✅ Rastrear coluna sendo arrastada
   const activeColumnIdRef = useRef<string | null>(null); // ✅ Ref para acessar no realtime
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1376,7 +1377,7 @@ export default function Tarefas() {
               ))}
             </select>
             
-            <DropdownMenu>
+            <DropdownMenu open={dropdownMenuOpen} onOpenChange={setDropdownMenuOpen}>
               <DropdownMenuTrigger asChild>
                 <Button 
                   variant="outline" 
@@ -1416,6 +1417,7 @@ export default function Tarefas() {
                         console.log('✏️ [Tarefas] Editar Quadro clicado');
                         e.preventDefault();
                         e.stopPropagation();
+                        setDropdownMenuOpen(false);
                         setEditarQuadroOpen(true);
                       }}
                     >
@@ -1427,6 +1429,7 @@ export default function Tarefas() {
                         console.log('⚙️ [Tarefas] Gerenciar Colunas clicado');
                         e.preventDefault();
                         e.stopPropagation();
+                        setDropdownMenuOpen(false);
                         setEditarQuadroOpen(true);
                       }}
                     >
@@ -1439,6 +1442,7 @@ export default function Tarefas() {
                         console.log('🗑️ [Tarefas] Excluir Quadro clicado');
                         e.preventDefault();
                         e.stopPropagation();
+                        setDropdownMenuOpen(false);
                         setEditarQuadroOpen(true);
                         // Pequeno delay para garantir que o dialog de edição seja montado primeiro
                         setTimeout(() => {
