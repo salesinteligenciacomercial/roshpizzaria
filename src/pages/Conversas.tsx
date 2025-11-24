@@ -1050,9 +1050,9 @@ function Conversas() {
     }
   }, [funis, etapas, leadVinculado?.funil_id, leadVinculado?.etapa_id, selectedConv?.id]);
 
-  // Carregar usuários da empresa e assinar atualizações quando o painel estiver aberto
+  // ⚡ CORREÇÃO: Carregar usuários da empresa SEMPRE (não apenas quando painel está aberto)
   useEffect(() => {
-    if (!showInfoPanel) return;
+    if (!userCompanyId) return; // ⚡ Aguardar company_id estar disponível
     let channel: any;
 
     const loadCompanyUsers = async () => {
@@ -1060,20 +1060,11 @@ function Conversas() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
 
-        // Buscar company_id do usuário atual
-        const { data: userRole } = await supabase
-          .from('user_roles')
-          .select('company_id')
-          .eq('user_id', session.user.id)
-          .maybeSingle();
-
-        if (!userRole?.company_id) return;
-
         // Buscar todos os usuários (ids) da empresa
         const { data: userRoles } = await supabase
           .from('user_roles')
           .select('user_id')
-          .eq('company_id', userRole.company_id);
+          .eq('company_id', userCompanyId); // ⚡ Usar userCompanyId diretamente
 
         const ids = (userRoles || []).map((ur: any) => ur.user_id);
         if (ids.length === 0) {
@@ -1088,6 +1079,7 @@ function Conversas() {
           .in('id', ids);
 
         const users = (profiles || []).map(p => ({ id: p.id, name: (p.full_name || p.email) as string })).filter(u => !!u.name);
+        console.log('👥 [USERS] Usuários da empresa carregados:', users.length, users);
         setCompanyUsers(users);
       } catch (e) {
         console.error('Erro ao carregar usuários da empresa:', e);
@@ -1109,7 +1101,7 @@ function Conversas() {
     return () => {
       if (channel) supabase.removeChannel(channel);
     };
-  }, [showInfoPanel]);
+  }, [userCompanyId]); // ⚡ Depender de userCompanyId ao invés de showInfoPanel
 
   // Assinar compromissos (agenda) em tempo real quando o painel estiver aberto
   useEffect(() => {
@@ -9357,18 +9349,20 @@ function Conversas() {
                               {/* Agentes */}
                               <div className="space-y-2">
                                 <h4 className="text-sm font-medium">Agentes</h4>
-                                {companyUsers
-                                  .filter(u => u.name !== selectedConv.responsavel)
-                                  .map((user) => (
-                                <Button 
-                                  key={user.id}
-                                  variant="outline" 
-                                  className="w-full justify-start"
-                                  onClick={() => assignConversationToUser(user.id, user.name)}
-                                >
-                                  {user.name}
-                                </Button>
-                                ))}
+                                {companyUsers.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground">Carregando usuários...</p>
+                                ) : (
+                                  companyUsers.map((user) => (
+                                    <Button 
+                                      key={user.id}
+                                      variant="outline" 
+                                      className="w-full justify-start"
+                                      onClick={() => assignConversationToUser(user.id, user.name)}
+                                    >
+                                      👤 {user.name}
+                                    </Button>
+                                  ))
+                                )}
                               </div>
 
                               {/* Membros da fila selecionada */}
