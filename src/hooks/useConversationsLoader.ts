@@ -177,7 +177,10 @@ export const useConversationsLoader = () => {
               id: m.id || `msg-${Date.now()}-${Math.random()}`,
               content: m.mensagem || '',
               type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem || 'text') as any,
-              sender: (m.fromme === true || m.status === 'Enviada') ? "user" : "contact",
+              // ✅ CORREÇÃO CRÍTICA: Usar APENAS fromme para determinar sender
+              // fromme === true → mensagem enviada pelo usuário (sender: "user")
+              // fromme === false/null → mensagem recebida do contato (sender: "contact")
+              sender: (m.fromme === true || String(m.fromme) === 'true') ? "user" : "contact",
               timestamp: new Date(m.created_at || Date.now()),
               delivered: true,
               read: m.status !== 'Recebida',
