@@ -110,12 +110,23 @@ export const useConversationsLoader = () => {
         if (isGroup) {
           key = conv.numero; // Grupos mantêm o ID original
         } else {
-          // Para contatos individuais: normalizar AMBOS telefone_formatado e numero
-          const tel1 = (conv.telefone_formatado || '').replace(/[^0-9]/g, '');
-          const tel2 = (conv.numero || '').replace(/[^0-9]/g, '');
+          // ✅ CORREÇÃO DEFINITIVA: Normalizar SEMPRE com todas as variações possíveis
+          const normalizePhone = (phone: string): string => {
+            if (!phone) return '';
+            // Remove tudo exceto dígitos
+            const digits = phone.replace(/[^0-9]/g, '');
+            // Remove possíveis variações de DDI duplicado (55155...)
+            if (digits.startsWith('5515') && digits.length > 12) {
+              return digits.substring(2); // Remove o 55 duplicado
+            }
+            return digits;
+          };
           
-          // Usar o telefone mais longo (mais completo) como chave
-          key = tel1.length >= tel2.length ? tel1 : tel2;
+          const tel1 = normalizePhone(conv.telefone_formatado || '');
+          const tel2 = normalizePhone(conv.numero || '');
+          
+          // SEMPRE priorizar telefone_formatado (mais confiável)
+          key = tel1 || tel2;
           
           // Se não tem telefone válido, usar numero original
           if (!key) {
