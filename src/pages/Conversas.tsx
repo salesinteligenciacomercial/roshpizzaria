@@ -2404,8 +2404,7 @@ function Conversas() {
                         return prev;
                       }
                     } else {
-                      // Mensagem nova - adicionar ao histórico
-                      // ⚡ CORREÇÃO CRÍTICA: Preservar TODAS as mensagens existentes e ordenar por timestamp
+                      // ⚡ CORREÇÃO CRÍTICA: Calcular status dinamicamente baseado em TODAS as mensagens
                       const todasMensagens = [...conversaExistente.messages, novaMensagem]
                         .sort((a, b) => {
                           const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
@@ -2413,13 +2412,8 @@ function Conversas() {
                           return timeA - timeB;
                         });
                       
-                      // ⚡ CORREÇÃO: Atualizar status corretamente
-                      let novoStatus = conversaExistente.status;
-                      if (conversaExistente.status === 'resolved' && novaConversa.fromme !== true) {
-                        novoStatus = 'waiting'; // Nova mensagem do contato = reabrir conversa
-                      } else if (novaConversa.fromme === true) {
-                        novoStatus = 'answered'; // Mensagem do usuário = marcada como respondida
-                      }
+                      // ⚡ CORREÇÃO: Usar função para calcular status baseado na última mensagem
+                      const novoStatus = calculateConversationStatus(todasMensagens);
                       
                       updated[existingIndex] = {
                         ...conversaExistente,
@@ -4482,23 +4476,27 @@ function Conversas() {
         });
       };
 
+      // ⚡ CORREÇÃO: Calcular status dinamicamente
+      const sortedMessagesWithNew = sortMessagesByTimestamp([...selectedConv.messages, newMessage]);
+      const newStatus = calculateConversationStatus(sortedMessagesWithNew);
+
       const updatedConversations = conversations.map((conv) =>
         conv.id === selectedConv.id
           ? {
               ...conv,
-              messages: sortMessagesByTimestamp([...conv.messages, newMessage]),
+              messages: sortedMessagesWithNew,
               lastMessage: tipoMensagem[type] || newMessage.content,
-              status: "answered" as const,
+              status: newStatus,
               unread: 0,
             }
           : conv
       );
 
       saveConversations(updatedConversations);
-      const sortedMessages = sortMessagesByTimestamp([...selectedConv.messages, newMessage]);
       setSelectedConv({
         ...selectedConv,
-        messages: sortedMessages,
+        messages: sortedMessagesWithNew,
+        status: newStatus,
       });
 
       // Atualizar status no banco de dados para sincronização em tempo real
@@ -4625,23 +4623,27 @@ function Conversas() {
         });
       };
 
+      // ⚡ CORREÇÃO: Calcular status dinamicamente
+      const sortedMessagesWithNew = sortMessagesByTimestamp([...selectedConv.messages, newMessage]);
+      const newStatus = calculateConversationStatus(sortedMessagesWithNew);
+
       const updatedConversations = conversations.map((conv) =>
         conv.id === selectedConv.id
           ? {
               ...conv,
-              messages: sortMessagesByTimestamp([...conv.messages, newMessage]),
+              messages: sortedMessagesWithNew,
               lastMessage: "Áudio enviado",
-              status: "answered" as const,
+              status: newStatus,
               unread: 0,
             }
           : conv
       );
 
       saveConversations(updatedConversations);
-      const sortedMessages = sortMessagesByTimestamp([...selectedConv.messages, newMessage]);
       setSelectedConv({
         ...selectedConv,
-        messages: sortedMessages,
+        messages: sortedMessagesWithNew,
+        status: newStatus,
       });
 
       // Atualizar status no banco de dados
@@ -4675,6 +4677,32 @@ function Conversas() {
       setTimeout(() => setSyncStatus('idle'), 2000);
       toast.error("Erro ao enviar áudio");
     }
+  };
+
+  // ⚡ FUNÇÃO PARA CALCULAR STATUS BASEADO NA ÚLTIMA MENSAGEM
+  const calculateConversationStatus = (messages: Message[]): "waiting" | "answered" | "resolved" => {
+    if (!messages || messages.length === 0) return "waiting";
+    
+    // Ordenar mensagens por timestamp para garantir que pegamos a última
+    const sortedMessages = [...messages].sort((a, b) => {
+      const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+      const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+      return timeA - timeB;
+    });
+    
+    const ultimaMensagem = sortedMessages[sortedMessages.length - 1];
+    
+    // Se a última mensagem foi do contato, está aguardando resposta
+    if (ultimaMensagem.sender === "contact") {
+      return "waiting";
+    }
+    
+    // Se a última mensagem foi do usuário, foi respondida
+    if (ultimaMensagem.sender === "user") {
+      return "answered";
+    }
+    
+    return "waiting";
   };
 
   const handleSendMessage = async (content?: string, type: Message["type"] = "text") => {
@@ -4718,25 +4746,28 @@ function Conversas() {
       });
     };
 
+    // ⚡ CORREÇÃO: Calcular status dinamicamente baseado nas mensagens
+    const sortedMessagesWithNew = sortMessagesByTimestamp([...selectedConv.messages, newMessage]);
+    const newStatus = calculateConversationStatus(sortedMessagesWithNew);
+
     const updatedConversations = conversations.map((conv) =>
       conv.id === selectedConv.id
         ? {
             ...conv,
-            messages: sortMessagesByTimestamp([...conv.messages, newMessage]),
+            messages: sortedMessagesWithNew,
             lastMessage: type === "text" ? messageContent : `📎 ${type}`,
-            status: "answered" as const,
+            status: newStatus,
             unread: 0,
           }
         : conv
     );
 
     saveConversations(updatedConversations);
-    const sortedMessages = sortMessagesByTimestamp([...selectedConv.messages, newMessage]);
     setSelectedConv({
       ...selectedConv,
-      messages: sortedMessages,
+      messages: sortedMessagesWithNew,
       lastMessage: type === "text" ? messageContent : `📎 ${type}`,
-      status: "answered",
+      status: newStatus,
     });
     setMessageInput("");
 
