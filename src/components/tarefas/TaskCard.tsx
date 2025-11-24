@@ -98,6 +98,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   // ✅ MELHORADO: Usar hook useTaskTimer para gerenciar timer
   const {
@@ -696,9 +697,28 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       {isExpanded && (
       <CardContent className="relative space-y-3">
         {cleanDescription && (
-          <p className="text-sm text-muted-foreground line-clamp-1 bg-muted/30 px-3 py-2 rounded-md">
-            {cleanDescription}
-          </p>
+          <div className="relative" onPointerDown={(e) => e.stopPropagation()}>
+            <p 
+              className={`text-sm text-muted-foreground bg-muted/30 px-3 py-2 rounded-md whitespace-pre-wrap break-words ${
+                !isDescriptionExpanded && cleanDescription.length > 100 ? 'line-clamp-3' : ''
+              }`}
+            >
+              {cleanDescription}
+            </p>
+            {cleanDescription.length > 100 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs mt-1 text-primary hover:text-primary/80"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsDescriptionExpanded(!isDescriptionExpanded);
+                }}
+              >
+                {isDescriptionExpanded ? 'Ver menos' : 'Ver mais'}
+              </Button>
+            )}
+          </div>
         )}
         
         <div className="flex items-center gap-4 text-xs flex-wrap">
