@@ -95,6 +95,15 @@ function transformEvolutionPayload(body: any) {
     // contato: limpar e normalizar
     const cleaned = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '').replace(/[^0-9]/g, '');
     numero = cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
+    
+    // ✅ LOG CRÍTICO: Ver exatamente o que está sendo extraído
+    console.log('📡 [TRANSFORM] Extração de número:', {
+      remoteJid_original: remoteJid,
+      cleaned: cleaned,
+      numero_final: numero,
+      tamanho_cleaned: cleaned.length,
+      tamanho_final: numero.length
+    });
   }
   
   // Extrair mensagem e tipo
@@ -251,12 +260,11 @@ serve(async (req) => {
     const url = new URL(req.url);
     const instanceName = url.searchParams.get('instance') || url.searchParams.get('instanceName');
 
-    console.log('📡 [WEBHOOK] Informações da requisição:', {
-      url: req.url,
-      instanceName: instanceName || 'NÃO FORNECIDO',
-      method: req.method,
-      hasBody: !!req.body
-    });
+    // ✅ LOG CRÍTICO: Payload RAW completo para debug
+    console.log('📡 [WEBHOOK] ========== INÍCIO DEBUG ==========');
+    console.log('📡 [WEBHOOK] URL:', req.url);
+    console.log('📡 [WEBHOOK] Instance:', instanceName || 'NÃO FORNECIDO');
+    console.log('📡 [WEBHOOK] Method:', req.method);
 
     if (instanceName) {
       console.log('✅ Instância identificada na URL:', instanceName);
@@ -270,6 +278,22 @@ serve(async (req) => {
     
     try {
       body = JSON.parse(rawBody);
+      // ✅ LOG CRÍTICO: Payload RAW completo
+      console.log('📡 [WEBHOOK] PAYLOAD RAW COMPLETO:', JSON.stringify(body, null, 2));
+      
+      // ✅ LOG CRÍTICO: Dados de número específicos
+      if (body.data) {
+        console.log('📡 [WEBHOOK] DADOS DO NÚMERO:', {
+          'key.remoteJid': body.data.key?.remoteJid,
+          'key.id': body.data.key?.id,
+          'key.fromMe': body.data.key?.fromMe,
+          'pushName': body.data.pushName,
+          'message.conversation': body.data.message?.conversation,
+          'messageType': body.data.messageType,
+          'instanceName': body.instance,
+          'event': body.event
+        });
+      }
     } catch {
       console.error('❌ JSON inválido recebido');
       return new Response(

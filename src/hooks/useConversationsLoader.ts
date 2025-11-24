@@ -110,15 +110,33 @@ export const useConversationsLoader = () => {
         if (isGroup) {
           key = conv.numero; // Grupos mantêm o ID original
         } else {
-          // ✅ CORREÇÃO DEFINITIVA: Normalizar SEMPRE com todas as variações possíveis
+          // ✅ CORREÇÃO DEFINITIVA: Normalizar SEMPRE com detecção de números malformados
           const normalizePhone = (phone: string): string => {
             if (!phone) return '';
             // Remove tudo exceto dígitos
-            const digits = phone.replace(/[^0-9]/g, '');
-            // Remove possíveis variações de DDI duplicado (55155...)
-            if (digits.startsWith('5515') && digits.length > 12) {
-              return digits.substring(2); // Remove o 55 duplicado
+            let digits = phone.replace(/[^0-9]/g, '');
+            
+            // ⚡ CORREÇÃO CRÍTICA: Detectar números malformados com DDI duplicado
+            // Ex: "5515578500694049" (16 dígitos) -> remover "5515" duplicado
+            if (digits.length > 13) {
+              console.log('⚠️ [AGRUPAMENTO] Número suspeito com mais de 13 dígitos:', {
+                original: digits,
+                tamanho: digits.length
+              });
+              
+              // Tentar extrair os últimos 12 dígitos (55 + DDD + número)
+              // ou últimos 11 (DDD + número)
+              if (digits.length === 16 && digits.startsWith('5515')) {
+                // Caso específico: 5515578500694049 -> pegar últimos 12 dígitos
+                digits = digits.substring(digits.length - 12);
+                console.log('✅ [AGRUPAMENTO] Número corrigido (últimos 12 dígitos):', digits);
+              } else if (digits.length > 13) {
+                // Caso genérico: pegar últimos 12 ou 13 dígitos
+                digits = digits.substring(digits.length - 12);
+                console.log('✅ [AGRUPAMENTO] Número corrigido (últimos 12 dígitos):', digits);
+              }
             }
+            
             return digits;
           };
           
@@ -128,10 +146,18 @@ export const useConversationsLoader = () => {
           // SEMPRE priorizar telefone_formatado (mais confiável)
           key = tel1 || tel2;
           
-          // Se não tem telefone válido, usar numero original
-          if (!key) {
-            key = conv.numero;
-          }
+          console.log('🔑 [AGRUPAMENTO] Chave de agrupamento:', {
+            telefone_formatado: conv.telefone_formatado,
+            numero: conv.numero,
+            tel1_normalizado: tel1,
+            tel2_normalizado: tel2,
+            chave_final: key
+          });
+        }
+        
+        // Se não tem telefone válido, usar numero original
+        if (!key) {
+          key = conv.numero;
         }
         
         if (!conversasMap.has(key)) {
