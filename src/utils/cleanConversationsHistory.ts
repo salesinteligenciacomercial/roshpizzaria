@@ -68,18 +68,18 @@ export const cleanSupabaseConversations = async (onProgress?: (progress: number,
       onProgress(0, 0, totalMessages);
     }
     
-    // Deletar em lotes PEQUENOS para evitar timeout e problemas de RLS
-    const BATCH_SIZE = 500; // Reduzido para evitar timeout
+    // Deletar em lotes MUITO PEQUENOS para evitar timeout
+    const BATCH_SIZE = 100; // Reduzido drasticamente para evitar timeout
     let deletedTotal = 0;
     let hasMore = true;
     let attempts = 0;
-    const MAX_ATTEMPTS = 100; // Segurança contra loops infinitos
+    const MAX_ATTEMPTS = 500; // Aumentado para processar todos os registros
     
     while (hasMore && attempts < MAX_ATTEMPTS) {
       attempts++;
       
       try {
-        // Buscar IDs de um lote
+        // Buscar IDs de um lote PEQUENO
         const { data: batch, error: fetchError } = await supabase
           .from('conversas')
           .select('id')
@@ -88,7 +88,9 @@ export const cleanSupabaseConversations = async (onProgress?: (progress: number,
         
         if (fetchError) {
           console.error('❌ Erro ao buscar lote:', fetchError);
-          return { success: false, error: fetchError.message };
+          // Não retornar erro, continuar tentando
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
         }
         
         if (!batch || batch.length === 0) {
@@ -96,7 +98,7 @@ export const cleanSupabaseConversations = async (onProgress?: (progress: number,
           break;
         }
         
-        // Deletar lote
+        // Deletar lote por IDs específicos
         const batchIds = batch.map(c => c.id);
         const { error: deleteError } = await supabase
           .from('conversas')
@@ -105,13 +107,13 @@ export const cleanSupabaseConversations = async (onProgress?: (progress: number,
         
         if (deleteError) {
           console.error('❌ Erro ao deletar lote:', deleteError);
-          // Tentar continuar com próximo lote mesmo com erro
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Não desistir - aguardar e continuar
+          await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
         }
         
         deletedTotal += batch.length;
-        console.log(`📊 Progresso: ${deletedTotal}/${totalMessages} conversas deletadas (tentativa ${attempts})`);
+        console.log(`📊 Progresso: ${deletedTotal}/${totalMessages} conversas deletadas (lote ${attempts})`);
         
         // Notificar progresso
         if (onProgress && totalMessages > 0) {
@@ -124,13 +126,13 @@ export const cleanSupabaseConversations = async (onProgress?: (progress: number,
           hasMore = false;
         }
         
-        // Pausa maior entre lotes para evitar sobrecarga
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Pausa de 1 segundo entre lotes para dar tempo ao banco processar
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
       } catch (batchError: any) {
         console.error('❌ Erro no lote:', batchError);
-        // Continuar mesmo com erro
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Aguardar 2 segundos e continuar
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
     
