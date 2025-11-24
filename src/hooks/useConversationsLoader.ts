@@ -80,12 +80,25 @@ export const useConversationsLoader = () => {
 
       const conversasData = conversasResult || [];
       
-      // ⚡ CORREÇÃO CRÍTICA: Validar company_id para evitar duplicação
-      const validConversas = conversasData.filter(conv => 
-        conv.numero && !conv.numero.includes('{{') &&
-        conv.mensagem && !conv.mensagem.includes('{{') &&
-        conv.company_id === userCompanyId // Garantir que apenas mensagens da empresa do usuário sejam processadas
-      );
+      // ⚡ CORREÇÃO CRÍTICA: Validar company_id e FILTRAR NÚMEROS INVÁLIDOS
+      const validConversas = conversasData.filter(conv => {
+        // Validação básica de conteúdo
+        if (!conv.numero || conv.numero.includes('{{')) return false;
+        if (!conv.mensagem || conv.mensagem.includes('{{')) return false;
+        if (conv.company_id !== userCompanyId) return false;
+        
+        // ⚡ NOVO: Validar tamanho do telefone (apenas números válidos)
+        const telefoneNormalizado = conv.telefone_formatado?.replace(/[^0-9]/g, '') || conv.numero?.replace(/[^0-9]/g, '') || '';
+        
+        // Telefones válidos: 10-13 dígitos (DDD + número + possível 55)
+        // Telefones inválidos: < 10 ou > 13 dígitos
+        if (telefoneNormalizado.length > 0 && (telefoneNormalizado.length < 10 || telefoneNormalizado.length > 13)) {
+          console.warn(`⚠️ [FILTRO] Telefone inválido ignorado: ${telefoneNormalizado} (${telefoneNormalizado.length} dígitos)`);
+          return false;
+        }
+        
+        return true;
+      });
 
       // ⚡ CORREÇÃO DEFINITIVA: Agrupar conversas por telefone normalizado para eliminar duplicação
       const conversasMap = new Map<string, any[]>();
