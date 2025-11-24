@@ -2966,9 +2966,22 @@ export default function Agenda() {
                                 </p>
                                 <p className="text-sm text-muted-foreground">
                                   <strong>Destinatário:</strong> {
-                                    lembrete.destinatario === 'lead' ? 'Lead' :
-                                    lembrete.destinatario === 'responsavel' ? 'Responsável' :
-                                    lembrete.destinatario === 'ambos' ? 'Lead e Responsável' :
+                                    lembrete.destinatario === 'lead' ? (
+                                      lembrete.compromisso?.lead ? 
+                                        `${lembrete.compromisso.lead.name}${lembrete.compromisso.lead.phone ? ` (${lembrete.compromisso.lead.phone})` : ''}` : 
+                                        'Lead'
+                                    ) :
+                                    lembrete.destinatario === 'responsavel' ? (
+                                      lembrete.telefone_responsavel ? 
+                                        `Responsável (${lembrete.telefone_responsavel})` : 
+                                        'Responsável'
+                                    ) :
+                                    lembrete.destinatario === 'ambos' ? (
+                                      <>
+                                        {lembrete.compromisso?.lead ? `${lembrete.compromisso.lead.name}${lembrete.compromisso.lead.phone ? ` (${lembrete.compromisso.lead.phone})` : ''}` : 'Lead'}
+                                        {lembrete.telefone_responsavel && ` e Responsável (${lembrete.telefone_responsavel})`}
+                                      </>
+                                    ) :
                                     'Lead'
                                   }
                                 </p>
