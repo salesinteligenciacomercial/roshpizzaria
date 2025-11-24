@@ -401,11 +401,14 @@ serve(async (req) => {
     if (!isGroup && numeroLimpo) {
       console.log('🔍 Número antes da normalização:', numeroLimpo);
       
-      // VALIDAR número brasileiro: 
+      // ⚡ VALIDAÇÃO ATUALIZADA: Aceitar números normais E LIDs do WhatsApp
+      // Números normais brasileiros: 
       // - 10 dígitos: DDD (2) + número (8 dígitos) - formato antigo
       // - 11 dígitos: DDD (2) + número (9 dígitos) - formato local atual
       // - 13 dígitos: 55 + DDD (2) + número (9 dígitos) - formato internacional
-      if (numeroLimpo.length < 10 || numeroLimpo.length > 13) {
+      // LIDs (LinkedIn IDs do WhatsApp): até 20 dígitos
+      // Exemplo: 55149783293472816 (17 dígitos) - são IDs válidos do WhatsApp
+      if (numeroLimpo.length < 10 || numeroLimpo.length > 20) {
         console.warn('⚠️ Número inválido após limpeza:', numeroLimpo, 'Tamanho:', numeroLimpo.length);
         return new Response(
           JSON.stringify({ success: true, message: 'Número inválido ignorado' }),
@@ -413,10 +416,15 @@ serve(async (req) => {
         );
       }
       
+      console.log('✅ Número validado:', numeroLimpo, 'Tamanho:', numeroLimpo.length);
+      
       // Normalizar: Se o número tem 10 ou 11 dígitos e não começa com 55, adicionar código do país
+      // Para LIDs (números com mais de 13 dígitos), não normalizar - já são IDs completos
       if (numeroLimpo.length >= 10 && numeroLimpo.length <= 11 && !numeroLimpo.startsWith('55')) {
         numeroLimpo = `55${numeroLimpo}`;
         console.log('✅ Número normalizado com código do país:', numeroLimpo);
+      } else if (numeroLimpo.length > 13) {
+        console.log('ℹ️ LID detectado (não normalizado):', numeroLimpo);
       }
       
       console.log('🔍 Número normalizado final (contato):', numeroLimpo);
