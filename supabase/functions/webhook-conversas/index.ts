@@ -22,6 +22,7 @@ const webhookPayloadSchema = z.object({
   status: z.string().optional().default('Recebida'), // Status da mensagem
   is_group: z.boolean().optional(),
   fromMe: z.boolean().optional(),
+  remoteJidAlt: z.string().nullable().optional(), // 🔥 Número alternativo real da Evolution API
 });
 
 // Verify webhook signature for security
@@ -244,6 +245,7 @@ function transformEvolutionPayload(body: any) {
     status, // 'Enviada' se fromMe=true, 'Recebida' se fromMe=false
     is_group: isGroup,
     fromMe,
+    remoteJidAlt: data.key.remoteJidAlt || null, // 🔥 Número alternativo real da Evolution API
   };
 }
 
@@ -476,51 +478,85 @@ serve(async (req) => {
 
     // Se temos company_id, buscar lead apenas nessa company
     if (companyId && !isGroup && numeroLimpo) {
-      // ⚡ CORREÇÃO CRÍTICA: Se o número veio de @lid, buscar SEMPRE por nome e usar número REAL
+      // ⚠️ CORREÇÃO CRÍTICA: Detectar @lid e usar remoteJidAlt ou buscar por nome
       const isLidNumber = validatedData.numero.includes('@lid');
+      const remoteJidAlt = validatedData.remoteJidAlt; // 🔥 Número alternativo real da Evolution API
       let numeroReal: string | null = null;
       
-      if (isLidNumber && validatedData.nome_contato) {
-        console.log('🔍 [WEBHOOK @LID] Buscando lead por NOME (número @lid não confiável):', {
-          nome: validatedData.nome_contato,
-          numeroLid: numeroLimpo
+      if (isLidNumber) {
+        console.log('⚠️ [WEBHOOK @LID] Detectado número @lid:', {
+          remoteJid: validatedData.numero,
+          remoteJidAlt: remoteJidAlt,
+          pushName: validatedData.nome_contato,
+          fromMe: validatedData.fromMe
         });
         
-        // Buscar por nome primeiro (mais confiável para @lid)
-        const { data: leadByName, error: nameSearchError } = await supabase
-          .from('leads')
-          .select('id, company_id, phone, telefone, name')
-          .eq('company_id', companyId)
-          .ilike('name', validatedData.nome_contato)
-          .limit(1)
-          .maybeSingle();
-        
-        if (leadByName && !nameSearchError) {
-          leadId = leadByName.id;
-          // ✅ USAR O NÚMERO REAL DO LEAD - NUNCA USAR @LID
-          numeroReal = leadByName.phone || leadByName.telefone;
-          if (numeroReal) {
-            // ⚡ CRÍTICO: SUBSTITUIR numeroLimpo pelo número REAL
-            numeroLimpo = numeroReal;
-            console.log('✅ [WEBHOOK @LID] Lead encontrado por NOME - SUBSTITUINDO número @lid pelo REAL:', {
-              leadId,
-              nome: leadByName.name,
+        // 🔥 PRIORIDADE 1: Usar remoteJidAlt se disponível (número real da Evolution API)
+        if (remoteJidAlt && !remoteJidAlt.includes('@lid')) {
+          const numeroRealAlt = remoteJidAlt.replace(/@.*/, '');
+          if (numeroRealAlt && numeroRealAlt.length >= 10) {
+            numeroLimpo = numeroRealAlt;
+            console.log('✅ [WEBHOOK @LID] Usando remoteJidAlt (número REAL da Evolution):', {
               numeroAnterior: validatedData.numero,
               numeroREAL: numeroLimpo,
               lidDescartado: validatedData.numero
             });
           }
-        } else {
-          console.log('⚠️ [WEBHOOK @LID] Lead não encontrado por nome');
-          // Se não encontrou lead com @lid, NÃO criar nova conversa
-          console.log('🚫 [WEBHOOK @LID] Bloqueando criação de conversa com número @lid não confiável');
-          return new Response(
-            JSON.stringify({ 
-              success: true, 
-              message: 'Número @lid sem lead correspondente - mensagem ignorada para evitar duplicação' 
-            }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+        }
+        
+        // 🔥 PRIORIDADE 2: Se não tem remoteJidAlt, buscar lead por NOME
+        if (validatedData.nome_contato && numeroLimpo && numeroLimpo.length < 12) {
+          console.log('🔍 [WEBHOOK @LID] remoteJidAlt não disponível - Buscando lead por NOME:', {
+            nome: validatedData.nome_contato,
+            numeroLid: numeroLimpo
+          });
+          
+          const { data: leadByName, error: nameSearchError } = await supabase
+            .from('leads')
+            .select('id, company_id, phone, telefone, name')
+            .eq('company_id', companyId)
+            .ilike('name', validatedData.nome_contato)
+            .limit(1)
+            .maybeSingle();
+          
+          if (leadByName && !nameSearchError) {
+            leadId = leadByName.id;
+            // ✅ USAR O NÚMERO REAL DO LEAD
+            numeroReal = leadByName.phone || leadByName.telefone;
+            if (numeroReal) {
+              numeroLimpo = numeroReal;
+              console.log('✅ [WEBHOOK @LID] Lead encontrado por NOME - Usando número REAL do lead:', {
+                leadId,
+                nome: leadByName.name,
+                numeroAnterior: validatedData.numero,
+                numeroREAL: numeroLimpo,
+                lidDescartado: validatedData.numero
+              });
+            }
+          } else {
+            console.log('⚠️ [WEBHOOK @LID] Lead não encontrado por nome');
+            console.log('🚫 [WEBHOOK @LID] BLOQUEANDO TOTALMENTE - número @lid não confiável');
+            
+            return new Response(JSON.stringify({
+              success: true,
+              message: 'Número @lid não confiável - aguardando número real',
+              blocked: true
+            }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+        } else if (!validatedData.nome_contato) {
+          console.log('🚫 [WEBHOOK @LID] Nome do contato ausente - BLOQUEANDO TOTALMENTE');
+          
+          return new Response(JSON.stringify({
+            success: true,
+            message: 'Número @lid sem nome - aguardando número real',
+            blocked: true
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
         }
       }
       
@@ -750,8 +786,11 @@ serve(async (req) => {
     // MELHORIA CRÍTICA: Garantir que SEMPRE tenha um lead vinculado
     // ====================================================================
     
+    // 🔥 VALIDAÇÃO CRÍTICA: NUNCA criar lead com número @lid ou inválido
+    const isStillLidNumber = numeroLimpo && (numeroLimpo.length < 10 || validatedData.numero.includes('@lid'));
+    
     // Se não tem lead e não é grupo, tentar criar automaticamente
-    if (!leadId && !isGroup && numeroLimpo && companyId) {
+    if (!leadId && !isGroup && numeroLimpo && companyId && !isStillLidNumber) {
       console.log('🔄 Tentando criar lead automaticamente para:', numeroLimpo);
       
       // Para mensagens RECEBIDAS: criar com nome do contato
@@ -780,6 +819,17 @@ serve(async (req) => {
       } else if (leadError) {
         console.error('❌ Erro ao criar lead:', leadError);
       }
+    } else if (!leadId && !isGroup && isStillLidNumber) {
+      console.log('🚫 [WEBHOOK] BLOQUEANDO criação de lead com número @lid inválido:', numeroLimpo);
+      
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Número @lid inválido - não pode criar lead',
+        blocked: true
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
     }
     
     // CORREÇÃO: Buscar nome do lead SEMPRE que tiver lead vinculado
@@ -815,6 +865,26 @@ serve(async (req) => {
     if (!nomeContatoFinal) {
       nomeContatoFinal = validatedData.numero || numeroLimpo || 'Contato Desconhecido';
       console.log('⚠️ [FALLBACK] Usando número original como nome:', nomeContatoFinal);
+    }
+    
+    // 🔥 VALIDAÇÃO FINAL CRÍTICA: BLOQUEAR salvamento se telefone_formatado ainda contém @lid
+    const telefoneFormatadoFinal = isGroup ? null : numeroLimpo;
+    if (telefoneFormatadoFinal && (telefoneFormatadoFinal.includes('@lid') || telefoneFormatadoFinal.length < 10)) {
+      console.error('🚫 [WEBHOOK] BLOQUEIO FINAL - telefone_formatado ainda contém @lid ou é inválido:', {
+        telefone_formatado: telefoneFormatadoFinal,
+        numero_original: validatedData.numero,
+        nome_contato: nomeContatoFinal
+      });
+      
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Bloqueado: telefone_formatado inválido (@lid ou < 10 dígitos)',
+        blocked: true,
+        telefone_formatado: telefoneFormatadoFinal
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
     }
     
     // ⚡ LOG CRÍTICO: Detectar mensagem recebida antes de salvar
