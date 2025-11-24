@@ -6,6 +6,25 @@
 All colors MUST be HSL.
 */
 
+/* ⚡ CORREÇÃO CRÍTICA: Garantir que botões de menu nas conversas sejam SEMPRE visíveis */
+[data-radix-dropdown-menu-trigger],
+button[aria-haspopup="menu"],
+.conversation-menu-button {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+/* Garantir que ícones dentro do botão sejam visíveis */
+[data-radix-dropdown-menu-trigger] svg,
+button[aria-haspopup="menu"] svg,
+.conversation-menu-button svg {
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
 @layer base {
   :root {
     /* Base colors */

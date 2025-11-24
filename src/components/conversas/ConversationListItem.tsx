@@ -76,9 +76,8 @@ function ConversationListItemComponent({
   };
 
 
-  // ⚡ GARANTIA: O botão sempre será renderizado, mesmo sem callbacks
-  // Os callbacks são opcionais, mas o botão deve sempre aparecer
-  const hasAnyCallback = !!(onEditName || onCreateLead || onDeleteConversation);
+  // ⚡ GARANTIA: O botão sempre será renderizado, independente de qualquer coisa
+  const showMenuButton = true; // SEMPRE TRUE - nunca esconder
   
   console.log('🎨 [RENDER] ConversationListItem:', {
     contactName,
@@ -89,8 +88,8 @@ function ConversationListItemComponent({
       onCreateLead: !!onCreateLead,
       onDeleteConversation: !!onDeleteConversation
     },
-    hasAnyCallback,
-    showingButton: true // SEMPRE TRUE - botão sempre visível
+    showMenuButton,
+    forcedVisible: true
   });
 
   return (
@@ -142,43 +141,47 @@ function ConversationListItemComponent({
                 </Badge>
               )}
               
-              {/* BOTÃO DE MENU - SEMPRE VISÍVEL EM TODOS OS FILTROS */}
-              {/* ⚡ CORREÇÃO: Botão sempre renderizado e visível, independente de filtro ou callbacks */}
+              {/* BOTÃO DE MENU - GARANTIDO SEMPRE VISÍVEL */}
+              {/* ⚡ CORREÇÃO FINAL: Botão SEMPRE renderizado sem condicionais */}
               <div 
-                className="flex-shrink-0" 
+                className="flex-shrink-0 ml-auto" 
                 style={{ 
-                  position: 'relative', 
+                  position: 'relative',
                   zIndex: 100,
-                  minWidth: '32px',
-                  minHeight: '32px',
+                  minWidth: '36px',
+                  minHeight: '36px',
                   overflow: 'visible',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center'
+                  justifyContent: 'center',
+                  flexShrink: 0
                 }}
               >
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <Button 
                       variant="ghost" 
-                      size="icon" 
-                      className="h-8 w-8 hover:bg-accent hover:text-accent-foreground shrink-0 flex-shrink-0"
+                      size="icon"
+                      data-conversation-menu="true"
+                      aria-label="Menu de opções"
+                      className="h-9 w-9 hover:bg-accent hover:text-accent-foreground flex-shrink-0 conversation-menu-button"
                       style={{ 
                         opacity: 1, 
                         visibility: 'visible', 
                         display: 'flex',
                         position: 'relative',
                         zIndex: 101,
-                        minWidth: '32px',
-                        minHeight: '32px',
+                        minWidth: '36px',
+                        minHeight: '36px',
                         flexShrink: 0,
                         pointerEvents: 'auto',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        backgroundColor: 'transparent'
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
-                        console.log('🔘 Menu clicado!', { conversationId, leadId, hasAnyCallback, filter: 'all' });
+                        console.log('🔘 Menu clicado!', { conversationId, leadId, contactName });
                       }}
                       onMouseDown={(e) => {
                         e.stopPropagation();
@@ -186,15 +189,15 @@ function ConversationListItemComponent({
                       }}
                     >
                       <MoreVertical 
-                        className="h-4 w-4 flex-shrink-0" 
+                        className="h-5 w-5" 
                         style={{ 
                           color: 'currentColor',
                           display: 'block',
                           opacity: 1,
                           visibility: 'visible',
                           pointerEvents: 'auto',
-                          width: '16px',
-                          height: '16px'
+                          width: '20px',
+                          height: '20px'
                         }} 
                       />
                     </Button>
