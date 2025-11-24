@@ -31,7 +31,7 @@ const CONVERSATION_CACHE_KEYS = [
  * Mantém a estrutura da tabela intacta
  * ⚡ Usa deleção em lotes pequenos para evitar timeout e respeitar RLS
  */
-export const cleanSupabaseConversations = async (): Promise<{ success: boolean; deletedCount?: number; error?: string }> => {
+export const cleanSupabaseConversations = async (onProgress?: (progress: number, deletedCount: number, totalMessages: number) => void): Promise<{ success: boolean; deletedCount?: number; error?: string }> => {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     
@@ -62,6 +62,11 @@ export const cleanSupabaseConversations = async (): Promise<{ success: boolean; 
     const totalMessages = count || 0;
     
     console.log(`🧹 Deletando ${totalMessages} conversas da empresa atual em lotes pequenos...`);
+    
+    // Notificar progresso inicial
+    if (onProgress) {
+      onProgress(0, 0, totalMessages);
+    }
     
     // Deletar em lotes PEQUENOS para evitar timeout e problemas de RLS
     const BATCH_SIZE = 500; // Reduzido para evitar timeout
@@ -107,6 +112,12 @@ export const cleanSupabaseConversations = async (): Promise<{ success: boolean; 
         
         deletedTotal += batch.length;
         console.log(`📊 Progresso: ${deletedTotal}/${totalMessages} conversas deletadas (tentativa ${attempts})`);
+        
+        // Notificar progresso
+        if (onProgress && totalMessages > 0) {
+          const progress = Math.round((deletedTotal / totalMessages) * 100);
+          onProgress(progress, deletedTotal, totalMessages);
+        }
         
         // Se deletou menos que o tamanho do lote, não há mais registros
         if (batch.length < BATCH_SIZE) {
@@ -265,7 +276,10 @@ export const diagnoseSystemHealth = async (companyId?: string): Promise<{
  * - Limpa todos os caches do localStorage
  * - ⚠️ GARANTE que não afeta outras funcionalidades
  */
-export const cleanAllConversationsHistory = async (companyId?: string): Promise<{
+export const cleanAllConversationsHistory = async (
+  companyId?: string,
+  onProgress?: (progress: number, deletedCount: number, totalMessages: number) => void
+): Promise<{
   success: boolean;
   supabaseResult?: { deletedCount?: number };
   localStorageResult?: { cleanedKeys: string[] };
@@ -281,7 +295,7 @@ export const cleanAllConversationsHistory = async (companyId?: string): Promise<
     console.log('📊 Estado antes:', diagnosisBefore);
     
     // 1. Limpar Supabase (TODAS as conversas de TODAS as empresas do usuário)
-    const supabaseResult = await cleanSupabaseConversations();
+    const supabaseResult = await cleanSupabaseConversations(onProgress);
     if (!supabaseResult.success) {
       return {
         success: false,

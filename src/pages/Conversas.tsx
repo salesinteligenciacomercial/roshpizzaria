@@ -331,6 +331,8 @@ function Conversas() {
   const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
   const [cleanHistoryDialogOpen, setCleanHistoryDialogOpen] = useState(false);
   const [cleaningHistory, setCleaningHistory] = useState(false);
+  const [cleaningProgress, setCleaningProgress] = useState(0);
+  const [cleaningStats, setCleaningStats] = useState({ deleted: 0, total: 0 });
   
   // CORREÇÃO: Estados para quadro e etapa (igual ao Funil de Vendas) - DEVE VIR ANTES DOS useEffects
   const [taskBoards, setTaskBoards] = useState<any[]>([]);
@@ -6971,8 +6973,17 @@ function Conversas() {
   // Função para limpar histórico de conversas
   const handleCleanHistory = async () => {
     setCleaningHistory(true);
+    setCleaningProgress(0);
+    setCleaningStats({ deleted: 0, total: 0 });
+    
     try {
-      const result = await cleanAllConversationsHistory(userCompanyId || undefined);
+      const result = await cleanAllConversationsHistory(
+        userCompanyId || undefined,
+        (progress, deleted, total) => {
+          setCleaningProgress(progress);
+          setCleaningStats({ deleted, total });
+        }
+      );
       
       if (result.success) {
         // ⚡ CORREÇÃO: Limpar APENAS o histórico de conversas, sem afetar outras funcionalidades
@@ -7009,6 +7020,8 @@ function Conversas() {
       toast.error(`❌ Erro ao limpar histórico: ${error.message || 'Erro desconhecido'}`);
     } finally {
       setCleaningHistory(false);
+      setCleaningProgress(0);
+      setCleaningStats({ deleted: 0, total: 0 });
     }
   };
 
@@ -7182,10 +7195,11 @@ function Conversas() {
                       disabled={cleaningHistory}
                     >
                       {cleaningHistory ? (
-                        <>
+                        <div className="flex items-center gap-2">
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Limpando...
-                        </>
+                          <span>Limpando... {cleaningProgress}%</span>
+                          <span className="text-xs opacity-70">({cleaningStats.deleted}/{cleaningStats.total})</span>
+                        </div>
                       ) : (
                         <>
                           <Trash2 className="mr-2 h-4 w-4" />
