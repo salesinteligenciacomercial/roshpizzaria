@@ -655,40 +655,52 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                     {task.title}
                     {isOverdue && <span className="ml-1 text-red-500">🔴</span>}
                   </CardTitle>
+                  
+                  {/* Data movida para abaixo do título */}
+                  {task.due_date && (
+                    <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md self-start mt-1 ${
+                      isOverdue ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-muted/50 text-muted-foreground'
+                    }`}>
+                      <CalendarIcon className="h-3 w-3" />
+                      <span className="font-medium">{new Date(task.due_date).toLocaleDateString("pt-BR")}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
-              <CardTitle className={`text-base font-semibold ${isOverdue ? 'text-red-700' : 'text-foreground'}`}>
-                {task.title}
-                {isOverdue && <span className="ml-2 text-red-500">🔴</span>}
-              </CardTitle>
-            )}
-          </div>
-          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-            <div className="flex items-center gap-1.5">
-              <Badge className={`${getPriorityColor(task.priority)} border-0 text-white shadow-sm`}>
-                {task.priority}
-              </Badge>
-              {/* ✅ BACKUP: Botão de expandir/recolher - Se retroceder, verificar este botão Chevron */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
-                title={isExpanded ? 'Recolher' : 'Expandir'}
-              >
-                {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              </Button>
-            </div>
-            {task.due_date && (
-              <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md ${
-                isOverdue ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-muted/50 text-muted-foreground'
-              }`}>
-                <CalendarIcon className="h-3 w-3" />
-                <span className="font-medium">{new Date(task.due_date).toLocaleDateString("pt-BR")}</span>
+              <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                <CardTitle className={`text-base font-semibold ${isOverdue ? 'text-red-700' : 'text-foreground'}`}>
+                  {task.title}
+                  {isOverdue && <span className="ml-2 text-red-500">🔴</span>}
+                </CardTitle>
+                
+                {/* Data movida para abaixo do título */}
+                {task.due_date && (
+                  <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md self-start ${
+                    isOverdue ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-muted/50 text-muted-foreground'
+                  }`}>
+                    <CalendarIcon className="h-3 w-3" />
+                    <span className="font-medium">{new Date(task.due_date).toLocaleDateString("pt-BR")}</span>
+                  </div>
+                )}
               </div>
             )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <Badge className={`${getPriorityColor(task.priority)} border-0 text-white shadow-sm`}>
+              {task.priority}
+            </Badge>
+            {/* ✅ BACKUP: Botão de expandir/recolher - Se retroceder, verificar este botão Chevron */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
+              title={isExpanded ? 'Recolher' : 'Expandir'}
+            >
+              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </Button>
           </div>
         </div>
       </CardHeader>
