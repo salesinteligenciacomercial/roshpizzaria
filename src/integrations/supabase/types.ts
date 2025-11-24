@@ -301,8 +301,11 @@ export type Database = {
         Row: {
           arquivo_nome: string | null
           assigned_user_id: string | null
+          campanha_id: string | null
+          campanha_nome: string | null
           company_id: string | null
           created_at: string | null
+          delivered: boolean | null
           fila_id: string | null
           fromme: boolean | null
           id: string
@@ -314,6 +317,7 @@ export type Database = {
           numero: string
           origem: string
           owner_id: string | null
+          read: boolean | null
           replied_to_id: string | null
           replied_to_message: string | null
           status: string
@@ -324,8 +328,11 @@ export type Database = {
         Insert: {
           arquivo_nome?: string | null
           assigned_user_id?: string | null
+          campanha_id?: string | null
+          campanha_nome?: string | null
           company_id?: string | null
           created_at?: string | null
+          delivered?: boolean | null
           fila_id?: string | null
           fromme?: boolean | null
           id?: string
@@ -337,6 +344,7 @@ export type Database = {
           numero: string
           origem?: string
           owner_id?: string | null
+          read?: boolean | null
           replied_to_id?: string | null
           replied_to_message?: string | null
           status?: string
@@ -347,8 +355,11 @@ export type Database = {
         Update: {
           arquivo_nome?: string | null
           assigned_user_id?: string | null
+          campanha_id?: string | null
+          campanha_nome?: string | null
           company_id?: string | null
           created_at?: string | null
+          delivered?: boolean | null
           fila_id?: string | null
           fromme?: boolean | null
           id?: string
@@ -360,6 +371,7 @@ export type Database = {
           numero?: string
           origem?: string
           owner_id?: string | null
+          read?: boolean | null
           replied_to_id?: string | null
           replied_to_message?: string | null
           status?: string
