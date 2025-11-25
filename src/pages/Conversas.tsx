@@ -354,6 +354,7 @@ function Conversas() {
   const lastUpdateTimeRef = useRef<number>(0);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isReconnectingRef = useRef<boolean>(false);
+  const messageTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // MELHORIA: Função auxiliar para chamar Edge Functions com retry, timeout e fallback
   const callEdgeFunctionWithRetry = async <T = any>(
@@ -1242,6 +1243,16 @@ function Conversas() {
       if (channel) supabase.removeChannel(channel);
     };
   }, [showInfoPanel]);
+
+  // Auto-resize do textarea quando messageInput mudar
+  useEffect(() => {
+    if (messageTextareaRef.current) {
+      messageTextareaRef.current.style.height = 'auto';
+      if (messageInput) {
+        messageTextareaRef.current.style.height = Math.min(messageTextareaRef.current.scrollHeight, 200) + 'px';
+      }
+    }
+  }, [messageInput]);
 
   // Carregar membros da fila selecionada e assinar realtime
   useEffect(() => {
@@ -7816,13 +7827,24 @@ function Conversas() {
                       </div>
                     </div>
                   )}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-end gap-2">
                     <MediaUpload onFileSelected={handleSendMedia} />
-                    <Input
+                    <Textarea
+                      ref={messageTextareaRef}
                       placeholder="Escreva sua mensagem..."
                       value={messageInput}
-                      onChange={(e) => setMessageInput(e.target.value)}
-                      onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                      onChange={(e) => {
+                        setMessageInput(e.target.value);
+                        // Auto-resize
+                        e.target.style.height = 'auto';
+                        e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
                       onPaste={async (e) => {
                         const items = e.clipboardData?.items;
                         if (!items) return;
@@ -7838,7 +7860,8 @@ function Conversas() {
                           }
                         }
                       }}
-                      className="flex-1"
+                      className="flex-1 min-h-[40px] max-h-[200px] resize-none overflow-y-auto"
+                      rows={1}
                     />
                     <AudioRecorder onSendAudio={handleSendAudio} />
                     <Button 
