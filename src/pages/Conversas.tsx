@@ -7736,9 +7736,9 @@ function Conversas() {
               />
             </div>
 
-            <div className="flex flex-1 min-h-0 overflow-hidden">
+            <div className="flex flex-1 min-h-0">
               {/* Messages Area */}
-              <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+              <div className="flex-1 flex flex-col min-w-0">
                 {/* Messages - Área de scroll sem barra lateral visível */}
                 <div 
                   id="messages-scroll-container"
@@ -7800,8 +7800,8 @@ function Conversas() {
                   </div>
                 </div>
 
-                {/* Input Area */}
-                <div className="bg-background border-t border-border p-4">
+                {/* Input Area - Fixed at bottom */}
+                <div className="bg-background border-t border-border p-4 shrink-0">
                   {replyingTo && (
                     <div className="mb-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
                       <div className="flex items-center justify-between">
