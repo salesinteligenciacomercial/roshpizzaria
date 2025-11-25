@@ -234,7 +234,7 @@ serve(async (req) => {
       }
       
       bodyPayload = {
-        ...(isGroup ? { groupId: (target as any).groupId } : { number: (target as any).number }),
+        number: isGroup ? (target as any).groupId : (target as any).number,
         mediatype: mediaType,
         mimetype: mimeType,
         caption: validatedData.caption || validatedData.mensagem || "",
@@ -246,7 +246,7 @@ serve(async (req) => {
       // Enviar mídia via URL - Formato Evolution API
       evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
       bodyPayload = {
-        ...(isGroup ? { groupId: (target as any).groupId } : { number: (target as any).number }),
+        number: isGroup ? (target as any).groupId : (target as any).number,
         mediaUrl: validatedData.mediaUrl,
         caption: validatedData.mensagem || validatedData.caption || ""
       };
@@ -256,7 +256,7 @@ serve(async (req) => {
       evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`;
       
       bodyPayload = {
-        ...(isGroup ? { groupId: (target as any).groupId } : { number: (target as any).number }),
+        number: isGroup ? (target as any).groupId : (target as any).number,
         text: validatedData.mensagem,
         ...(validatedData.quoted ? { 
           options: {
