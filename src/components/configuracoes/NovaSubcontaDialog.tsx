@@ -75,16 +75,27 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
       if (error) {
         console.error('❌ [NOVA-SUBCONTA] Erro da função:', error);
         
-        // Extrair mensagem de erro de diferentes formatos possíveis
+        // Tentar extrair mensagem do corpo da resposta de erro
         let errorMsg = '';
         
-        if (typeof error === 'string') {
-          errorMsg = error;
-        } else if (error?.message) {
-          errorMsg = error.message;
-        } else if (error?.error) {
-          errorMsg = error.error;
+        // O error.context pode conter a resposta da edge function
+        if (error?.context?.body) {
+          try {
+            const errorBody = typeof error.context.body === 'string' 
+              ? JSON.parse(error.context.body) 
+              : error.context.body;
+            errorMsg = errorBody?.error || errorBody?.message || '';
+          } catch (e) {
+            console.warn('Não foi possível parsear body do erro:', e);
+          }
         }
+        
+        // Fallback para outras propriedades
+        if (!errorMsg) {
+          errorMsg = error?.message || error?.error || JSON.stringify(error);
+        }
+        
+        console.log('📝 [NOVA-SUBCONTA] Mensagem de erro extraída:', errorMsg);
         
         // Verificar se é erro de email duplicado
         if (errorMsg?.includes('EMAIL_JA_CADASTRADO') || 
@@ -93,7 +104,7 @@ export function NovaSubcontaDialog({ open, onOpenChange, onSuccess }: NovaSubcon
           throw new Error(`O email ${formData.email} já está cadastrado no sistema. Por favor, use outro email ou remova o usuário existente primeiro.`);
         }
         
-        // Erro genérico
+        // Erro genérico com a mensagem real do servidor
         throw new Error(errorMsg || 'Erro ao criar subconta. Verifique os dados e tente novamente.');
       }
 
