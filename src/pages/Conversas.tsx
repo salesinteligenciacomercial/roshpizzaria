@@ -7709,7 +7709,7 @@ function Conversas() {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}>
         {selectedConv ? (
           <>
             <div className="sticky top-0 z-50 flex-shrink-0">
@@ -7736,17 +7736,18 @@ function Conversas() {
               />
             </div>
 
-            <div className="flex flex-1 min-h-0">
+            <div className="flex flex-1 min-h-0 scrollbar-hide">
               {/* Messages Area */}
-              <div className="flex-1 flex flex-col min-w-0">
+              <div className="flex-1 flex flex-col min-w-0 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}>
                 {/* Messages - Área de scroll sem barra lateral visível */}
                 <div 
                   id="messages-scroll-container"
-                  className="flex-1 overflow-y-auto p-6 bg-[#e5ddd5] messages-scroll-area" 
+                  className="flex-1 overflow-y-auto p-6 bg-[#e5ddd5] messages-scroll-area scrollbar-hide" 
                   style={{ 
                     backgroundImage: "url('data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d9d9d9' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')",
                     scrollbarWidth: 'none',
-                    msOverflowStyle: 'none'
+                    msOverflowStyle: 'none',
+                    WebkitOverflowScrolling: 'touch'
                   } as React.CSSProperties}
                 >
                   {/* Indicador de histórico */}
