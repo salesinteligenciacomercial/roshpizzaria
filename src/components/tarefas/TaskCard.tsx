@@ -660,7 +660,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       {...listeners}
       className={`group relative mb-3 border-0 shadow-card hover:shadow-lg transition-all duration-300 overflow-hidden cursor-grab active:cursor-grabbing ${
         isOverdue ? 'ring-2 ring-red-500/50 border-red-200' : ''
-      } ${!isOwnTask ? 'opacity-60' : ''}`}
+      } ${!isOwnTask ? 'opacity-40 saturate-50' : ''}`}
     >
       <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       
