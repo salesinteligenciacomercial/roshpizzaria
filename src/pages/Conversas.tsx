@@ -4619,7 +4619,7 @@ function Conversas() {
 
       const { data, error } = await enviarWhatsApp({
         numero: numeroNormalizado,
-        mensagem: caption || tipoMensagem[type],
+        mensagem: caption || '',
         tipo_mensagem: type,
         mediaBase64: base64,
         fileName: file.name,
