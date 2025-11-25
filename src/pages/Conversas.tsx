@@ -2144,17 +2144,35 @@ function Conversas() {
         setHasMoreConversations(true); // Garantir que o botão "carregar mais" apareça
       }
       
-      // ⚡ CORREÇÃO CRÍTICA: Remover TODOS os filtros restritivos
-      // Aceitar TODAS as mensagens que tenham número (mesmo sem mensagem, pode ser mídia)
-      // NÃO filtrar por nome_contato, status, ou qualquer outro campo
+      // ⚡ CORREÇÃO CRÍTICA: FILTROS RIGOROSOS para prevenir bugs e mensagens de outras instâncias
       const validConversas = conversasData.filter(conv => {
-        // Apenas verificar se tem número (obrigatório)
+        // VALIDAÇÃO 1: company_id DEVE ser exatamente igual (CRÍTICO para prevenir mensagens de outras instâncias)
+        if (conv.company_id !== userCompanyIdRef.current) {
+          console.warn(`🚫 [FILTRO CRÍTICO] Mensagem de outra company bloqueada: ${conv.company_id} (esperado: ${userCompanyIdRef.current})`);
+          return false;
+        }
+        
+        // VALIDAÇÃO 2: Número obrigatório
         if (!conv.numero || conv.numero.trim() === '') {
           return false;
         }
         
-        // ⚡ CORREÇÃO: Aceitar mensagens mesmo sem texto (pode ser apenas mídia)
-        // Se não tem mensagem, pode ser imagem/áudio/vídeo sem caption
+        // VALIDAÇÃO 3: BLOQUEAR telefones malformados/corrompidos de outras instâncias
+        const telefoneNormalizado = conv.telefone_formatado?.replace(/[^0-9]/g, '') || conv.numero?.replace(/[^0-9]/g, '') || '';
+        
+        // ⚡ CORREÇÃO CRÍTICA: Telefones válidos brasileiros têm 11-13 dígitos APENAS
+        // - 11 dígitos: DDD + número (ex: 11987654321)
+        // - 12 dígitos: 0 + DDD + número (ex: 011987654321) 
+        // - 13 dígitos: 55 + DDD + número (ex: 5511987654321)
+        // QUALQUER COISA DIFERENTE = número corrompido/malformado/de outra instância
+        if (telefoneNormalizado.length > 0) {
+          if (telefoneNormalizado.length < 11 || telefoneNormalizado.length > 13) {
+            console.warn(`🚫 [FILTRO CRÍTICO] Telefone malformado/outra instância bloqueado: ${telefoneNormalizado} (${telefoneNormalizado.length} dígitos) - company: ${conv.company_id}`);
+            return false;
+          }
+        }
+        
+        // ⚡ VALIDAÇÃO 4: Aceitar mensagens mesmo sem texto (pode ser apenas mídia)
         if (!conv.mensagem || conv.mensagem.trim() === '') {
           // Verificar se tem mídia - se tiver, aceitar mesmo sem texto
           if (conv.midia_url || conv.tipo_mensagem !== 'text') {
@@ -2163,7 +2181,7 @@ function Conversas() {
           return false; // Rejeitar apenas se não tem nem mensagem nem mídia
         }
         
-        return true; // Aceitar todas as outras mensagens
+        return true; // Aceitar todas as outras mensagens válidas
       });
       
       console.log(`📊 [LOAD] ${validConversas.length} mensagens válidas de ${conversasData.length} total`, {
@@ -2523,12 +2541,14 @@ function Conversas() {
             !/^\d+$/.test(m.nome_contato)
           );
           
-          // Usar nome da primeira mensagem como placeholder
-          // Esse nome será atualizado depois com o nome real do grupo via API
+          // ⚡ CORREÇÃO: Para grupos, usar nome da mensagem ou fallback "Grupo"
+          // Não usar telefone como fallback para grupos
           contactName = primeiraComNome?.nome_contato || 'Grupo';
           
-          // Se o nome contém caracteres especiais de telefone, usar "Grupo" mesmo
-          if (/[@-]|^\d{10,}$/.test(contactName)) {
+          // ⚡ CORREÇÃO CRÍTICA: Validar se nome parece ser um ID de grupo malformado
+          // IDs de grupo têm formato específico com @ e números longos
+          // Se detectar isso, forçar "Grupo" como nome
+          if (/@g\.us$/.test(contactName) || /^\d{15,}/.test(contactName)) {
             contactName = 'Grupo';
           }
         } else {
@@ -2557,7 +2577,8 @@ function Conversas() {
             }
           }
           
-          // FALLBACK: Usar telefone para contatos individuais
+          // ⚡ CORREÇÃO CRÍTICA: FALLBACK para contatos individuais
+          // Contatos individuais SEMPRE usam telefone como fallback, NUNCA "Grupo"
           if (!contactName || contactName.trim() === '') {
             contactName = telefone;
           }

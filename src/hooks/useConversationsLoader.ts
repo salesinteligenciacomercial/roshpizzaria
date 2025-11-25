@@ -80,21 +80,31 @@ export const useConversationsLoader = () => {
 
       const conversasData = conversasResult || [];
       
-      // ⚡ CORREÇÃO CRÍTICA: Validar company_id e FILTRAR NÚMEROS INVÁLIDOS
+      // ⚡ CORREÇÃO CRÍTICA: Validar company_id e FILTRAR NÚMEROS INVÁLIDOS E DE OUTRAS INSTÂNCIAS
       const validConversas = conversasData.filter(conv => {
-        // Validação básica de conteúdo
+        // Validação 1: company_id DEVE ser exatamente igual
+        if (conv.company_id !== userCompanyId) {
+          console.warn(`⚠️ [FILTRO] Mensagem de outra company ignorada: ${conv.company_id}`);
+          return false;
+        }
+        
+        // Validação 2: Conteúdo básico
         if (!conv.numero || conv.numero.includes('{{')) return false;
         if (!conv.mensagem || conv.mensagem.includes('{{')) return false;
-        if (conv.company_id !== userCompanyId) return false;
         
-        // ⚡ NOVO: Validar tamanho do telefone (apenas números válidos)
+        // Validação 3: VALIDAR RIGOROSAMENTE o tamanho do telefone
         const telefoneNormalizado = conv.telefone_formatado?.replace(/[^0-9]/g, '') || conv.numero?.replace(/[^0-9]/g, '') || '';
         
-        // Telefones válidos: 10-13 dígitos (DDD + número + possível 55)
-        // Telefones inválidos: < 10 ou > 13 dígitos
-        if (telefoneNormalizado.length > 0 && (telefoneNormalizado.length < 10 || telefoneNormalizado.length > 13)) {
-          console.warn(`⚠️ [FILTRO] Telefone inválido ignorado: ${telefoneNormalizado} (${telefoneNormalizado.length} dígitos)`);
-          return false;
+        // ⚡ CORREÇÃO CRÍTICA: Telefones válidos brasileiros têm 11-13 dígitos APENAS
+        // - 11 dígitos: DDD + número (ex: 11987654321)
+        // - 12 dígitos: 0 + DDD + número (ex: 011987654321) 
+        // - 13 dígitos: 55 + DDD + número (ex: 5511987654321)
+        // QUALQUER COISA DIFERENTE é número corrompido/malformado/de outra instância
+        if (telefoneNormalizado.length > 0) {
+          if (telefoneNormalizado.length < 11 || telefoneNormalizado.length > 13) {
+            console.warn(`🚫 [FILTRO CRÍTICO] Telefone malformado/outra instância bloqueado: ${telefoneNormalizado} (${telefoneNormalizado.length} dígitos) - company: ${conv.company_id}`);
+            return false;
+          }
         }
         
         return true;
@@ -210,6 +220,7 @@ export const useConversationsLoader = () => {
       const novasConversas: Conversation[] = Array.from(conversasMap.entries())
         .map(([telefone, mensagens]) => {
           const leadInfo = leadsMap.get(telefone);
+          const isGroup = mensagens[0]?.is_group || /@g\.us$/.test(telefone);
           
           // ⚡ PRIORIDADE 1: Nome do lead cadastrado no CRM (mais confiável)
           let contactName = leadInfo?.name;
@@ -235,9 +246,15 @@ export const useConversationsLoader = () => {
             }
           }
           
-          // ⚡ FALLBACK: Se ainda não tem nome, usar telefone
+          // ⚡ CORREÇÃO CRÍTICA: Fallback CORRETO baseado no tipo da conversa
           if (!contactName || contactName.trim() === '') {
-            contactName = telefone;
+            // Se é grupo e não tem nome, usar "Grupo"
+            if (isGroup) {
+              contactName = 'Grupo';
+            } else {
+              // Se é conversa individual, usar o telefone
+              contactName = telefone;
+            }
           }
           
           // MELHORIA: Carregar TODAS as mensagens carregadas do banco
@@ -268,8 +285,6 @@ export const useConversationsLoader = () => {
               statusConversa = "answered";
             }
           }
-
-          const isGroup = mensagens[0]?.is_group || /@g\.us$/.test(telefone);
 
           return {
             id: leadInfo?.leadId || `conv-${telefone}`,
