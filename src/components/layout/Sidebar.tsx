@@ -101,7 +101,7 @@ export function Sidebar({
               <span className="text-white font-bold text-xl">W</span>
             </div>
             <div>
-              <span className="text-sidebar-foreground font-bold text-lg block leading-tight">​MOTION</span>
+              <span className="text-sidebar-foreground font-bold text-lg block leading-tight">WAZE CRM      </span>
               <span className="text-sidebar-foreground/60 text-xs">Sistema inteligente de gestão comercial</span>
             </div>
           </div>}
