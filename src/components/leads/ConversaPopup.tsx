@@ -560,28 +560,45 @@ export function ConversaPopup({
       }
 
       const companyId = await getCompanyId();
-      await supabase.from("conversas").insert([
-        {
-          numero: telefoneNormalizado,
-          telefone_formatado: telefoneNormalizado,
-          mensagem: caption || `Arquivo ${type}`,
-          origem: "WhatsApp",
-          status: "Enviada",
-          tipo_mensagem: type,
-          nome_contato: leadName,
-          arquivo_nome: file.name,
-          company_id: companyId,
-        },
-      ]);
+      
+      // ⚡ CORREÇÃO: Criar data URL para salvar no banco e exibição
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          resolve(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      });
+
+      const { data: inserted, error: dbError } = await supabase.from("conversas").insert({
+        numero: telefoneNormalizado,
+        telefone_formatado: telefoneNormalizado,
+        mensagem: caption || `Arquivo ${type}`,
+        origem: "WhatsApp",
+        status: "Enviada",
+        tipo_mensagem: type,
+        nome_contato: leadName,
+        arquivo_nome: file.name,
+        midia_url: dataUrl, // ⚡ Salvar URL da mídia
+        company_id: companyId,
+        fromme: true, // Marcar como mensagem enviada pelo usuário
+      }).select('id').single();
+
+      if (dbError) {
+        console.error("❌ Erro ao salvar mensagem no banco:", dbError);
+        toast.error("Erro ao salvar mensagem no histórico");
+        // Não bloquear o envio mesmo com erro no banco
+        console.warn("⚠️ Mídia enviada mas com problema ao salvar no banco");
+      }
 
       const newMessage: Message = {
-        id: Date.now().toString(),
+        id: (inserted?.id || Date.now()).toString(),
         content: caption || `Arquivo ${type}`,
         type: type as Message["type"],
         sender: "user",
         timestamp: new Date(),
         delivered: true,
-        mediaUrl: URL.createObjectURL(file),
+        mediaUrl: dataUrl, // ⚡ Usar data URL permanente
         fileName: file.name,
         mimeType: file.type,
       };

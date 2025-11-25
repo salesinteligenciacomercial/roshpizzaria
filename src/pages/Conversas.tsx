@@ -4543,7 +4543,7 @@ function Conversas() {
         reader.readAsDataURL(file);
       });
 
-      const { data: inserted, error: dbError } = await supabase.from('conversas').insert([{
+      const { data: inserted, error: dbError } = await supabase.from('conversas').insert({
         numero: numeroNormalizado,
         telefone_formatado: numeroNormalizado,
         mensagem: caption || tipoMensagem[type],
@@ -4555,11 +4555,15 @@ function Conversas() {
         midia_url: dataUrl, // ⚡ CORREÇÃO: Salvar URL da mídia no banco
         company_id: userRole?.company_id,
         fromme: true, // Marcar como mensagem enviada pelo usuário
-      }]).select('id, midia_url').single();
+      }).select('id, midia_url').single();
 
       if (dbError) {
         console.error('❌ Erro ao salvar mensagem no banco:', dbError);
         toast.error('Erro ao salvar mensagem no histórico');
+        // Não bloquear o envio mesmo com erro no banco
+        console.warn('⚠️ Mídia enviada mas com problema ao salvar no banco');
+      } else {
+        console.log('✅ Mensagem salva no banco:', inserted);
       }
 
       // ⚡ CORREÇÃO: Usar data URL para exibição imediata e permanente
