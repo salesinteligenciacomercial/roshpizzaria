@@ -1027,6 +1027,154 @@ function Conversas() {
     }
   }, [cachedConversations]);
 
+  // ✅ SINCRONIZAÇÃO REALTIME: Escutar novas mensagens e atualizações
+  useEffect(() => {
+    if (!userCompanyId) return;
+
+    console.log('🔴 [REALTIME] Iniciando escuta de mensagens em tempo real...');
+    
+    const channel = supabase
+      .channel('conversas-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'conversas',
+          filter: `company_id=eq.${userCompanyId}`
+        },
+        async (payload) => {
+          console.log('📨 [REALTIME] Nova mensagem recebida:', payload);
+          
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const novaMensagem = payload.new;
+            
+            // Validar company_id e telefone
+            if (novaMensagem.company_id !== userCompanyId) {
+              console.warn('⚠️ [REALTIME] Mensagem de outra company ignorada');
+              return;
+            }
+            
+            const telefone = (novaMensagem.telefone_formatado || novaMensagem.numero || '').replace(/[^0-9]/g, '');
+            if (telefone.length < 11 || telefone.length > 13) {
+              console.warn('⚠️ [REALTIME] Telefone inválido ignorado:', telefone);
+              return;
+            }
+            
+            // Atualizar conversas
+            setConversations(prev => {
+              const telefoneKey = telefone;
+              const conversaExistente = prev.find(c => {
+                const tel = (c.phoneNumber || c.id || '').replace(/[^0-9]/g, '');
+                return tel === telefoneKey;
+              });
+              
+              const novaMensagemObj: Message = {
+                id: novaMensagem.id,
+                content: novaMensagem.mensagem || '',
+                type: (novaMensagem.tipo_mensagem === 'texto' ? 'text' : novaMensagem.tipo_mensagem || 'text') as any,
+                sender: (novaMensagem.fromme === true || String(novaMensagem.fromme) === 'true') ? 'user' : 'contact',
+                timestamp: new Date(novaMensagem.created_at || Date.now()),
+                delivered: true,
+                read: novaMensagem.status !== 'Recebida',
+                mediaUrl: novaMensagem.midia_url,
+              };
+              
+              if (conversaExistente) {
+                // Atualizar conversa existente
+                const mensagemJaExiste = conversaExistente.messages.some(m => m.id === novaMensagem.id);
+                
+                if (!mensagemJaExiste) {
+                  console.log('✅ [REALTIME] Adicionando mensagem à conversa existente:', conversaExistente.contactName);
+                  
+                  return prev.map(conv => {
+                    if (conv.id === conversaExistente.id) {
+                      const novasMensagens = [...conv.messages, novaMensagemObj].sort((a, b) => {
+                        const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+                        const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+                        return timeA - timeB;
+                      });
+                      
+                      // Atualizar status baseado na última mensagem
+                      let novoStatus: "waiting" | "answered" | "resolved" = conv.status;
+                      if (conv.status !== 'resolved') { // Preservar 'resolved' se estava finalizada
+                        if (novaMensagemObj.sender === 'user') {
+                          novoStatus = 'answered';
+                        } else if (novaMensagemObj.sender === 'contact') {
+                          novoStatus = 'waiting';
+                        }
+                      }
+                      
+                      return {
+                        ...conv,
+                        messages: novasMensagens,
+                        lastMessage: novaMensagem.mensagem || '',
+                        status: novoStatus,
+                        unread: novaMensagemObj.sender === 'contact' ? (conv.unread || 0) + 1 : 0,
+                      };
+                    }
+                    return conv;
+                  });
+                } else {
+                  console.log('⚠️ [REALTIME] Mensagem duplicada ignorada:', novaMensagem.id);
+                  return prev;
+                }
+              } else {
+                // Criar nova conversa
+                console.log('✅ [REALTIME] Criando nova conversa para:', telefoneKey);
+                
+                const novaConversa: Conversation = {
+                  id: novaMensagem.lead_id || `conv-${telefoneKey}`,
+                  contactName: novaMensagem.nome_contato || telefoneKey,
+                  channel: 'whatsapp' as const,
+                  status: novaMensagemObj.sender === 'user' ? 'answered' : 'waiting',
+                  lastMessage: novaMensagem.mensagem || '',
+                  unread: novaMensagemObj.sender === 'contact' ? 1 : 0,
+                  messages: [novaMensagemObj],
+                  tags: [],
+                  phoneNumber: telefoneKey,
+                  isGroup: novaMensagem.is_group || /@g\.us$/.test(novaMensagem.numero || ''),
+                };
+                
+                return [novaConversa, ...prev];
+              }
+            });
+            
+            // Tocar som de notificação se for mensagem do contato
+            if (novaMensagem.fromme === false || String(novaMensagem.fromme) === 'false') {
+              const audio = new Audio('/notification.mp3');
+              audio.play().catch(() => {});
+              
+              toast.info(`Nova mensagem de ${novaMensagem.nome_contato || 'contato'}`, {
+                duration: 3000,
+              });
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('🔴 [REALTIME] Status da conexão:', status);
+      });
+    
+    return () => {
+      console.log('🔴 [REALTIME] Desconectando canal de realtime...');
+      supabase.removeChannel(channel);
+    };
+  }, [userCompanyId]);
+
+  // ✅ SINCRONIZAÇÃO AUTOMÁTICA a cada 30 segundos (backup do realtime)
+  useEffect(() => {
+    if (userCompanyId && !loadingConversations) {
+      const syncTimer = setInterval(() => {
+        console.log('🔄 [AUTO-SYNC] Sincronização backup (30s)...');
+        loadInitialConversations();
+      }, 30000);
+      
+      return () => clearInterval(syncTimer);
+    }
+  }, [userCompanyId, loadingConversations]);
+
+
   // Form states
   const [newQuickTitle, setNewQuickTitle] = useState("");
   const [newQuickContent, setNewQuickContent] = useState("");
