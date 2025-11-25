@@ -1564,7 +1564,10 @@ function Conversas() {
       
       const { data: leadData } = await supabase
         .from('leads')
-        .select('*')
+        .select(`
+          *,
+          responsavel:profiles!leads_responsavel_id_fkey(full_name)
+        `)
         .eq('company_id', userRole.company_id)
         .or(`phone.eq.${phoneToSearch},telefone.eq.${phoneToSearch}`)
         .maybeSingle();
@@ -2628,10 +2631,13 @@ function Conversas() {
         console.log('🔍 Lead ID recebido via state:', state.leadId);
         
         try {
-          // Buscar o lead no Supabase
+          // Buscar o lead no Supabase com nome do responsável
           const { data: leadData, error } = await supabase
             .from('leads')
-            .select('*')
+            .select(`
+              *,
+              responsavel:profiles!leads_responsavel_id_fkey(full_name)
+            `)
             .eq('id', state.leadId)
             .maybeSingle();
           
@@ -2688,7 +2694,7 @@ function Conversas() {
                   messages: [],
                   tags: leadData.tags || [],
                   funnelStage: leadData.stage,
-                  responsavel: leadData.responsavel_id,
+                  responsavel: (leadData as any).responsavel?.full_name || 'Sem responsável',
                   produto: leadData.servico,
                   valor: leadData.value ? `R$ ${Number(leadData.value).toLocaleString('pt-BR')}` : undefined,
                   phoneNumber: convId,
@@ -2767,7 +2773,7 @@ function Conversas() {
               messages: [],
               tags: leadData.tags || [],
               funnelStage: leadData.stage,
-              responsavel: leadData.responsavel_id,
+              responsavel: (leadData as any).responsavel?.full_name || 'Sem responsável',
               produto: leadData.servico,
               valor: leadData.value ? `R$ ${Number(leadData.value).toLocaleString('pt-BR')}` : undefined,
               phoneNumber: phoneFormatted,
@@ -6675,7 +6681,10 @@ function Conversas() {
       
       const { data: existingLead, error: searchError } = await supabase
         .from('leads')
-        .select('*')
+        .select(`
+          *,
+          responsavel:profiles!leads_responsavel_id_fkey(full_name)
+        `)
         .eq('company_id', userRole.company_id)
         .or(phoneConditions)
         .maybeSingle();
@@ -6847,7 +6856,10 @@ function Conversas() {
       
       const { data: existingLead, error } = await supabase
         .from('leads')
-        .select('*')
+        .select(`
+          *,
+          responsavel:profiles!leads_responsavel_id_fkey(full_name)
+        `)
         .eq('company_id', userRole.company_id)
         .or(phoneConditions)
         .maybeSingle();
@@ -6898,7 +6910,7 @@ function Conversas() {
             ? { 
                 ...conv, 
                 tags: existingLead.tags || conv.tags,
-                responsavel: existingLead.responsavel_id ? conv.responsavel : conv.responsavel,
+                responsavel: (existingLead as any).responsavel?.full_name || conv.responsavel,
                 valor: existingLead.value ? `R$ ${Number(existingLead.value).toLocaleString('pt-BR')}` : conv.valor
               }
             : conv
@@ -7931,17 +7943,28 @@ function Conversas() {
                                   const telefoneFormatado = safeFormatPhoneNumber(selectedConv.phoneNumber || selectedConv.id);
                                   const { data: leadAtualizado } = await supabase
                                     .from('leads')
-                                    .select('*')
+                                    .select(`
+                                      *,
+                                      responsavel:profiles!leads_responsavel_id_fkey(full_name)
+                                    `)
                                     .or(`phone.eq.${telefoneFormatado},telefone.eq.${telefoneFormatado}`)
                                     .maybeSingle();
                                   
-                                  if (leadAtualizado) {
+                                   if (leadAtualizado) {
                                     setLeadVinculado(leadAtualizado);
                                     setLeadsVinculados(prev => ({
                                       ...prev,
                                       [selectedConv.id]: leadAtualizado.id,
                                       [safeFormatPhoneNumber(selectedConv.id)]: leadAtualizado.id
                                     }));
+                                    
+                                    // Atualizar conversa com nome do responsável
+                                    setSelectedConv(prev => prev ? {
+                                      ...prev,
+                                      responsavel: (leadAtualizado as any).responsavel?.full_name || 'Sem responsável',
+                                      tags: leadAtualizado.tags || prev.tags,
+                                      valor: leadAtualizado.value ? `R$ ${Number(leadAtualizado.value).toLocaleString('pt-BR')}` : prev.valor
+                                    } : null);
                                   }
                                 }
                               }}
