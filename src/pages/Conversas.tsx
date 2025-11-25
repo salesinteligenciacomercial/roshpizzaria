@@ -3544,34 +3544,65 @@ function Conversas() {
         
         const leadInfo = leadsMap.get(telefone);
         
-        // PRIORIDADE 1: Nome do Lead (se existir) - APENAS para contatos individuais
-        let contactName = leadInfo?.name;
+        // ⚡ CORREÇÃO: Para GRUPOS, buscar nome real do grupo via API
+        let contactName = '';
         
-        // PRIORIDADE 2: Nome da mensagem
-        const nomesProibidos = [
-          'jeohvah lima', 
-          'jeohvah i.a', 
-          'jeova costa de lima',
-          'jeo',
-          telefone
-        ];
-        
-        if (!contactName || contactName === telefone) {
-          const nomeMensagem = mensagens.find(m => {
-            const nomeMsg = m.nome_contato?.trim().toLowerCase();
-            return nomeMsg && 
-                   nomeMsg !== telefone && 
-                   !nomesProibidos.includes(nomeMsg);
-          })?.nome_contato;
+        if (isGroup) {
+          // Para grupos, o campo numero geralmente contém o ID completo do grupo
+          // Exemplo: "558787166688-1633483191@g.us"
+          // Vamos buscar metadados do grupo para pegar o nome real
           
-          if (nomeMensagem) {
-            contactName = nomeMensagem;
+          // Por enquanto, usar o nome do primeiro contato que enviou mensagem no grupo
+          // mas marcar para buscar o nome real depois
+          const mensagensOrdenadas = [...mensagens].sort((a, b) => 
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+          
+          // Buscar a primeira mensagem que tem nome_contato diferente de telefone
+          const primeiraComNome = mensagensOrdenadas.find(m => 
+            m.nome_contato && 
+            m.nome_contato !== telefone && 
+            !/^\d+$/.test(m.nome_contato)
+          );
+          
+          // Usar nome da primeira mensagem como placeholder
+          // Esse nome será atualizado depois com o nome real do grupo via API
+          contactName = primeiraComNome?.nome_contato || 'Grupo';
+          
+          // Se o nome contém caracteres especiais de telefone, usar "Grupo" mesmo
+          if (/[@-]|^\d{10,}$/.test(contactName)) {
+            contactName = 'Grupo';
           }
-        }
-        
-        // FALLBACK: Usar telefone ou "Grupo" para grupos
-        if (!contactName || contactName.trim() === '') {
-          contactName = isGroup ? 'Grupo' : telefone;
+        } else {
+          // PRIORIDADE 1: Nome do Lead (se existir) - APENAS para contatos individuais
+          contactName = leadInfo?.name || '';
+          
+          // PRIORIDADE 2: Nome da mensagem (para contatos individuais)
+          const nomesProibidos = [
+            'jeohvah lima', 
+            'jeohvah i.a', 
+            'jeova costa de lima',
+            'jeo',
+            telefone
+          ];
+          
+          if (!contactName || contactName === telefone) {
+            const nomeMensagem = mensagens.find(m => {
+              const nomeMsg = m.nome_contato?.trim().toLowerCase();
+              return nomeMsg && 
+                     nomeMsg !== telefone && 
+                     !nomesProibidos.includes(nomeMsg);
+            })?.nome_contato;
+            
+            if (nomeMensagem) {
+              contactName = nomeMensagem;
+            }
+          }
+          
+          // FALLBACK: Usar telefone para contatos individuais
+          if (!contactName || contactName.trim() === '') {
+            contactName = telefone;
+          }
         }
         
         // ⚡ CORREÇÃO CRÍTICA: Processar TODAS as mensagens (não limitar) para preservar histórico completo
