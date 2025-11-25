@@ -140,7 +140,7 @@ export function SubcontasManager() {
     setUsuariosDialogOpen(true);
   };
 
-  const deletarSubconta = async (id: string) => {
+  const deletarSubconta = async (id: string, nome: string) => {
     try {
       // Verificar dados associados
       const [leadsCount, tasksCount, conversasCount] = await Promise.all([
@@ -153,84 +153,36 @@ export function SubcontasManager() {
 
       // Mensagem de confirmação detalhada
       const confirmMessage = totalRecords > 0
-        ? `Esta subconta possui ${totalRecords} registro(s) associado(s):\n` +
+        ? `A subconta "${nome}" possui ${totalRecords} registro(s) associado(s):\n` +
           `- ${leadsCount.count || 0} lead(s)\n` +
           `- ${tasksCount.count || 0} tarefa(s)\n` +
           `- ${conversasCount.count || 0} conversa(s)\n\n` +
           `TODOS estes dados serão PERMANENTEMENTE deletados junto com a subconta.\n\n` +
           `Esta ação NÃO PODE ser desfeita. Deseja continuar?`
-        : 'Tem certeza que deseja deletar esta subconta? Esta ação não pode ser desfeita.';
+        : `Tem certeza que deseja deletar a subconta "${nome}"? Esta ação não pode ser desfeita.`;
 
       if (!confirm(confirmMessage)) {
         return;
       }
 
-      // Deletar dados associados na ordem correta (dependências primeiro)
-      if (totalRecords > 0) {
-        console.log('🗑️ Deletando dados associados da subconta...');
-        
-        // Deletar conversas
-        if (conversasCount.count && conversasCount.count > 0) {
-          const { error: conversasError } = await supabase
-            .from('conversas')
-            .delete()
-            .eq('company_id', id);
-          if (conversasError) throw conversasError;
-        }
+      // Mostrar loading
+      toast({
+        title: 'Deletando subconta...',
+        description: 'Por favor, aguarde. Isso pode levar alguns segundos.',
+      });
 
-        // Deletar tarefas
-        if (tasksCount.count && tasksCount.count > 0) {
-          const { error: tasksError } = await supabase
-            .from('tasks')
-            .delete()
-            .eq('company_id', id);
-          if (tasksError) throw tasksError;
-        }
-
-        // Deletar leads
-        if (leadsCount.count && leadsCount.count > 0) {
-          const { error: leadsError } = await supabase
-            .from('leads')
-            .delete()
-            .eq('company_id', id);
-          if (leadsError) throw leadsError;
-        }
-
-        // Deletar outros dados relacionados
-        await Promise.all([
-          supabase.from('compromissos').delete().eq('company_id', id),
-          supabase.from('agendas').delete().eq('company_id', id),
-          supabase.from('automation_flows').delete().eq('company_id', id),
-          supabase.from('funis').delete().eq('company_id', id),
-          supabase.from('task_boards').delete().eq('company_id', id),
-          supabase.from('quick_messages').delete().eq('company_id', id),
-          supabase.from('quick_message_categories').delete().eq('company_id', id),
-          supabase.from('whatsapp_connections').delete().eq('company_id', id),
-        ]);
-
-        console.log('✅ Dados associados deletados');
-      }
-
-      // Deletar user_roles associados
-      const { error: rolesError } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('company_id', id);
-      if (rolesError) console.warn('Erro ao deletar roles:', rolesError);
-
-      // Por fim, deletar a empresa
-      const { error } = await supabase
-        .from('companies')
-        .delete()
-        .eq('id', id);
+      // Chamar edge function para deletar com service role
+      const { data, error } = await supabase.functions.invoke('deletar-subconta', {
+        body: { subcontaId: id }
+      });
 
       if (error) throw error;
 
       toast({
-        title: 'Subconta deletada',
-        description: totalRecords > 0 
-          ? `Subconta e ${totalRecords} registro(s) associado(s) foram removidos com sucesso.`
-          : 'A subconta foi removida com sucesso.',
+        title: 'Subconta deletada com sucesso',
+        description: data.deletedRecords > 0 
+          ? `Subconta "${data.subcontaName}" e ${data.deletedRecords} registro(s) foram removidos.`
+          : `Subconta "${data.subcontaName}" foi removida com sucesso.`,
       });
 
       await carregarSubcontas();
@@ -239,7 +191,7 @@ export function SubcontasManager() {
       toast({
         variant: 'destructive',
         title: 'Erro ao deletar subconta',
-        description: error.message,
+        description: error.message || 'Não foi possível deletar a subconta.',
       });
     }
   };
@@ -442,7 +394,7 @@ export function SubcontasManager() {
                       variant="ghost"
                       size="icon"
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => deletarSubconta(subconta.id)}
+                      onClick={() => deletarSubconta(subconta.id, subconta.name)}
                       title="Deletar subconta"
                     >
                       <Trash2 className="h-4 w-4" />
