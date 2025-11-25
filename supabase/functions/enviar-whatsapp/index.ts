@@ -16,7 +16,6 @@ const enviarWhatsAppSchema = z.object({
     return isDigits || isGroupJid || isContactJid;
   }, 'Informe dígitos (10-15), JID de contato @s.whatsapp.net ou grupo @g.us'),
   mensagem: z.string()
-    .min(1, 'Mensagem não pode ser vazia')
     .max(4096, 'Mensagem muito longa')
     .optional(),
   tipo_mensagem: z.enum(['text', 'texto', 'image', 'audio', 'video', 'document', 'pdf']).optional(),

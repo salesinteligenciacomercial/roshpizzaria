@@ -4582,15 +4582,6 @@ function Conversas() {
 
     setSyncStatus('syncing');
 
-    // Definir texto correto por tipo
-    const tipoMensagem: { [key: string]: string } = {
-      'image': 'Imagem enviada',
-      'audio': 'Áudio enviado',
-      'pdf': 'Documento enviado',
-      'video': 'Vídeo enviado',
-      'document': 'Documento enviado'
-    };
-
     try {
       console.log('📤 Enviando mídia via edge function...');
 
@@ -4653,7 +4644,7 @@ function Conversas() {
       const { data: inserted, error: dbError } = await supabase.from('conversas').insert({
         numero: numeroNormalizado,
         telefone_formatado: numeroNormalizado,
-        mensagem: caption || tipoMensagem[type],
+        mensagem: caption || '[Mídia]',
         origem: 'WhatsApp',
         status: 'Enviada',
         tipo_mensagem: type,
@@ -4693,7 +4684,7 @@ function Conversas() {
       // ⚡ CORREÇÃO: Usar data URL para exibição imediata e permanente
       const newMessage: Message = {
         id: (inserted?.id || Date.now()).toString(),
-        content: caption || tipoMensagem[type] || 'Arquivo enviado',
+        content: caption || '[Mídia]',
         type: type as "image" | "audio" | "pdf" | "video",
         sender: "user",
         timestamp: new Date(),
@@ -4723,7 +4714,7 @@ function Conversas() {
           ? {
               ...conv,
               messages: sortedMessagesWithNew,
-              lastMessage: tipoMensagem[type] || newMessage.content,
+              lastMessage: newMessage.content,
               status: newStatus,
               unread: 0,
             }
