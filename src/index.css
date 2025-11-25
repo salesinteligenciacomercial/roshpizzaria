@@ -252,15 +252,42 @@ div.messages-scroll-area::-webkit-scrollbar-button,
   height: 0px !important;
 }
 
-/* Remover scrollbar de todo o container da conversa */
+/* Remover scrollbar de todo o container da conversa - FORÇA MÁXIMA */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-thumb {
+  display: none !important;
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-track {
+  display: none !important;
+  background: transparent !important;
+}
+
+/* Força específica para área de conversa */
 .flex-1.flex.flex-col.overflow-hidden.min-w-0,
-.flex-1.flex.flex-col.min-w-0 {
+.flex-1.flex.flex-col.min-w-0,
+div[class*="flex-1"],
+div[class*="overflow"] {
   scrollbar-width: none !important;
   -ms-overflow-style: none !important;
 }
 
 .flex-1.flex.flex-col.overflow-hidden.min-w-0::-webkit-scrollbar,
-.flex-1.flex.flex-col.min-w-0::-webkit-scrollbar {
+.flex-1.flex.flex-col.min-w-0::-webkit-scrollbar,
+div[class*="flex-1"]::-webkit-scrollbar,
+div[class*="overflow"]::-webkit-scrollbar {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
