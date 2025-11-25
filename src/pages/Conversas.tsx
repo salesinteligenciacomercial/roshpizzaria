@@ -1061,24 +1061,65 @@ function Conversas() {
               return;
             }
             
-            // Atualizar conversas
+            // Criar objeto de mensagem
+            const novaMensagemObj: Message = {
+              id: novaMensagem.id,
+              content: novaMensagem.mensagem || '',
+              type: (novaMensagem.tipo_mensagem === 'texto' ? 'text' : novaMensagem.tipo_mensagem || 'text') as any,
+              sender: (novaMensagem.fromme === true || String(novaMensagem.fromme) === 'true') ? 'user' : 'contact',
+              timestamp: new Date(novaMensagem.created_at || Date.now()),
+              delivered: true,
+              read: novaMensagem.status !== 'Recebida',
+              mediaUrl: novaMensagem.midia_url,
+            };
+            
+            // ⚡ CRÍTICO: Atualizar conversa selecionada em tempo real
+            setSelectedConv(prevSelected => {
+              if (!prevSelected) return prevSelected;
+              
+              // Verificar se a mensagem pertence à conversa selecionada
+              const telSelected = (prevSelected.phoneNumber || prevSelected.id || '').replace(/[^0-9]/g, '');
+              if (telSelected === telefone) {
+                // Verificar se mensagem já existe
+                const mensagemJaExiste = prevSelected.messages.some(m => m.id === novaMensagem.id);
+                if (!mensagemJaExiste) {
+                  console.log('✅ [REALTIME] Atualizando conversa SELECIONADA com nova mensagem');
+                  
+                  const novasMensagens = [...prevSelected.messages, novaMensagemObj].sort((a, b) => {
+                    const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+                    const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+                    return timeA - timeB;
+                  });
+                  
+                  // Atualizar status baseado na última mensagem
+                  let novoStatus: "waiting" | "answered" | "resolved" = prevSelected.status;
+                  if (prevSelected.status !== 'resolved') {
+                    if (novaMensagemObj.sender === 'user') {
+                      novoStatus = 'answered';
+                    } else if (novaMensagemObj.sender === 'contact') {
+                      novoStatus = 'waiting';
+                    }
+                  }
+                  
+                  return {
+                    ...prevSelected,
+                    messages: novasMensagens,
+                    lastMessage: novaMensagem.mensagem || '',
+                    status: novoStatus,
+                    unread: novaMensagemObj.sender === 'contact' ? (prevSelected.unread || 0) + 1 : 0,
+                  };
+                }
+              }
+              return prevSelected;
+            });
+            
+            // Atualizar lista de conversas
             setConversations(prev => {
               const telefoneKey = telefone;
               const conversaExistente = prev.find(c => {
                 const tel = (c.phoneNumber || c.id || '').replace(/[^0-9]/g, '');
                 return tel === telefoneKey;
               });
-              
-              const novaMensagemObj: Message = {
-                id: novaMensagem.id,
-                content: novaMensagem.mensagem || '',
-                type: (novaMensagem.tipo_mensagem === 'texto' ? 'text' : novaMensagem.tipo_mensagem || 'text') as any,
-                sender: (novaMensagem.fromme === true || String(novaMensagem.fromme) === 'true') ? 'user' : 'contact',
-                timestamp: new Date(novaMensagem.created_at || Date.now()),
-                delivered: true,
-                read: novaMensagem.status !== 'Recebida',
-                mediaUrl: novaMensagem.midia_url,
-              };
               
               if (conversaExistente) {
                 // Atualizar conversa existente
@@ -1097,7 +1138,7 @@ function Conversas() {
                       
                       // Atualizar status baseado na última mensagem
                       let novoStatus: "waiting" | "answered" | "resolved" = conv.status;
-                      if (conv.status !== 'resolved') { // Preservar 'resolved' se estava finalizada
+                      if (conv.status !== 'resolved') {
                         if (novaMensagemObj.sender === 'user') {
                           novoStatus = 'answered';
                         } else if (novaMensagemObj.sender === 'contact') {
