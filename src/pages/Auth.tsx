@@ -101,20 +101,31 @@ export default function Auth() {
   const checkBackendStatus = async () => {
     setCheckingStatus(true);
     try {
-      const {
-        error
-      } = await supabase.auth.getSession();
-      if (error && (error as any).status === 503) {
+      const { data, error } = await supabase.from('companies').select('count').limit(1);
+      
+      if (error || !data) {
+        console.error('❌ Backend check error:', error);
         setBackendDown(true);
+        toast({
+          variant: "destructive",
+          title: "Backend ainda indisponível",
+          description: "O servidor não está respondendo. Aguarde alguns minutos e tente novamente."
+        });
       } else {
         setBackendDown(false);
         toast({
-          title: "Backend online!",
-          description: "O servidor está respondendo. Tente fazer login novamente."
+          title: "✅ Backend online!",
+          description: "O servidor está respondendo. Você pode fazer login agora."
         });
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error('❌ Backend check exception:', err);
       setBackendDown(true);
+      toast({
+        variant: "destructive",
+        title: "Erro ao verificar status",
+        description: "Não foi possível conectar ao servidor. Tente novamente em alguns instantes."
+      });
     } finally {
       setCheckingStatus(false);
     }
@@ -192,19 +203,20 @@ export default function Auth() {
     } catch (err: any) {
       console.error("❌ Exceção ao fazer login:", err);
 
-      // Verificar se é erro 503
-      if (err.status === 503) {
+      // Verificar se é erro de conexão (Failed to fetch) - comum quando backend está pausado
+      if (err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError") || err.status === 0) {
+        setBackendDown(true);
+        toast({
+          variant: "destructive",
+          title: "🔴 Não foi possível conectar",
+          description: "O backend pode estar pausado ou reiniciando. Aguarde alguns minutos e clique em 'Verificar Status'."
+        });
+      } else if (err.status === 503) {
         setBackendDown(true);
         toast({
           variant: "destructive",
           title: "Backend fora do ar",
           description: "O servidor não está respondendo (erro 503)."
-        });
-      } else if (err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError")) {
-        toast({
-          variant: "destructive",
-          title: "Erro de conexão",
-          description: "Não foi possível conectar ao servidor."
         });
       } else {
         toast({
@@ -232,17 +244,14 @@ export default function Auth() {
         <CardContent>
           {backendDown && <Alert variant="destructive" className="mb-4">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Backend Indisponível (503)</AlertTitle>
+              <AlertTitle>🔴 Backend Indisponível</AlertTitle>
               <AlertDescription className="space-y-2">
-                <p>O servidor de autenticação está temporariamente fora do ar.</p>
+                <p className="text-sm">O servidor não está respondendo. Se você acabou de adicionar créditos, pode levar alguns minutos para o backend reativar.</p>
+                <p className="text-xs text-muted-foreground">Aguarde 2-5 minutos e clique em "Verificar Status".</p>
                 <div className="flex gap-2 mt-3">
                   <Button variant="outline" size="sm" onClick={checkBackendStatus} disabled={checkingStatus} className="flex items-center gap-2">
                     <RefreshCw className={`h-3 w-3 ${checkingStatus ? 'animate-spin' : ''}`} />
                     {checkingStatus ? 'Verificando...' : 'Verificar Status'}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => window.open('https://status.supabase.com', '_blank')} className="flex items-center gap-2">
-                    <ExternalLink className="h-3 w-3" />
-                    Status Supabase
                   </Button>
                 </div>
               </AlertDescription>
