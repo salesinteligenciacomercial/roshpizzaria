@@ -7832,6 +7832,21 @@ function Conversas() {
                       value={messageInput}
                       onChange={(e) => setMessageInput(e.target.value)}
                       onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                      onPaste={async (e) => {
+                        const items = e.clipboardData?.items;
+                        if (!items) return;
+
+                        for (let i = 0; i < items.length; i++) {
+                          if (items[i].type.indexOf('image') !== -1) {
+                            e.preventDefault();
+                            const blob = items[i].getAsFile();
+                            if (blob) {
+                              await handleSendMedia(blob, '', 'image');
+                            }
+                            break;
+                          }
+                        }
+                      }}
                       className="flex-1"
                     />
                     <AudioRecorder onSendAudio={handleSendAudio} />
