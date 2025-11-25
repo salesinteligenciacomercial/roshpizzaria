@@ -61,18 +61,29 @@ export function EditarSubcontaDialog({ company, open, onOpenChange, onSuccess }:
 
   const loadAdminUser = async () => {
     try {
-      const { data } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .eq('company_id', company.id)
-        .eq('role', 'company_admin')
-        .single();
+      console.log('🔍 [EDITAR-SUBCONTA] Buscando admin da empresa:', company.id);
       
-      if (data) {
-        setUserId(data.user_id);
+      // Buscar qualquer usuário da empresa (company_admin, gestor, etc)
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('user_id, role')
+        .eq('company_id', company.id)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      
+      if (error) {
+        console.error('❌ [EDITAR-SUBCONTA] Erro ao buscar usuário:', error);
+        return;
+      }
+      
+      if (data && data.length > 0) {
+        console.log('✅ [EDITAR-SUBCONTA] Usuário encontrado:', data[0]);
+        setUserId(data[0].user_id);
+      } else {
+        console.warn('⚠️ [EDITAR-SUBCONTA] Nenhum usuário encontrado para empresa:', company.id);
       }
     } catch (error) {
-      console.error('Erro ao buscar user_id:', error);
+      console.error('❌ [EDITAR-SUBCONTA] Erro ao buscar user_id:', error);
     }
   };
 
@@ -139,15 +150,18 @@ export function EditarSubcontaDialog({ company, open, onOpenChange, onSuccess }:
     if (!userId) {
       toast({
         title: "Erro",
-        description: "Usuário não encontrado",
+        description: "Usuário não encontrado para esta empresa. Verifique se a subconta foi criada corretamente.",
         variant: "destructive",
       });
+      console.error('❌ [EDITAR-SUBCONTA] userId não encontrado para empresa:', company.id);
       return;
     }
 
     setLoading(true);
     try {
-      const { error } = await supabase.functions.invoke('redefinir-senha-subconta', {
+      console.log('🔐 [EDITAR-SUBCONTA] Redefinindo senha para usuário:', userId);
+      
+      const { data, error } = await supabase.functions.invoke('redefinir-senha-subconta', {
         body: {
           userId,
           novaSenha,
@@ -158,7 +172,12 @@ export function EditarSubcontaDialog({ company, open, onOpenChange, onSuccess }:
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ [EDITAR-SUBCONTA] Erro da edge function:', error);
+        throw error;
+      }
+
+      console.log('✅ [EDITAR-SUBCONTA] Senha redefinida com sucesso:', data);
 
       toast({
         title: "Senha redefinida",
@@ -168,9 +187,11 @@ export function EditarSubcontaDialog({ company, open, onOpenChange, onSuccess }:
       setShowRedefinirSenha(false);
       setNovaSenha("");
     } catch (error: any) {
+      console.error('❌ [EDITAR-SUBCONTA] Erro ao redefinir senha:', error);
+      
       toast({
         title: "Erro ao redefinir senha",
-        description: error.message,
+        description: error.message || "Não foi possível redefinir a senha. Verifique os logs do console.",
         variant: "destructive",
       });
     } finally {
