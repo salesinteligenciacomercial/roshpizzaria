@@ -188,7 +188,7 @@ export function SubcontasManager() {
       const { data, error } = await supabase.functions.invoke('aplicar-atualizacoes-subcontas', {
         body: {
           parentCompanyId: parentCompanyId,
-          forceUpdate: false
+          forceUpdate: true // Força reaplicação das melhorias
         }
       });
 
