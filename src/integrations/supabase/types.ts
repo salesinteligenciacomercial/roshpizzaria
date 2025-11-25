@@ -156,6 +156,39 @@ export type Database = {
         }
         Relationships: []
       }
+      blocked_groups: {
+        Row: {
+          blocked_at: string
+          company_id: string
+          created_at: string
+          group_name: string | null
+          group_number: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          blocked_at?: string
+          company_id: string
+          created_at?: string
+          group_name?: string | null
+          group_number: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          blocked_at?: string
+          company_id?: string
+          created_at?: string
+          group_name?: string | null
+          group_number?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       companies: {
         Row: {
           cnpj: string | null

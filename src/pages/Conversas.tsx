@@ -290,6 +290,7 @@ function Conversas() {
   const [leadsVinculados, setLeadsVinculados] = useState<Record<string, string>>({}); // conversationId -> leadId
   const [onlineStatus, setOnlineStatus] = useState<Record<string, 'online' | 'offline' | 'unknown'>>({}); // telefone -> status
   const [userName, setUserName] = useState<string>(""); // Nome do usuário logado
+  const [blockedGroups, setBlockedGroups] = useState<Set<string>>(new Set()); // Grupos bloqueados
   const [companyMetrics, setCompanyMetrics] = useState<{
     totalConversas: number;
     conversasAtivas: number;
@@ -652,29 +653,104 @@ function Conversas() {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  // 🔐 CARREGAR GRUPOS BLOQUEADOS
+  useEffect(() => {
+    if (!currentUserId || !userCompanyId) return;
+
+    const loadBlockedGroups = async () => {
+      const { data, error } = await supabase
+        .from('blocked_groups')
+        .select('group_number')
+        .eq('user_id', currentUserId)
+        .eq('company_id', userCompanyId);
+
+      if (error) {
+        console.error('❌ Erro ao carregar grupos bloqueados:', error);
+        return;
+      }
+
+      if (data) {
+        setBlockedGroups(new Set(data.map(g => g.group_number)));
+        console.log('🔐 Grupos bloqueados carregados:', data.length);
+      }
+    };
+
+    loadBlockedGroups();
+  }, [currentUserId, userCompanyId]);
+
+  // 🔐 FUNÇÃO: Bloquear/Desbloquear Grupo
+  const toggleBlockGroup = async (groupNumber: string, groupName: string, block: boolean) => {
+    if (!currentUserId || !userCompanyId) {
+      toast.error('Erro: usuário ou empresa não identificado');
+      return;
+    }
+
+    try {
+      if (block) {
+        // Bloquear grupo
+        const { error } = await supabase
+          .from('blocked_groups')
+          .insert({
+            user_id: currentUserId,
+            company_id: userCompanyId,
+            group_number: groupNumber,
+            group_name: groupName
+          });
+
+        if (error) throw error;
+
+        setBlockedGroups(prev => new Set([...prev, groupNumber]));
+        toast.success(`🔒 Grupo "${groupName}" bloqueado com sucesso`);
+        console.log('🔒 Grupo bloqueado:', groupNumber);
+      } else {
+        // Desbloquear grupo
+        const { error } = await supabase
+          .from('blocked_groups')
+          .delete()
+          .eq('user_id', currentUserId)
+          .eq('company_id', userCompanyId)
+          .eq('group_number', groupNumber);
+
+        if (error) throw error;
+
+        setBlockedGroups(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(groupNumber);
+          return newSet;
+        });
+        toast.success(`🔓 Grupo "${groupName}" desbloqueado com sucesso`);
+        console.log('🔓 Grupo desbloqueado:', groupNumber);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao bloquear/desbloquear grupo:', error);
+      toast.error(`Erro ao ${block ? 'bloquear' : 'desbloquear'} grupo`);
+    }
+  };
+
   // Contador de conversas aguardando resposta
   const waitingCount = useMemo(() => {
     return conversations.filter(
       (conv) => conv.status === "waiting" && conv.isGroup !== true
     ).length;
-  }, [conversations]);
+  }, [conversations, blockedGroups]);
 
   // ✅ FILTROS CORRIGIDOS: Implementação conforme especificação do usuário
   const filteredConversations = useMemo(() => {
     console.log('🔍 [DEBUG] Filtrando conversas:', {
       total: conversations.length,
       filtro: filter,
-      busca: debouncedSearchTerm
+      busca: debouncedSearchTerm,
+      gruposBloqueados: blockedGroups.size
     });
     
     let filtered = conversations;
 
     // Aplicar filtro de status conforme especificação
     if (filter === "all") {
-      // ✅ Filtro "Todos": Mostrar TODAS as conversas (individuais e grupos)
-      filtered = filtered; // Não filtrar nada - mostrar tudo
+      // ✅ Filtro "Todos": Mostrar TODAS as conversas EXCETO grupos bloqueados
+      filtered = filtered.filter((conv) => !conv.isGroup || !blockedGroups.has(conv.phoneNumber || conv.id));
     } else if (filter === "group") {
-      // ✅ Filtro "Grupos": Mostrar APENAS grupos
+      // ✅ Filtro "Grupos": Mostrar APENAS grupos (bloqueados e não bloqueados aparecem aqui)
       filtered = filtered.filter((conv) => conv.isGroup === true);
     } else if (filter === "waiting") {
       // ✅ Filtro "Aguardando": Contatos que enviaram mensagem e ainda não foram respondidos
@@ -7446,7 +7522,14 @@ function Conversas() {
               valor={conv.valor}
               conversationId={conv.id}
               leadId={leadsVinculados[conv.id] || leadsVinculados[safeFormatPhoneNumber(conv.id)]}
-              onEditName={() => handleEditName(conv.id)}
+              isGroup={conv.isGroup}
+              isBlocked={blockedGroups.has(conv.phoneNumber || conv.id)}
+              onToggleBlock={conv.isGroup ? () => {
+                const groupId = conv.phoneNumber || conv.id;
+                const isBlocked = blockedGroups.has(groupId);
+                toggleBlockGroup(groupId, conv.contactName, !isBlocked);
+              } : undefined}
+              onEditName={conv.isGroup ? undefined : () => handleEditName(conv.id)}
               onCreateLead={() => handleCreateLead(conv.id)}
               onDeleteConversation={() => handleDeleteConversation(conv.id)}
               onClick={async () => {

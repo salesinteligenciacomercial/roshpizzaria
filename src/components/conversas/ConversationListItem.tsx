@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, Instagram, Facebook, MoreVertical, Edit, UserPlus, Trash2 } from "lucide-react";
+import { MessageSquare, Instagram, Facebook, MoreVertical, Edit, UserPlus, Trash2, Lock, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -25,9 +25,12 @@ interface ConversationListItemProps {
   onClick: () => void;
   conversationId?: string;
   leadId?: string;
+  isGroup?: boolean;
+  isBlocked?: boolean;
   onEditName?: () => void;
   onCreateLead?: () => void;
   onDeleteConversation?: () => void;
+  onToggleBlock?: () => void;
 }
 
 function ConversationListItemComponent({
@@ -45,9 +48,12 @@ function ConversationListItemComponent({
   onClick,
   conversationId,
   leadId,
+  isGroup = false,
+  isBlocked = false,
   onEditName,
   onCreateLead,
   onDeleteConversation,
+  onToggleBlock,
 }: ConversationListItemProps) {
   const getChannelIcon = () => {
     switch (channel) {
@@ -115,6 +121,14 @@ function ConversationListItemComponent({
               <span className="font-medium text-sm text-foreground truncate">
                 {contactName}
               </span>
+              {isGroup && (
+                <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5 flex-shrink-0">
+                  Grupo
+                </Badge>
+              )}
+              {isBlocked && (
+                <Lock className="h-3.5 w-3.5 text-destructive flex-shrink-0" />
+              )}
             </div>
             
             {/* HORÁRIO, BADGE E MENU */}
@@ -210,24 +224,45 @@ function ConversationListItemComponent({
                     onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
                   >
-                      {/* ⚡ SEMPRE mostrar opção de editar nome */}
-                      <DropdownMenuItem 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          console.log('✏️ Editar nome', conversationId);
-                          if (onEditName) {
+                      {/* ⚡ Mostrar "Editar nome" apenas para contatos individuais (não grupos) */}
+                      {!isGroup && onEditName && (
+                        <DropdownMenuItem 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            console.log('✏️ Editar nome', conversationId);
                             onEditName();
-                          } else {
-                            console.warn('⚠️ onEditName não está definido');
-                          }
-                        }}
-                        className="cursor-pointer"
-                        disabled={!onEditName}
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Editar nome
-                      </DropdownMenuItem>
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Editar nome
+                        </DropdownMenuItem>
+                      )}
+                      {/* 🔐 Mostrar opção de bloquear/desbloquear apenas para grupos */}
+                      {isGroup && onToggleBlock && (
+                        <DropdownMenuItem 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            console.log(isBlocked ? '🔓 Desbloquear grupo' : '🔒 Bloquear grupo', conversationId);
+                            onToggleBlock();
+                          }}
+                          className="cursor-pointer"
+                        >
+                          {isBlocked ? (
+                            <>
+                              <Unlock className="h-4 w-4 mr-2" />
+                              Desbloquear grupo
+                            </>
+                          ) : (
+                            <>
+                              <Lock className="h-4 w-4 mr-2" />
+                              Bloquear grupo
+                            </>
+                          )}
+                        </DropdownMenuItem>
+                      )}
                       {/* ⚡ Mostrar "Adicionar ao CRM" apenas se não tiver lead e tiver callback */}
                       {!leadId && onCreateLead && (
                         <DropdownMenuItem 
