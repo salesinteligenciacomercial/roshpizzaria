@@ -98,7 +98,8 @@ function transformEvolutionPayload(body: any) {
     throw new Error('IGNORE: Mensagem de status/broadcast não será salva');
   }
 
-  const isGroup = /@g\.us$/.test(remoteJid);
+  // ⚡ CORREÇÃO CRÍTICA: Detectar grupos de forma mais robusta (case insensitive)
+  const isGroup = /@g\.us/i.test(remoteJid);
   
   // ⚡ CORREÇÃO CRÍTICA: Para @lid, NÃO extrair número do remoteJid
   // O @lid é um identificador temporário não confiável
@@ -438,8 +439,9 @@ serve(async (req) => {
       }
     }
 
-    // Determinar se é grupo e normalizar número apenas para contatos
-    const isGroup = validatedData.is_group === true || /@g\.us$/.test(validatedData.numero);
+    // ⚡ CORREÇÃO CRÍTICA: Detectar se é grupo de forma mais robusta
+    // Verificar is_group OU se o número contém @g.us em qualquer posição (case insensitive)
+    const isGroup = validatedData.is_group === true || /@g\.us/i.test(validatedData.numero);
     let numeroLimpo = isGroup ? null : validatedData.numero.replace(/[^0-9]/g, '');
     
     if (!isGroup && numeroLimpo) {
