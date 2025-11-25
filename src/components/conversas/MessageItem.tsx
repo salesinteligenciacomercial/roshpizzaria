@@ -250,25 +250,50 @@ function MessageItemComponent({
           {message.type === "image" && (
             <div className="space-y-2">
               {mediaLoading ? (
-                <div className="flex items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <div className="flex flex-col items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg border-2 border-dashed border-border">
+                  <ImageIcon className="h-12 w-12 text-muted-foreground mb-2" />
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mb-1" />
+                  <span className="text-xs text-muted-foreground">Carregando imagem...</span>
+                  {message.fileName && (
+                    <span className="text-xs text-muted-foreground mt-1 px-2 text-center">{message.fileName}</span>
+                  )}
                 </div>
               ) : (mediaUrl || message.mediaUrl) ? (
-                <img
-                  src={mediaUrl || message.mediaUrl}
-                  alt="Imagem"
-                  className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
-                  style={{ maxHeight: '400px', maxWidth: '300px' }}
-                  onClick={() => onImageClick?.(mediaUrl || message.mediaUrl || '', `imagem-${message.id}`)}
-                  onError={(e) => {
-                    console.error('❌ [MESSAGE-ITEM] Erro ao carregar imagem:', message.id);
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
+                <div className="space-y-1">
+                  <img
+                    src={mediaUrl || message.mediaUrl}
+                    alt={message.fileName || "Imagem"}
+                    className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity border border-border"
+                    style={{ maxHeight: '400px', maxWidth: '300px' }}
+                    onClick={() => onImageClick?.(mediaUrl || message.mediaUrl || '', message.fileName || `imagem-${message.id}`)}
+                    onError={(e) => {
+                      console.error('❌ [MESSAGE-ITEM] Erro ao carregar imagem:', message.id);
+                      const parent = e.currentTarget.parentElement;
+                      if (parent) {
+                        parent.innerHTML = `
+                          <div class="flex flex-col items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg border border-border p-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground mb-2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                            <span class="text-sm text-muted-foreground font-medium">📷 Imagem</span>
+                            ${message.fileName ? `<span class="text-xs text-muted-foreground mt-1 text-center">${message.fileName}</span>` : ''}
+                          </div>
+                        `;
+                      }
+                    }}
+                  />
+                  {message.fileName && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <ImageIcon className="h-3 w-3" />
+                      <span className="truncate">{message.fileName}</span>
+                    </div>
+                  )}
+                </div>
               ) : (
-                <div className="flex items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg">
-                  <ImageIcon className="h-8 w-8 text-muted-foreground mr-2" />
-                  <span className="text-sm text-muted-foreground">Imagem enviada</span>
+                <div className="flex flex-col items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg border border-border p-4">
+                  <ImageIcon className="h-12 w-12 text-muted-foreground mb-2" />
+                  <span className="text-sm text-muted-foreground font-medium">📷 Imagem enviada</span>
+                  {message.fileName && (
+                    <span className="text-xs text-muted-foreground mt-1 text-center">{message.fileName}</span>
+                  )}
                 </div>
               )}
               {message.content && !message.content.includes('[Imagem]') && !message.content.includes('Imagem enviada') && (
@@ -387,11 +412,15 @@ function MessageItemComponent({
           
           {/* PDF Message */}
           {message.type === "pdf" && (
-            <div className="space-y-2 min-w-[200px]">
+            <div className="space-y-2 min-w-[250px]">
               {mediaLoading ? (
-                <div className="flex items-center justify-center p-8 border border-border rounded bg-muted/50">
-                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                  <span>Carregando PDF...</span>
+                <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-lg bg-muted/50">
+                  <FileText className="h-12 w-12 text-muted-foreground mb-2" />
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mb-1" />
+                  <span className="text-sm text-muted-foreground">Carregando PDF...</span>
+                  {message.fileName && (
+                    <span className="text-xs text-muted-foreground mt-1 text-center px-2">{message.fileName}</span>
+                  )}
                 </div>
               ) : (mediaUrl || message.mediaUrl) ? (
                 pdfExpanded ? (
@@ -436,6 +465,15 @@ function MessageItemComponent({
                       onClick={() => setPdfExpanded(true)}
                     />
                     
+                    {/* Nome do arquivo com ícone */}
+                    {message.fileName && (
+                      <div className="flex items-center gap-2 p-2 bg-muted/30 rounded text-xs border border-border">
+                        <FileText className="h-4 w-4 text-red-600" />
+                        <span className="font-medium truncate flex-1">{message.fileName}</span>
+                        <Badge variant="secondary" className="text-[10px]">PDF</Badge>
+                      </div>
+                    )}
+                    
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -457,9 +495,13 @@ function MessageItemComponent({
                   </div>
                 )
               ) : (
-                <div className="flex items-center justify-center p-8 border border-border rounded bg-muted/50">
-                  <FileText className="h-6 w-6 text-muted-foreground mr-2" />
-                  <span>Documento enviado</span>
+                <div className="flex flex-col items-center justify-center p-6 border border-border rounded-lg bg-muted/50">
+                  <FileText className="h-12 w-12 text-red-600 mb-2" />
+                  <span className="text-sm text-muted-foreground font-medium">📄 Documento PDF</span>
+                  {message.fileName && (
+                    <span className="text-xs text-muted-foreground mt-1 text-center px-2">{message.fileName}</span>
+                  )}
+                  <Badge variant="secondary" className="text-[10px] mt-2">PDF</Badge>
                 </div>
               )}
             </div>
@@ -469,25 +511,51 @@ function MessageItemComponent({
           {message.type === "video" && (
             <div className="space-y-2">
               {mediaLoading ? (
-                <div className="flex items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <div className="flex flex-col items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg border-2 border-dashed border-border">
+                  <Video className="h-12 w-12 text-muted-foreground mb-2" />
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mb-1" />
+                  <span className="text-xs text-muted-foreground">Carregando vídeo...</span>
+                  {message.fileName && (
+                    <span className="text-xs text-muted-foreground mt-1 px-2 text-center">{message.fileName}</span>
+                  )}
                 </div>
               ) : (mediaUrl || message.mediaUrl) ? (
-                <video
-                  controls
-                  className="rounded-lg max-w-full h-auto"
-                  style={{ maxHeight: '400px', maxWidth: '300px' }}
-                  onError={(e) => {
-                    console.error('❌ [MESSAGE-ITEM] Erro ao carregar vídeo:', message.id);
-                  }}
-                >
-                  <source src={mediaUrl || message.mediaUrl} type="video/mp4" />
-                  Seu navegador não suporta o elemento de vídeo.
-                </video>
+                <div className="space-y-1">
+                  <video
+                    controls
+                    className="rounded-lg max-w-full h-auto border border-border"
+                    style={{ maxHeight: '400px', maxWidth: '300px' }}
+                    onError={(e) => {
+                      console.error('❌ [MESSAGE-ITEM] Erro ao carregar vídeo:', message.id);
+                      const parent = e.currentTarget.parentElement;
+                      if (parent) {
+                        parent.innerHTML = `
+                          <div class="flex flex-col items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg border border-border p-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground mb-2"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
+                            <span class="text-sm text-muted-foreground font-medium">🎥 Vídeo</span>
+                            ${message.fileName ? `<span class="text-xs text-muted-foreground mt-1 text-center">${message.fileName}</span>` : ''}
+                          </div>
+                        `;
+                      }
+                    }}
+                  >
+                    <source src={mediaUrl || message.mediaUrl} type="video/mp4" />
+                    Seu navegador não suporta o elemento de vídeo.
+                  </video>
+                  {message.fileName && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Video className="h-3 w-3" />
+                      <span className="truncate">{message.fileName}</span>
+                    </div>
+                  )}
+                </div>
               ) : (
-                <div className="flex items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg">
-                  <Video className="h-8 w-8 text-muted-foreground mr-2" />
-                  <span className="text-sm text-muted-foreground">Vídeo enviado</span>
+                <div className="flex flex-col items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg border border-border p-4">
+                  <Video className="h-12 w-12 text-muted-foreground mb-2" />
+                  <span className="text-sm text-muted-foreground font-medium">🎥 Vídeo enviado</span>
+                  {message.fileName && (
+                    <span className="text-xs text-muted-foreground mt-1 text-center">{message.fileName}</span>
+                  )}
                 </div>
               )}
             </div>
