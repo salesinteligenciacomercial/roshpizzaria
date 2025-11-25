@@ -3271,8 +3271,9 @@ function Conversas() {
       };
       
       validConversas.forEach(conv => {
-        // Detectar se é grupo: verificar is_group OU se numero termina com @g.us
-        const isGroup = Boolean(conv.is_group) === true || /@g\.us$/.test(String(conv.numero || ''));
+        // ⚡ CORREÇÃO CRÍTICA: Detectar se é grupo de MÚLTIPLAS formas
+        // Verificar is_group OU se numero contém @g.us em qualquer posição
+        const isGroup = Boolean(conv.is_group) === true || /@g\.us/i.test(String(conv.numero || ''));
         
         // ⚡ CORREÇÃO CRÍTICA: Para grupos, SEMPRE usar numero (JID completo do grupo)
         // Para contatos individuais, normalizar telefone para garantir agrupamento correto
@@ -3552,12 +3553,26 @@ function Conversas() {
         // REMOVIDO: .slice(0, INITIAL_LIMIT) - agora todas as conversas são exibidas
         // REMOVIDO: .filter() por responsável - todas as conversas devem ser visíveis
         .map(([telefone, mensagens]) => {
-        // ⚡ CORREÇÃO CRÍTICA: Detectar se é grupo ANTES de processar
-        // Verificar se alguma mensagem tem is_group = true ou se o número termina com @g.us
-        // Verificar também o telefone (que pode ser o número do grupo) e o número das mensagens
-        const isGroup = mensagens.some(m => Boolean(m.is_group) === true) || 
-                       /@g\.us$/.test(String(telefone || '')) || 
-                       mensagens.some(m => /@g\.us$/.test(String(m.numero || '')));
+        // ⚡ CORREÇÃO CRÍTICA: Detectar se é grupo de MÚLTIPLAS formas para garantir 100% de precisão
+        // 1. Verificar is_group no banco
+        // 2. Verificar se o número termina com @g.us (padrão WhatsApp)
+        // 3. Verificar se algum número nas mensagens termina com @g.us
+        // 4. Verificar se o telefone contém @g.us em qualquer posição
+        const hasIsGroupFlag = mensagens.some(m => Boolean(m.is_group) === true);
+        const telefoneIsGroup = /@g\.us/i.test(String(telefone || ''));
+        const numeroMensagemIsGroup = mensagens.some(m => /@g\.us/i.test(String(m.numero || '')));
+        const isGroup = hasIsGroupFlag || telefoneIsGroup || numeroMensagemIsGroup;
+        
+        // Log para debug de grupos
+        if (isGroup) {
+          console.log('📱 [GRUPO DETECTADO]', {
+            telefone,
+            hasIsGroupFlag,
+            telefoneIsGroup,
+            numeroMensagemIsGroup,
+            primeiroNumero: mensagens[0]?.numero
+          });
+        }
         
         const leadInfo = leadsMap.get(telefone);
         
