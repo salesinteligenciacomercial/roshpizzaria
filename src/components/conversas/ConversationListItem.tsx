@@ -162,10 +162,10 @@ function ConversationListItemComponent({
                 style={{ 
                   position: 'relative',
                   zIndex: 100,
-                  minWidth: '36px',
-                  minHeight: '36px',
+                  minWidth: '40px',
+                  minHeight: '40px',
                   overflow: 'visible',
-                  display: 'flex',
+                  display: 'flex !important' as any,
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0
@@ -178,11 +178,11 @@ function ConversationListItemComponent({
                       size="icon"
                       data-conversation-menu="true"
                       aria-label="Menu de opções"
-                      className="h-9 w-9 hover:bg-accent hover:text-accent-foreground flex-shrink-0 conversation-menu-button"
+                      className="h-9 w-9 hover:bg-accent hover:text-accent-foreground flex-shrink-0 conversation-menu-button !opacity-100 !visible !flex"
                       style={{ 
-                        opacity: 1, 
-                        visibility: 'visible', 
-                        display: 'flex',
+                        opacity: '1 !important' as any, 
+                        visibility: 'visible !important' as any, 
+                        display: 'flex !important' as any,
                         position: 'relative',
                         zIndex: 101,
                         minWidth: '36px',
@@ -203,12 +203,12 @@ function ConversationListItemComponent({
                       }}
                     >
                       <MoreVertical 
-                        className="h-5 w-5" 
+                        className="h-5 w-5 !opacity-100" 
                         style={{ 
-                          color: 'currentColor',
-                          display: 'block',
-                          opacity: 1,
-                          visibility: 'visible',
+                          color: 'hsl(var(--foreground))',
+                          display: 'block !important' as any,
+                          opacity: '1 !important' as any,
+                          visibility: 'visible !important' as any,
                           pointerEvents: 'auto',
                           width: '20px',
                           height: '20px'

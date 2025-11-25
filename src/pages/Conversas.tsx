@@ -7588,8 +7588,10 @@ function Conversas() {
                 const groupId = conv.phoneNumber || conv.id;
                 const isBlocked = blockedGroups.has(groupId);
                 toggleBlockGroup(groupId, conv.contactName, !isBlocked);
-              } : undefined}
-              onEditName={conv.isGroup ? undefined : () => handleEditName(conv.id)}
+              } : () => {
+                console.log('⚠️ Tentativa de bloquear contato individual - operação não suportada');
+              }}
+              onEditName={() => handleEditName(conv.id)}
               onCreateLead={() => handleCreateLead(conv.id)}
               onDeleteConversation={() => handleDeleteConversation(conv.id)}
               onClick={async () => {
