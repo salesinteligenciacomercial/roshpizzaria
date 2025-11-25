@@ -7708,11 +7708,12 @@ function Conversas() {
         </ScrollArea>
       </div>
 
-      {/* Chat Area */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}>
+      {/* Chat Area - Estrutura fixa sem movimento vertical */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}>
         {selectedConv ? (
           <>
-            <div className="sticky top-0 z-50 flex-shrink-0">
+            {/* Header - ABSOLUTAMENTE FIXO */}
+            <div className="flex-shrink-0 bg-background border-b">
               <ConversationHeader
               contactName={selectedConv.contactName}
               channel={selectedConv.channel}
@@ -7736,10 +7737,10 @@ function Conversas() {
               />
             </div>
 
-            <div className="flex flex-1 min-h-0 scrollbar-hide">
+            <div className="flex flex-1 overflow-hidden scrollbar-hide">
               {/* Messages Area */}
-              <div className="flex-1 flex flex-col min-w-0 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}>
-                {/* Messages - Área de scroll sem barra lateral visível */}
+              <div className="flex-1 flex flex-col overflow-hidden scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}>
+                {/* Messages - ÚNICA ÁREA COM SCROLL */}
                 <div 
                   id="messages-scroll-container"
                   className="flex-1 overflow-y-auto p-6 bg-[#e5ddd5] messages-scroll-area scrollbar-hide" 
@@ -7801,8 +7802,8 @@ function Conversas() {
                   </div>
                 </div>
 
-                {/* Input Area - Fixed at bottom */}
-                <div className="bg-background border-t border-border p-4 shrink-0">
+                {/* Input Area - ABSOLUTAMENTE FIXO NO BOTTOM */}
+                <div className="bg-background border-t border-border p-4 flex-shrink-0">
                   {replyingTo && (
                     <div className="mb-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
                       <div className="flex items-center justify-between">
