@@ -276,6 +276,7 @@ function Conversas() {
   const avatarCacheRef = useRef<Map<string, string>>(new Map());
   const inflightAvatarPromisesRef = useRef<Map<string, Promise<string | undefined>>>(new Map());
   const initialLoadRef = useRef<boolean>(false);
+  const notifiedMessagesRef = useRef<Set<string>>(new Set()); // ⚡ Rastrear mensagens já notificadas
   const [aiMode, setAiMode] = useState<Record<string, boolean>>({});
   const [quickMessages, setQuickMessages] = useState<QuickMessage[]>([]);
   const [quickCategories, setQuickCategories] = useState<QuickMessageCategory[]>([]);
@@ -1181,13 +1182,36 @@ function Conversas() {
               }
             });
             
-            // Tocar som de notificação se for mensagem do contato
-            if (novaMensagem.fromme === false || String(novaMensagem.fromme) === 'false') {
+            // ⚡ CORREÇÃO CRÍTICA: Tocar som de notificação APENAS para mensagens novas recebidas do contato
+            // Verificar: 1) É do contato (fromme === false), 2) É INSERT (não UPDATE), 3) Não foi notificada antes
+            const isFromContact = novaMensagem.fromme === false || String(novaMensagem.fromme) === 'false';
+            const isNewMessage = payload.eventType === 'INSERT';
+            const notAlreadyNotified = !notifiedMessagesRef.current.has(novaMensagem.id);
+            
+            if (isFromContact && isNewMessage && notAlreadyNotified) {
+              // Marcar como notificada
+              notifiedMessagesRef.current.add(novaMensagem.id);
+              
+              // Limpar set se ficar muito grande (manter apenas últimas 100 mensagens)
+              if (notifiedMessagesRef.current.size > 100) {
+                const idsArray = Array.from(notifiedMessagesRef.current);
+                notifiedMessagesRef.current = new Set(idsArray.slice(-100));
+              }
+              
+              console.log('🔔 [REALTIME] Disparando notificação para mensagem nova:', novaMensagem.id);
+              
               const audio = new Audio('/notification.mp3');
               audio.play().catch(() => {});
               
               toast.info(`Nova mensagem de ${novaMensagem.nome_contato || 'contato'}`, {
                 duration: 3000,
+              });
+            } else {
+              console.log('⚠️ [REALTIME] Notificação ignorada:', {
+                isFromContact,
+                isNewMessage,
+                notAlreadyNotified,
+                messageId: novaMensagem.id
               });
             }
           }
