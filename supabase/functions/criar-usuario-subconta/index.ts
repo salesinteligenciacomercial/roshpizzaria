@@ -83,11 +83,24 @@ serve(async (req) => {
 
     // Valores válidos do enum app_role: super_admin, company_admin, gestor, vendedor, suporte
     // NÃO usar 'user' pois não existe no enum
-    const userRole = role || 'vendedor'; // Valor padrão mudado de 'user' para 'vendedor'
+    
+    // IMPORTANTE: Se está criando subconta, o primeiro usuário DEVE ser company_admin
+    // Se está apenas criando usuário em empresa existente, usar role fornecido ou 'vendedor' padrão
+    const defaultRole = isCreatingSubaccount ? 'company_admin' : 'vendedor';
+    const userRole = role || defaultRole;
     const allowedRoles = new Set(['company_admin', 'gestor', 'vendedor', 'suporte']);
     
     // Se receber 'user', mapear para 'vendedor' (role mais básico)
     const finalRole = userRole === 'user' ? 'vendedor' : userRole;
+    
+    console.log('🔐 [CRIAR-USUARIO] Role determinada:', {
+      isCreatingSubaccount,
+      isCreatingUser,
+      roleRecebida: role,
+      defaultRole,
+      userRole,
+      finalRole
+    });
     
     if (!allowedRoles.has(finalRole)) {
       return new Response(JSON.stringify({ 
