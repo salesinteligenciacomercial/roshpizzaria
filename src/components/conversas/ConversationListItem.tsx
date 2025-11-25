@@ -104,7 +104,6 @@ function ConversationListItemComponent({
         isSelected ? "bg-muted/70" : ""
       }`}
       onClick={onClick}
-      style={{ position: 'relative', overflow: 'visible' }}
     >
       <div className="flex gap-3 items-start">
         <Avatar className="h-12 w-12 flex-shrink-0">
@@ -114,8 +113,8 @@ function ConversationListItemComponent({
           </AvatarFallback>
         </Avatar>
         
-        <div className="flex-1 min-w-0" style={{ overflow: 'visible' }}>
-          <div className="flex items-start justify-between mb-1 gap-2" style={{ overflow: 'visible' }}>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between mb-1 gap-3">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               {getChannelIcon()}
               <span className="font-medium text-sm text-foreground truncate">
@@ -131,7 +130,6 @@ function ConversationListItemComponent({
               )}
             </div>
             
-            {/* HORÁRIO, BADGE E MENU - SEMPRE VISÍVEL */}
             <div className="flex items-center gap-2 flex-shrink-0">
               <span className="text-xs text-muted-foreground whitespace-nowrap">
                 {timestamp.toLocaleTimeString("pt-BR", {
@@ -140,87 +138,10 @@ function ConversationListItemComponent({
                 })}
               </span>
               {unread > 0 && (
-                <Badge className="bg-[#25D366] hover:bg-[#25D366] text-white text-xs h-5 min-w-5 rounded-full flex items-center justify-center">
+                <Badge className="bg-[#25D366] hover:bg-[#25D366] text-white text-xs h-5 min-w-5 rounded-full">
                   {unread}
                 </Badge>
               )}
-              
-              {/* ⚡ BOTÃO DE MENU - SEMPRE VISÍVEL SEM EXCEÇÕES */}
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    data-conversation-menu="true"
-                    aria-label="Menu de opções"
-                    aria-haspopup="menu"
-                    className="h-8 w-8 flex-shrink-0 conversation-menu-button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      console.log('🔘 Menu aberto:', contactName);
-                    }}
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent 
-                  align="end"
-                  className="w-56"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {!isGroup && onEditName && (
-                    <DropdownMenuItem onClick={(e) => {
-                      e.stopPropagation();
-                      onEditName();
-                    }}>
-                      <Edit className="h-4 w-4 mr-2" />
-                      Editar nome
-                    </DropdownMenuItem>
-                  )}
-                  
-                  {isGroup && onToggleBlock && (
-                    <DropdownMenuItem onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleBlock();
-                    }}>
-                      {isBlocked ? (
-                        <>
-                          <Unlock className="h-4 w-4 mr-2" />
-                          Desbloquear grupo
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="h-4 w-4 mr-2" />
-                          Bloquear grupo
-                        </>
-                      )}
-                    </DropdownMenuItem>
-                  )}
-                  
-                  {!leadId && onCreateLead && (
-                    <DropdownMenuItem onClick={(e) => {
-                      e.stopPropagation();
-                      onCreateLead();
-                    }}>
-                      <UserPlus className="h-4 w-4 mr-2" />
-                      Adicionar ao CRM
-                    </DropdownMenuItem>
-                  )}
-                  
-                  {onDeleteConversation && (
-                    <DropdownMenuItem 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteConversation();
-                      }}
-                      className="text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Excluir conversa
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </div>
           
@@ -230,15 +151,10 @@ function ConversationListItemComponent({
           
           {/* Informações do Lead */}
           <div className="mt-2 space-y-1.5">
-            {/* Tags */}
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {tags.slice(0, 2).map((tag, index) => (
-                  <Badge 
-                    key={index} 
-                    variant="secondary" 
-                    className="text-xs px-1.5 py-0 h-5"
-                  >
+                  <Badge key={index} variant="secondary" className="text-xs px-1.5 py-0 h-5">
                     {tag}
                   </Badge>
                 ))}
@@ -250,25 +166,90 @@ function ConversationListItemComponent({
               </div>
             )}
             
-            {/* Responsável, Funil/Etapa, Valor */}
             <div className="flex flex-wrap gap-1.5 text-xs">
               {responsavel && (
-                <span className="text-muted-foreground truncate">
-                  👤 {responsavel}
-                </span>
+                <span className="text-muted-foreground truncate">👤 {responsavel}</span>
               )}
               {funnelStage && (
-                <span className="text-muted-foreground truncate">
-                  📊 {funnelStage}
-                </span>
+                <span className="text-muted-foreground truncate">📊 {funnelStage}</span>
               )}
               {valor && (
-                <span className="text-green-600 font-semibold truncate">
-                  💰 {valor}
-                </span>
+                <span className="text-green-600 font-semibold truncate">💰 {valor}</span>
               )}
             </div>
           </div>
+        </div>
+        
+        {/* BOTÃO DE MENU - POSIÇÃO ABSOLUTA NO CANTO SUPERIOR DIREITO */}
+        <div className="absolute top-2 right-2">
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="h-8 w-8 bg-background/80 hover:bg-accent"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  console.log('🔘 Menu clicado:', contactName);
+                }}
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
+              {!isGroup && onEditName && (
+                <DropdownMenuItem onClick={(e) => {
+                  e.stopPropagation();
+                  onEditName();
+                }}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Editar nome
+                </DropdownMenuItem>
+              )}
+              
+              {isGroup && onToggleBlock && (
+                <DropdownMenuItem onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleBlock();
+                }}>
+                  {isBlocked ? (
+                    <>
+                      <Unlock className="h-4 w-4 mr-2" />
+                      Desbloquear grupo
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="h-4 w-4 mr-2" />
+                      Bloquear grupo
+                    </>
+                  )}
+                </DropdownMenuItem>
+              )}
+              
+              {!leadId && onCreateLead && (
+                <DropdownMenuItem onClick={(e) => {
+                  e.stopPropagation();
+                  onCreateLead();
+                }}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Adicionar ao CRM
+                </DropdownMenuItem>
+              )}
+              
+              {onDeleteConversation && (
+                <DropdownMenuItem 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteConversation();
+                  }}
+                  className="text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir conversa
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>
