@@ -4170,51 +4170,11 @@ function Conversas() {
       return;
     }
 
-    const newMessage: Message = {
-      id: `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`, // ID temporário único
-      content: messageContent,
-      type,
-      sender: "user",
-      timestamp: new Date(),
-      delivered: true,
-      replyTo: replyingTo || undefined,
-      sentBy: userName || "Você", // Adicionar quem enviou a mensagem
-    };
-
-    console.log('📝 [ENVIO] Mensagem criada com ID temporário:', newMessage.id);
-
-    // ⚡ CORREÇÃO CRÍTICA: Ordenar mensagens por timestamp após adicionar nova mensagem
-    const sortMessagesByTimestamp = (messages: Message[]): Message[] => {
-      return [...messages].sort((a, b) => {
-        const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-        const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-        return timeA - timeB;
-      });
-    };
-
-    // ⚡ CORREÇÃO: Calcular status dinamicamente baseado nas mensagens
-    const sortedMessagesWithNew = sortMessagesByTimestamp([...selectedConv.messages, newMessage]);
-    const newStatus = calculateConversationStatus(sortedMessagesWithNew);
-
-    const updatedConversations = conversations.map((conv) =>
-      conv.id === selectedConv.id
-        ? {
-            ...conv,
-            messages: sortedMessagesWithNew,
-            lastMessage: type === "text" ? messageContent : `📎 ${type}`,
-            status: newStatus,
-            unread: 0,
-          }
-        : conv
-    );
-
-    saveConversations(updatedConversations);
-    setSelectedConv({
-      ...selectedConv,
-      messages: sortedMessagesWithNew,
-      lastMessage: type === "text" ? messageContent : `📎 ${type}`,
-      status: newStatus,
-    });
+    // ⚡ CORREÇÃO CRÍTICA: NÃO adicionar mensagem localmente (evita duplicação)
+    // O realtime vai adicionar automaticamente após salvar no banco
+    console.log('📝 [ENVIO] Preparando mensagem para envio (sem update otimista)');
+    
+    // Limpar input imediatamente para feedback visual
     setMessageInput("");
 
     // Atualizar status no banco de dados para sincronização em tempo real
@@ -4393,33 +4353,6 @@ function Conversas() {
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
       toast.error('Erro ao processar envio');
-    }
-
-    // Simulate contact response if AI is active
-    if (aiMode[selectedConv.id]) {
-      setTimeout(() => {
-        const aiResponse: Message = {
-          id: (Date.now() + 1).toString(),
-          content: "Resposta automática da IA: entendi sua mensagem!",
-          type: "text",
-          sender: "contact",
-          timestamp: new Date(),
-          delivered: true,
-        };
-        
-        const withAiResponse = updatedConversations.map((conv) =>
-          conv.id === selectedConv.id
-            ? { ...conv, messages: [...conv.messages, newMessage, aiResponse], unread: conv.unread + 1 }
-            : conv
-        );
-        
-        saveConversations(withAiResponse);
-        if (selectedConv.id === selectedConv.id) {
-          setSelectedConv((prev) =>
-            prev ? { ...prev, messages: [...prev.messages, aiResponse] } : prev
-          );
-        }
-      }, 2000);
     }
   };
 
