@@ -131,18 +131,8 @@ function ConversationListItemComponent({
               )}
             </div>
             
-            {/* HORÁRIO, BADGE E MENU */}
-            {/* ⚡ CORREÇÃO: Garantir que o container do menu sempre seja visível em todos os filtros */}
-            <div 
-              className="flex items-center gap-1.5 flex-shrink-0" 
-              style={{ 
-                position: 'relative', 
-                zIndex: 100,
-                overflow: 'visible',
-                minWidth: '120px',
-                justifyContent: 'flex-end'
-              }}
-            >
+            {/* HORÁRIO, BADGE E MENU - SEMPRE VISÍVEL */}
+            <div className="flex items-center gap-2 flex-shrink-0">
               <span className="text-xs text-muted-foreground whitespace-nowrap">
                 {timestamp.toLocaleTimeString("pt-BR", {
                   hour: "2-digit",
@@ -155,150 +145,82 @@ function ConversationListItemComponent({
                 </Badge>
               )}
               
-              {/* BOTÃO DE MENU - GARANTIDO SEMPRE VISÍVEL */}
-              {/* ⚡ CORREÇÃO FINAL: Botão SEMPRE renderizado sem condicionais */}
-              <div 
-                className="flex-shrink-0 ml-auto" 
-                style={{ 
-                  position: 'relative',
-                  zIndex: 100,
-                  minWidth: '40px',
-                  minHeight: '40px',
-                  overflow: 'visible',
-                  display: 'flex !important' as any,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}
-              >
-                <DropdownMenu modal={false}>
-                  <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon"
-                      data-conversation-menu="true"
-                      aria-label="Menu de opções"
-                      className="h-9 w-9 hover:bg-accent hover:text-accent-foreground flex-shrink-0 conversation-menu-button !opacity-100 !visible !flex"
-                      style={{ 
-                        opacity: '1 !important' as any, 
-                        visibility: 'visible !important' as any, 
-                        display: 'flex !important' as any,
-                        position: 'relative',
-                        zIndex: 101,
-                        minWidth: '36px',
-                        minHeight: '36px',
-                        flexShrink: 0,
-                        pointerEvents: 'auto',
-                        cursor: 'pointer',
-                        backgroundColor: 'transparent'
-                      }}
+              {/* ⚡ BOTÃO DE MENU - SEMPRE VISÍVEL SEM EXCEÇÕES */}
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    data-conversation-menu="true"
+                    aria-label="Menu de opções"
+                    aria-haspopup="menu"
+                    className="h-8 w-8 flex-shrink-0 conversation-menu-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      console.log('🔘 Menu aberto:', contactName);
+                    }}
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent 
+                  align="end"
+                  className="w-56"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {!isGroup && onEditName && (
+                    <DropdownMenuItem onClick={(e) => {
+                      e.stopPropagation();
+                      onEditName();
+                    }}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Editar nome
+                    </DropdownMenuItem>
+                  )}
+                  
+                  {isGroup && onToggleBlock && (
+                    <DropdownMenuItem onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleBlock();
+                    }}>
+                      {isBlocked ? (
+                        <>
+                          <Unlock className="h-4 w-4 mr-2" />
+                          Desbloquear grupo
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="h-4 w-4 mr-2" />
+                          Bloquear grupo
+                        </>
+                      )}
+                    </DropdownMenuItem>
+                  )}
+                  
+                  {!leadId && onCreateLead && (
+                    <DropdownMenuItem onClick={(e) => {
+                      e.stopPropagation();
+                      onCreateLead();
+                    }}>
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Adicionar ao CRM
+                    </DropdownMenuItem>
+                  )}
+                  
+                  {onDeleteConversation && (
+                    <DropdownMenuItem 
                       onClick={(e) => {
                         e.stopPropagation();
-                        e.preventDefault();
-                        console.log('🔘 Menu clicado!', { conversationId, leadId, contactName });
+                        onDeleteConversation();
                       }}
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                      }}
+                      className="text-destructive"
                     >
-                      <MoreVertical 
-                        className="h-5 w-5 !opacity-100" 
-                        style={{ 
-                          color: 'hsl(var(--foreground))',
-                          display: 'block !important' as any,
-                          opacity: '1 !important' as any,
-                          visibility: 'visible !important' as any,
-                          pointerEvents: 'auto',
-                          width: '20px',
-                          height: '20px'
-                        }} 
-                      />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent 
-                    align="end" 
-                    side="bottom"
-                    className="w-56 z-[99999] bg-background border border-border shadow-lg"
-                    style={{ zIndex: 99999 }}
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  >
-                      {/* ⚡ Mostrar "Editar nome" apenas para contatos individuais (não grupos) */}
-                      {!isGroup && onEditName && (
-                        <DropdownMenuItem 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            console.log('✏️ Editar nome', conversationId);
-                            onEditName();
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <Edit className="h-4 w-4 mr-2" />
-                          Editar nome
-                        </DropdownMenuItem>
-                      )}
-                      {/* 🔐 Mostrar opção de bloquear/desbloquear apenas para grupos */}
-                      {isGroup && onToggleBlock && (
-                        <DropdownMenuItem 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            console.log(isBlocked ? '🔓 Desbloquear grupo' : '🔒 Bloquear grupo', conversationId);
-                            onToggleBlock();
-                          }}
-                          className="cursor-pointer"
-                        >
-                          {isBlocked ? (
-                            <>
-                              <Unlock className="h-4 w-4 mr-2" />
-                              Desbloquear grupo
-                            </>
-                          ) : (
-                            <>
-                              <Lock className="h-4 w-4 mr-2" />
-                              Bloquear grupo
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                      )}
-                      {/* ⚡ Mostrar "Adicionar ao CRM" apenas se não tiver lead e tiver callback */}
-                      {!leadId && onCreateLead && (
-                        <DropdownMenuItem 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            console.log('➕ Adicionar ao CRM', conversationId);
-                            onCreateLead();
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <UserPlus className="h-4 w-4 mr-2" />
-                          Adicionar ao CRM
-                        </DropdownMenuItem>
-                      )}
-                      {/* ⚡ SEMPRE mostrar opção de excluir conversa */}
-                      <DropdownMenuItem 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          console.log('🗑️ Excluir conversa', conversationId);
-                          if (onDeleteConversation) {
-                            onDeleteConversation();
-                          } else {
-                            console.warn('⚠️ onDeleteConversation não está definido');
-                          }
-                        }}
-                        className="text-destructive cursor-pointer"
-                        disabled={!onDeleteConversation}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Excluir conversa
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Excluir conversa
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
           

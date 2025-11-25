@@ -9,20 +9,30 @@ All colors MUST be HSL.
 /* ⚡ CORREÇÃO CRÍTICA: Garantir que botões de menu nas conversas sejam SEMPRE visíveis */
 [data-radix-dropdown-menu-trigger],
 button[aria-haspopup="menu"],
+button[data-conversation-menu="true"],
+button[aria-label="Menu de opções"],
 .conversation-menu-button {
   display: flex !important;
   opacity: 1 !important;
   visibility: visible !important;
   pointer-events: auto !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  flex-shrink: 0 !important;
 }
 
 /* Garantir que ícones dentro do botão sejam visíveis */
 [data-radix-dropdown-menu-trigger] svg,
 button[aria-haspopup="menu"] svg,
+button[data-conversation-menu="true"] svg,
+button[aria-label="Menu de opções"] svg,
 .conversation-menu-button svg {
   display: block !important;
   opacity: 1 !important;
   visibility: visible !important;
+  color: currentColor !important;
+  width: 20px !important;
+  height: 20px !important;
 }
 
 @layer base {
