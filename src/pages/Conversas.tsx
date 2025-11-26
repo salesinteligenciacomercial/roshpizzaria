@@ -1092,16 +1092,25 @@ function Conversas() {
               }
             }
             
+            // ⚡ CORREÇÃO: Mapear tipos de mensagem corretamente (document → pdf)
+            const tipoMensagem = novaMensagem.tipo_mensagem === 'texto' ? 'text' :
+                                novaMensagem.tipo_mensagem === 'image' ? 'image' :
+                                novaMensagem.tipo_mensagem === 'audio' ? 'audio' :
+                                novaMensagem.tipo_mensagem === 'video' ? 'video' :
+                                novaMensagem.tipo_mensagem === 'document' ? 'pdf' :
+                                novaMensagem.tipo_mensagem || 'text';
+            
             // Criar objeto de mensagem
             const novaMensagemObj: Message = {
               id: novaMensagem.id,
               content: novaMensagem.mensagem || '',
-              type: (novaMensagem.tipo_mensagem === 'texto' ? 'text' : novaMensagem.tipo_mensagem || 'text') as any,
+              type: tipoMensagem as any,
               sender: isFromMe ? 'user' : 'contact',
               timestamp: new Date(novaMensagem.created_at || Date.now()),
               delivered: true,
               read: novaMensagem.status !== 'Recebida',
               mediaUrl: novaMensagem.midia_url,
+              fileName: novaMensagem.arquivo_nome, // ⚡ CORREÇÃO: Adicionar nome do arquivo
               sentBy: sentBy, // Nome do usuário que enviou
             };
             
@@ -2430,7 +2439,8 @@ function Conversas() {
       // ⚡ CORREÇÃO CRÍTICA: FILTROS RIGOROSOS para prevenir bugs e mensagens de outras instâncias
       const validConversas = conversasData.filter(conv => {
         // VALIDAÇÃO 1: company_id DEVE ser exatamente igual (CRÍTICO para prevenir mensagens de outras instâncias)
-        if (conv.company_id !== userCompanyIdRef.current) {
+        // ⚡ CORREÇÃO: Aceitar mensagens sem company_id (mensagens antigas) ou com company_id correto
+        if (conv.company_id && conv.company_id !== userCompanyIdRef.current) {
           console.warn(`🚫 [FILTRO CRÍTICO] Mensagem de outra company bloqueada: ${conv.company_id} (esperado: ${userCompanyIdRef.current})`);
           return false;
         }
@@ -2909,12 +2919,18 @@ function Conversas() {
             return {
               id: m.id || `msg-${Date.now()}-${Math.random()}`,
               content: m.mensagem || '',
-              type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem || 'text') as any,
+              type: (m.tipo_mensagem === 'texto' ? 'text' : 
+                     m.tipo_mensagem === 'image' ? 'image' :
+                     m.tipo_mensagem === 'audio' ? 'audio' :
+                     m.tipo_mensagem === 'video' ? 'video' :
+                     m.tipo_mensagem === 'document' ? 'pdf' : 
+                     m.tipo_mensagem || 'text') as any,
               sender: sender,
               timestamp: new Date(m.created_at || Date.now()),
               delivered: true,
               read: m.status !== 'Recebida',
               mediaUrl: m.midia_url,
+              fileName: m.arquivo_nome, // ⚡ CORREÇÃO: Adicionar nome do arquivo
               sentBy: sentBy, // Nome do usuário que enviou
             };
           });
