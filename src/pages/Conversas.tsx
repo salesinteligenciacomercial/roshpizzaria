@@ -34,6 +34,8 @@ import { NovaConversaDialog } from "@/components/conversas/NovaConversaDialog";
 import { EditarLeadDialog } from "@/components/funil/EditarLeadDialog";
 import { ResponsaveisManager } from "@/components/conversas/ResponsaveisManager";
 import { AgendaModal } from "@/components/agenda/AgendaModal";
+import { HorarioSeletor } from "@/components/agenda/HorarioSeletor";
+import { HorarioComercial, criarHorarioPadrao } from "@/components/agenda/HorarioComercialConfig";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { formatPhoneNumber, safeFormatPhoneNumber } from "@/utils/phoneFormatter";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
@@ -1273,12 +1275,22 @@ function Conversas() {
   const [scheduledContent, setScheduledContent] = useState("");
   const [scheduledDatetime, setScheduledDatetime] = useState("");
   const [meetingTitle, setMeetingTitle] = useState("");
+  const [meetingData, setMeetingData] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [meetingHoraInicio, setMeetingHoraInicio] = useState("");
   const [meetingDatetime, setMeetingDatetime] = useState("");
   const [meetingNotes, setMeetingNotes] = useState("");
   const [meetingTipoServico, setMeetingTipoServico] = useState("reuniao");
   const [meetingCustoEstimado, setMeetingCustoEstimado] = useState("");
   const [meetingDuracao, setMeetingDuracao] = useState("30");
   const [meetingDescricao, setMeetingDescricao] = useState("");
+  const [meetingHorarioComercial, setMeetingHorarioComercial] = useState<any>({
+    manha: { inicio: "08:00", fim: "12:00", ativo: true },
+    tarde: { inicio: "14:00", fim: "18:00", ativo: true },
+    noite: { inicio: "19:00", fim: "23:00", ativo: false },
+    intervalo_almoco: { inicio: "12:00", fim: "14:00", ativo: true }
+  });
+  const [meetingCompromissosExistentes, setMeetingCompromissosExistentes] = useState<any[]>([]);
+  const [meetingAgendaSelecionada, setMeetingAgendaSelecionada] = useState<any>(null);
   const [enviarConfirmacaoReuniao, setEnviarConfirmacaoReuniao] = useState(true); // ⚡ Enviar confirmação por padrão
   const [enviarLembreteReuniao, setEnviarLembreteReuniao] = useState(true); // ⚡ Enviar lembrete por padrão
   const [horasAntecedenciaReuniaoHoras, setHorasAntecedenciaReuniaoHoras] = useState("1"); // ⚡ 1 hora padrão
@@ -5002,8 +5014,79 @@ function Conversas() {
     };
   }, [selectedConv?.id]);
 
+  // Carregar horário comercial e compromissos quando a data mudar
+  useEffect(() => {
+    if (meetingData && reunioesDialogOpen) {
+      carregarMeetingHorarioComercial();
+      carregarMeetingCompromissos();
+    }
+  }, [meetingData, reunioesDialogOpen]);
+
+  const carregarMeetingHorarioComercial = async () => {
+    try {
+      const { data: agendas } = await supabase
+        .from("agendas")
+        .select("*")
+        .eq("tipo", "principal")
+        .limit(1)
+        .single();
+
+      if (agendas && agendas.disponibilidade && typeof agendas.disponibilidade === 'object') {
+        setMeetingAgendaSelecionada(agendas);
+        const disp = agendas.disponibilidade as any;
+        setMeetingHorarioComercial({
+          manha: {
+            inicio: disp.horario_inicio || "08:00",
+            fim: "12:00",
+            ativo: true,
+          },
+          tarde: {
+            inicio: "14:00",
+            fim: disp.horario_fim || "18:00",
+            ativo: true,
+          },
+          noite: {
+            inicio: "19:00",
+            fim: "23:00",
+            ativo: false,
+          },
+          intervalo_almoco: {
+            inicio: "12:00",
+            fim: "14:00",
+            ativo: true,
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao carregar horário comercial:", error);
+    }
+  };
+
+  const carregarMeetingCompromissos = async () => {
+    try {
+      const dataInicio = new Date(meetingData + "T00:00:00");
+      const dataFim = new Date(meetingData + "T23:59:59");
+
+      const { data: compromissos } = await supabase
+        .from("compromissos")
+        .select("id, data_hora_inicio, data_hora_fim")
+        .gte("data_hora_inicio", dataInicio.toISOString())
+        .lte("data_hora_inicio", dataFim.toISOString());
+
+      setMeetingCompromissosExistentes(compromissos || []);
+    } catch (error) {
+      console.error("Erro ao carregar compromissos:", error);
+    }
+  };
+
+  const handleSelecionarMeetingHorario = (horario: string) => {
+    setMeetingHoraInicio(horario);
+    // Também atualizar meetingDatetime para compatibilidade com código existente
+    setMeetingDatetime(`${meetingData}T${horario}`);
+  };
+
   const scheduleMeeting = async () => {
-    if (!selectedConv || !meetingTipoServico.trim() || !meetingDatetime) {
+    if (!selectedConv || !meetingTipoServico.trim() || !meetingData || !meetingHoraInicio) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
@@ -5025,8 +5108,8 @@ function Conversas() {
         return;
       }
 
-      // Criar compromisso/reunião
-      const dataHoraInicio = new Date(meetingDatetime);
+      // Criar compromisso/reunião com parse correto da data e hora
+      const dataHoraInicio = new Date(`${meetingData}T${meetingHoraInicio}`);
       const duracaoMinutos = parseInt(meetingDuracao) || 30;
       const dataHoraFim = new Date(dataHoraInicio.getTime() + duracaoMinutos * 60 * 1000);
       
@@ -8412,12 +8495,12 @@ function Conversas() {
 
                                 <div className="grid grid-cols-2 gap-3">
                                   <div>
-                                    <Label htmlFor="data">Data e Horário *</Label>
+                                    <Label htmlFor="data">Data do Compromisso *</Label>
                                     <Input
                                       id="data"
-                                      type="datetime-local"
-                                      value={meetingDatetime}
-                                      onChange={(e) => setMeetingDatetime(e.target.value)}
+                                      type="date"
+                                      value={meetingData}
+                                      onChange={(e) => setMeetingData(e.target.value)}
                                       className="h-9"
                                     />
                                   </div>
@@ -8440,6 +8523,20 @@ function Conversas() {
                                       </SelectContent>
                                     </Select>
                                   </div>
+                                </div>
+
+                                {/* Seletor de Horários Disponíveis */}
+                                <div>
+                                  <Label className="text-sm mb-2 block">Selecione o Horário *</Label>
+                                  <HorarioSeletor
+                                    data={meetingData}
+                                    horarioComercial={meetingHorarioComercial}
+                                    compromissosExistentes={meetingCompromissosExistentes}
+                                    horarioSelecionado={meetingHoraInicio}
+                                    duracaoMinutos={parseInt(meetingDuracao) || 30}
+                                    permitirSimultaneo={meetingAgendaSelecionada?.permite_simultaneo || false}
+                                    onSelecionarHorario={handleSelecionarMeetingHorario}
+                                  />
                                 </div>
                                 
                                 <div>
@@ -8552,7 +8649,7 @@ function Conversas() {
                                     await scheduleMeeting();
                                   }} 
                                   className="w-full"
-                                  disabled={!meetingTipoServico.trim() || !meetingDatetime}
+                                  disabled={!meetingTipoServico.trim() || !meetingData || !meetingHoraInicio}
                                 >
                                   Agendar Compromisso
                                 </Button>
