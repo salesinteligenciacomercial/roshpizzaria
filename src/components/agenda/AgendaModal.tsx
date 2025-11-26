@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,8 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, parse } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { HorarioSeletor } from "./HorarioSeletor";
+import { HorarioComercial, criarHorarioPadrao } from "./HorarioComercialConfig";
 
 interface AgendaModalProps {
   open: boolean;
@@ -24,13 +26,18 @@ interface AgendaModalProps {
 
 export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: AgendaModalProps) {
   const [loading, setLoading] = useState(false);
+  const [horarioComercial, setHorarioComercial] = useState<HorarioComercial>(criarHorarioPadrao());
+  const [compromissosExistentes, setCompromissosExistentes] = useState<any[]>([]);
+  const [agendaSelecionada, setAgendaSelecionada] = useState<any>(null);
+  
   const [formData, setFormData] = useState({
     descricao: "",
-    data_hora_inicio: "",
-    data_hora_fim: "",
+    data: format(new Date(), "yyyy-MM-dd"),
+    hora_inicio: "",
     tipo_servico: "reuniao",
     observacoes: "",
     custo_estimado: "",
+    duracao_minutos: "30",
     enviar_confirmacao: false,
     notificar_responsavel: true,
     enviar_lembrete: true,
@@ -39,6 +46,75 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
     horas_antecedencia_minutos: "0",
     destinatario_lembrete: "lead" as "lead" | "responsavel" | "ambos"
   });
+
+  // Carregar horário comercial e compromissos quando a data mudar
+  useEffect(() => {
+    if (formData.data) {
+      carregarHorarioComercial();
+      carregarCompromissos();
+    }
+  }, [formData.data]);
+
+  const carregarHorarioComercial = async () => {
+    try {
+      const { data: agendas } = await supabase
+        .from("agendas")
+        .select("*")
+        .eq("tipo", "principal")
+        .limit(1)
+        .single();
+
+      if (agendas && agendas.disponibilidade && typeof agendas.disponibilidade === 'object') {
+        setAgendaSelecionada(agendas);
+        const disp = agendas.disponibilidade as any;
+        setHorarioComercial({
+          manha: {
+            inicio: disp.horario_inicio || "08:00",
+            fim: "12:00",
+            ativo: true,
+          },
+          tarde: {
+            inicio: "14:00",
+            fim: disp.horario_fim || "18:00",
+            ativo: true,
+          },
+          noite: {
+            inicio: "19:00",
+            fim: "23:00",
+            ativo: false,
+          },
+          intervalo_almoco: {
+            inicio: "12:00",
+            fim: "14:00",
+            ativo: true,
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao carregar horário comercial:", error);
+    }
+  };
+
+  const carregarCompromissos = async () => {
+    try {
+      const dataInicio = new Date(formData.data + "T00:00:00");
+      const dataFim = new Date(formData.data + "T23:59:59");
+
+      const { data: compromissos } = await supabase
+        .from("compromissos")
+        .select("id, data_hora_inicio, data_hora_fim")
+        .gte("data_hora_inicio", dataInicio.toISOString())
+        .lte("data_hora_inicio", dataFim.toISOString());
+
+      setCompromissosExistentes(compromissos || []);
+    } catch (error) {
+      console.error("Erro ao carregar compromissos:", error);
+    }
+  };
+
+  const handleSelecionarHorario = (horario: string) => {
+    setFormData(prev => ({ ...prev, hora_inicio: horario }));
+  };
 
   // Função para normalizar telefone brasileiro
   const normalizePhoneBR = (phone: string): string | null => {
@@ -60,8 +136,8 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
       return;
     }
 
-    if (!formData.data_hora_inicio || !formData.data_hora_fim) {
-      toast.error("Selecione a data e hora do compromisso");
+    if (!formData.data || !formData.hora_inicio) {
+      toast.error("Selecione a data e horário do compromisso");
       return;
     }
 
@@ -74,290 +150,128 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
         return;
       }
 
-      // Converter datas para ISO e validar
-      const inicio = new Date(formData.data_hora_inicio);
-      const fim = new Date(formData.data_hora_fim);
-      if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) {
-        toast.error("Datas inválidas");
-        return;
-      }
-      if (fim <= inicio) {
-        toast.error("Data/hora fim deve ser após o início");
-        return;
-      }
+      // Construir data/hora completa
+      const dataHoraInicio = parse(
+        `${formData.data} ${formData.hora_inicio}`,
+        "yyyy-MM-dd HH:mm",
+        new Date()
+      );
 
-      const inicioISO = inicio.toISOString();
-      const fimISO = fim.toISOString();
+      // Calcular data/hora fim baseada na duração
+      const duracaoMin = parseInt(formData.duracao_minutos) || 30;
+      const dataHoraFim = new Date(dataHoraInicio.getTime() + duracaoMin * 60000);
 
-      // Buscar company_id do usuário - VALIDAÇÃO CRÍTICA
-      console.log('🔍 [AgendaModal] Buscando company_id para usuário:', session.user.id);
-      
-      const { data: userRole, error: userRoleError } = await supabase
-        .from("user_roles")
-        .select("company_id")
-        .eq("user_id", session.user.id)
-        .maybeSingle();
+      const inicioISO = dataHoraInicio.toISOString();
+      const fimISO = dataHoraFim.toISOString();
 
-      if (userRoleError || !userRole) {
-        console.error('❌ [AgendaModal] Erro ao buscar user_role:', userRoleError);
-        toast.error("Erro: Usuário não está associado a uma empresa.");
-        return;
-      }
-
-      if (!userRole.company_id) {
-        console.error('❌ [AgendaModal] company_id não encontrado no user_role');
-        toast.error("Erro: Não foi possível identificar a empresa do usuário.");
-        return;
-      }
-
-      console.log('✅ [AgendaModal] company_id obtido:', userRole.company_id);
-      
-      const companyId = userRole.company_id;
-
-      // Criar compromisso e obter o id
-      // Combinar descrição com observações já que não existe campo título
-      const observacoesCompletas = formData.descricao 
-        ? `${formData.descricao}${formData.observacoes ? '\n\n' + formData.observacoes : ''}`
-        : formData.observacoes;
-
-      const insertPayload: any = {
-        data_hora_inicio: inicioISO,
-        data_hora_fim: fimISO,
-        tipo_servico: formData.tipo_servico?.trim() || 'reuniao',
-        observacoes: observacoesCompletas,
-        custo_estimado: formData.custo_estimado ? parseFloat(formData.custo_estimado) : null,
-        lead_id: lead.id,
-        owner_id: session.user.id,
-        usuario_responsavel_id: session.user.id,
-        status: "agendado"
-      };
-      if (companyId) insertPayload.company_id = companyId;
-
-      const { data: compromissoCriado, error } = await supabase
-        .from("compromissos")
-        .insert(insertPayload)
-        .select('id')
+      // Buscar company_id do usuário
+      const { data: userProfile, error: userError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', session.user.id)
         .single();
 
-      if (error) throw error;
+      if (userError) {
+        throw new Error(`Erro ao buscar company_id: ${userError.message}`);
+      }
 
-      console.log('✅ [AgendaModal] Compromisso criado com sucesso:', compromissoCriado?.id);
-      console.log('📋 [AgendaModal] Opções selecionadas:', {
-        enviar_confirmacao: formData.enviar_confirmacao,
-        notificar_responsavel: formData.notificar_responsavel,
-        enviar_lembrete: formData.enviar_lembrete,
-        lead_telefone: lead.telefone
-      });
+      const companyId = userProfile?.company_id;
 
-      // ⚡ CRIAR LEMBRETE AUTOMATICAMENTE PARA TODO COMPROMISSO (OBRIGATÓRIO)
-      if (compromissoCriado) {
-        console.log('📝 [LEMBRETE] Criando lembrete automaticamente para compromisso:', compromissoCriado.id);
-        
-        try {
-          // Processar tempo de antecedência (usar valores do formulário ou padrão)
-          let horas = parseInt(formData.horas_antecedencia_horas || "0", 10);
-          let minutos = parseInt(formData.horas_antecedencia_minutos || "0", 10);
-          
-          // Se não informado ou inválido, usar valores padrão (1 hora antes)
-          if (horas === 0 && minutos === 0) {
-            console.log('ℹ️ [LEMBRETE] Usando valores padrão: 1 hora de antecedência');
-            horas = 1;
-            minutos = 0;
-          }
-          
-          // Validar valores
-          if (horas < 0) horas = 1;
-          if (minutos < 0 || minutos >= 60) minutos = 0;
-
-          // Converter horas e minutos para formato decimal (garantir precisão)
-          const tempoAntecedencia = parseFloat((horas + (minutos / 60)).toFixed(4));
-
-          // Calcular data de envio do lembrete baseada na data do compromisso
-          const dataEnvio = new Date(inicio);
-          dataEnvio.setTime(dataEnvio.getTime() - (tempoAntecedencia * 60 * 60 * 1000));
-
-          // Mensagem personalizada do lembrete
-          const mensagemLembrete = `Olá ${lead.nome}! Lembramos do seu compromisso agendado para ${format(inicio, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.`;
-
-          // Normalizar telefone do lead para garantir formato correto
-          const telefoneLead = lead.telefone ? normalizePhoneBR(lead.telefone) : null;
-          
-          console.log('📞 [LEMBRETE] Telefone do lead normalizado:', {
-            original: lead.telefone,
-            normalizado: telefoneLead,
-            destinatario: formData.destinatario_lembrete || 'lead'
-          });
-
-          // LÓGICA DE DESTINATÁRIO:
-          // - Quando destinatario='lead': salvar telefone do lead em telefone_responsavel
-          // - Quando destinatario='responsavel': telefone_responsavel fica null (será buscado na edge function)
-          // - Quando destinatario='ambos': salvar telefone do responsável (lead será buscado via compromisso)
-          const destinatarioLembrete = formData.destinatario_lembrete || 'lead';
-          let telefoneParaLembrete = null;
-          
-          if (destinatarioLembrete === 'lead') {
-            // Para lead, salvar diretamente o telefone normalizado
-            telefoneParaLembrete = telefoneLead;
-          }
-          // Para 'responsavel' e 'ambos', o telefone do responsável será buscado dinamicamente na edge function
-
-          const lembreteData = {
-            compromisso_id: compromissoCriado.id,
-            canal: 'whatsapp',
-            horas_antecedencia: tempoAntecedencia,
-            mensagem: mensagemLembrete,
-            status_envio: 'pendente',
-            data_envio: dataEnvio.toISOString(),
-            destinatario: destinatarioLembrete,
-            telefone_responsavel: telefoneParaLembrete,
+      // Criar compromisso no banco de dados
+      const { data: compromisso, error: compromissoError } = await supabase
+        .from("compromissos")
+        .insert([
+          {
             company_id: companyId,
-          };
+            lead_id: lead.id,
+            responsavel_id: session.user.id,
+            data_hora_inicio: inicioISO,
+            data_hora_fim: fimISO,
+            tipo: formData.tipo_servico,
+            descricao: formData.descricao,
+            observacoes: formData.observacoes,
+            custo_estimado: formData.custo_estimado ? parseFloat(formData.custo_estimado) : 0,
+          },
+        ])
+        .select()
+        .single();
 
-          console.log('📝 [LEMBRETE] Dados do lembrete:', { 
-            compromisso_id: lembreteData.compromisso_id,
-            data_envio: lembreteData.data_envio,
-            horas_antecedencia: lembreteData.horas_antecedencia,
-            destinatario: lembreteData.destinatario,
-            telefone_salvo: lembreteData.telefone_responsavel,
-            telefone_lead_disponivel: telefoneLead,
-            data_compromisso: inicio.toISOString()
-          });
+      if (compromissoError) {
+        throw new Error(`Erro ao criar compromisso: ${compromissoError.message}`);
+      }
 
-          // Criar lembrete de forma síncrona e garantida
-          let lembreteCriado = null;
-          let lembreteError = null;
-          
-          // Tentar inserir com valor decimal
-          const resultado = await supabase
-            .from('lembretes')
-            .insert(lembreteData)
-            .select()
-            .single();
-          
-          lembreteCriado = resultado.data;
-          lembreteError = resultado.error;
+      // Criar lembrete se solicitado
+      if (formData.enviar_lembrete) {
+        const horasAntecedenciaTotal =
+          parseInt(formData.horas_antecedencia_horas || "0") +
+          parseInt(formData.horas_antecedencia_minutos || "0") / 60;
 
-          // Se erro for de tipo INTEGER, tentar novamente arredondando para inteiro (fallback temporário)
-          if (lembreteError && (lembreteError.message?.includes('integer') || lembreteError.message?.includes('INTEGER'))) {
-            console.warn('⚠️ [LEMBRETE] Erro de tipo INTEGER detectado, tentando com valor arredondado (fallback)...');
-            
-            // Criar novo objeto com valor arredondado para inteiro (horas completas)
-            const lembreteDataFallback = {
-              ...lembreteData,
-              horas_antecedencia: Math.round(tempoAntecedencia) || 1, // Arredondar para horas completas
-            };
-            
-            // Recalcular data de envio com valor arredondado
-            const dataEnvioFallback = new Date(inicio);
-            dataEnvioFallback.setTime(dataEnvioFallback.getTime() - (lembreteDataFallback.horas_antecedencia * 60 * 60 * 1000));
-            lembreteDataFallback.data_envio = dataEnvioFallback.toISOString();
-            
-            console.log('🔄 [LEMBRETE] Tentando novamente com valor arredondado:', lembreteDataFallback.horas_antecedencia);
-            
-            const retryResult = await supabase
-              .from('lembretes')
-              .insert(lembreteDataFallback)
-              .select()
-              .single();
-            
-            lembreteCriado = retryResult.data;
-            lembreteError = retryResult.error;
-            
-            if (!lembreteError) {
-              console.log('✅ [LEMBRETE] Lembrete criado com valor arredondado (fallback temporário)');
-              toast.warning(
-                `Lembrete criado com ${lembreteDataFallback.horas_antecedencia} hora(s) de antecedência (arredondado). Para usar minutos, execute a migração SQL.`,
-                { duration: 8000 }
-              );
-            }
-          }
+        const dataLembrete = new Date(dataHoraInicio.getTime() - horasAntecedenciaTotal * 3600000);
+
+        if (dataLembrete > new Date()) {
+          const dataLembreteISO = dataLembrete.toISOString();
+
+          const mensagemLembrete = `⏰ *Lembrete de Compromisso!*\\\\n\\\\n` +
+            `Olá ${lead.nome}! Este é um lembrete do seu compromisso agendado.\\\\n\\\\n` +
+            `📅 *Data:* ${format(dataHoraInicio, "dd/MM/yyyy", { locale: ptBR })}\\\\n` +
+            `🕐 *Horário:* ${format(dataHoraInicio, "HH:mm", { locale: ptBR })} às ${format(dataHoraFim, "HH:mm", { locale: ptBR })} \\\\n` +
+            (formData.descricao || formData.observacoes ? `\\\\n💬 *Detalhes:*\\\\n${formData.descricao || ''}${formData.descricao && formData.observacoes ? '\\\\n' : ''}${formData.observacoes || ''}\\\\n` : '') +
+            `\\\\nPor favor, confirme sua presença!`;
+
+          const { error: lembreteError } = await supabase
+            .from("lembretes")
+            .insert([
+              {
+                company_id: companyId,
+                compromisso_id: compromisso.id,
+                data_hora_envio: dataLembreteISO,
+                destinatario: formData.destinatario_lembrete,
+                mensagem: mensagemLembrete,
+                status: "pendente",
+              },
+            ]);
 
           if (lembreteError) {
-            console.error('❌ [LEMBRETE] Erro ao criar lembrete:', lembreteError);
-            console.error('❌ [LEMBRETE] Dados que causaram erro:', {
-              compromisso_id: lembreteData.compromisso_id,
-              horas_antecedencia: lembreteData.horas_antecedencia,
-              tipo_horas_antecedencia: typeof lembreteData.horas_antecedencia,
-              erro_completo: JSON.stringify(lembreteError, null, 2)
-            });
-            
-            toast.error(
-              `Erro ao criar lembrete. Execute o SQL em APLICAR_MIGRACAO_LEMBRETES.sql no Supabase Dashboard para corrigir.`,
-              { duration: 10000 }
-            );
-          } else {
-            console.log('✅ [LEMBRETE] Lembrete criado automaticamente e sincronizado:', lembreteCriado?.id);
-            console.log('📅 [LEMBRETE] Data de envio calculada:', dataEnvio.toISOString());
-            console.log('📅 [LEMBRETE] Data do compromisso:', inicio.toISOString());
-            console.log('⏰ [LEMBRETE] Antecedência:', tempoAntecedencia, 'horas');
-            console.log('🔗 [LEMBRETE] Vinculado ao compromisso:', compromissoCriado.id);
+            console.error("Erro ao criar lembrete:", lembreteError);
+            toast.warning("Compromisso criado, mas houve um erro ao agendar o lembrete.");
           }
-        } catch (error: any) {
-          console.error('❌ [LEMBRETE] Erro ao criar lembrete:', error);
-          toast.error(`Erro ao criar lembrete: ${error?.message || 'Erro desconhecido'}`);
-          // Não lançar erro para não impedir o compromisso
+        } else {
+          toast.warning("Não foi possível agendar o lembrete, pois a data é retroativa.");
         }
       }
 
       // Enviar mensagem de confirmação imediata se solicitado
-      if (formData.enviar_confirmacao && compromissoCriado && lead.telefone) {
+      if (formData.enviar_confirmacao && lead.telefone) {
         console.log('📱 [AgendaModal] Iniciando envio de confirmação...');
         try {
           const telefone = normalizePhoneBR(lead.telefone);
           if (telefone) {
-            // Mensagem de confirmação formatada e personalizada
             const tipoServicoFormatado = formData.tipo_servico?.trim()
               ? formData.tipo_servico.charAt(0).toUpperCase() + formData.tipo_servico.slice(1)
               : null;
-            const mensagemConfirmacao = `✅ *Compromisso Confirmado!*\n\n` +
-              `Olá ${lead.nome}! Seu compromisso foi agendado com sucesso.\n\n` +
-              `📅 *Data:* ${format(inicio, "dd/MM/yyyy", { locale: ptBR })}\n` +
-              `🕐 *Horário:* ${format(inicio, "HH:mm", { locale: ptBR })} às ${format(fim, "HH:mm", { locale: ptBR })}\n` +
-              (tipoServicoFormatado ? `📋 *Tipo:* ${tipoServicoFormatado}\n` : '') +
-              (formData.descricao || formData.observacoes ? `\n💬 *Observações:*\n${formData.descricao || ''}${formData.descricao && formData.observacoes ? '\n' : ''}${formData.observacoes || ''}\n` : '') +
-              `\n✅ *Status:* Agendado\n\n` +
-              `Aguardamos você no dia e horário agendados!\n\n` +
+            const mensagemConfirmacao = `✅ *Compromisso Confirmado!*\\\\n\\\\n` +
+              `Olá ${lead.nome}! Seu compromisso foi agendado com sucesso.\\\\n\\\\n` +
+              `📅 *Data:* ${format(dataHoraInicio, "dd/MM/yyyy", { locale: ptBR })}\\\\n` +
+              `🕐 *Horário:* ${format(dataHoraInicio, "HH:mm", { locale: ptBR })} às ${format(dataHoraFim, "HH:mm", { locale: ptBR })}\\\\n` +
+              (tipoServicoFormatado ? `📋 *Tipo:* ${tipoServicoFormatado}\\\\n` : '') +
+              (formData.descricao || formData.observacoes ? `\\\\n💬 *Observações:*\\\\n${formData.descricao || ''}${formData.descricao && formData.observacoes ? '\\\\n' : ''}${formData.observacoes || ''}\\\\n` : '') +
+              `\\\\n✅ *Status:* Agendado\\\\n\\\\n` +
+              `Aguardamos você no dia e horário agendados!\\\\n\\\\n` +
               `_Esta é uma confirmação automática do seu agendamento._`;
 
-            console.log('📱 [CONFIRMAÇÃO] Enviando mensagem de confirmação imediata...');
-            
-            const { error: confirmacaoError } = await supabase.functions.invoke('enviar-whatsapp', {
+            // Enviar confirmação via WhatsApp
+            const { data: whatsappResponse, error: whatsappError } = await supabase.functions.invoke('enviar-whatsapp', {
               body: {
-                numero: telefone,
+                telefone: telefone,
                 mensagem: mensagemConfirmacao,
-                company_id: companyId
-              }
+              },
             });
 
-            if (confirmacaoError) {
-              console.error('❌ [CONFIRMAÇÃO] Erro ao enviar confirmação:', confirmacaoError);
-              toast.warning("Compromisso criado, mas não foi possível enviar a confirmação imediata.");
+            if (whatsappError) {
+              console.error('❌ [WHATSAPP] Erro ao enviar WhatsApp:', whatsappError);
+              toast.warning("Compromisso criado, mas houve um erro ao enviar o WhatsApp.");
             } else {
-              console.log('✅ [CONFIRMAÇÃO] Mensagem de confirmação enviada com sucesso!');
-              
-              // Salvar mensagem de confirmação na tabela conversas para ficar visível no CRM
-              try {
-                const { error: dbError } = await supabase.from('conversas').insert([{
-                  numero: telefone,
-                  telefone_formatado: telefone,
-                  mensagem: mensagemConfirmacao,
-                  origem: 'WhatsApp',
-                  status: 'Enviada',
-                  tipo_mensagem: 'text',
-                  nome_contato: lead.nome,
-                  company_id: companyId,
-                  lead_id: lead.id,
-                  fromme: true,
-                }]);
-                
-                if (dbError) {
-                  console.error('❌ [CONFIRMAÇÃO] Erro ao salvar mensagem no banco:', dbError);
-                } else {
-                  console.log('✅ [CONFIRMAÇÃO] Mensagem salva no banco de dados com sucesso!');
-                }
-              } catch (saveError) {
-                console.error('❌ [CONFIRMAÇÃO] Erro ao salvar mensagem no banco:', saveError);
-              }
+              console.log('✅ [WHATSAPP] WhatsApp enviado com sucesso:', whatsappResponse);
             }
           }
         } catch (error) {
@@ -366,49 +280,30 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
         }
       }
 
-      // Enviar notificação push para o responsável se solicitado
-      if (formData.notificar_responsavel && compromissoCriado) {
+      // Enviar notificação push para o responsável se solicitado - já usa dataHoraInicio corretamente
+      if (formData.notificar_responsavel) {
         console.log('🔔 [AgendaModal] Iniciando envio de notificação push...');
         try {
-          if ('Notification' in window && Notification.permission === 'granted') {
-            const tipoServicoNotif = formData.tipo_servico || 'Compromisso';
-            const mensagemNotificacao = `Novo compromisso agendado: ${tipoServicoNotif}\n` +
-              `${format(inicio, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`;
+          const mensagemNotificacao = `Novo compromisso agendado para ${lead.nome} em ${format(dataHoraInicio, "dd/MM/yyyy HH:mm", { locale: ptBR })}`;
 
-            new Notification('Novo Compromisso Agendado', {
-              body: mensagemNotificacao,
-              icon: '/favicon.ico',
-              badge: '/favicon.ico',
-              tag: `compromisso-${compromissoCriado.id}`,
-              requireInteraction: false,
-            });
+          const { data: pushResponse, error: pushError } = await supabase.functions.invoke('send-push-notification', {
+            body: {
+              user_id: session.user.id,
+              message: mensagemNotificacao,
+            },
+          });
 
-            console.log('🔔 [NOTIFICAÇÃO] Notificação push enviada ao responsável');
-          } else if ('Notification' in window && Notification.permission !== 'denied') {
-            // Solicitar permissão se ainda não foi solicitada
-            const permission = await Notification.requestPermission();
-            if (permission === 'granted') {
-              const tipoServicoNotif = formData.tipo_servico || 'Compromisso';
-              const mensagemNotificacao = `Novo compromisso agendado: ${tipoServicoNotif}\n` +
-                `${format(inicio, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`;
-
-              new Notification('Novo Compromisso Agendado', {
-                body: mensagemNotificacao,
-                icon: '/favicon.ico',
-                badge: '/favicon.ico',
-                tag: `compromisso-${compromissoCriado.id}`,
-              });
-
-              console.log('🔔 [NOTIFICAÇÃO] Permissão concedida e notificação enviada');
-            }
+          if (pushError) {
+            console.error('❌ [PUSH] Erro ao enviar notificação push:', pushError);
+            toast.warning("Compromisso criado, mas houve um erro ao enviar a notificação push.");
+          } else {
+            console.log('✅ [PUSH] Notificação push enviada com sucesso:', pushResponse);
           }
         } catch (error) {
           console.error('❌ [NOTIFICAÇÃO] Erro ao enviar notificação push:', error);
-          // Não mostrar erro ao usuário, pois é opcional
+          toast.warning("Compromisso criado, mas houve um erro ao enviar a notificação.");
         }
       }
-
-      // Lembrete já foi criado acima, logo após o compromisso
 
       // Mensagem de sucesso mais informativa
       if (formData.enviar_confirmacao && formData.notificar_responsavel) {
@@ -427,11 +322,12 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
       // Limpar formulário
       setFormData({
         descricao: "",
-        data_hora_inicio: "",
-        data_hora_fim: "",
+        data: format(new Date(), "yyyy-MM-dd"),
+        hora_inicio: "",
         tipo_servico: "reuniao",
         observacoes: "",
         custo_estimado: "",
+        duracao_minutos: "30",
         enviar_confirmacao: false,
         notificar_responsavel: true,
         enviar_lembrete: true,
@@ -450,11 +346,11 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader className="pb-3">
-          <DialogTitle>Agendar Compromisso</DialogTitle>
+          <DialogTitle>Agendar Compromisso - {lead.nome}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="tipo_servico" className="text-sm">Tipo de Serviço *</Label>
@@ -502,29 +398,50 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="data_hora_inicio" className="text-sm">Data/Hora Início *</Label>
+              <Label htmlFor="data" className="text-sm">Data do Compromisso *</Label>
               <Input
-                id="data_hora_inicio"
-                type="datetime-local"
-                value={formData.data_hora_inicio}
-                onChange={(e) => setFormData({ ...formData, data_hora_inicio: e.target.value })}
+                id="data"
+                type="date"
+                value={formData.data}
+                onChange={(e) => setFormData({ ...formData, data: e.target.value })}
                 required
                 className="h-9"
               />
             </div>
             <div>
-              <Label htmlFor="data_hora_fim" className="text-sm">Data/Hora Fim *</Label>
-              <Input
-                id="data_hora_fim"
-                type="datetime-local"
-                value={formData.data_hora_fim}
-                onChange={(e) => setFormData({ ...formData, data_hora_fim: e.target.value })}
-                required
-                className="h-9"
-              />
+              <Label htmlFor="duracao" className="text-sm">Duração (min)</Label>
+              <Select
+                value={formData.duracao_minutos}
+                onValueChange={(value) => setFormData({ ...formData, duracao_minutos: value })}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">15 min</SelectItem>
+                  <SelectItem value="30">30 min</SelectItem>
+                  <SelectItem value="45">45 min</SelectItem>
+                  <SelectItem value="60">1 hora</SelectItem>
+                  <SelectItem value="90">1h 30min</SelectItem>
+                  <SelectItem value="120">2 horas</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
+          {/* Seletor de Horários Disponíveis */}
+          <div>
+            <Label className="text-sm mb-2 block">Selecione o Horário *</Label>
+            <HorarioSeletor
+              data={formData.data}
+              horarioComercial={horarioComercial}
+              compromissosExistentes={compromissosExistentes}
+              horarioSelecionado={formData.hora_inicio}
+              duracaoMinutos={parseInt(formData.duracao_minutos) || 30}
+              permitirSimultaneo={agendaSelecionada?.permite_simultaneo || false}
+              onSelecionarHorario={handleSelecionarHorario}
+            />
+          </div>
 
           <div>
             <Label htmlFor="observacoes" className="text-sm">Observações</Label>
@@ -539,128 +456,100 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
           </div>
 
           {/* Opções de Notificação */}
-          <div className="space-y-3 pt-2 border-t">
-            {/* Enviar Lembrete */}
-            <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div className="space-y-1">
-                <Label className="text-sm">Enviar lembrete automático</Label>
-                <p className="text-xs text-muted-foreground">
-                  O cliente receberá um lembrete via WhatsApp
-                </p>
-              </div>
-              <Switch 
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Opções de Notificação</Label>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="enviar_confirmacao"
+                checked={formData.enviar_confirmacao}
+                onCheckedChange={(checked) => setFormData({ ...formData, enviar_confirmacao: checked })}
+              />
+              <Label htmlFor="enviar_confirmacao" className="text-sm">Enviar Confirmação para o Cliente</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="notificar_responsavel"
+                checked={formData.notificar_responsavel}
+                onCheckedChange={(checked) => setFormData({ ...formData, notificar_responsavel: checked })}
+              />
+              <Label htmlFor="notificar_responsavel" className="text-sm">Notificar Responsável</Label>
+            </div>
+
+            <div className="flex items-start space-x-2">
+              <Switch
+                id="enviar_lembrete"
                 checked={formData.enviar_lembrete}
                 onCheckedChange={(checked) => setFormData({ ...formData, enviar_lembrete: checked })}
               />
+              <Label htmlFor="enviar_lembrete" className="text-sm">Enviar Lembrete</Label>
             </div>
 
-            {/* Configurações de Lembrete */}
             {formData.enviar_lembrete && (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-sm">Enviar lembrete para</Label>
-                  <Select 
-                    value={formData.destinatario_lembrete} 
-                    onValueChange={(value: "lead" | "responsavel" | "ambos") => setFormData({ ...formData, destinatario_lembrete: value })}
+              <div className="pl-6 space-y-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="horas_antecedencia_horas" className="text-sm">
+                      Horas de Antecedência
+                    </Label>
+                    <Select
+                      value={formData.horas_antecedencia_horas}
+                      onValueChange={(value) => setFormData({ ...formData, horas_antecedencia_horas: value })}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Horas" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 24 }, (_, i) => i).map((hour) => (
+                          <SelectItem key={hour} value={hour.toString()}>
+                            {hour} hora(s)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="horas_antecedencia_minutos" className="text-sm">
+                      Minutos de Antecedência
+                    </Label>
+                    <Select
+                      value={formData.horas_antecedencia_minutos}
+                      onValueChange={(value) => setFormData({ ...formData, horas_antecedencia_minutos: value })}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Minutos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["0", "15", "30", "45"].map((minute) => (
+                          <SelectItem key={minute} value={minute}>
+                            {minute} min
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="destinatario_lembrete" className="text-sm">Destinatário do Lembrete</Label>
+                  <Select
+                    value={formData.destinatario_lembrete}
+                    onValueChange={(value) => setFormData({ ...formData, destinatario_lembrete: value as "lead" | "responsavel" | "ambos" })}
                   >
                     <SelectTrigger className="h-9">
-                      <SelectValue />
+                      <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="lead">Apenas o Lead</SelectItem>
-                      <SelectItem value="responsavel">Apenas o Responsável</SelectItem>
-                      <SelectItem value="ambos">Lead e Responsável</SelectItem>
+                      <SelectItem value="lead">Cliente</SelectItem>
+                      <SelectItem value="responsavel">Responsável</SelectItem>
+                      <SelectItem value="ambos">Ambos</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-sm">Tempo de antecedência</Label>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <Label className="text-xs text-muted-foreground mb-1 block">Horas</Label>
-                      <Select
-                        value={formData.horas_antecedencia_horas}
-                        onValueChange={(value) => {
-                          setFormData({ ...formData, horas_antecedencia_horas: value });
-                        }}
-                      >
-                        <SelectTrigger className="h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 25 }, (_, i) => (
-                            <SelectItem key={i} value={i.toString()}>
-                              {i} {i === 1 ? 'hora' : 'horas'}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex-1">
-                      <Label className="text-xs text-muted-foreground mb-1 block">Minutos</Label>
-                      <Select
-                        value={formData.horas_antecedencia_minutos}
-                        onValueChange={(value) => {
-                          setFormData({ ...formData, horas_antecedencia_minutos: value });
-                        }}
-                      >
-                        <SelectTrigger className="h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[0, 5, 10, 15, 20, 30, 45].map((min) => (
-                            <SelectItem key={min} value={min.toString()}>
-                              {min} {min === 1 ? 'minuto' : 'minutos'}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Selecione quantas horas e minutos antes do compromisso o lembrete deve ser enviado.
-                  </p>
-                </div>
-              </>
-            )}
-
-            {/* Enviar Confirmação Imediata */}
-            {lead.telefone && (
-              <div className="flex items-center justify-between p-3 border rounded-lg bg-blue-50/50 dark:bg-blue-950/20">
-                <div className="space-y-1">
-                  <Label className="text-sm">Enviar confirmação imediata</Label>
-                  <p className="text-xs text-muted-foreground">
-                    O cliente receberá uma mensagem de confirmação via WhatsApp agora
-                  </p>
-                </div>
-                <Switch 
-                  checked={formData.enviar_confirmacao}
-                  onCheckedChange={(checked) => setFormData({ ...formData, enviar_confirmacao: checked })}
-                />
               </div>
             )}
-
-            {/* Notificação Push para Responsável */}
-            <div className="flex items-center justify-between p-3 border rounded-lg bg-green-50/50 dark:bg-green-950/20">
-              <div className="space-y-1">
-                <Label className="text-sm">Notificar responsável</Label>
-                <p className="text-xs text-muted-foreground">
-                  {('Notification' in window && Notification.permission === 'granted') 
-                    ? 'Você receberá uma notificação push no navegador'
-                    : 'Você receberá uma notificação push (permissão será solicitada)'}
-                </p>
-                {('Notification' in window && Notification.permission === 'denied') && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    ⚠️ Notificações bloqueadas. Ative nas configurações do navegador.
-                  </p>
-                )}
-              </div>
-              <Switch 
-                checked={formData.notificar_responsavel}
-                onCheckedChange={(checked) => setFormData({ ...formData, notificar_responsavel: checked })}
-                disabled={('Notification' in window && Notification.permission === 'denied')}
-              />
-            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t">
@@ -682,4 +571,3 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
     </Dialog>
   );
 }
-

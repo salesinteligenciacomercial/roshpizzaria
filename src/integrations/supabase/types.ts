@@ -23,6 +23,7 @@ export type Database = {
           id: string
           nome: string
           owner_id: string
+          permite_simultaneo: boolean | null
           responsavel_id: string | null
           slug: string | null
           status: string | null
@@ -38,6 +39,7 @@ export type Database = {
           id?: string
           nome: string
           owner_id: string
+          permite_simultaneo?: boolean | null
           responsavel_id?: string | null
           slug?: string | null
           status?: string | null
@@ -53,6 +55,7 @@ export type Database = {
           id?: string
           nome?: string
           owner_id?: string
+          permite_simultaneo?: boolean | null
           responsavel_id?: string | null
           slug?: string | null
           status?: string | null

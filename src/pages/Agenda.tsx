@@ -75,6 +75,7 @@ interface Agenda {
     horario_fim: string;
   };
   responsavel_id?: string;
+  permite_simultaneo?: boolean;
 }
 
 interface Compromisso {
