@@ -1275,6 +1275,10 @@ function Conversas() {
   const [meetingTitle, setMeetingTitle] = useState("");
   const [meetingDatetime, setMeetingDatetime] = useState("");
   const [meetingNotes, setMeetingNotes] = useState("");
+  const [meetingTipoServico, setMeetingTipoServico] = useState("reuniao");
+  const [meetingCustoEstimado, setMeetingCustoEstimado] = useState("");
+  const [meetingDuracao, setMeetingDuracao] = useState("30");
+  const [meetingDescricao, setMeetingDescricao] = useState("");
   const [enviarConfirmacaoReuniao, setEnviarConfirmacaoReuniao] = useState(true); // ⚡ Enviar confirmação por padrão
   const [enviarLembreteReuniao, setEnviarLembreteReuniao] = useState(true); // ⚡ Enviar lembrete por padrão
   const [horasAntecedenciaReuniaoHoras, setHorasAntecedenciaReuniaoHoras] = useState("1"); // ⚡ 1 hora padrão
@@ -4999,14 +5003,14 @@ function Conversas() {
   }, [selectedConv?.id]);
 
   const scheduleMeeting = async () => {
-    if (!selectedConv || !meetingTitle.trim() || !meetingDatetime) {
-      toast.error("Preencha todos os campos");
+    if (!selectedConv || !meetingTipoServico.trim() || !meetingDatetime) {
+      toast.error("Preencha todos os campos obrigatórios");
       return;
     }
     
     // ⚠️ IMPORTANTE: Não criar lead automaticamente
     if (!leadVinculado?.id) {
-      toast.error("Por favor, adicione o contato ao CRM antes de criar uma tarefa");
+      toast.error("Por favor, adicione o contato ao CRM antes de criar um compromisso");
       return;
     }
 
@@ -5023,7 +5027,8 @@ function Conversas() {
 
       // Criar compromisso/reunião
       const dataHoraInicio = new Date(meetingDatetime);
-      const dataHoraFim = new Date(dataHoraInicio.getTime() + 60 * 60 * 1000); // 1 hora de duração
+      const duracaoMinutos = parseInt(meetingDuracao) || 30;
+      const dataHoraFim = new Date(dataHoraInicio.getTime() + duracaoMinutos * 60 * 1000);
       
       const { data: compromisso, error } = await supabase
         .from('compromissos')
@@ -5034,9 +5039,10 @@ function Conversas() {
           company_id: companyId,
           data_hora_inicio: dataHoraInicio.toISOString(),
           data_hora_fim: dataHoraFim.toISOString(),
-          tipo_servico: meetingTitle,
-          observacoes: meetingNotes,
+          tipo_servico: meetingTipoServico,
+          observacoes: meetingDescricao || meetingNotes,
           status: 'agendado',
+          custo_estimado: meetingCustoEstimado ? parseFloat(meetingCustoEstimado) : null,
         })
         .select()
         .single();
@@ -5061,16 +5067,17 @@ function Conversas() {
             
             if (telefoneNormalizado) {
               // Mensagem de confirmação formatada e personalizada
-              const tipoServicoFormatado = meetingTitle.trim()
-                ? meetingTitle.charAt(0).toUpperCase() + meetingTitle.slice(1)
+              const tipoServicoFormatado = meetingTipoServico.trim()
+                ? meetingTipoServico.charAt(0).toUpperCase() + meetingTipoServico.slice(1)
                 : 'Compromisso';
               
+              const observacoes = meetingDescricao || meetingNotes;
               const mensagemConfirmacao = `✅ *Compromisso Confirmado!*\n\n` +
                 `Olá ${leadVinculado.name}! Seu compromisso foi agendado com sucesso.\n\n` +
                 `📅 *Data:* ${format(dataHoraInicio, "dd/MM/yyyy", { locale: ptBR })}\n` +
                 `🕐 *Horário:* ${format(dataHoraInicio, "HH:mm", { locale: ptBR })} às ${format(dataHoraFim, "HH:mm", { locale: ptBR })}\n` +
                 `📋 *Tipo:* ${tipoServicoFormatado}\n` +
-                (meetingNotes ? `\n💬 *Observações:*\n${meetingNotes}\n` : '') +
+                (observacoes ? `\n💬 *Observações:*\n${observacoes}\n` : '') +
                 `\n✅ *Status:* Agendado\n\n` +
                 `Aguardamos você no dia e horário agendados!\n\n` +
                 `_Esta é uma confirmação automática do seu agendamento._`;
@@ -8360,28 +8367,90 @@ function Conversas() {
                               </TabsList>
 
                               <TabsContent value="criar" className="space-y-4">
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <Label htmlFor="tipo_servico">Tipo de Serviço *</Label>
+                                    <Select
+                                      value={meetingTipoServico}
+                                      onValueChange={setMeetingTipoServico}
+                                    >
+                                      <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="Selecione" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="reuniao">Reunião</SelectItem>
+                                        <SelectItem value="apresentacao">Apresentação</SelectItem>
+                                        <SelectItem value="visita">Visita</SelectItem>
+                                        <SelectItem value="outro">Outro</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div>
+                                    <Label htmlFor="custo_estimado">Custo Estimado (R$)</Label>
+                                    <Input
+                                      id="custo_estimado"
+                                      type="number"
+                                      step="0.01"
+                                      value={meetingCustoEstimado}
+                                      onChange={(e) => setMeetingCustoEstimado(e.target.value)}
+                                      placeholder="0.00"
+                                      className="h-9"
+                                    />
+                                  </div>
+                                </div>
+                                
                                 <div>
-                                  <Label>Título da Reunião</Label>
+                                  <Label htmlFor="descricao">Descrição</Label>
                                   <Input
-                                    value={meetingTitle}
-                                    onChange={(e) => setMeetingTitle(e.target.value)}
-                                    placeholder="Ex: Apresentação de proposta"
+                                    id="descricao"
+                                    value={meetingDescricao}
+                                    onChange={(e) => setMeetingDescricao(e.target.value)}
+                                    placeholder="Ex: Apresentação do produto para cliente"
+                                    className="h-9"
                                   />
                                 </div>
-                                <div>
-                                  <Label>Data e Hora</Label>
-                                  <Input
-                                    type="datetime-local"
-                                    value={meetingDatetime}
-                                    onChange={(e) => setMeetingDatetime(e.target.value)}
-                                  />
+
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <Label htmlFor="data">Data e Horário *</Label>
+                                    <Input
+                                      id="data"
+                                      type="datetime-local"
+                                      value={meetingDatetime}
+                                      onChange={(e) => setMeetingDatetime(e.target.value)}
+                                      className="h-9"
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label htmlFor="duracao">Duração (min)</Label>
+                                    <Select
+                                      value={meetingDuracao}
+                                      onValueChange={setMeetingDuracao}
+                                    >
+                                      <SelectTrigger className="h-9">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="15">15 min</SelectItem>
+                                        <SelectItem value="30">30 min</SelectItem>
+                                        <SelectItem value="45">45 min</SelectItem>
+                                        <SelectItem value="60">1 hora</SelectItem>
+                                        <SelectItem value="90">1h 30min</SelectItem>
+                                        <SelectItem value="120">2 horas</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
                                 </div>
+                                
                                 <div>
-                                  <Label>Observações</Label>
+                                  <Label htmlFor="observacoes">Observações</Label>
                                   <Textarea
+                                    id="observacoes"
                                     value={meetingNotes}
                                     onChange={(e) => setMeetingNotes(e.target.value)}
                                     placeholder="Pauta, participantes, etc..."
+                                    rows={2}
+                                    className="resize-none"
                                   />
                                 </div>
                                 
@@ -8483,9 +8552,9 @@ function Conversas() {
                                     await scheduleMeeting();
                                   }} 
                                   className="w-full"
-                                  disabled={!meetingTitle.trim() || !meetingDatetime}
+                                  disabled={!meetingTipoServico.trim() || !meetingDatetime}
                                 >
-                                  Agendar Reunião
+                                  Agendar Compromisso
                                 </Button>
                               </TabsContent>
 
