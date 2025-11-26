@@ -87,9 +87,16 @@ export function EditarCompromissoDialog({
   const [horaInicio, setHoraInicio] = useState(
     format(parseISO(compromisso.data_hora_inicio), "HH:mm")
   );
-  const [horaFim, setHoraFim] = useState(
-    format(parseISO(compromisso.data_hora_fim), "HH:mm")
-  );
+  
+  // Calcular duração em minutos baseada no compromisso existente
+  const calcularDuracao = () => {
+    const inicio = parseISO(compromisso.data_hora_inicio);
+    const fim = parseISO(compromisso.data_hora_fim);
+    const duracaoEmMinutos = Math.round((fim.getTime() - inicio.getTime()) / 60000);
+    return duracaoEmMinutos.toString();
+  };
+  
+  const [duracaoMinutos, setDuracaoMinutos] = useState(calcularDuracao());
   const [tipoServico, setTipoServico] = useState(compromisso.tipo_servico);
   const [observacoes, setObservacoes] = useState(compromisso.observacoes || "");
   const [custoEstimado, setCustoEstimado] = useState(
@@ -109,7 +116,7 @@ export function EditarCompromissoDialog({
     setAgendaId(compromisso.agenda_id || "");
     setData(parseISO(compromisso.data_hora_inicio));
     setHoraInicio(format(parseISO(compromisso.data_hora_inicio), "HH:mm"));
-    setHoraFim(format(parseISO(compromisso.data_hora_fim), "HH:mm"));
+    setDuracaoMinutos(calcularDuracao());
     setTipoServico(compromisso.tipo_servico);
     setObservacoes(compromisso.observacoes || "");
     setCustoEstimado(compromisso.custo_estimado?.toString() || "");
@@ -170,18 +177,10 @@ export function EditarCompromissoDialog({
       newErrors.data = "A data não pode ser no passado para compromissos agendados";
     }
 
-    // Validar horários
-    const [horaInicioH, horaInicioM] = horaInicio.split(":").map(Number);
-    const [horaFimH, horaFimM] = horaFim.split(":").map(Number);
-    const minutosInicio = horaInicioH * 60 + horaInicioM;
-    const minutosFim = horaFimH * 60 + horaFimM;
-
-    if (minutosFim <= minutosInicio) {
-      newErrors.horaFim = "Horário de término deve ser após o início";
-    }
-
-    if (minutosFim - minutosInicio < 15) {
-      newErrors.horaFim = "Compromisso deve ter no mínimo 15 minutos";
+    // Validar duração
+    const duracao = parseInt(duracaoMinutos) || 0;
+    if (duracao < 15) {
+      newErrors.duracao = "Compromisso deve ter no mínimo 15 minutos";
     }
 
     // Validar tipo de serviço
@@ -218,18 +217,19 @@ export function EditarCompromissoDialog({
       const horaInicioCompleta = horaInicio.includes(':') && horaInicio.split(':').length === 2 
         ? `${horaInicio}:00` 
         : horaInicio;
-      const horaFimCompleta = horaFim.includes(':') && horaFim.split(':').length === 2 
-        ? `${horaFim}:00` 
-        : horaFim;
       
       const dataHoraInicio = new Date(`${dataFormatada}T${horaInicioCompleta}`);
-      const dataHoraFim = new Date(`${dataFormatada}T${horaFimCompleta}`);
+      
+      // Calcular data/hora fim baseada na duração
+      const duracao = parseInt(duracaoMinutos) || 30;
+      const dataHoraFim = new Date(dataHoraInicio.getTime() + duracao * 60000);
       
       // Validar se as datas são válidas
       if (isNaN(dataHoraInicio.getTime())) {
         toast.error("Data/horário de início inválido");
         return;
       }
+      
       if (isNaN(dataHoraFim.getTime())) {
         toast.error("Data/horário de fim inválido");
         return;
@@ -241,9 +241,9 @@ export function EditarCompromissoDialog({
         return;
       }
       
-      // Validar duração mínima (15 minutos)
-      const duracaoMinutos = (dataHoraFim.getTime() - dataHoraInicio.getTime()) / (1000 * 60);
-      if (duracaoMinutos < 15) {
+      // Validar duração mínima (15 minutos) - já calculado, apenas verificar
+      const duracaoCalculada = (dataHoraFim.getTime() - dataHoraInicio.getTime()) / (1000 * 60);
+      if (duracaoCalculada < 15) {
         toast.error("O compromisso deve ter no mínimo 15 minutos de duração");
         return;
       }
@@ -273,9 +273,9 @@ export function EditarCompromissoDialog({
         const fimDisponivel = horaFimDisponivel * 60 + minutoFimDisponivel;
         
         const [horaInicioNum, minutoInicioNum] = horaInicio.split(':').map(Number);
-        const [horaFimNum, minutoFimNum] = horaFim.split(':').map(Number);
         const inicioSolicitado = horaInicioNum * 60 + minutoInicioNum;
-        const fimSolicitado = horaFimNum * 60 + minutoFimNum;
+        const duracaoMin = parseInt(duracaoMinutos) || 30;
+        const fimSolicitado = inicioSolicitado + duracaoMin;
 
         if (inicioSolicitado < inicioDisponivel || fimSolicitado > fimDisponivel) {
           toast.error(`O horário está fora do horário de funcionamento da agenda (${agendaSelecionada.disponibilidade.horario_inicio} - ${agendaSelecionada.disponibilidade.horario_fim})`);
@@ -347,11 +347,13 @@ export function EditarCompromissoDialog({
       // Detectar alterações para notificação
       const dataOriginal = parseISO(compromisso.data_hora_inicio);
       const horaInicioOriginal = format(dataOriginal, "HH:mm");
-      const horaFimOriginal = format(parseISO(compromisso.data_hora_fim), "HH:mm");
+      const dataFimOriginal = parseISO(compromisso.data_hora_fim);
+      const horaFimOriginal = format(dataFimOriginal, "HH:mm");
       const dataOriginalFormatada = format(dataOriginal, "yyyy-MM-dd");
       
       const dataAlterada = dataFormatada !== dataOriginalFormatada;
-      const horarioAlterado = horaInicio !== horaInicioOriginal || horaFim !== horaFimOriginal;
+      const horaFimNova = format(dataHoraFim, "HH:mm");
+      const horarioAlterado = horaInicio !== horaInicioOriginal || horaFimNova !== horaFimOriginal;
       const houveAlteracao = dataAlterada || horarioAlterado;
 
       // Verificar autenticação e permissões antes de atualizar
@@ -768,18 +770,28 @@ export function EditarCompromissoDialog({
               )}
             </div>
             <div>
-              <Label>Horário de término *</Label>
-              <Input
-                type="time"
-                value={horaFim}
-                onChange={(e) => {
-                  setHoraFim(e.target.value);
-                  if (errors.horaFim) setErrors({ ...errors, horaFim: "" });
+              <Label>Duração *</Label>
+              <Select
+                value={duracaoMinutos}
+                onValueChange={(value) => {
+                  setDuracaoMinutos(value);
+                  if (errors.duracao) setErrors({ ...errors, duracao: "" });
                 }}
-                className={errors.horaFim ? "border-destructive" : ""}
-              />
-              {errors.horaFim && (
-                <p className="text-xs text-destructive mt-1">{errors.horaFim}</p>
+              >
+                <SelectTrigger className={errors.duracao ? "border-destructive" : ""}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">15 min</SelectItem>
+                  <SelectItem value="30">30 min</SelectItem>
+                  <SelectItem value="45">45 min</SelectItem>
+                  <SelectItem value="60">1 hora</SelectItem>
+                  <SelectItem value="90">1h 30min</SelectItem>
+                  <SelectItem value="120">2 horas</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.duracao && (
+                <p className="text-xs text-destructive mt-1">{errors.duracao}</p>
               )}
             </div>
           </div>
