@@ -1885,6 +1885,7 @@ function Conversas() {
             read: msg.status === 'Lida',
             mediaUrl: msg.midia_url,
             fileName: msg.arquivo_nome,
+            sentBy: undefined, // Será preenchido depois com lookup do owner_id
           };
           
           conv.messages.push(message);
@@ -2286,17 +2287,41 @@ function Conversas() {
           return;
         }
 
-        companyId = userRole.company_id;
-        setUserCompanyId(companyId);
-        userCompanyIdRef.current = companyId;
-      } else {
-        // Se já tem companyId, buscar user para verificar responsável
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          currentUser = user;
-          setCurrentUserId(user.id);
+      companyId = userRole.company_id;
+      setUserCompanyId(companyId);
+      userCompanyIdRef.current = companyId;
+      
+      // Carregar nome do usuário do perfil
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', user.id)
+        .maybeSingle();
+      
+      if (profileData) {
+        setUserName(profileData.full_name || profileData.email || 'Usuário');
+      }
+    } else {
+      // Se já tem companyId, buscar user para verificar responsável
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        currentUser = user;
+        setCurrentUserId(user.id);
+        
+        // Carregar nome do usuário se ainda não tiver
+        if (!userName) {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', user.id)
+            .maybeSingle();
+          
+          if (profileData) {
+            setUserName(profileData.full_name || profileData.email || 'Usuário');
+          }
         }
       }
+    }
       
       // ⚡ CORREÇÃO: Remover limite de conversas - carregar TODAS as conversas do WhatsApp
       // Não usar INITIAL_LIMIT para limitar conversas - todas devem ser exibidas
@@ -2586,6 +2611,30 @@ function Conversas() {
       
       console.log(`📊 [LOAD] ${conversasData.length} mensagens processadas, ${conversasMap.size} conversas únicas, ${leadsData.length} leads encontrados`);
       
+      // ETAPA 3.5: Buscar nomes dos usuários que enviaram mensagens (para exibir quem respondeu)
+      const ownerIds = new Set<string>();
+      conversasData.forEach(msg => {
+        if (msg.owner_id && msg.fromme === true) {
+          ownerIds.add(msg.owner_id);
+        }
+      });
+      
+      const ownerNamesMap = new Map<string, string>();
+      if (ownerIds.size > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', Array.from(ownerIds));
+        
+        if (profilesData) {
+          profilesData.forEach(profile => {
+            ownerNamesMap.set(profile.id, profile.full_name || profile.email || 'Usuário');
+          });
+        }
+        
+        console.log(`👥 [LOAD] ${ownerNamesMap.size} nomes de usuários carregados para mensagens`);
+      }
+      
       // ⚡ CORREÇÃO CRÍTICA: Deduplicar conversas ANTES de criar leads
       // Estratégia: Agrupar por NOME DE CONTATO primeiro, depois por telefone normalizado
       // Isso garante que mensagens do mesmo contato com números diferentes sejam mescladas
@@ -2834,6 +2883,9 @@ function Conversas() {
             const isFromMe = m.fromme === true || m.fromme === 'true';
             const sender: "user" | "contact" = isFromMe ? "user" : "contact";
             
+            // Buscar nome do usuário que enviou (se for mensagem enviada pela equipe)
+            const sentBy = isFromMe && m.owner_id ? ownerNamesMap.get(m.owner_id) : undefined;
+            
             return {
               id: m.id || `msg-${Date.now()}-${Math.random()}`,
               content: m.mensagem || '',
@@ -2843,6 +2895,7 @@ function Conversas() {
               delivered: true,
               read: m.status !== 'Recebida',
               mediaUrl: m.midia_url,
+              sentBy: sentBy, // Nome do usuário que enviou
             };
           });
         
@@ -3905,6 +3958,7 @@ function Conversas() {
         arquivo_nome: file.name,
         midia_url: dataUrl, // ⚡ CORREÇÃO: Salvar URL da mídia no banco
         company_id: userRole?.company_id,
+        owner_id: (await supabase.auth.getUser()).data.user?.id, // ID do usuário que enviou
         fromme: true, // Marcar como mensagem enviada pelo usuário
       }).select('id, midia_url').single();
 
@@ -4087,6 +4141,7 @@ function Conversas() {
         arquivo_nome: 'audio.ogg',
         midia_url: audioDataUrl, // ⚡ CORREÇÃO: Salvar data URL do áudio
         company_id: userRole?.company_id,
+        owner_id: (await supabase.auth.getUser()).data.user?.id, // ID do usuário que enviou
         fromme: true, // ⚡ CORREÇÃO: Marcar como mensagem enviada pelo usuário
       }]).select('id, midia_url').single();
       if (dbError) {
@@ -4282,6 +4337,7 @@ function Conversas() {
             tipo_mensagem: type,
             nome_contato: selectedConv.contactName,
             company_id: userRole.company_id,
+            owner_id: user.id, // Adicionar ID do usuário que enviou
             fromme: true,
             replied_to_message: repliedMessage || null,
           }]);
@@ -4372,6 +4428,7 @@ function Conversas() {
                 tipo_mensagem: type,
                 nome_contato: selectedConv.contactName,
                 company_id: userRole.company_id,
+                owner_id: user.id, // Adicionar ID do usuário que enviou
                 fromme: true,
                 replied_to_message: repliedMessage || null,
               }]);
