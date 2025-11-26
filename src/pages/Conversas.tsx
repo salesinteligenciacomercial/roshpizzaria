@@ -1020,6 +1020,15 @@ function Conversas() {
     }
   }, [userCompanyId]);
 
+  // ⚡ CORREÇÃO CRÍTICA: Carregar mensagens rápidas e categorias do banco ao inicializar
+  useEffect(() => {
+    if (userCompanyId) {
+      console.log('📦 [QUICK-MESSAGES] Carregando mensagens rápidas e categorias do banco...');
+      loadQuickMessages();
+      loadQuickCategories();
+    }
+  }, [userCompanyId]);
+
   // ⚡ SINCRONIZAÇÃO INSTANTÂNEA: Atualizar conversas do cache imediatamente (0 segundos)
   useEffect(() => {
     if (cachedConversations.length > 0) {
