@@ -1077,6 +1077,7 @@ function Conversas() {
             let sentBy: string | undefined;
             const isFromMe = novaMensagem.fromme === true || String(novaMensagem.fromme) === 'true';
             if (isFromMe && novaMensagem.owner_id) {
+              console.log('🔍 [REALTIME] Buscando nome do usuário para owner_id:', novaMensagem.owner_id);
               try {
                 const { data: profile } = await supabase
                   .from('profiles')
@@ -1086,10 +1087,15 @@ function Conversas() {
                 
                 if (profile) {
                   sentBy = profile.full_name || profile.email || 'Usuário';
+                  console.log('✅ [REALTIME] Nome encontrado:', sentBy);
+                } else {
+                  console.log('⚠️ [REALTIME] Profile não encontrado');
                 }
               } catch (error) {
                 console.error('❌ [REALTIME] Erro ao buscar nome do usuário:', error);
               }
+            } else {
+              console.log('ℹ️ [REALTIME] Mensagem não é do usuário ou sem owner_id:', { isFromMe, owner_id: novaMensagem.owner_id });
             }
             
             // ⚡ CORREÇÃO: Mapear tipos de mensagem corretamente (document → pdf)
@@ -1110,13 +1116,20 @@ function Conversas() {
               delivered: true,
               read: novaMensagem.status !== 'Recebida',
               mediaUrl: novaMensagem.midia_url,
-              fileName: novaMensagem.arquivo_nome, // ⚡ CORREÇÃO: Adicionar nome do arquivo
+              fileName: novaMensagem.arquivo_nome,
               mimeType: novaMensagem.tipo_mensagem === 'video' ? 'video/mp4' : 
                        novaMensagem.tipo_mensagem === 'audio' ? 'audio/mpeg' :
                        novaMensagem.tipo_mensagem === 'image' ? 'image/jpeg' :
                        novaMensagem.tipo_mensagem === 'document' ? 'application/pdf' : undefined,
-              sentBy: sentBy, // Nome do usuário que enviou
+              sentBy: sentBy,
             };
+            
+            console.log('📨 [REALTIME] Mensagem criada com sentBy:', {
+              id: novaMensagemObj.id,
+              sender: novaMensagemObj.sender,
+              sentBy: novaMensagemObj.sentBy,
+              owner_id: novaMensagem.owner_id
+            });
             
             // ⚡ CRÍTICO: Atualizar conversa selecionada em tempo real
             setSelectedConv(prevSelected => {
@@ -1904,6 +1917,22 @@ function Conversas() {
           const conv = conversationsMap.get(convId)!;
           
           // Adicionar mensagem
+          const isFromMe = msg.fromme === true;
+          let sentBy: string | undefined = undefined;
+          
+          // ⚡ CORREÇÃO: Buscar nome do usuário que enviou
+          if (isFromMe && msg.owner_id) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('full_name, email')
+              .eq('id', msg.owner_id)
+              .single();
+            
+            if (profile) {
+              sentBy = profile.full_name || profile.email || 'Usuário';
+            }
+          }
+          
           const message: Message = {
             id: msg.id,
             content: msg.mensagem || '',
@@ -1911,8 +1940,7 @@ function Conversas() {
                   msg.tipo_mensagem === 'audio' ? 'audio' :
                   msg.tipo_mensagem === 'video' ? 'video' :
                   msg.tipo_mensagem === 'document' ? 'pdf' : 'text',
-            // ✅ CORREÇÃO: Usar APENAS fromme para determinar lado da mensagem
-            sender: (msg.fromme === true) ? 'user' : 'contact',
+            sender: isFromMe ? 'user' : 'contact',
             timestamp: new Date(msg.created_at),
             delivered: msg.status === 'Enviada',
             read: msg.status === 'Lida',
@@ -1922,7 +1950,7 @@ function Conversas() {
                      msg.tipo_mensagem === 'audio' ? 'audio/mpeg' :
                      msg.tipo_mensagem === 'image' ? 'image/jpeg' :
                      msg.tipo_mensagem === 'document' ? 'application/pdf' : undefined,
-            sentBy: undefined, // Será preenchido depois com lookup do owner_id
+            sentBy: sentBy,
           };
           
           conv.messages.push(message);
@@ -2687,7 +2715,9 @@ function Conversas() {
           });
         }
         
-        console.log(`👥 [LOAD] ${ownerNamesMap.size} nomes de usuários carregados para mensagens`);
+        console.log(`👥 [LOAD] ${ownerNamesMap.size} nomes de usuários carregados para mensagens`, {
+          usuários: Array.from(ownerNamesMap.entries()).map(([id, nome]) => ({ id: id.substring(0, 8), nome }))
+        });
       }
       
       // ⚡ CORREÇÃO CRÍTICA: Deduplicar conversas ANTES de criar leads
@@ -2938,8 +2968,12 @@ function Conversas() {
             const isFromMe = m.fromme === true || m.fromme === 'true';
             const sender: "user" | "contact" = isFromMe ? "user" : "contact";
             
-            // Buscar nome do usuário que enviou (se for mensagem enviada pela equipe)
-            const sentBy = isFromMe && m.owner_id ? ownerNamesMap.get(m.owner_id) : undefined;
+            // ⚡ CORREÇÃO DEFINITIVA: Buscar nome do usuário que enviou (se for mensagem enviada pela equipe)
+            let sentBy: string | undefined = undefined;
+            if (isFromMe && m.owner_id) {
+              sentBy = ownerNamesMap.get(m.owner_id);
+              console.log('🔍 [SENTBY] Buscando nome para owner_id:', m.owner_id, '-> Encontrado:', sentBy);
+            }
             
             return {
               id: m.id || `msg-${Date.now()}-${Math.random()}`,
@@ -2955,7 +2989,7 @@ function Conversas() {
               delivered: true,
               read: m.status !== 'Recebida',
               mediaUrl: m.midia_url,
-              fileName: m.arquivo_nome, // ⚡ CORREÇÃO: Adicionar nome do arquivo
+              fileName: m.arquivo_nome,
               mimeType: m.tipo_mensagem === 'video' ? 'video/mp4' : 
                        m.tipo_mensagem === 'audio' ? 'audio/mpeg' :
                        m.tipo_mensagem === 'image' ? 'image/jpeg' :
