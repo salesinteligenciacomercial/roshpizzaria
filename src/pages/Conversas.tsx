@@ -1111,6 +1111,10 @@ function Conversas() {
               read: novaMensagem.status !== 'Recebida',
               mediaUrl: novaMensagem.midia_url,
               fileName: novaMensagem.arquivo_nome, // ⚡ CORREÇÃO: Adicionar nome do arquivo
+              mimeType: novaMensagem.tipo_mensagem === 'video' ? 'video/mp4' : 
+                       novaMensagem.tipo_mensagem === 'audio' ? 'audio/mpeg' :
+                       novaMensagem.tipo_mensagem === 'image' ? 'image/jpeg' :
+                       novaMensagem.tipo_mensagem === 'document' ? 'application/pdf' : undefined,
               sentBy: sentBy, // Nome do usuário que enviou
             };
             
@@ -1914,6 +1918,10 @@ function Conversas() {
             read: msg.status === 'Lida',
             mediaUrl: msg.midia_url,
             fileName: msg.arquivo_nome,
+            mimeType: msg.tipo_mensagem === 'video' ? 'video/mp4' : 
+                     msg.tipo_mensagem === 'audio' ? 'audio/mpeg' :
+                     msg.tipo_mensagem === 'image' ? 'image/jpeg' :
+                     msg.tipo_mensagem === 'document' ? 'application/pdf' : undefined,
             sentBy: undefined, // Será preenchido depois com lookup do owner_id
           };
           
@@ -2931,6 +2939,10 @@ function Conversas() {
               read: m.status !== 'Recebida',
               mediaUrl: m.midia_url,
               fileName: m.arquivo_nome, // ⚡ CORREÇÃO: Adicionar nome do arquivo
+              mimeType: m.tipo_mensagem === 'video' ? 'video/mp4' : 
+                       m.tipo_mensagem === 'audio' ? 'audio/mpeg' :
+                       m.tipo_mensagem === 'image' ? 'image/jpeg' :
+                       m.tipo_mensagem === 'document' ? 'application/pdf' : undefined,
               sentBy: sentBy, // Nome do usuário que enviou
             };
           });

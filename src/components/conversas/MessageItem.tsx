@@ -539,7 +539,14 @@ function MessageItemComponent({
                       }
                     }}
                   >
-                    <source src={mediaUrl || message.mediaUrl} type="video/mp4" />
+                    <source 
+                      src={mediaUrl || message.mediaUrl} 
+                      type={message.mimeType || 'video/mp4'} 
+                    />
+                    {/* Fallback para outros formatos */}
+                    {message.mimeType && message.mimeType !== 'video/mp4' && (
+                      <source src={mediaUrl || message.mediaUrl} type="video/mp4" />
+                    )}
                     Seu navegador não suporta o elemento de vídeo.
                   </video>
                   {message.fileName && (
