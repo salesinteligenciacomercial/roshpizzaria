@@ -71,7 +71,7 @@ export function ConversaPopup({
   const [scheduledList, setScheduledList] = useState<any[]>([]);
   const [editLeadOpen, setEditLeadOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
-  // Mensagens rápidas compartilhadas com o menu Conversas (via localStorage)
+  // ⚡ CORREÇÃO: Mensagens rápidas agora carregadas do banco de dados
   const [quickMessages, setQuickMessages] = useState<Array<{ id: string; title: string; content: string; category: string }>>([]);
   const [quickCategories, setQuickCategories] = useState<Array<{ id: string; name: string }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -403,33 +403,65 @@ export function ConversaPopup({
   }, [messages]);
 
   // Carregar Mensagens Rápidas quando o modal abrir
-  const loadQuickDataFromStorage = () => {
+  // ⚡ CORREÇÃO: Carregar do banco de dados ao invés de localStorage
+  const loadQuickDataFromDatabase = async () => {
     try {
-      const msgs = window.localStorage.getItem("continuum_quick_messages");
-      const cats = window.localStorage.getItem("continuum_quick_categories");
-      setQuickMessages(msgs ? JSON.parse(msgs) : []);
-      setQuickCategories(cats ? JSON.parse(cats) : []);
-    } catch {
+      const { data: companyData } = await supabase.rpc('get_my_company_id');
+      if (!companyData) return;
+
+      // Carregar categorias
+      const { data: categoriesData } = await supabase
+        .from('quick_message_categories')
+        .select('*')
+        .eq('company_id', companyData)
+        .order('created_at', { ascending: true });
+
+      if (categoriesData) {
+        const formattedCategories = categoriesData.map(cat => ({
+          id: cat.id,
+          name: cat.name,
+        }));
+        setQuickCategories(formattedCategories);
+      }
+
+      // Carregar mensagens
+      const { data: messagesData } = await supabase
+        .from('quick_messages')
+        .select('*')
+        .eq('company_id', companyData)
+        .order('created_at', { ascending: false });
+
+      if (messagesData) {
+        const formattedMessages = messagesData.map(msg => ({
+          id: msg.id,
+          title: msg.title,
+          content: msg.content,
+          category: msg.category_id || '',
+        }));
+        setQuickMessages(formattedMessages);
+      }
+
+      console.log('✅ [QUICK-MESSAGES] Carregadas do banco:', {
+        categorias: categoriesData?.length || 0,
+        mensagens: messagesData?.length || 0
+      });
+    } catch (error) {
+      console.error('❌ Erro ao carregar quick messages:', error);
       setQuickMessages([]);
       setQuickCategories([]);
     }
   };
 
   useEffect(() => {
-    if (quickOpen) loadQuickDataFromStorage();
+    if (quickOpen) loadQuickDataFromDatabase();
   }, [quickOpen]);
 
-  // Garantir carregamento inicial e reagir a alterações no storage
+  // ⚡ CORREÇÃO: Carregar do banco ao montar e quando abrir o popup
   useEffect(() => {
-    loadQuickDataFromStorage();
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "continuum_quick_messages" || e.key === "continuum_quick_categories") {
-        loadQuickDataFromStorage();
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
+    if (open) {
+      loadQuickDataFromDatabase();
+    }
+  }, [open]);
   // Enviar mensagem
   const handleSendMessage = async (content?: string, type: Message["type"] = "text") => {
     const messageContent = content || messageInput.trim();
