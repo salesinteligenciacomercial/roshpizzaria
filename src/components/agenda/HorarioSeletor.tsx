@@ -147,6 +147,7 @@ export function HorarioSeletor({
             return (
               <Button
                 key={item.horario}
+                type="button"
                 variant={isSelected ? "default" : "outline"}
                 size="sm"
                 disabled={!item.disponivel && !permitirSimultaneo}
