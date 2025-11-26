@@ -1073,30 +1073,11 @@ function Conversas() {
               return;
             }
             
-            // Buscar nome do usuário que enviou (se for mensagem da equipe)
-            let sentBy: string | undefined;
+            // ⚡ CORREÇÃO: Usar sent_by do banco de dados (já salvo permanentemente)
+            const sentBy = novaMensagem.sent_by || undefined;
+            console.log('🔍 [REALTIME] Usando sent_by do banco:', sentBy);
+            
             const isFromMe = novaMensagem.fromme === true || String(novaMensagem.fromme) === 'true';
-            if (isFromMe && novaMensagem.owner_id) {
-              console.log('🔍 [REALTIME] Buscando nome do usuário para owner_id:', novaMensagem.owner_id);
-              try {
-                const { data: profile } = await supabase
-                  .from('profiles')
-                  .select('full_name, email')
-                  .eq('id', novaMensagem.owner_id)
-                  .single();
-                
-                if (profile) {
-                  sentBy = profile.full_name || profile.email || 'Usuário';
-                  console.log('✅ [REALTIME] Nome encontrado:', sentBy);
-                } else {
-                  console.log('⚠️ [REALTIME] Profile não encontrado');
-                }
-              } catch (error) {
-                console.error('❌ [REALTIME] Erro ao buscar nome do usuário:', error);
-              }
-            } else {
-              console.log('ℹ️ [REALTIME] Mensagem não é do usuário ou sem owner_id:', { isFromMe, owner_id: novaMensagem.owner_id });
-            }
             
             // ⚡ CORREÇÃO: Mapear tipos de mensagem corretamente (document → pdf)
             const tipoMensagem = novaMensagem.tipo_mensagem === 'texto' ? 'text' :
@@ -2968,12 +2949,9 @@ function Conversas() {
             const isFromMe = m.fromme === true || m.fromme === 'true';
             const sender: "user" | "contact" = isFromMe ? "user" : "contact";
             
-            // ⚡ CORREÇÃO DEFINITIVA: Buscar nome do usuário que enviou (se for mensagem enviada pela equipe)
-            let sentBy: string | undefined = undefined;
-            if (isFromMe && m.owner_id) {
-              sentBy = ownerNamesMap.get(m.owner_id);
-              console.log('🔍 [SENTBY] Buscando nome para owner_id:', m.owner_id, '-> Encontrado:', sentBy);
-            }
+            // ⚡ CORREÇÃO DEFINITIVA: Usar sent_by do banco de dados (já salvo permanentemente)
+            let sentBy: string | undefined = m.sent_by || undefined;
+            console.log('🔍 [SENTBY] Usando sent_by do banco para mensagem:', m.id, '-> sent_by:', sentBy);
             
             return {
               id: m.id || `msg-${Date.now()}-${Math.random()}`,
@@ -4417,6 +4395,16 @@ function Conversas() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // Buscar nome do usuário atual para salvar como sent_by
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', user.id)
+          .single();
+        
+        const sentByName = userProfile?.full_name || userProfile?.email || 'Você';
+        console.log('👤 [ENVIO] Nome do usuário que envia:', sentByName);
+        
         const { data: userRole } = await supabase
           .from('user_roles')
           .select('company_id')
@@ -4437,6 +4425,7 @@ function Conversas() {
             nome_contato: selectedConv.contactName,
             company_id: userRole.company_id,
             owner_id: user.id, // Adicionar ID do usuário que enviou
+            sent_by: sentByName, // ⚡ NOVO: Salvar nome do usuário permanentemente
             fromme: true,
             replied_to_message: repliedMessage || null,
           }]);

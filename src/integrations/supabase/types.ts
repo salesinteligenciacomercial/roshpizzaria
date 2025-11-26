@@ -356,6 +356,7 @@ export type Database = {
           read: boolean | null
           replied_to_id: string | null
           replied_to_message: string | null
+          sent_by: string | null
           status: string
           telefone_formatado: string | null
           tipo_mensagem: string | null
@@ -383,6 +384,7 @@ export type Database = {
           read?: boolean | null
           replied_to_id?: string | null
           replied_to_message?: string | null
+          sent_by?: string | null
           status?: string
           telefone_formatado?: string | null
           tipo_mensagem?: string | null
@@ -410,6 +412,7 @@ export type Database = {
           read?: boolean | null
           replied_to_id?: string | null
           replied_to_message?: string | null
+          sent_by?: string | null
           status?: string
           telefone_formatado?: string | null
           tipo_mensagem?: string | null
