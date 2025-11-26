@@ -55,14 +55,14 @@ import { useEffect, useState } from "react";
    const [finalizeOpen, setFinalizeOpen] = useState(false);
    const [finalizeMessage, setFinalizeMessage] = useState("");
 
-   useEffect(() => {
-     const saved = localStorage.getItem("continuum_finalize_template");
-     if (saved) {
-       setFinalizeMessage(saved);
-     } else {
-       setFinalizeMessage(`Olá ${contactName}, foi um prazer atendê-lo(a)!\n\nSeu atendimento foi finalizado com sucesso. Se precisar de algo, basta responder esta mensagem.\n\nPoderia nos avaliar no Google? Sua opinião é muito importante.\nLink: `);
-     }
-   }, [contactName]);
+    useEffect(() => {
+      const saved = localStorage.getItem("continuum_finalize_template");
+      if (saved) {
+        setFinalizeMessage(saved);
+      } else {
+        setFinalizeMessage(`Seu atendimento foi finalizado com sucesso. Se precisar de algo, basta responder esta mensagem.\n\nPoderia nos avaliar no Google? Sua opinião é muito importante.\nLink: `);
+      }
+    }, []);
 
    const getChannelIcon = () => {
      switch (channel) {
