@@ -4772,14 +4772,12 @@ function Conversas() {
       return;
     }
     
-    // Garantir lead automaticamente
+    // ⚠️ IMPORTANTE: Não criar lead automaticamente
+    // Lead só será criado quando usuário clicar em "Adicionar ao CRM"
     if (!leadVinculado?.id) {
-      const lead = await findOrCreateLead(selectedConv);
-      if (!lead) {
-        toast.error("Não foi possível vincular o lead automaticamente");
-        return;
-      }
-      setLeadVinculado(lead);
+      console.log('ℹ️ Lead não vinculado - aguardando ação manual do usuário');
+      toast.error("Por favor, adicione o contato ao CRM antes de criar um compromisso");
+      return;
     }
 
     try {
@@ -4799,7 +4797,7 @@ function Conversas() {
       const { data: compromisso, error: compromissoError } = await supabase
         .from('compromissos')
         .insert({
-          lead_id: (leadVinculado?.id || (await findOrCreateLead(selectedConv))?.id) as string,
+          lead_id: leadVinculado.id as string,
           usuario_responsavel_id: user.id,
           owner_id: user.id,
           company_id: companyId,
@@ -5006,14 +5004,10 @@ function Conversas() {
       return;
     }
     
-    // Garantir lead automaticamente
+    // ⚠️ IMPORTANTE: Não criar lead automaticamente
     if (!leadVinculado?.id) {
-      const lead = await findOrCreateLead(selectedConv);
-      if (!lead) {
-        toast.error("Não foi possível vincular o lead automaticamente");
-        return;
-      }
-      setLeadVinculado(lead);
+      toast.error("Por favor, adicione o contato ao CRM antes de criar uma tarefa");
+      return;
     }
 
     try {
@@ -5246,8 +5240,8 @@ function Conversas() {
     try {
       setSyncStatus('syncing');
       
-      // Buscar ou criar lead no Supabase
-      const leadData = await findOrCreateLead(selectedConv);
+      // Buscar lead existente (não criar automaticamente)
+      const leadData = await findLead(selectedConv);
       
       if (leadData) {
         // Atualizar tags no Supabase
@@ -5300,8 +5294,8 @@ function Conversas() {
     try {
       setSyncStatus('syncing');
       
-      // Buscar ou criar lead no Supabase
-      const leadData = await findOrCreateLead(selectedConv);
+      // Buscar lead existente (não criar automaticamente)
+      const leadData = await findLead(selectedConv);
       
       if (leadData) {
         // Atualizar tags no Supabase
@@ -5353,8 +5347,8 @@ function Conversas() {
     try {
       setSyncStatus('syncing');
       
-      // Buscar lead no Supabase
-      const leadData = await findOrCreateLead(selectedConv);
+      // Buscar lead existente
+      const leadData = await findLead(selectedConv);
       
       if (leadData) {
         // Remover tag do array
@@ -5410,8 +5404,8 @@ function Conversas() {
     try {
       setSyncStatus('syncing');
       
-      // Buscar ou criar lead no Supabase
-      const leadData = await findOrCreateLead(selectedConv);
+      // Buscar lead existente (não criar automaticamente)
+      const leadData = await findLead(selectedConv);
       
       if (leadData) {
         // Atualizar funil e etapa no Supabase
@@ -5472,8 +5466,8 @@ function Conversas() {
     try {
       setSyncStatus('syncing');
       
-      // Buscar ou criar lead no Supabase
-      const leadData = await findOrCreateLead(selectedConv);
+      // Buscar lead existente (não criar automaticamente)
+      const leadData = await findLead(selectedConv);
       
       if (leadData) {
         // Por enquanto, salvamos o nome do responsável em notes ou company
@@ -5526,14 +5520,8 @@ function Conversas() {
     // Garantir lead automaticamente e aguardar atualização do estado
     let leadIdFinal = leadVinculado?.id;
     if (!leadIdFinal) {
-      const lead = await findOrCreateLead(selectedConv);
-      if (!lead) {
-        toast.error("Não foi possível vincular o lead automaticamente");
-        return;
-      }
-      setLeadVinculado(lead);
-      leadIdFinal = lead.id;
-      console.log('📋 [TAREFAS] Lead criado/vincular:', leadIdFinal);
+      toast.error("Por favor, adicione o contato ao CRM antes de criar uma tarefa");
+      return;
     }
 
     try {
@@ -5729,8 +5717,8 @@ function Conversas() {
     try {
       setSyncStatus('syncing');
       
-      // Buscar ou criar lead no Supabase
-      const leadData = await findOrCreateLead(selectedConv);
+      // Buscar lead existente (não criar automaticamente)
+      const leadData = await findLead(selectedConv);
       
       if (leadData) {
         // Preparar dados para atualização
@@ -5839,21 +5827,21 @@ function Conversas() {
     return { normalized, isValid, variations };
   };
 
-  const findOrCreateLead = async (conversation: Conversation) => {
+  // 🎯 APENAS buscar lead existente - NÃO criar automaticamente
+  const findLead = async (conversation: Conversation) => {
     try {
-      console.log('🔍 [LEAD] Iniciando busca/criação de lead para conversa:', {
+      console.log('🔍 [LEAD] Buscando lead existente para conversa:', {
         contactName: conversation.contactName,
         phoneNumber: conversation.phoneNumber,
         conversationId: conversation.id
       });
       
-      // MELHORIA 1: Validar número de telefone antes de buscar lead
+      // Validar número de telefone antes de buscar lead
       const phoneRaw = conversation.phoneNumber || conversation.id;
       const { normalized: phoneNormalized, isValid, variations } = validateAndNormalizePhone(phoneRaw);
 
       if (!isValid || !phoneNormalized) {
-        console.error('❌ [LEAD] Telefone inválido - não é possível buscar/criar lead:', phoneRaw);
-        toast.error('Número de telefone inválido. Não é possível vincular lead.');
+        console.warn('⚠️ [LEAD] Telefone inválido - não é possível buscar lead:', phoneRaw);
         return null;
       }
 
@@ -5873,7 +5861,6 @@ function Conversas() {
 
       if (!userRole?.company_id) {
         console.warn('⚠️ [LEAD] Usuário sem company_id');
-        toast.error('Erro: Configuração de empresa não encontrada');
         return null;
       }
 
@@ -5882,7 +5869,7 @@ function Conversas() {
         companyId: userRole.company_id
       });
 
-      // MELHORIA 3: Buscar lead por telefone exato e variações
+      // Buscar lead por telefone exato e variações
       const phoneConditions = variations
         .map(v => `phone.eq.${v},telefone.eq.${v}`)
         .join(',');
@@ -5903,7 +5890,7 @@ function Conversas() {
         return null;
       }
 
-      // MELHORIA 6: Logs detalhados para debug de vinculação
+      // Se encontrou, vincular conversa ao lead
       if (existingLead) {
         console.log('✅ [LEAD] Lead encontrado:', {
           leadId: existingLead.id,
@@ -5912,7 +5899,7 @@ function Conversas() {
           searchedVariations: variations.length
         });
 
-        // MELHORIA 5: Vincular conversa ao lead encontrado
+        // Vincular conversa ao lead encontrado
         const phoneKey = conversation.phoneNumber || conversation.id;
         const formatted = safeFormatPhoneNumber(phoneKey);
         setLeadsVinculados(prev => {
@@ -5932,9 +5919,51 @@ function Conversas() {
         return existingLead;
       }
 
-      // MELHORIA 4: Se não encontrar, criar lead automaticamente
-      console.log('📝 [LEAD] Lead não encontrado - criando novo lead no Supabase...');
-      
+      // ✅ NÃO criar automaticamente - apenas retornar null
+      console.log('ℹ️ [LEAD] Lead não encontrado - aguardando criação manual pelo usuário');
+      return null;
+    } catch (error) {
+      console.error('❌ [LEAD] Erro em findLead:', {
+        error: error instanceof Error ? error.message : String(error),
+        conversation: conversation?.id
+      });
+      return null;
+    }
+  };
+
+  // 🎯 Criar lead MANUALMENTE quando usuário clicar em "Adicionar ao CRM"
+  const createLeadManually = async (conversation: Conversation) => {
+    try {
+      console.log('📝 [LEAD] Criando lead manualmente:', conversation.contactName);
+
+      // Validar número de telefone
+      const phoneRaw = conversation.phoneNumber || conversation.id;
+      const { normalized: phoneNormalized, isValid, variations } = validateAndNormalizePhone(phoneRaw);
+
+      if (!isValid || !phoneNormalized) {
+        toast.error('Número de telefone inválido. Não é possível criar lead.');
+        return null;
+      }
+
+      // Buscar user_id do usuário autenticado
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Usuário não autenticado');
+        return null;
+      }
+
+      // Buscar company_id do usuário
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!userRole?.company_id) {
+        toast.error('Erro: Configuração de empresa não encontrada');
+        return null;
+      }
+
       // Preparar dados do novo lead
       const newLeadData = {
         name: conversation.contactName || 'Contato sem nome',
@@ -5960,26 +5989,22 @@ function Conversas() {
         .single();
 
       if (createError) {
-        console.error('❌ [LEAD] Erro ao criar lead:', {
-          error: createError,
-          data: newLeadData
-        });
+        console.error('❌ [LEAD] Erro ao criar lead:', createError);
         toast.error(`Erro ao criar lead: ${createError.message}`);
         return null;
       }
 
-      console.log('✅ [LEAD] Novo lead criado com sucesso:', {
+      console.log('✅ [LEAD] Novo lead criado manualmente:', {
         leadId: newLead.id,
         leadName: newLead.name,
         phone: newLead.phone
       });
 
-      // MELHORIA 5: Vincular conversa ao lead criado
+      // Vincular conversa ao lead criado
       const phoneKey = conversation.phoneNumber || conversation.id;
       const formatted = safeFormatPhoneNumber(phoneKey);
       setLeadsVinculados(prev => {
         const newMap = { ...prev };
-        // Adicionar todas as variações ao mapeamento
         variations.forEach(v => {
           newMap[v] = newLead.id;
         });
@@ -5990,10 +6015,7 @@ function Conversas() {
         return newMap;
       });
 
-      toast.success(`Lead "${conversation.contactName}" criado automaticamente!`);
-      console.log('✅ [LEAD] Conversa vinculada ao novo lead');
-      
-      // O realtime vai propagar para Leads e Funil automaticamente
+      toast.success(`Lead "${conversation.contactName}" adicionado ao CRM com sucesso!`);
       return newLead;
     } catch (error) {
       console.error('❌ [LEAD] Erro em findOrCreateLead:', {
@@ -6192,7 +6214,7 @@ function Conversas() {
     
     try {
       setSyncStatus('syncing');
-      const lead = await findOrCreateLead(selectedConv);
+      const lead = await findLead(selectedConv);
       
       if (lead) {
         // CORREÇÃO: setLeadVinculado deve receber o objeto lead, não true
@@ -6272,7 +6294,8 @@ function Conversas() {
       // Aguardar um pouco para o state atualizar
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      const lead = await findOrCreateLead(conv);
+      // 🎯 USAR FUNÇÃO MANUAL para criar lead (não buscar automaticamente)
+      const lead = await createLeadManually(conv);
       
       if (lead) {
         // Atualizar o mapeamento de leads vinculados
@@ -6286,11 +6309,9 @@ function Conversas() {
         setLeadVinculado(lead);
         setSyncStatus('synced');
         setTimeout(() => setSyncStatus('idle'), 1000);
-        toast.success(`Lead ${conv.contactName} criado com sucesso!`);
       } else {
         setSyncStatus('error');
         setTimeout(() => setSyncStatus('idle'), 2000);
-        toast.error("Erro ao criar lead");
       }
     } catch (error) {
       console.error('Erro ao criar lead:', error);
@@ -8194,7 +8215,7 @@ function Conversas() {
                                     // CORREÇÃO: Garantir lead antes de criar lembrete
                                     if (!leadVinculado?.id && selectedConv) {
                                       setSyncStatus('syncing');
-                                      const lead = await findOrCreateLead(selectedConv);
+                                      const lead = await findLead(selectedConv);
                                       if (lead) {
                                         setLeadVinculado(lead);
                                         setMostrarBotaoCriarLead(false);
@@ -8304,7 +8325,7 @@ function Conversas() {
                                 // CORREÇÃO: Criar lead automaticamente ao abrir o modal
                                 if (!leadVinculado?.id && selectedConv) {
                                   setSyncStatus('syncing');
-                                  const lead = await findOrCreateLead(selectedConv);
+                                  const lead = await findLead(selectedConv);
                                   if (lead) {
                                     setLeadVinculado(lead);
                                     setMostrarBotaoCriarLead(false);
@@ -8444,7 +8465,7 @@ function Conversas() {
                                     // CORREÇÃO: Garantir lead antes de agendar
                                     if (!leadVinculado?.id && selectedConv) {
                                       setSyncStatus('syncing');
-                                      const lead = await findOrCreateLead(selectedConv);
+                                      const lead = await findLead(selectedConv);
                                       if (lead) {
                                         setLeadVinculado(lead);
                                         setMostrarBotaoCriarLead(false);
@@ -8547,7 +8568,7 @@ function Conversas() {
                                 // CORREÇÃO: Criar lead automaticamente ao abrir o modal
                                 if (!leadVinculado?.id && selectedConv) {
                                   setSyncStatus('syncing');
-                                  const lead = await findOrCreateLead(selectedConv);
+                                  const lead = await findLead(selectedConv);
                                   if (lead) {
                                     setLeadVinculado(lead);
                                     setMostrarBotaoCriarLead(false);
@@ -8596,7 +8617,7 @@ function Conversas() {
                                       onClick={async () => {
                                         if (selectedConv) {
                                           setSyncStatus('syncing');
-                                          const lead = await findOrCreateLead(selectedConv);
+                                          const lead = await findLead(selectedConv);
                                           if (lead) {
                                             setLeadVinculado(lead);
                                             setMostrarBotaoCriarLead(false);
@@ -8715,7 +8736,7 @@ function Conversas() {
                                         
                                         if (!leadVinculado?.id && selectedConv) {
                                           setSyncStatus('syncing');
-                                          const lead = await findOrCreateLead(selectedConv);
+                                          const lead = await findLead(selectedConv);
                                           if (lead) {
                                             setLeadVinculado(lead);
                                             setMostrarBotaoCriarLead(false);
