@@ -2,6 +2,55 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
+// Helper function to upload media to Storage
+async function uploadMediaToStorage(
+  supabase: any,
+  base64Data: string,
+  mimetype: string,
+  messageId: string
+): Promise<string | null> {
+  try {
+    // Extract clean base64 content
+    const cleanBase64 = base64Data.replace(/^data:.*?;base64,/, '');
+    
+    // Convert base64 to binary
+    const binaryString = atob(cleanBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Determine file extension from mimetype
+    const extension = mimetype.split('/')[1]?.split(';')[0] || 'bin';
+    const fileName = `${messageId}-${Date.now()}.${extension}`;
+    const filePath = `incoming/${fileName}`;
+    
+    // Upload to Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('conversation-media')
+      .upload(filePath, bytes, {
+        contentType: mimetype,
+        upsert: false
+      });
+    
+    if (uploadError) {
+      console.error('❌ Erro ao fazer upload para Storage:', uploadError);
+      return null;
+    }
+    
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('conversation-media')
+      .getPublicUrl(filePath);
+    
+    console.log('✅ Mídia enviada para Storage:', urlData.publicUrl);
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error('❌ Erro ao processar upload:', error);
+    return null;
+  }
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-signature',
@@ -65,7 +114,7 @@ function isEvolutionAPIPayload(body: any): boolean {
 }
 
 // Transformar payload da Evolution API para formato do CRM
-function transformEvolutionPayload(body: any) {
+async function transformEvolutionPayload(body: any, supabase: any) {
   const data = body.data;
   
   // Extrair JID remoto (contato ou grupo)
@@ -164,8 +213,14 @@ function transformEvolutionPayload(body: any) {
     tipo_mensagem = 'image';
     const base64Content = data.message.base64 || img.base64;
     if (base64Content) {
-      const cleanBase64 = base64Content.replace(/^data:.*?;base64,/, '');
-      midia_url = `data:${img.mimetype || 'image/jpeg'};base64,${cleanBase64}`;
+      // Upload to Storage instead of saving BASE64
+      const storageUrl = await uploadMediaToStorage(
+        supabase,
+        base64Content,
+        img.mimetype || 'image/jpeg',
+        data.key.id
+      );
+      midia_url = storageUrl;
     } else if (img.url) {
       // Salvar messageId para download via Evolution API
       midia_url = JSON.stringify({
@@ -182,8 +237,14 @@ function transformEvolutionPayload(body: any) {
     tipo_mensagem = 'audio';
     const base64Content = data.message.base64 || audio.base64;
     if (base64Content) {
-      const cleanBase64 = base64Content.replace(/^data:.*?;base64,/, '');
-      midia_url = `data:${audio.mimetype || 'audio/ogg'};base64,${cleanBase64}`;
+      // Upload to Storage instead of saving BASE64
+      const storageUrl = await uploadMediaToStorage(
+        supabase,
+        base64Content,
+        audio.mimetype || 'audio/ogg',
+        data.key.id
+      );
+      midia_url = storageUrl;
     } else if (audio.url) {
       midia_url = JSON.stringify({
         url: audio.url,
@@ -199,8 +260,14 @@ function transformEvolutionPayload(body: any) {
     tipo_mensagem = 'video';
     const base64Content = data.message.base64 || video.base64;
     if (base64Content) {
-      const cleanBase64 = base64Content.replace(/^data:.*?;base64,/, '');
-      midia_url = `data:${video.mimetype || 'video/mp4'};base64,${cleanBase64}`;
+      // Upload to Storage instead of saving BASE64
+      const storageUrl = await uploadMediaToStorage(
+        supabase,
+        base64Content,
+        video.mimetype || 'video/mp4',
+        data.key.id
+      );
+      midia_url = storageUrl;
     } else if (video.url) {
       midia_url = JSON.stringify({
         url: video.url,
@@ -217,8 +284,14 @@ function transformEvolutionPayload(body: any) {
     tipo_mensagem = 'document';
     const base64Content = data.message.base64 || doc.base64;
     if (base64Content) {
-      const cleanBase64 = base64Content.replace(/^data:.*?;base64,/, '');
-      midia_url = `data:${doc.mimetype || 'application/pdf'};base64,${cleanBase64}`;
+      // Upload to Storage instead of saving BASE64
+      const storageUrl = await uploadMediaToStorage(
+        supabase,
+        base64Content,
+        doc.mimetype || 'application/pdf',
+        data.key.id
+      );
+      midia_url = storageUrl;
     } else if (doc.url) {
       midia_url = JSON.stringify({
         url: doc.url,
@@ -358,7 +431,7 @@ serve(async (req) => {
     let payload = body;
     if (isEvolutionAPI) {
       try {
-        payload = transformEvolutionPayload(body);
+        payload = await transformEvolutionPayload(body, supabase);
         console.log('✅ Payload transformado');
       } catch (transformError: any) {
         // Se for mensagem de grupo/status, retornar sucesso sem salvar
