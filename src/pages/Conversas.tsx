@@ -6997,7 +6997,7 @@ function Conversas() {
               onClick={() => setFilter("waiting")}
               className="relative"
             >
-              Aguardando
+              Esperando
               {waitingCount > 0 && (
                 <Badge 
                   variant="destructive" 
