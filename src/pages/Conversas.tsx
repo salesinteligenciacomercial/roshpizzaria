@@ -738,6 +738,19 @@ function Conversas() {
     ).length;
   }, [conversations, blockedGroups]);
 
+  // Contador de conversas em atendimento
+  const answeredCount = useMemo(() => {
+    return conversations.filter((conv) => {
+      if (conv.isGroup === true) return false;
+      if (conv.status === 'resolved') return false;
+      
+      const lastMessage = conv.messages?.[conv.messages.length - 1];
+      if (!lastMessage) return false;
+      
+      return lastMessage.sender === 'user';
+    }).length;
+  }, [conversations]);
+
   // ✅ FILTROS CORRIGIDOS: Implementação conforme especificação do usuário
   const filteredConversations = useMemo(() => {
     console.log('🔍 [DEBUG] Filtrando conversas:', {
@@ -7011,8 +7024,17 @@ function Conversas() {
               variant={filter === "answered" ? "default" : "ghost"}
               size="sm"
               onClick={() => setFilter("answered")}
+              className="relative"
             >
               Em Atendimento
+              {answeredCount > 0 && (
+                <Badge 
+                  variant="default" 
+                  className="ml-2 bg-blue-500 hover:bg-blue-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center"
+                >
+                  {answeredCount}
+                </Badge>
+              )}
             </Button>
             <Button
               variant={filter === "resolved" ? "default" : "ghost"}
