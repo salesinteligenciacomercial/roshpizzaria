@@ -150,6 +150,16 @@ async function transformEvolutionPayload(body: any, supabase: any) {
   // ⚡ CORREÇÃO CRÍTICA: Detectar grupos de forma mais robusta (case insensitive)
   const isGroup = /@g\.us/i.test(remoteJid);
   
+  // 🚫 BLOQUEAR MENSAGENS DE GRUPOS - Não salvar no banco para economia de storage
+  if (isGroup) {
+    console.log('🚫 [WEBHOOK] Mensagem de grupo ignorada para economia de storage:', {
+      remoteJid,
+      pushName: data.pushName,
+      fromMe: data.key.fromMe
+    });
+    throw new Error('IGNORE: Mensagem de grupo não será salva (configuração de otimização)');
+  }
+  
   // ⚡ CORREÇÃO CRÍTICA: Para @lid, NÃO extrair número do remoteJid
   // O @lid é um identificador temporário não confiável
   let numero: string;
