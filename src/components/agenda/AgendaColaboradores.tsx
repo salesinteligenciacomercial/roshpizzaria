@@ -37,6 +37,9 @@ export function AgendaColaboradores() {
     tempo_medio_servico: 30,
     horarioComercial: criarHorarioPadrao(),
     dias_semana: ["seg", "ter", "qua", "qui", "sex"],
+    email: "",
+    senha: "",
+    telefone: "",
   });
 
   useEffect(() => {
@@ -94,6 +97,36 @@ export function AgendaColaboradores() {
 
       if (!userRole?.company_id) throw new Error("Empresa não encontrada");
 
+      let profissionalId = null;
+
+      // Se for colaborador e tiver email/senha, criar profissional
+      if (formData.tipo === "colaborador" && formData.email && formData.senha) {
+        console.log('📝 Criando profissional com credenciais de login...');
+        
+        const { data: profissionalData, error: profissionalError } = await supabase.functions.invoke('criar-profissional', {
+          body: {
+            nome: formData.nome,
+            email: formData.email,
+            senha: formData.senha,
+            telefone: formData.telefone || undefined,
+            especialidade: undefined,
+            company_id: userRole.company_id
+          }
+        });
+
+        if (profissionalError) {
+          console.error('❌ Erro ao criar profissional:', profissionalError);
+          throw new Error(profissionalError.message || "Erro ao criar profissional");
+        }
+
+        if (profissionalData?.error) {
+          throw new Error(profissionalData.error);
+        }
+
+        profissionalId = profissionalData?.profissional?.id;
+        console.log('✅ Profissional criado:', profissionalId);
+      }
+
       const { data: novaAgenda, error } = await supabase
         .from('agendas')
         .insert([{
@@ -108,6 +141,7 @@ export function AgendaColaboradores() {
           } as any,
           owner_id: user.id,
           company_id: userRole.company_id,
+          responsavel_id: profissionalId,
         }])
         .select()
         .single();
@@ -119,7 +153,7 @@ export function AgendaColaboradores() {
 
       console.log('✅ Agenda criada:', { id: novaAgenda?.id, nome: novaAgenda?.nome });
 
-      toast.success("Agenda criada com sucesso!");
+      toast.success("Agenda criada com sucesso! " + (profissionalId ? "Profissional pode fazer login no app Waze Agenda." : ""));
       setDialogOpen(false);
       carregarAgendas();
       
@@ -131,6 +165,9 @@ export function AgendaColaboradores() {
         tempo_medio_servico: 30,
         horarioComercial: criarHorarioPadrao(),
         dias_semana: ["seg", "ter", "qua", "qui", "sex"],
+        email: "",
+        senha: "",
+        telefone: "",
       });
     } catch (error: any) {
       console.error('Erro ao criar agenda:', error);
@@ -254,6 +291,45 @@ export function AgendaColaboradores() {
                   </Select>
                 </div>
               </div>
+
+              {formData.tipo === "colaborador" && (
+                <div className="space-y-4 p-4 bg-muted rounded-lg">
+                  <p className="text-sm font-medium">Credenciais de Acesso ao App Waze Agenda</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>E-mail *</Label>
+                      <Input
+                        type="email"
+                        placeholder="profissional@email.com"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Senha *</Label>
+                      <Input
+                        type="password"
+                        placeholder="Mínimo 6 caracteres"
+                        value={formData.senha}
+                        onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
+                        minLength={6}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Telefone</Label>
+                    <Input
+                      type="tel"
+                      placeholder="(00) 00000-0000"
+                      value={formData.telefone}
+                      onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    O profissional usará este e-mail e senha para acessar sua agenda pelo aplicativo Waze Agenda
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
