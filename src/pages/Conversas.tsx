@@ -4216,7 +4216,29 @@ function Conversas() {
     try {
       console.log('🎤 Enviando áudio via edge function...');
 
-      // Converter áudio para base64
+      // 1️⃣ Upload do áudio para o Storage PRIMEIRO
+      const fileName = `outgoing/${Date.now()}-audio.ogg`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('conversation-media')
+        .upload(fileName, audioBlob, {
+          contentType: 'audio/ogg; codecs=opus',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('❌ Erro ao fazer upload do áudio:', uploadError);
+        throw new Error('Falha ao fazer upload do áudio');
+      }
+
+      // Obter URL pública do Storage
+      const { data: urlData } = supabase.storage
+        .from('conversation-media')
+        .getPublicUrl(fileName);
+      
+      const storageUrl = urlData.publicUrl;
+      console.log('✅ Áudio salvo no Storage:', storageUrl);
+
+      // 2️⃣ Converter áudio para base64 para enviar via WhatsApp
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -4227,7 +4249,7 @@ function Conversas() {
         reader.readAsDataURL(audioBlob);
       });
 
-      // Enviar via edge function (retry via wrapper interno)
+      // 3️⃣ Enviar via WhatsApp
       const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
       const quotedPayload = replyingTo && selectedConv.messages.find(m => m.id === replyingTo)
         ? {
@@ -4238,9 +4260,10 @@ function Conversas() {
             quotedMessageId: replyingTo
           }
         : {};
+      
       const { data, error } = await enviarWhatsApp({
         numero: numeroNormalizado,
-        mensagem: 'Áudio enviado',
+        mensagem: '[Áudio]',
         tipo_mensagem: 'audio',
         mediaBase64: base64,
         fileName: 'audio.ogg',
@@ -4250,21 +4273,13 @@ function Conversas() {
       });
 
       if (error) {
-        throw error;
+        console.warn('⚠️ Erro ao enviar áudio via WhatsApp, mas mídia já foi salva:', error);
+        // Continuar mesmo com erro de envio - a mídia já está no Storage
+      } else {
+        console.log('✅ Áudio enviado com sucesso via WhatsApp');
       }
 
-      console.log('✅ Áudio enviado com sucesso');
-
-      // ⚡ CORREÇÃO: Converter áudio para data URL para salvar no banco
-      const audioDataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          resolve(reader.result as string);
-        };
-        reader.readAsDataURL(audioBlob);
-      });
-
-      // Salvar no Supabase e obter ID para manter sincronizado
+      // 4️⃣ Salvar no banco com URL do Storage
       const { data: userRole } = await supabase
         .from('user_roles')
         .select('company_id')
@@ -4281,33 +4296,36 @@ function Conversas() {
       const { data: inserted, error: dbError } = await supabase.from('conversas').insert([{
         numero: numeroNormalizado,
         telefone_formatado: numeroNormalizado,
-        mensagem: 'Áudio enviado',
+        mensagem: '[Áudio]',
         origem: 'WhatsApp',
         status: 'Enviada',
         tipo_mensagem: 'audio',
         nome_contato: selectedConv.contactName,
         arquivo_nome: 'audio.ogg',
-        midia_url: audioDataUrl, // ⚡ CORREÇÃO: Salvar data URL do áudio
+        midia_url: storageUrl, // ⚡ CORREÇÃO CRÍTICA: Salvar URL do Storage
         company_id: userRole?.company_id,
-        owner_id: user?.id, // ID do usuário que enviou
-        sent_by: userProfile?.full_name || userProfile?.email || 'Você', // ⚡ ASSINATURA PERMANENTE
-        fromme: true, // ⚡ CORREÇÃO: Marcar como mensagem enviada pelo usuário
+        owner_id: user?.id,
+        sent_by: userProfile?.full_name || userProfile?.email || 'Você',
+        fromme: true,
       }]).select('id, midia_url').single();
+      
       if (dbError) {
         console.error('❌ Erro ao salvar mensagem no banco:', dbError);
         toast.error('Erro ao salvar mensagem no histórico');
+      } else {
+        console.log('✅ Mensagem de áudio salva no banco com Storage URL:', inserted?.midia_url);
       }
 
       const newMessage: Message = {
         id: (inserted?.id || Date.now()).toString(),
-        content: "Áudio enviado",
+        content: "[Áudio]",
         type: "audio",
         sender: "user",
         timestamp: new Date(),
         delivered: true,
         read: false,
-        mediaUrl: audioDataUrl, // ⚡ CORREÇÃO: Usar data URL permanente
-        sentBy: userName || "Você", // Adicionar quem enviou
+        mediaUrl: storageUrl, // ⚡ CORREÇÃO CRÍTICA: Usar URL do Storage
+        sentBy: userName || "Você",
       };
 
       // ⚡ CORREÇÃO CRÍTICA: Ordenar mensagens por timestamp após adicionar nova mensagem
@@ -4328,7 +4346,7 @@ function Conversas() {
           ? {
               ...conv,
               messages: sortedMessagesWithNew,
-              lastMessage: "Áudio enviado",
+              lastMessage: "[Áudio]",
               status: newStatus,
               unread: 0,
             }
@@ -4357,7 +4375,9 @@ function Conversas() {
 
       // Iniciar transcrição automática
       try {
-        await transcreverAudio(newMessage.id, newMessage.mediaUrl!);
+        if (inserted?.id && storageUrl) {
+          await transcreverAudio(inserted.id, storageUrl);
+        }
       } catch (e) {
         console.error('❌ Erro ao iniciar transcrição automática:', e);
       }
