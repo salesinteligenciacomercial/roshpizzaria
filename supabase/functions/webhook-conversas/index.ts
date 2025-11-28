@@ -10,8 +10,20 @@ async function uploadMediaToStorage(
   messageId: string
 ): Promise<string | null> {
   try {
+    console.log('📤 [UPLOAD] Iniciando upload:', {
+      messageId,
+      mimetype,
+      base64Length: base64Data?.length,
+      base64Preview: base64Data?.substring(0, 50)
+    });
+    
     // Extract clean base64 content
     const cleanBase64 = base64Data.replace(/^data:.*?;base64,/, '');
+    
+    console.log('📤 [UPLOAD] Base64 limpo:', {
+      cleanBase64Length: cleanBase64.length,
+      cleanBase64Preview: cleanBase64.substring(0, 50)
+    });
     
     // Convert base64 to binary
     const binaryString = atob(cleanBase64);
@@ -20,10 +32,21 @@ async function uploadMediaToStorage(
       bytes[i] = binaryString.charCodeAt(i);
     }
     
+    console.log('📤 [UPLOAD] Bytes convertidos:', {
+      bytesLength: bytes.length,
+      mimetype
+    });
+    
     // Determine file extension from mimetype
     const extension = mimetype.split('/')[1]?.split(';')[0] || 'bin';
     const fileName = `${messageId}-${Date.now()}.${extension}`;
     const filePath = `incoming/${fileName}`;
+    
+    console.log('📤 [UPLOAD] Fazendo upload para Storage:', {
+      fileName,
+      filePath,
+      bucket: 'conversation-media'
+    });
     
     // Upload to Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
@@ -34,19 +57,33 @@ async function uploadMediaToStorage(
       });
     
     if (uploadError) {
-      console.error('❌ Erro ao fazer upload para Storage:', uploadError);
+      console.error('❌ [UPLOAD] Erro ao fazer upload para Storage:', {
+        error: uploadError,
+        errorMessage: uploadError.message,
+        errorCode: uploadError.statusCode,
+        filePath,
+        bytesLength: bytes.length
+      });
       return null;
     }
+    
+    console.log('✅ [UPLOAD] Upload bem-sucedido:', uploadData);
     
     // Get public URL
     const { data: urlData } = supabase.storage
       .from('conversation-media')
       .getPublicUrl(filePath);
     
-    console.log('✅ Mídia enviada para Storage:', urlData.publicUrl);
+    console.log('✅ [UPLOAD] Mídia enviada para Storage:', urlData.publicUrl);
     return urlData.publicUrl;
   } catch (error) {
-    console.error('❌ Erro ao processar upload:', error);
+    console.error('❌ [UPLOAD] Erro ao processar upload:', {
+      error,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      errorStack: error instanceof Error ? error.stack : undefined,
+      messageId,
+      mimetype
+    });
     return null;
   }
 }
@@ -249,6 +286,7 @@ async function transformEvolutionPayload(body: any, supabase: any) {
     
     console.log('🎤 [WEBHOOK] Processando áudio:', {
       hasBase64: !!base64Content,
+      base64Length: base64Content?.length,
       hasUrl: !!audio.url,
       hasMediaKey: !!audio.mediaKey,
       messageId: data.key.id,
@@ -256,15 +294,50 @@ async function transformEvolutionPayload(body: any, supabase: any) {
     });
     
     if (base64Content) {
-      // Upload to Storage instead of saving BASE64
-      const storageUrl = await uploadMediaToStorage(
-        supabase,
-        base64Content,
-        audio.mimetype || 'audio/ogg',
-        data.key.id
-      );
-      midia_url = storageUrl;
-      console.log('✅ [WEBHOOK] Áudio salvo no Storage:', storageUrl);
+      try {
+        // Upload to Storage instead of saving BASE64
+        const storageUrl = await uploadMediaToStorage(
+          supabase,
+          base64Content,
+          audio.mimetype || 'audio/ogg',
+          data.key.id
+        );
+        
+        if (storageUrl) {
+          midia_url = storageUrl;
+          console.log('✅ [WEBHOOK] Áudio salvo no Storage:', storageUrl);
+        } else {
+          console.error('❌ [WEBHOOK] Upload para Storage falhou, salvando metadados como fallback');
+          // Fallback: salvar metadados se upload falhar
+          if (audio.url || audio.mediaKey) {
+            midia_url = JSON.stringify({
+              url: audio.url,
+              mediaKey: audio.mediaKey,
+              messageId: data.key.id,
+              mimetype: audio.mimetype || 'audio/ogg; codecs=opus',
+              type: 'audio'
+            });
+            console.log('📦 [WEBHOOK] Áudio salvo como metadados (fallback):', midia_url);
+          } else {
+            console.error('❌ [WEBHOOK] Upload falhou e não tem metadados - áudio será perdido');
+          }
+        }
+      } catch (uploadError) {
+        console.error('❌ [WEBHOOK] Erro ao fazer upload de áudio:', uploadError);
+        // Fallback: salvar metadados se upload falhar
+        if (audio.url || audio.mediaKey) {
+          midia_url = JSON.stringify({
+            url: audio.url,
+            mediaKey: audio.mediaKey,
+            messageId: data.key.id,
+            mimetype: audio.mimetype || 'audio/ogg; codecs=opus',
+            type: 'audio'
+          });
+          console.log('📦 [WEBHOOK] Áudio salvo como metadados após erro:', midia_url);
+        } else {
+          console.error('❌ [WEBHOOK] Erro de upload e não tem metadados - áudio será perdido');
+        }
+      }
     } else if (audio.url || audio.mediaKey) {
       // Salvar metadados para download posterior via Evolution API
       midia_url = JSON.stringify({
@@ -348,55 +421,28 @@ async function transformEvolutionPayload(body: any, supabase: any) {
 }
 
 // ==============================
-// Roteamento Automático (OPCIONAL - Desativado temporariamente)
+// MAIN WEBHOOK HANDLER
 // ==============================
-async function autoRouteConversation(params: {
-  supabase: any,
-  companyId: string,
-  numeroLimpo: string,
-  conversaId: string,
-}) {
-  // NOTA: Função desativada temporariamente para evitar erros de tipo
-  // Será reimplementada quando necessário
-  console.log('ℹ️ Roteamento automático desativado');
-  return;
-}
 
 serve(async (req) => {
-  // Handle CORS preflight requests
+  // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const webhookSecret = Deno.env.get('WEBHOOK_SECRET');
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
-    // Extrair nome da instância da URL (aceita ?instance= ou ?instanceName=)
-    const url = new URL(req.url);
-    const instanceName = url.searchParams.get('instance') || url.searchParams.get('instanceName');
-
-    // ✅ LOG CRÍTICO: Payload RAW completo para debug
-    console.log('📡 [WEBHOOK] ========== INÍCIO DEBUG ==========');
-    console.log('📡 [WEBHOOK] URL:', req.url);
-    console.log('📡 [WEBHOOK] Instance:', instanceName || 'NÃO FORNECIDO');
-    console.log('📡 [WEBHOOK] Method:', req.method);
-
-    if (instanceName) {
-      console.log('✅ Instância identificada na URL:', instanceName);
-    } else {
-      console.warn('⚠️ Parâmetro instance não fornecido na URL - tentando identificar pela company do lead');
-    }
-
-    // Get raw body for signature verification
     const rawBody = await req.text();
-    let body;
-    
+    let body: any;
+
     try {
       body = JSON.parse(rawBody);
-      // ✅ LOG CRÍTICO: Payload RAW completo
+      
+      // Log completo do payload recebido para debug de routing
       console.log('📡 [WEBHOOK] PAYLOAD RAW COMPLETO:', JSON.stringify(body, null, 2));
       
       // ✅ LOG CRÍTICO: Dados de número específicos
@@ -421,6 +467,7 @@ serve(async (req) => {
     }
 
     // Verify webhook signature if secret is configured
+    const webhookSecret = Deno.env.get('WEBHOOK_SECRET');
     if (webhookSecret) {
       const signature = req.headers.get('x-webhook-signature');
       const isValidSignature = await verifyWebhookSignature(rawBody, signature, webhookSecret);
@@ -493,6 +540,9 @@ serve(async (req) => {
       }
       throw error;
     }
+
+    // Extrair instanceName do body original da Evolution API
+    const instanceName = body.instance || null;
 
     // Buscar company_id baseado na instância primeiro
     let companyId = validatedData.company_id || null;
@@ -1264,6 +1314,8 @@ serve(async (req) => {
     }
 
     // ROTEAMENTO AUTOMÁTICO: tentar atribuir conversa a um colaborador disponível (apenas para contatos)
+    // TODO: Implementar autoRouteConversation
+    /*
     if (!isGroup && numeroLimpo) {
       try {
         await autoRouteConversation({
@@ -1276,6 +1328,7 @@ serve(async (req) => {
         console.warn('⚠️ Falha ao rotear automaticamente:', routeError);
       }
     }
+    */
 
     return new Response(
       JSON.stringify({
