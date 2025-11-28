@@ -1119,9 +1119,14 @@ serve(async (req) => {
     console.log('💾 [WEBHOOK] TENTANDO SALVAR CONVERSA:', {
       isReceivedMessage,
       fromMe: validatedData.fromMe,
+      tipo_mensagem: validatedData.tipo_mensagem,
+      midia_url_validatedData: validatedData.midia_url,
+      arquivo_nome_validatedData: validatedData.arquivo_nome,
       insertData: {
         ...insertData,
-        mensagem: insertData.mensagem?.substring(0, 50) + '...'
+        mensagem: insertData.mensagem?.substring(0, 50) + '...',
+        midia_url: insertData.midia_url,
+        arquivo_nome: insertData.arquivo_nome
       }
     });
     
