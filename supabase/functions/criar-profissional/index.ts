@@ -96,7 +96,29 @@ Deno.serve(async (req) => {
 
     if (authError || !authUser.user) {
       console.error('[criar-profissional] Erro ao criar usuário no Auth:', authError)
-      throw new Error(`Erro ao criar usuário: ${authError?.message || 'Unknown error'}`)
+      
+      // Retornar mensagem de erro específica para email já cadastrado
+      if (authError?.message?.includes('already been registered')) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Este e-mail já está cadastrado. Use outro e-mail.' 
+          }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+      }
+      
+      return new Response(
+        JSON.stringify({ 
+          error: `Erro ao criar usuário: ${authError?.message || 'Erro desconhecido'}` 
+        }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
     }
 
     console.log('[criar-profissional] Usuário criado no Auth:', authUser.user.id)

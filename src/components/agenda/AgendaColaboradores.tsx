@@ -116,10 +116,11 @@ export function AgendaColaboradores() {
 
         if (profissionalError) {
           console.error('❌ Erro ao criar profissional:', profissionalError);
-          throw new Error(profissionalError.message || "Erro ao criar profissional");
+          throw new Error("Erro ao criar profissional. Verifique os dados e tente novamente.");
         }
 
         if (profissionalData?.error) {
+          console.error('❌ Erro retornado pela função:', profissionalData.error);
           throw new Error(profissionalData.error);
         }
 
