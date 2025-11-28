@@ -63,20 +63,25 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Verificar se email já existe
+    // Verificar se profissional já existe
     const { data: existingProf } = await supabaseAdmin
       .from('profissionais')
-      .select('id')
+      .select('id, user_id, nome, email')
       .eq('email', email)
-      .single()
+      .maybeSingle()
 
+    // Se profissional já existe, retornar seus dados
     if (existingProf) {
+      console.log('[criar-profissional] Profissional já existe, retornando dados:', existingProf.id)
       return new Response(
         JSON.stringify({ 
-          error: 'Email já cadastrado' 
+          success: true,
+          profissional: existingProf,
+          message: 'Profissional já cadastrado',
+          already_exists: true
         }),
         { 
-          status: 400, 
+          status: 200, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       )
