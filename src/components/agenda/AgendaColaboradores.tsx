@@ -85,6 +85,18 @@ export function AgendaColaboradores() {
   };
 
   const criarAgenda = async () => {
+    // Validar campos obrigatórios para colaborador
+    if (formData.tipo === "colaborador") {
+      if (!formData.email || !formData.senha) {
+        toast.error("Preencha o e-mail e senha do profissional");
+        return;
+      }
+      if (formData.senha.length < 6) {
+        toast.error("A senha deve ter no mínimo 6 caracteres");
+        return;
+      }
+    }
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado");
@@ -115,17 +127,25 @@ export function AgendaColaboradores() {
         });
 
         if (profissionalError) {
-          console.error('❌ Erro ao criar profissional:', profissionalError);
-          throw new Error("Erro ao criar profissional. Verifique os dados e tente novamente.");
+          console.error('❌ Erro ao invocar função:', profissionalError);
+          throw new Error("Erro ao criar profissional. Verifique sua conexão e tente novamente.");
         }
 
-        if (profissionalData?.error) {
-          console.error('❌ Erro retornado pela função:', profissionalData.error);
-          throw new Error(profissionalData.error);
+        // Verificar se a resposta tem erro
+        if (!profissionalData?.success) {
+          const errorMsg = profissionalData?.error || "Erro desconhecido ao criar profissional";
+          console.error('❌ Erro retornado pela função:', errorMsg);
+          throw new Error(errorMsg);
         }
 
         profissionalId = profissionalData?.profissional?.id;
-        console.log('✅ Profissional criado:', profissionalId);
+        const isExisting = profissionalData?.already_exists || false;
+        
+        console.log('✅ Profissional:', { id: profissionalId, existing: isExisting });
+        
+        if (isExisting) {
+          toast.info("Profissional já cadastrado. Vinculando à agenda...");
+        }
       }
 
       const { data: novaAgenda, error } = await supabase
@@ -304,6 +324,7 @@ export function AgendaColaboradores() {
                         placeholder="profissional@email.com"
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        required
                       />
                     </div>
                     <div className="space-y-2">
@@ -314,6 +335,7 @@ export function AgendaColaboradores() {
                         value={formData.senha}
                         onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
                         minLength={6}
+                        required
                       />
                     </div>
                   </div>
@@ -327,7 +349,8 @@ export function AgendaColaboradores() {
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    O profissional usará este e-mail e senha para acessar sua agenda pelo aplicativo Waze Agenda
+                    O profissional usará este e-mail e senha para acessar sua agenda pelo aplicativo Waze Agenda.
+                    {formData.email && formData.senha && " ✓ Credenciais preenchidas"}
                   </p>
                 </div>
               )}
