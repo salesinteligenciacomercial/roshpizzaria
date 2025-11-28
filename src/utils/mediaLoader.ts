@@ -70,10 +70,21 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
 
         // A edge function retorna o blob da mídia
         const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
+        
+        // Para áudio, garantir que o tipo MIME correto seja usado
+        let finalBlob = blob;
+        if (type === 'audio' || message.tipo_mensagem === 'audio') {
+          // Se o blob não tem um tipo adequado, forçar o tipo correto
+          if (!blob.type || blob.type === 'application/octet-stream') {
+            finalBlob = new Blob([blob], { type: 'audio/ogg; codecs=opus' });
+          }
+        }
+        
+        const url = URL.createObjectURL(finalBlob);
         console.log('✅ [MEDIA-LOADER] Mídia carregada via Evolution API:', {
-          blobSize: blob.size,
-          blobType: blob.type
+          blobSize: finalBlob.size,
+          blobType: finalBlob.type,
+          mediaType: type || message.tipo_mensagem
         });
         return url;
       }

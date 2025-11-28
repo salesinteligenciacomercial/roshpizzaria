@@ -303,7 +303,7 @@ function MessageItemComponent({
           )}
           
           {/* Audio Message */}
-          {message.type === "audio" && message.mediaUrl && (
+          {message.type === "audio" && (
             <div className="space-y-2 min-w-[250px]">
               <div className="flex items-center gap-2">
                 <Volume2 className="h-4 w-4" />
@@ -314,13 +314,22 @@ function MessageItemComponent({
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span className="text-xs text-muted-foreground">Carregando áudio...</span>
                 </div>
-              ) : mediaUrl ? (
+              ) : (mediaUrl || message.mediaUrl) ? (
                 <audio 
                   controls 
                   className="w-full h-8" 
                   style={{ maxWidth: '300px' }}
+                  onError={(e) => {
+                    console.error('❌ [MESSAGE-ITEM] Erro ao carregar áudio:', {
+                      messageId: message.id,
+                      mediaUrl: mediaUrl || message.mediaUrl,
+                      error: e
+                    });
+                  }}
                 >
-                  <source src={mediaUrl} type="audio/ogg" />
+                  <source src={mediaUrl || message.mediaUrl} type="audio/ogg; codecs=opus" />
+                  <source src={mediaUrl || message.mediaUrl} type="audio/mpeg" />
+                  <source src={mediaUrl || message.mediaUrl} type="audio/wav" />
                   Seu navegador não suporta o elemento de áudio.
                 </audio>
               ) : (
