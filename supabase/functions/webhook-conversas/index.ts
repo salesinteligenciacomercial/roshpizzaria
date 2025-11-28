@@ -246,6 +246,15 @@ async function transformEvolutionPayload(body: any, supabase: any) {
     mensagem = '[Áudio]';
     tipo_mensagem = 'audio';
     const base64Content = data.message.base64 || audio.base64;
+    
+    console.log('🎤 [WEBHOOK] Processando áudio:', {
+      hasBase64: !!base64Content,
+      hasUrl: !!audio.url,
+      hasMediaKey: !!audio.mediaKey,
+      messageId: data.key.id,
+      mimetype: audio.mimetype
+    });
+    
     if (base64Content) {
       // Upload to Storage instead of saving BASE64
       const storageUrl = await uploadMediaToStorage(
@@ -255,14 +264,19 @@ async function transformEvolutionPayload(body: any, supabase: any) {
         data.key.id
       );
       midia_url = storageUrl;
-    } else if (audio.url) {
+      console.log('✅ [WEBHOOK] Áudio salvo no Storage:', storageUrl);
+    } else if (audio.url || audio.mediaKey) {
+      // Salvar metadados para download posterior via Evolution API
       midia_url = JSON.stringify({
         url: audio.url,
         mediaKey: audio.mediaKey,
         messageId: data.key.id,
-        mimetype: audio.mimetype || 'audio/ogg',
+        mimetype: audio.mimetype || 'audio/ogg; codecs=opus',
         type: 'audio'
       });
+      console.log('📦 [WEBHOOK] Áudio salvo como metadados para download:', midia_url);
+    } else {
+      console.error('❌ [WEBHOOK] Áudio sem base64 e sem URL/mediaKey - não pode ser processado');
     }
   } else if (data.message.videoMessage) {
     const video = data.message.videoMessage;
