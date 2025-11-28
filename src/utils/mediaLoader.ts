@@ -35,55 +35,53 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
     // Se for JSON com metadados de mídia criptografada
     try {
       const mediaData = JSON.parse(message.midia_url);
-      if (mediaData.messageId && mediaData.url) {
+      if (mediaData.url || mediaData.mediaKey) {
         console.log('🔓 [MEDIA-LOADER] Baixando mídia via Evolution API:', {
           messageId: mediaData.messageId,
           tipo: mediaData.type,
-          company_id: message.company_id
+          company_id: message.company_id,
+          hasUrl: !!mediaData.url,
+          hasMediaKey: !!mediaData.mediaKey
         });
         
-        // Chamar edge function que usa Evolution API
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/download-media`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-            },
-            body: JSON.stringify({ 
-              company_id: message.company_id,
-              messageId: mediaData.messageId,
-              type: mediaData.type || type || message.tipo_mensagem
-            }),
+        // Chamar edge function que usa Evolution API para baixar mídia
+        const response = await supabase.functions.invoke('download-media', {
+          body: { 
+            company_id: message.company_id,
+            messageId: mediaData.messageId,
+            url: mediaData.url,
+            mediaKey: mediaData.mediaKey,
+            mimetype: mediaData.mimetype || type || message.tipo_mensagem,
+            type: mediaData.type || type || message.tipo_mensagem
           }
-        );
+        });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('❌ [MEDIA-LOADER] Erro na edge function:', {
-            status: response.status,
-            error: errorText
-          });
-          throw new Error(`Erro ao baixar mídia: ${response.status} - ${errorText}`);
+        if (response.error) {
+          console.error('❌ [MEDIA-LOADER] Erro na edge function:', response.error);
+          throw new Error(`Erro ao baixar mídia: ${response.error.message}`);
         }
 
-        // A edge function retorna o blob da mídia
-        const blob = await response.blob();
-        
-        // Para áudio, garantir que o tipo MIME correto seja usado
-        let finalBlob = blob;
-        if (type === 'audio' || message.tipo_mensagem === 'audio') {
-          // Se o blob não tem um tipo adequado, forçar o tipo correto
-          if (!blob.type || blob.type === 'application/octet-stream') {
-            finalBlob = new Blob([blob], { type: 'audio/ogg; codecs=opus' });
-          }
+        // A edge function retorna o base64 da mídia
+        const base64Data = response.data?.base64;
+        if (!base64Data) {
+          console.error('❌ [MEDIA-LOADER] Edge function não retornou base64');
+          throw new Error('Edge function não retornou dados');
         }
+
+        // Converter base64 para blob
+        const mimeType = mediaData.mimetype || 'audio/ogg; codecs=opus';
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: mimeType });
         
-        const url = URL.createObjectURL(finalBlob);
+        const url = URL.createObjectURL(blob);
         console.log('✅ [MEDIA-LOADER] Mídia carregada via Evolution API:', {
-          blobSize: finalBlob.size,
-          blobType: finalBlob.type,
+          blobSize: blob.size,
+          blobType: blob.type,
           mediaType: type || message.tipo_mensagem
         });
         return url;

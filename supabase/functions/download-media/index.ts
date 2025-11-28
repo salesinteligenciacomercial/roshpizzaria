@@ -109,14 +109,32 @@ Deno.serve(async (req) => {
         const match = mediaData.base64.match(/data:([^;]+);/);
         if (match) mimetype = match[1];
       } else {
-        // Usar tipo baseado no tipo da mensagem
-        if (body.type === 'image') mimetype = 'image/jpeg';
-        else if (body.type === 'video') mimetype = 'video/mp4';
-        else if (body.type === 'audio') mimetype = 'audio/ogg';
-        else if (body.type === 'document') mimetype = 'application/pdf';
+        // Usar tipo baseado no tipo da mensagem ou mimetype enviado
+        if (body.mimetype) {
+          mimetype = body.mimetype;
+        } else if (body.type === 'image') {
+          mimetype = 'image/jpeg';
+        } else if (body.type === 'video') {
+          mimetype = 'video/mp4';
+        } else if (body.type === 'audio') {
+          mimetype = 'audio/ogg; codecs=opus';
+        } else if (body.type === 'document') {
+          mimetype = 'application/pdf';
+        }
       }
       
-      return createMediaResponse(mediaData.base64, mimetype);
+      console.log('📤 [DOWNLOAD-MEDIA] Retornando base64 com mimetype:', mimetype);
+      
+      // Retornar JSON com base64 para o frontend processar
+      return new Response(
+        JSON.stringify({ 
+          base64: mediaData.base64.includes(',') ? mediaData.base64.split(',')[1] : mediaData.base64,
+          mimetype: mimetype 
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
     
     throw new Error('Mídia não retornada pela Evolution API');
