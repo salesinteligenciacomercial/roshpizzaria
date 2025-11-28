@@ -99,7 +99,8 @@ function MessageItemComponent({
         console.log('✅ [MESSAGE-ITEM] Usando URL direta da mídia:', {
           id: message.id,
           type: message.type,
-          urlType: message.mediaUrl.startsWith('blob:') ? 'blob' : 'data'
+          urlType: message.mediaUrl.startsWith('blob:') ? 'blob' : 'data',
+          urlPreview: message.mediaUrl.substring(0, 50)
         });
         setMediaUrl(message.mediaUrl);
         setMediaLoading(false);
@@ -111,7 +112,8 @@ function MessageItemComponent({
       console.log('🔄 [MESSAGE-ITEM] Carregando mídia do banco:', {
         id: message.id,
         type: message.type,
-        hasUrl: !!message.mediaUrl
+        hasUrl: !!message.mediaUrl,
+        urlPreview: message.mediaUrl.substring(0, 50)
       });
       
       getMediaUrl(message.id, message.type)
@@ -128,15 +130,24 @@ function MessageItemComponent({
           console.error('❌ [MESSAGE-ITEM] Erro ao carregar mídia:', {
             id: message.id,
             type: message.type,
-            error: error?.message || String(error)
+            error: error?.message || String(error),
+            mediaUrlPreview: message.mediaUrl?.substring(0, 50)
           });
           // ⚡ CORREÇÃO: Se falhar, tentar usar a URL original como fallback
           if (message.mediaUrl) {
-            console.log('⚠️ [MESSAGE-ITEM] Usando URL original como fallback');
+            console.log('⚠️ [MESSAGE-ITEM] Usando URL original como fallback:', message.mediaUrl.substring(0, 50));
             setMediaUrl(message.mediaUrl);
           }
           setMediaLoading(false);
         });
+    } else {
+      // Sem mediaUrl - marcar como não carregando
+      setMediaLoading(false);
+      console.log('⚠️ [MESSAGE-ITEM] Mensagem sem mediaUrl:', {
+        id: message.id,
+        type: message.type,
+        hasMediaUrl: !!message.mediaUrl
+      });
     }
 
     // Cleanup blob URL quando desmontar
