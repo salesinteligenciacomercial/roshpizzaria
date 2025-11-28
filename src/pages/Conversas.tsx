@@ -6590,6 +6590,23 @@ function Conversas() {
 
       if (error) throw error;
 
+      // ⚡ CORREÇÃO: Atualizar também o lead se existir um vinculado
+      const leadId = leadsVinculados[conversationId] || leadsVinculados[safeFormatPhoneNumber(conversationId)];
+      if (leadId) {
+        console.log('🔄 Atualizando nome do lead vinculado:', leadId);
+        const { error: leadError } = await supabase
+          .from('leads')
+          .update({ name: novoNome.trim() })
+          .eq('id', leadId);
+
+        if (leadError) {
+          console.error('❌ Erro ao atualizar nome do lead:', leadError);
+          toast.error("Nome da conversa atualizado, mas erro ao atualizar o lead");
+        } else {
+          console.log('✅ Nome do lead atualizado com sucesso');
+        }
+      }
+
       // Atualizar localmente
       const updated = conversations.map(c =>
         c.id === conversationId ? { ...c, contactName: novoNome.trim() } : c
