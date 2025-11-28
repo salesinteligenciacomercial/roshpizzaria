@@ -1062,6 +1062,36 @@ serve(async (req) => {
       fromme: validatedData.fromMe === true, // CORREÇÃO: fromme minúsculo (PostgreSQL converte para lowercase)
     };
     
+    // ⚡ CORREÇÃO: Se mensagem foi enviada pelo CRM (fromMe = true), buscar nome do usuário para assinatura
+    if (validatedData.fromMe === true && companyId) {
+      try {
+        // Buscar primeiro usuário admin ou qualquer usuário da empresa
+        const { data: companyUsers } = await supabase
+          .from('user_roles')
+          .select('user_id')
+          .eq('company_id', companyId)
+          .limit(1)
+          .single();
+        
+        if (companyUsers?.user_id) {
+          // Buscar nome do usuário
+          const { data: userProfile } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', companyUsers.user_id)
+            .single();
+          
+          if (userProfile) {
+            insertData.sent_by = userProfile.full_name || userProfile.email;
+            insertData.owner_id = companyUsers.user_id;
+            console.log('✅ [WEBHOOK] Assinatura adicionada:', insertData.sent_by);
+          }
+        }
+      } catch (error) {
+        console.error('⚠️ [WEBHOOK] Erro ao buscar assinatura do usuário:', error);
+      }
+    }
+    
     // ⚡ CORREÇÃO: Adicionar company_id apenas se existir
     // Se não existir mas for mensagem recebida, tentar salvar mesmo assim
     if (companyId) {
