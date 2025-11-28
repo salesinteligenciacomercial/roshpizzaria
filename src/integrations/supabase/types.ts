@@ -265,13 +265,18 @@ export type Database = {
           custo_estimado: number | null
           data_hora_fim: string
           data_hora_inicio: string
+          duracao: number | null
           id: string
           lead_id: string | null
           lembrete_enviado: boolean | null
           observacoes: string | null
           owner_id: string
+          paciente: string | null
+          profissional_id: string | null
           status: string | null
+          telefone: string | null
           tipo_servico: string
+          titulo: string | null
           updated_at: string | null
           usuario_responsavel_id: string
         }
@@ -282,13 +287,18 @@ export type Database = {
           custo_estimado?: number | null
           data_hora_fim: string
           data_hora_inicio: string
+          duracao?: number | null
           id?: string
           lead_id?: string | null
           lembrete_enviado?: boolean | null
           observacoes?: string | null
           owner_id: string
+          paciente?: string | null
+          profissional_id?: string | null
           status?: string | null
+          telefone?: string | null
           tipo_servico: string
+          titulo?: string | null
           updated_at?: string | null
           usuario_responsavel_id: string
         }
@@ -299,13 +309,18 @@ export type Database = {
           custo_estimado?: number | null
           data_hora_fim?: string
           data_hora_inicio?: string
+          duracao?: number | null
           id?: string
           lead_id?: string | null
           lembrete_enviado?: boolean | null
           observacoes?: string | null
           owner_id?: string
+          paciente?: string | null
+          profissional_id?: string | null
           status?: string | null
+          telefone?: string | null
           tipo_servico?: string
+          titulo?: string | null
           updated_at?: string | null
           usuario_responsavel_id?: string
         }
@@ -329,6 +344,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compromissos_profissional_id_fkey"
+            columns: ["profissional_id"]
+            isOneToOne: false
+            referencedRelation: "profissionais"
             referencedColumns: ["id"]
           },
         ]
@@ -1060,6 +1082,50 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      profissionais: {
+        Row: {
+          company_id: string | null
+          created_at: string | null
+          email: string
+          especialidade: string | null
+          id: string
+          nome: string
+          telefone: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string | null
+          email: string
+          especialidade?: string | null
+          id?: string
+          nome: string
+          telefone?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string | null
+          email?: string
+          especialidade?: string | null
+          id?: string
+          nome?: string
+          telefone?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profissionais_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       quick_message_categories: {
         Row: {
