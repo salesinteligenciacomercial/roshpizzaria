@@ -54,7 +54,7 @@ export const useConversationsLoader = () => {
       // ⚡ OTIMIZAÇÃO: Query mais simples e eficiente usando índices
       let query = supabase
         .from('conversas')
-        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, midia_url, fromme, company_id')
+        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, midia_url, fromme, company_id, sent_by')
         .eq('company_id', userCompanyId)
         .order('created_at', { ascending: false });
       
@@ -275,6 +275,7 @@ export const useConversationsLoader = () => {
               delivered: true,
               read: m.status !== 'Recebida',
               mediaUrl: m.midia_url,
+              sentBy: m.sent_by || undefined, // ✅ CORREÇÃO: Incluir assinatura do remetente
             }));
 
           const ultimaMensagem = messagensFormatadas[messagensFormatadas.length - 1];
