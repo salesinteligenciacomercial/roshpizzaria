@@ -669,11 +669,26 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     
-    const startDate = task.start_date ? new Date(task.start_date) : null;
-    const endDate = task.due_date ? new Date(task.due_date) : null;
+    // ✅ Validar start_date: deve ser uma string não vazia e válida
+    const startDate = task.start_date && task.start_date.trim() !== '' 
+      ? new Date(task.start_date) 
+      : null;
     
-    if (startDate) startDate.setHours(0, 0, 0, 0);
-    if (endDate) endDate.setHours(0, 0, 0, 0);
+    // ✅ Validar due_date: deve ser uma string não vazia e válida  
+    const endDate = task.due_date && task.due_date.trim() !== '' 
+      ? new Date(task.due_date) 
+      : null;
+    
+    // ✅ Verificar se as datas são válidas
+    if (startDate && isNaN(startDate.getTime())) {
+      console.warn('start_date inválida:', task.start_date);
+    }
+    if (endDate && isNaN(endDate.getTime())) {
+      console.warn('due_date inválida:', task.due_date);
+    }
+    
+    if (startDate && !isNaN(startDate.getTime())) startDate.setHours(0, 0, 0, 0);
+    if (endDate && !isNaN(endDate.getTime())) endDate.setHours(0, 0, 0, 0);
     
     let daysRemaining = 0;
     let totalDays = 0;
@@ -681,10 +696,10 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     let timeProgress = 0;
     let status: 'not_started' | 'in_progress' | 'overdue' | 'completed' = 'not_started';
     
-    if (endDate) {
+    if (endDate && !isNaN(endDate.getTime())) {
       daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
       
-      if (startDate && endDate) {
+      if (startDate && !isNaN(startDate.getTime()) && endDate) {
         totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         daysElapsed = Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
         
@@ -708,14 +723,14 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     }
     
     return {
-      startDate,
-      endDate,
+      startDate: startDate && !isNaN(startDate.getTime()) ? startDate : null,
+      endDate: endDate && !isNaN(endDate.getTime()) ? endDate : null,
       daysRemaining,
       totalDays,
       daysElapsed,
       timeProgress,
       status,
-      hasDeadline: !!endDate
+      hasDeadline: !!(endDate && !isNaN(endDate.getTime()))
     };
   }, [task.start_date, task.due_date]);
 
