@@ -669,6 +669,16 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     
+    // ✅ DEBUG: Verificar valores recebidos
+    console.log('🔍 [TaskCard Debug]', {
+      taskId: task.id,
+      title: task.title,
+      start_date: task.start_date,
+      due_date: task.due_date,
+      start_date_type: typeof task.start_date,
+      due_date_type: typeof task.due_date
+    });
+    
     // ✅ Validar start_date: deve ser uma string não vazia e válida
     const startDate = task.start_date && task.start_date.trim() !== '' 
       ? new Date(task.start_date) 
