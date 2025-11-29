@@ -22,8 +22,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Tag } from "lucide-react";
 import { upsertCompromissoParaTarefa } from "@/services/tarefaService";
+import { useTagsManager } from "@/hooks/useTagsManager";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 interface NovaTarefaDialogProps {
   columnId: string;
@@ -40,7 +43,8 @@ export function NovaTarefaDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("media");
-  const [dueDate, setDueDate] = useState("");
+  const [startDate, setStartDate] = useState(""); // Data início do prazo
+  const [dueDate, setDueDate] = useState(""); // Data final do prazo
   const [assigneeId, setAssigneeId] = useState("");
   const [leadId, setLeadId] = useState("");
   const [users, setUsers] = useState<any[]>([]);
@@ -52,18 +56,63 @@ export function NovaTarefaDialog({
   const [responsaveis, setResponsaveis] = useState<string[]>([]);
   const [leadSearch, setLeadSearch] = useState("");
   const [selectedLeadName, setSelectedLeadName] = useState("");
+  const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
+  
+  // ✅ CORRIGIDO: Usar hook de tags sincronizado com o gerenciador de tags
+  const { allTags: tagsExistentes, refreshTags } = useTagsManager();
 
   useEffect(() => {
     if (open) {
       loadData();
+      refreshTags(); // Atualizar tags ao abrir o dialog
     }
-  }, [open]);
+  }, [open, refreshTags]);
 
   const loadData = async () => {
-    const { data: usersData } = await supabase.from("profiles").select("id, full_name");
-    const { data: leadsData } = await supabase.from("leads").select("id, name, phone, telefone, tags");
-    setUsers(usersData || []);
-    setLeads(leadsData || []);
+    try {
+      // ✅ CORRIGIDO: Buscar apenas usuários da empresa atual (não de subcontas)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data: userRole } = await supabase
+        .from("user_roles")
+        .select("company_id")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (!userRole?.company_id) {
+        console.warn("Company ID não encontrado");
+        return;
+      }
+
+      // Buscar apenas usuários vinculados à mesma empresa
+      const { data: companyUserRoles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("company_id", userRole.company_id);
+
+      const userIds = (companyUserRoles || []).map((ur: any) => ur.user_id);
+
+      if (userIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", userIds)
+          .order("full_name");
+        setUsers(usersData || []);
+      } else {
+        setUsers([]);
+      }
+
+      // Buscar leads da empresa
+      const { data: leadsData } = await supabase
+        .from("leads")
+        .select("id, name, phone, telefone, tags")
+        .eq("company_id", userRole.company_id);
+      setLeads(leadsData || []);
+    } catch (error) {
+      console.error("Erro ao carregar dados:", error);
+    }
   };
 
   const filteredLeads = leads.filter((lead) => {
@@ -89,16 +138,23 @@ export function NovaTarefaDialog({
         return;
       }
 
-      // Converter data (YYYY-MM-DD) para ISO esperado pelo backend
-      const dueDateIso = dueDate ? new Date(`${dueDate}T00:00:00`).toISOString() : null;
+      // Converter datas (YYYY-MM-DD) para ISO esperado pelo backend
+      const startDateIso = startDate ? new Date(`${startDate}T00:00:00`).toISOString() : null;
+      const dueDateIso = dueDate ? new Date(`${dueDate}T23:59:59`).toISOString() : null;
 
+      // Se não tiver assignee_id definido, usar o primeiro responsável
+      const primaryAssignee = assigneeId && assigneeId.trim() 
+        ? assigneeId 
+        : (responsaveis.length > 0 ? responsaveis[0] : null);
+      
       // Normalizar valores vazios para null (o schema espera null, não string vazia)
       const normalizedData = {
         title,
         description: description || null,
         priority,
-        due_date: dueDateIso,
-        assignee_id: assigneeId && assigneeId.trim() ? assigneeId : null,
+        start_date: startDateIso, // Data início do prazo
+        due_date: dueDateIso, // Data final do prazo
+        assignee_id: primaryAssignee,
         lead_id: leadId && leadId.trim() ? leadId : null,
         column_id: columnId && columnId.trim() ? columnId : null,
         board_id: boardId && boardId.trim() ? boardId : null,
@@ -162,7 +218,8 @@ export function NovaTarefaDialog({
             title: normalizedData.title,
             description: normalizedData.description || null,
             priority: normalizedData.priority || 'media',
-            due_date: normalizedData.due_date || null,
+            start_date: normalizedData.start_date || null, // Data início do prazo
+            due_date: normalizedData.due_date || null, // Data final do prazo
             assignee_id: normalizedData.assignee_id || null,
             lead_id: normalizedData.lead_id || null,
             column_id: normalizedData.column_id || null,
@@ -191,6 +248,7 @@ export function NovaTarefaDialog({
               title: normalizedData.title,
               description: normalizedData.description || null,
               priority: normalizedData.priority || 'media',
+              start_date: normalizedData.start_date || null,
               due_date: normalizedData.due_date || null,
               assignee_id: normalizedData.assignee_id || null,
               lead_id: normalizedData.lead_id || null,
@@ -257,6 +315,7 @@ export function NovaTarefaDialog({
       setTitle("");
       setDescription("");
       setPriority("media");
+      setStartDate("");
       setDueDate("");
       setAssigneeId("");
       setLeadId("");
@@ -335,47 +394,113 @@ export function NovaTarefaDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Prioridade</Label>
-              <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="baixa">Baixa</SelectItem>
-                  <SelectItem value="media">Média</SelectItem>
-                  <SelectItem value="alta">Alta</SelectItem>
-                  <SelectItem value="urgente">Urgente</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Prazo</Label>
-              <Input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-              />
-            </div>
+          <div>
+            <Label>Prioridade</Label>
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="baixa">Baixa</SelectItem>
+                <SelectItem value="media">Média</SelectItem>
+                <SelectItem value="alta">Alta</SelectItem>
+                <SelectItem value="urgente">Urgente</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <div>
+          {/* Prazo Estimado - Data Inicial e Final */}
+          <div className="space-y-2">
+            <Label>Prazo Estimado</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">Data Início</Label>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    // Se a data final for anterior à inicial, ajustar
+                    if (dueDate && e.target.value > dueDate) {
+                      setDueDate(e.target.value);
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Data Final</Label>
+                <Input
+                  type="date"
+                  value={dueDate}
+                  min={startDate || undefined}
+                  onChange={(e) => setDueDate(e.target.value)}
+                />
+              </div>
+            </div>
+            {startDate && dueDate && (
+              <p className="text-xs text-muted-foreground">
+                Duração: {Math.ceil((new Date(dueDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1} dia(s)
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
             <Label>Responsáveis (múltiplos)</Label>
-            <div className="grid grid-cols-2 gap-2 max-h-32 overflow-auto p-2 border rounded-md">
+            {/* Responsáveis selecionados */}
+            {responsaveis.length > 0 && (
+              <div className="flex flex-wrap gap-2 p-2 bg-primary/5 rounded-md border border-primary/20">
+                {responsaveis.map((id) => {
+                  const user = users.find(u => u.id === id);
+                  return user ? (
+                    <div 
+                      key={id}
+                      className="flex items-center gap-1.5 bg-primary/10 text-primary px-2 py-1 rounded-full text-xs"
+                    >
+                      <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-semibold">
+                        {user.full_name?.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="font-medium">{user.full_name}</span>
+                      <button 
+                        type="button"
+                        onClick={() => setResponsaveis(prev => prev.filter(i => i !== id))}
+                        className="hover:text-destructive ml-1"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : null;
+                })}
+              </div>
+            )}
+            {/* Lista de usuários para selecionar */}
+            <div className="grid grid-cols-2 gap-2 max-h-32 overflow-auto p-2 border rounded-md bg-muted/20">
               {users.map((u) => (
-                <label key={u.id} className="flex items-center gap-2 text-sm">
+                <label 
+                  key={u.id} 
+                  className={`flex items-center gap-2 text-sm cursor-pointer p-1.5 rounded transition-colors ${
+                    responsaveis.includes(u.id) 
+                      ? 'bg-primary/10 text-primary' 
+                      : 'hover:bg-muted'
+                  }`}
+                >
                   <Checkbox
                     checked={responsaveis.includes(u.id)}
                     onCheckedChange={(checked) => {
                       setResponsaveis((prev) => checked ? [...prev, u.id] : prev.filter(id => id !== u.id));
                     }}
                   />
-                  {u.full_name}
+                  <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold">
+                    {u.full_name?.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="truncate">{u.full_name}</span>
                 </label>
               ))}
             </div>
+            {responsaveis.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {responsaveis.length} responsável(is) selecionado(s)
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -410,37 +535,81 @@ export function NovaTarefaDialog({
 
           <div className="space-y-2">
             <Label>Tags</Label>
+            {/* Dropdown para selecionar tags existentes */}
+            <Popover open={tagsPopoverOpen} onOpenChange={setTagsPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button type="button" variant="outline" className="w-full justify-start">
+                  <Tag className="h-4 w-4 mr-2" />
+                  {tagsExistentes.length > 0 ? "Selecionar tag existente" : "Nenhuma tag cadastrada"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[300px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Buscar tag..." />
+                  <CommandList>
+                    <CommandEmpty>Nenhuma tag encontrada.</CommandEmpty>
+                    <CommandGroup>
+                      {tagsExistentes
+                        .filter(tag => !tags.includes(tag))
+                        .map((tag) => (
+                          <CommandItem
+                            key={tag}
+                            value={tag}
+                            onSelect={() => {
+                              if (!tags.includes(tag)) {
+                                setTags([...tags, tag]);
+                              }
+                              setTagsPopoverOpen(false);
+                            }}
+                          >
+                            <Tag className="h-4 w-4 mr-2" />
+                            {tag}
+                          </CommandItem>
+                        ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            
+            {/* Campo para adicionar nova tag */}
             <div className="flex gap-2">
-              <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} placeholder="Adicionar tag..." />
+              <Input 
+                value={tagInput} 
+                onChange={(e) => setTagInput(e.target.value)} 
+                placeholder="Ou criar nova tag..."
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addTag();
+                  }
+                }}
+              />
               <Button type="button" variant="outline" onClick={addTag}>
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {tags.map((tag) => (
-                <span key={tag} className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
-                  {tag}
-                  <button className="ml-1 text-muted-foreground" onClick={() => removeTag(tag)}>×</button>
-                </span>
-              ))}
-              {tags.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tag adicionada.</p>}
+            
+            {/* Tags selecionadas */}
+            <div className="flex flex-wrap gap-2 min-h-[32px] p-2 border rounded-md bg-muted/20">
+              {tags.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhuma tag adicionada.</p>
+              ) : (
+                tags.map((tag) => (
+                  <span key={tag} className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
+                    <Tag className="h-3 w-3" />
+                    {tag}
+                    <button 
+                      type="button"
+                      className="ml-1 text-muted-foreground hover:text-destructive" 
+                      onClick={() => removeTag(tag)}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))
+              )}
             </div>
-          </div>
-
-          <div>
-            <Label>Responsável</Label>
-            <Select value={assigneeId} onValueChange={setAssigneeId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione um responsável" />
-              </SelectTrigger>
-              <SelectContent>
-                {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="space-y-2">

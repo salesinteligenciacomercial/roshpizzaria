@@ -46,7 +46,8 @@ interface Task {
   priority: string;
   assignee_id: string | null;
   assignee_name?: string;
-  due_date: string | null;
+  start_date: string | null; // Data início do prazo
+  due_date: string | null; // Data final do prazo
   lead_id: string | null;
   lead_name?: string;
   column_id?: string | null;
@@ -687,7 +688,34 @@ export default function Tarefas() {
       console.log("📊 Dados brutos:", tasksData);
 
       // ✅ CORRIGIDO: Usa campos reais do banco sem fallback de descrição
+      // Buscar nomes dos responsáveis adicionais
+      const allResponsaveisIds = new Set<string>();
+      (tasksData || []).forEach((task: any) => {
+        if (Array.isArray(task.responsaveis)) {
+          task.responsaveis.forEach((id: string) => allResponsaveisIds.add(id));
+        }
+      });
+      
+      let responsaveisMap = new Map<string, string>();
+      if (allResponsaveisIds.size > 0) {
+        const { data: responsaveisProfiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', Array.from(allResponsaveisIds));
+        
+        if (responsaveisProfiles) {
+          responsaveisProfiles.forEach((p: any) => {
+            responsaveisMap.set(p.id, p.full_name);
+          });
+        }
+      }
+      
       const formattedTasks = (tasksData || []).map((task: any) => {
+        // Mapear IDs dos responsáveis para nomes
+        const responsaveis_names = Array.isArray(task.responsaveis) 
+          ? task.responsaveis.map((id: string) => responsaveisMap.get(id)).filter(Boolean)
+          : [];
+        
         return {
           ...task,
           checklist: task.checklist ?? [],
@@ -695,7 +723,8 @@ export default function Tarefas() {
           comments: task.comments ?? [],
           attachments: task.attachments ?? [],
           assignee_name: task.assignee?.full_name,
-          lead_name: task.lead?.nome || task.lead_name, // ✅ CORRIGIDO: usar 'nome' em vez de 'name'
+          responsaveis_names, // ✅ NOVO: Nomes dos responsáveis adicionais
+          lead_name: task.lead?.nome || task.lead?.name || task.lead_name,
         };
       });
       

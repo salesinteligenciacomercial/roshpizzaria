@@ -47,3 +47,6 @@ SELECT
   COUNT(*) FILTER (WHERE fromme = true AND (sent_by IS NULL OR TRIM(sent_by) = '')) as sem_assinatura
 FROM public.conversas;
 
+
+
+

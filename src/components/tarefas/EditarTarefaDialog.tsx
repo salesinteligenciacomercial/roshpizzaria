@@ -38,7 +38,8 @@ interface Task {
   priority: string;
   assignee_id: string | null;
   responsaveis?: string[];
-  due_date: string | null;
+  start_date: string | null; // Data início do prazo
+  due_date: string | null; // Data final do prazo
   lead_id: string | null;
   checklist?: { id?: string; text: string; done: boolean }[];
   tags?: string[];
@@ -69,6 +70,9 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || "");
   const [priority, setPriority] = useState(normalizePriority(task.priority));
+  const [startDate, setStartDate] = useState(
+    task.start_date ? new Date(task.start_date).toISOString().split("T")[0] : ""
+  );
   const [dueDate, setDueDate] = useState(
     task.due_date ? new Date(task.due_date).toISOString().split("T")[0] : ""
   );
@@ -98,6 +102,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
       setTitle(task.title);
       setDescription(task.description || "");
       setPriority(normalizePriority(task.priority));
+      setStartDate(task.start_date ? new Date(task.start_date).toISOString().split("T")[0] : "");
       setDueDate(task.due_date ? new Date(task.due_date).toISOString().split("T")[0] : "");
       setAssigneeId(task.assignee_id || "none");
       setLeadId(task.lead_id || "none");
@@ -112,10 +117,50 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
   }, [open, task]);
 
   const loadData = async () => {
-    const { data: usersData } = await supabase.from("profiles").select("id, full_name");
-    const { data: leadsData } = await supabase.from("leads").select("id, name");
-    setUsers(usersData || []);
-    setLeads(leadsData || []);
+    try {
+      // ✅ CORRIGIDO: Buscar apenas usuários da empresa atual (não de subcontas)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data: userRole } = await supabase
+        .from("user_roles")
+        .select("company_id")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (!userRole?.company_id) {
+        console.warn("Company ID não encontrado");
+        return;
+      }
+
+      // Buscar apenas usuários vinculados à mesma empresa
+      const { data: companyUserRoles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("company_id", userRole.company_id);
+
+      const userIds = (companyUserRoles || []).map((ur: any) => ur.user_id);
+
+      if (userIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", userIds)
+          .order("full_name");
+        setUsers(usersData || []);
+      } else {
+        setUsers([]);
+      }
+
+      // Buscar leads da empresa
+      const { data: leadsData } = await supabase
+        .from("leads")
+        .select("id, name")
+        .eq("company_id", userRole.company_id);
+      setLeads(leadsData || []);
+    } catch (error) {
+      console.error("Erro ao carregar dados:", error);
+    }
   };
 
   const validateForm = () => {
@@ -157,7 +202,13 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
     }
 
     try {
-      const dueDateIso = dueDate ? new Date(`${dueDate}T00:00:00`).toISOString() : null;
+      const startDateIso = startDate ? new Date(`${startDate}T00:00:00`).toISOString() : null;
+      const dueDateIso = dueDate ? new Date(`${dueDate}T23:59:59`).toISOString() : null;
+      
+      // Se não tiver assignee_id definido, usar o primeiro responsável
+      const primaryAssignee = (assigneeId && assigneeId !== 'none') 
+        ? assigneeId 
+        : (responsaveis.length > 0 ? responsaveis[0] : null);
 
       // Tentar usar Edge Function primeiro
       let edgeFunctionError = null;
@@ -170,8 +221,9 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
               title: title.trim(),
               description: description.trim(),
               priority,
+              start_date: startDateIso,
               due_date: dueDateIso,
-              assignee_id: assigneeId === 'none' ? null : assigneeId,
+              assignee_id: primaryAssignee,
               responsaveis,
               lead_id: leadId === 'none' ? null : leadId,
               checklist,
@@ -204,14 +256,14 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
 
         // Atualizar diretamente no banco
         // Construir objeto de atualização apenas com campos que existem no schema
-        // Removendo 'responsaveis' pois pode não existir no schema atual
         const updateData: any = {
           title: title.trim(),
           description: description.trim(),
           priority,
-          due_date: dueDateIso,
-          assignee_id: assigneeId === 'none' ? null : assigneeId,
-          responsaveis,
+          start_date: startDateIso, // Data início do prazo
+          due_date: dueDateIso, // Data final do prazo
+          assignee_id: primaryAssignee,
+          responsaveis: responsaveis || [],
           lead_id: leadId === 'none' ? null : leadId,
           checklist: checklist && checklist.length > 0 ? checklist : null,
           tags: tags && tags.length > 0 ? tags : null,
@@ -244,7 +296,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
       setErrors({});
       try {
         if (dueDateIso) {
-          await upsertCompromissoParaTarefa({ id: task.id, title: title.trim(), due_date: dueDateIso, assignee_id: assigneeId === 'none' ? null : assigneeId });
+          await upsertCompromissoParaTarefa({ id: task.id, title: title.trim(), due_date: dueDateIso, assignee_id: primaryAssignee });
         }
       } catch (compromissoError) {
         console.warn("Erro ao criar/atualizar compromisso:", compromissoError);
@@ -412,37 +464,61 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Prioridade</Label>
-                  <Select value={priority} onValueChange={setPriority}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="baixa">Baixa</SelectItem>
-                      <SelectItem value="media">Média</SelectItem>
-                      <SelectItem value="alta">Alta</SelectItem>
-                      <SelectItem value="urgente">Urgente</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div>
+                <Label>Prioridade</Label>
+                <Select value={priority} onValueChange={setPriority}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="baixa">Baixa</SelectItem>
+                    <SelectItem value="media">Média</SelectItem>
+                    <SelectItem value="alta">Alta</SelectItem>
+                    <SelectItem value="urgente">Urgente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <div>
-                  <Label>Prazo</Label>
-                  <Input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => {
-                      setDueDate(e.target.value);
-                      if (errors.dueDate) setErrors({ ...errors, dueDate: "" });
-                    }}
-                    className={errors.dueDate ? "border-destructive" : ""}
-                  />
-                  {errors.dueDate && (
-                    <p className="text-xs text-destructive mt-1">{errors.dueDate}</p>
-                  )}
+              {/* Prazo Estimado - Data Inicial e Final */}
+              <div className="space-y-2">
+                <Label>Prazo Estimado</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Data Início</Label>
+                    <Input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => {
+                        setStartDate(e.target.value);
+                        // Se a data final for anterior à inicial, ajustar
+                        if (dueDate && e.target.value > dueDate) {
+                          setDueDate(e.target.value);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Data Final</Label>
+                    <Input
+                      type="date"
+                      value={dueDate}
+                      min={startDate || undefined}
+                      onChange={(e) => {
+                        setDueDate(e.target.value);
+                        if (errors.dueDate) setErrors({ ...errors, dueDate: "" });
+                      }}
+                      className={errors.dueDate ? "border-destructive" : ""}
+                    />
+                    {errors.dueDate && (
+                      <p className="text-xs text-destructive mt-1">{errors.dueDate}</p>
+                    )}
+                  </div>
                 </div>
+                {startDate && dueDate && (
+                  <p className="text-xs text-muted-foreground">
+                    Duração: {Math.ceil((new Date(dueDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1} dia(s)
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -518,31 +594,48 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
                 </div>
               </div>
 
-              <div>
-                <Label>Responsável Principal</Label>
-                <Select value={assigneeId} onValueChange={setAssigneeId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um responsável" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {users.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.full_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
               <div className="space-y-2">
-                <Label>Responsáveis Adicionais (múltiplos)</Label>
+                <Label>Responsáveis (múltiplos)</Label>
+                {/* Responsáveis selecionados */}
+                {responsaveis.length > 0 && (
+                  <div className="flex flex-wrap gap-2 p-2 bg-primary/5 rounded-md border border-primary/20">
+                    {responsaveis.map((id) => {
+                      const user = users.find(u => u.id === id);
+                      return user ? (
+                        <div 
+                          key={id}
+                          className="flex items-center gap-1.5 bg-primary/10 text-primary px-2 py-1 rounded-full text-xs"
+                        >
+                          <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-semibold">
+                            {user.full_name?.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="font-medium">{user.full_name}</span>
+                          <button 
+                            type="button"
+                            onClick={() => setResponsaveis(prev => prev.filter(i => i !== id))}
+                            className="hover:text-destructive ml-1"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ) : null;
+                    })}
+                  </div>
+                )}
+                {/* Lista de usuários para selecionar */}
                 <div className="grid grid-cols-2 gap-2 max-h-40 overflow-auto p-3 border rounded-md bg-muted/10">
                   {users.length === 0 ? (
                     <p className="text-xs text-muted-foreground col-span-2">Carregando usuários...</p>
                   ) : (
                     users.map((u) => (
-                      <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/30 p-1.5 rounded transition-colors">
+                      <label 
+                        key={u.id} 
+                        className={`flex items-center gap-2 text-sm cursor-pointer p-1.5 rounded transition-colors ${
+                          responsaveis.includes(u.id) 
+                            ? 'bg-primary/10 text-primary' 
+                            : 'hover:bg-muted/30'
+                        }`}
+                      >
                         <Checkbox
                           checked={responsaveis.includes(u.id)}
                           onCheckedChange={(checked) => {
@@ -553,6 +646,9 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
                             );
                           }}
                         />
+                        <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold flex-shrink-0">
+                          {u.full_name?.charAt(0).toUpperCase()}
+                        </div>
                         <span className="flex-1 truncate">{u.full_name}</span>
                       </label>
                     ))
@@ -560,7 +656,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
                 </div>
                 {responsaveis.length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    {responsaveis.length} responsável(is) adicional(is) selecionado(s)
+                    {responsaveis.length} responsável(is) selecionado(s)
                   </p>
                 )}
               </div>

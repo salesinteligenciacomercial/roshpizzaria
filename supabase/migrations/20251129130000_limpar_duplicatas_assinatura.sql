@@ -63,3 +63,6 @@ SELECT
 FROM public.conversas
 WHERE fromme = true;
 
+
+
+

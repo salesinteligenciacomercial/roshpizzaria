@@ -24,6 +24,12 @@ import { Label } from "@/components/ui/label";
 import { useGlobalSync } from "@/hooks/useGlobalSync";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EditarLeadDialog } from "@/components/funil/EditarLeadDialog";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useTagsManager } from "@/hooks/useTagsManager";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, X } from "lucide-react";
 
 interface ConversaPopupProps {
   open: boolean;
@@ -46,6 +52,7 @@ interface Message {
   mimeType?: string;
   status?: string;
   origem?: string;
+  sentBy?: string; // Nome do usuário que enviou a mensagem
 }
 
 export function ConversaPopup({
@@ -75,6 +82,15 @@ export function ConversaPopup({
   const [quickMessages, setQuickMessages] = useState<Array<{ id: string; title: string; content: string; category: string }>>([]);
   const [quickCategories, setQuickCategories] = useState<Array<{ id: string; name: string }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // ✅ NOVO: Estado para Tags e Funis
+  const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
+  const [funis, setFunis] = useState<Array<{ id: string; nome: string; etapas: Array<{ id: string; nome: string }> }>>([]);
+  const [loadingFunis, setLoadingFunis] = useState(false);
+  const [currentUserName, setCurrentUserName] = useState<string>(""); // Nome do usuário logado
+  
+  // ✅ NOVO: Hook de tags sincronizado com gerenciador
+  const { allTags: tagsExistentes, refreshTags, addTagToLead, removeTagFromLead } = useTagsManager();
 
   // Cache simples de avatar por sessão do componente
   const avatarCacheRef = useRef<Map<string, string>>(new Map());
@@ -247,7 +263,8 @@ export function ConversaPopup({
       const formattedMessages: Message[] = (data || []).map((msg: any) => {
         const rawType = String(msg.tipo_mensagem || 'text').toLowerCase();
         const fileName = msg.arquivo_nome as string | undefined;
-        const mediaUrl = (msg.media_url || msg.arquivo_url) as string | undefined;
+        // ✅ CORREÇÃO: Buscar URL da mídia de todos os campos possíveis
+        const mediaUrl = (msg.media_url || msg.midia_url || msg.arquivo_url) as string | undefined;
 
         // Normalizar tipo para os valores aceitos pelo componente
         let type: Message["type"] = 'text';
@@ -310,6 +327,7 @@ export function ConversaPopup({
           mimeType,
           status: msg.status,
           origem: msg.origem,
+          sentBy: msg.sent_by || (sender === "user" ? "Equipe" : undefined), // ✅ Nome do remetente
         } as Message;
       });
 
@@ -371,12 +389,131 @@ export function ConversaPopup({
     }
   };
 
+  // ✅ NOVO: Carregar nome do usuário atual
+  const carregarUsuarioAtual = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle();
+      
+      if (profile?.full_name) {
+        setCurrentUserName(profile.full_name);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar usuário:', err);
+    }
+  };
+
+  // ✅ NOVO: Carregar funis disponíveis
+  const carregarFunis = async () => {
+    setLoadingFunis(true);
+    try {
+      const companyId = await getCompanyId();
+      if (!companyId) return;
+      
+      const { data: funisData } = await supabase
+        .from('funis')
+        .select('id, nome, etapas:etapas_funil(id, nome, ordem)')
+        .eq('company_id', companyId)
+        .order('created_at');
+      
+      if (funisData) {
+        setFunis(funisData.map((f: any) => ({
+          id: f.id,
+          nome: f.nome,
+          etapas: (f.etapas || []).sort((a: any, b: any) => a.ordem - b.ordem)
+        })));
+      }
+    } catch (err) {
+      console.error('Erro ao carregar funis:', err);
+    } finally {
+      setLoadingFunis(false);
+    }
+  };
+
+  // ✅ NOVO: Adicionar tag ao lead
+  const handleAddTag = async (tag: string) => {
+    if (!leadVinculado?.id) {
+      toast.error('Salve o lead antes de adicionar tags');
+      return;
+    }
+    try {
+      await addTagToLead(leadVinculado.id, tag);
+      // Atualizar estado local
+      setLeadVinculado((prev: any) => ({
+        ...prev,
+        tags: [...(prev.tags || []), tag]
+      }));
+      setTagsPopoverOpen(false);
+      toast.success('Tag adicionada');
+    } catch (err) {
+      console.error('Erro ao adicionar tag:', err);
+      toast.error('Erro ao adicionar tag');
+    }
+  };
+
+  // ✅ NOVO: Remover tag do lead
+  const handleRemoveTag = async (tag: string) => {
+    if (!leadVinculado?.id) return;
+    try {
+      await removeTagFromLead(leadVinculado.id, tag);
+      // Atualizar estado local
+      setLeadVinculado((prev: any) => ({
+        ...prev,
+        tags: (prev.tags || []).filter((t: string) => t !== tag)
+      }));
+      toast.success('Tag removida');
+    } catch (err) {
+      console.error('Erro ao remover tag:', err);
+      toast.error('Erro ao remover tag');
+    }
+  };
+
+  // ✅ NOVO: Mover lead para funil/etapa
+  const handleMoverParaFunil = async (funilId: string, etapaId: string) => {
+    if (!leadVinculado?.id) {
+      toast.error('Salve o lead antes de mover para um funil');
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({ 
+          funil_id: funilId, 
+          etapa_id: etapaId,
+          company_id: leadVinculado.company_id // Preservar company_id
+        })
+        .eq('id', leadVinculado.id);
+      
+      if (error) throw error;
+      
+      // Atualizar estado local
+      setLeadVinculado((prev: any) => ({
+        ...prev,
+        funil_id: funilId,
+        etapa_id: etapaId
+      }));
+      toast.success('Lead movido para o funil');
+    } catch (err) {
+      console.error('Erro ao mover lead:', err);
+      toast.error('Erro ao mover lead para funil');
+    }
+  };
+
   // Carregar mensagens quando o popup abrir
   useEffect(() => {
     if (open && leadPhone) {
       carregarMensagens();
       carregarMensagensAgendadas();
       carregarLead();
+      carregarFunis(); // ✅ Carregar funis disponíveis
+      carregarUsuarioAtual(); // ✅ Carregar nome do usuário
+      refreshTags(); // ✅ Atualizar tags do gerenciador
       // Buscar foto de perfil via Edge Function (com cache)
       (async () => {
         try {
@@ -395,12 +532,92 @@ export function ConversaPopup({
       setLeadVinculado(null);
       setAvatarUrl(undefined);
     }
-  }, [open, leadPhone, leadId]);
+  }, [open, leadPhone, leadId, refreshTags]);
 
   // Scroll para o final quando novas mensagens chegarem
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // ✅ NOVO: Realtime - Receber mensagens em tempo real
+  useEffect(() => {
+    if (!open || !leadPhone) return;
+
+    const telefoneNormalizado = normalizePhoneBR(leadPhone);
+    if (!telefoneNormalizado) return;
+
+    console.log('🔴 [REALTIME] Iniciando escuta para:', telefoneNormalizado);
+
+    // Criar canal de realtime para a conversa
+    const channel = supabase
+      .channel(`conversa-popup-${telefoneNormalizado}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'conversas',
+        },
+        async (payload: any) => {
+          const newMsg = payload.new;
+          
+          // Verificar se a mensagem é para este número
+          const msgNumero = (newMsg.numero || newMsg.telefone_formatado || '').replace(/\D/g, '').replace('@s.whatsapp.net', '').replace('@c.us', '');
+          const leadNumero = telefoneNormalizado.replace(/\D/g, '');
+          
+          if (!msgNumero.includes(leadNumero) && !leadNumero.includes(msgNumero)) {
+            return; // Mensagem não é desta conversa
+          }
+
+          console.log('📩 [REALTIME] Nova mensagem recebida:', newMsg.id);
+
+          // Formatar a nova mensagem
+          const rawType = String(newMsg.tipo_mensagem || 'text').toLowerCase();
+          let type: Message["type"] = 'text';
+          if (rawType === 'texto' || rawType === 'text') type = 'text';
+          else if (rawType === 'image' || rawType === 'imagem') type = 'image';
+          else if (rawType === 'audio' || rawType === 'áudio') type = 'audio';
+          else if (rawType === 'video' || rawType === 'vídeo') type = 'video';
+          else if (rawType === 'pdf') type = 'pdf';
+          else if (rawType === 'document' || rawType === 'documento') type = 'document';
+
+          const fromMeFlag = newMsg.fromme === true || newMsg.fromMe === true;
+          const sender: Message["sender"] = fromMeFlag ? "user" : "contact";
+          const mediaUrl = (newMsg.media_url || newMsg.midia_url || newMsg.arquivo_url) as string | undefined;
+
+          const formattedMessage: Message = {
+            id: newMsg.id || Date.now().toString(),
+            content: newMsg.mensagem || "",
+            type,
+            sender,
+            timestamp: new Date(newMsg.created_at || new Date()),
+            delivered: true,
+            read: false,
+            mediaUrl,
+            fileName: newMsg.arquivo_nome,
+            status: newMsg.status,
+            origem: newMsg.origem,
+            sentBy: newMsg.sent_by || (sender === "user" ? "Equipe" : undefined),
+          };
+
+          // Adicionar mensagem se não existir
+          setMessages((prev) => {
+            const exists = prev.some(m => m.id === formattedMessage.id);
+            if (exists) return prev;
+            return [...prev, formattedMessage];
+          });
+        }
+      )
+      .subscribe((status) => {
+        console.log('🔴 [REALTIME] Status do canal:', status);
+      });
+
+    // Cleanup ao fechar ou desmontar
+    return () => {
+      console.log('🔴 [REALTIME] Fechando canal');
+      supabase.removeChannel(channel);
+    };
+  }, [open, leadPhone]);
 
   // Carregar Mensagens Rápidas quando o modal abrir
   // ⚡ CORREÇÃO: Carregar do banco de dados ao invés de localStorage
@@ -518,6 +735,7 @@ export function ConversaPopup({
           nome_contato: leadName,
           company_id: companyId,
           fromme: true, // ✅ CORREÇÃO: Definir fromme como true para mensagens enviadas
+          sent_by: currentUserName || "Equipe", // ✅ CORREÇÃO: Nome do usuário que enviou
           replied_to_message: replyingTo ? messages.find(m => m.id === replyingTo)?.content || null : null,
         },
       ]);
@@ -542,6 +760,7 @@ export function ConversaPopup({
         timestamp: new Date(),
         delivered: true,
         read: false,
+        sentBy: currentUserName || "Equipe", // ✅ Nome do usuário que enviou
       };
 
       setMessages((prev) => [...prev, newMessage]);
@@ -612,8 +831,10 @@ export function ConversaPopup({
         nome_contato: leadName,
         arquivo_nome: file.name,
         midia_url: dataUrl, // ⚡ Salvar URL da mídia
+        media_url: dataUrl, // ⚡ Campo alternativo para mídia
         company_id: companyId,
         fromme: true, // Marcar como mensagem enviada pelo usuário
+        sent_by: currentUserName || "Equipe", // ✅ Nome do usuário que enviou
       }).select('id').single();
 
       // ⚡ Log detalhado para debugging
@@ -650,6 +871,7 @@ export function ConversaPopup({
         timestamp: new Date(),
         delivered: true,
         mediaUrl: dataUrl, // ⚡ Usar data URL permanente
+        sentBy: currentUserName || "Equipe", // ✅ Nome do usuário
         fileName: file.name,
         mimeType: file.type,
       };
@@ -937,9 +1159,10 @@ export function ConversaPopup({
               )}
               <div className="flex items-center gap-2">
                 <MediaUpload onFileSelected={handleSendMedia as any} />
-            {/* Mensagens Rápidas */}
-            <Button variant="outline" size="sm" onClick={() => setQuickOpen(true)}>
-              💡 Rápidas
+            {/* Mensagens Rápidas - Botão igual ao menu Conversas */}
+            <Button variant="outline" size="sm" onClick={() => setQuickOpen(true)} className="gap-1">
+              <Zap className="h-4 w-4 text-yellow-500" />
+              Rápidas
             </Button>
             {/* Agendar Mensagem */}
             <Button variant="outline" size="sm" onClick={() => setScheduledOpen(true)}>
@@ -1049,122 +1272,258 @@ export function ConversaPopup({
                   }}
                 />
 
-                {/* Tags */}
+                {/* Tags - Sincronizado com Gerenciador de Tags */}
                 <div>
                   <h4 className="text-foreground font-medium mb-2 flex items-center gap-2">
                     <Tag className="h-4 w-4" /> Tags
                   </h4>
                   <div className="flex flex-wrap gap-2 mb-2">
                     {leadVinculado?.tags?.map((tag: string, idx: number) => (
-                      <Badge key={idx} variant="secondary">
+                      <Badge key={idx} variant="secondary" className="flex items-center gap-1 pr-1">
                         {tag}
+                        <button 
+                          onClick={() => handleRemoveTag(tag)}
+                          className="ml-1 hover:text-destructive rounded-full"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
                       </Badge>
                     ))}
-                  </div>
-                </div>
-
-                {/* Funil de Vendas */}
-                {leadVinculado && (
-                  <div>
-                    <h4 className="text-foreground font-medium mb-2 flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4" /> Funil de Vendas
-                    </h4>
-                    {leadVinculado.funil_id ? (
-                      <Badge variant="outline" className="w-full justify-center py-2">
-                        Lead no funil
-                      </Badge>
-                    ) : (
-                      <p className="text-sm text-muted-foreground mb-2">
-                        Não está em nenhum funil
-                      </p>
+                    {(!leadVinculado?.tags || leadVinculado.tags.length === 0) && (
+                      <span className="text-xs text-muted-foreground">Nenhuma tag</span>
                     )}
                   </div>
-                )}
+                  {/* Adicionar Tag */}
+                  <Popover open={tagsPopoverOpen} onOpenChange={setTagsPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="w-full gap-2">
+                        <Plus className="h-3 w-3" />
+                        Adicionar Tag
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[250px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Buscar tag..." />
+                        <CommandList>
+                          <CommandEmpty>Nenhuma tag encontrada.</CommandEmpty>
+                          <CommandGroup>
+                            {tagsExistentes
+                              .filter(tag => !(leadVinculado?.tags || []).includes(tag))
+                              .map((tag) => (
+                                <CommandItem
+                                  key={tag}
+                                  value={tag}
+                                  onSelect={() => handleAddTag(tag)}
+                                >
+                                  <Tag className="h-3 w-3 mr-2" />
+                                  {tag}
+                                </CommandItem>
+                              ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Funil de Vendas - Com seleção de funil/etapa */}
+                <div>
+                  <h4 className="text-foreground font-medium mb-2 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4" /> Funil de Vendas
+                  </h4>
+                  {leadVinculado?.funil_id ? (
+                    <div className="space-y-2">
+                      <Badge variant="outline" className="w-full justify-center py-2 bg-green-500/10 text-green-600 border-green-500/20">
+                        {funis.find(f => f.id === leadVinculado.funil_id)?.nome || 'No funil'}
+                        {leadVinculado.etapa_id && (
+                          <span className="ml-1">
+                            → {funis.find(f => f.id === leadVinculado.funil_id)?.etapas.find(e => e.id === leadVinculado.etapa_id)?.nome || ''}
+                          </span>
+                        )}
+                      </Badge>
+                      {/* Mover para outra etapa */}
+                      <Select 
+                        value={leadVinculado.etapa_id || ''} 
+                        onValueChange={(etapaId) => handleMoverParaFunil(leadVinculado.funil_id, etapaId)}
+                      >
+                        <SelectTrigger className="w-full text-xs">
+                          <SelectValue placeholder="Mover para etapa..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {funis.find(f => f.id === leadVinculado.funil_id)?.etapas.map((etapa) => (
+                            <SelectItem key={etapa.id} value={etapa.id}>
+                              {etapa.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        Não está em nenhum funil
+                      </p>
+                      {/* Adicionar a um funil */}
+                      {leadVinculado ? (
+                        funis.length > 0 ? (
+                          <Select onValueChange={(value) => {
+                            const [funilId, etapaId] = value.split('|');
+                            handleMoverParaFunil(funilId, etapaId);
+                          }}>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Selecionar funil..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {funis.map((funil) => (
+                                <SelectItem 
+                                  key={funil.id} 
+                                  value={`${funil.id}|${funil.etapas[0]?.id || ''}`}
+                                >
+                                  {funil.nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            {loadingFunis ? "Carregando funis..." : "Nenhum funil disponível"}
+                          </p>
+                        )
+                      ) : (
+                        <p className="text-xs text-amber-600">
+                          Salve o lead para adicionar a um funil
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
         </div>
-      {/* Dialog: Mensagens Rápidas */}
+      {/* Dialog: Mensagens Rápidas - CÓPIA EXATA do menu Conversas */}
       <UIDialog open={quickOpen} onOpenChange={setQuickOpen}>
-        <UIDialogContent>
-          <UIDialogHeader>
-            <UIDialogTitle>Mensagens Rápidas</UIDialogTitle>
+        <UIDialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0">
+          <UIDialogHeader className="flex-shrink-0 p-6 pb-2">
+            <UIDialogTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-yellow-500" />
+              Respostas Rápidas
+            </UIDialogTitle>
+            <p className="text-sm text-muted-foreground">Mensagens por Categoria:</p>
           </UIDialogHeader>
-          <div className="grid gap-2">
-            {quickMessages.length > 0 ? (
-              <>
-                {quickCategories.length > 0 ? (
-                  quickCategories.map(cat => {
-                    const items = quickMessages.filter(m => m.category === cat.id);
-                    if (items.length === 0) return null;
-                    return (
-                      <div key={cat.id} className="border rounded-md p-3 space-y-2">
-                        <div className="text-sm font-medium">{cat.name}</div>
-                        <div className="grid gap-2">
-                          {items.map((m) => (
-                            <Button
-                              key={m.id}
-                              variant="outline"
-                              className="justify-start"
-                              onClick={() => { handleSendMessage(m.content); setQuickOpen(false); }}
-                            >
-                              {m.title || (m.content.length > 60 ? m.content.slice(0, 57) + "..." : m.content)}
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  quickMessages.map((m) => (
-                    <Button
-                      key={m.id}
-                      variant="outline"
-                      className="justify-start"
-                      onClick={() => { handleSendMessage(m.content); setQuickOpen(false); }}
-                    >
-                      {m.title || (m.content.length > 60 ? m.content.slice(0, 57) + "..." : m.content)}
-                    </Button>
-                  ))
-                )}
+          
+          {/* Container com scroll */}
+          <div className="flex-1 overflow-y-auto px-6 pb-6" style={{ maxHeight: 'calc(85vh - 100px)' }}>
+            <div className="space-y-2">
+              {quickCategories.length === 0 && quickMessages.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Zap className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm">Nenhuma mensagem rápida cadastrada</p>
+                  <p className="text-xs mt-1">Crie mensagens rápidas no menu Conversas</p>
+                </div>
+              ) : (
+                <>
+                  <Accordion type="single" collapsible className="w-full">
+                    {quickCategories.map((category) => {
+                      const categoryMessages = quickMessages.filter((msg) => msg.category === category.id);
+                      return (
+                        <AccordionItem key={category.id} value={category.id}>
+                          <AccordionTrigger className="hover:no-underline">
+                            <div className="flex items-center justify-between w-full pr-4">
+                              <span className="font-medium">{category.name}</span>
+                              <Badge variant="secondary">{categoryMessages.length}</Badge>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            {categoryMessages.length === 0 ? (
+                              <p className="text-sm text-muted-foreground py-2 px-4">
+                                Nenhuma mensagem nesta categoria
+                              </p>
+                            ) : (
+                              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                                {categoryMessages.map((qm) => (
+                                  <div
+                                    key={qm.id}
+                                    className="flex items-start justify-between p-3 bg-background rounded border hover:bg-muted/50 cursor-pointer transition-colors"
+                                    onClick={() => { handleSendMessage(qm.content); setQuickOpen(false); }}
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium">{qm.title}</p>
+                                      <p className="text-xs text-muted-foreground mt-1 break-words line-clamp-2">
+                                        {qm.content}
+                                      </p>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      className="ml-2 flex-shrink-0"
+                                      onClick={(e) => { 
+                                        e.stopPropagation(); 
+                                        handleSendMessage(qm.content); 
+                                        setQuickOpen(false); 
+                                      }}
+                                    >
+                                      Enviar
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
 
-                {/* Mensagens sem categoria conhecida */}
-                {quickCategories.length > 0 && (() => {
-                  const knownCatIds = new Set(quickCategories.map(c => c.id));
-                  const uncategorized = quickMessages.filter(m => !knownCatIds.has(m.category));
-                  if (uncategorized.length === 0) return null;
-                  return (
-                    <div className="border rounded-md p-3 space-y-2">
-                      <div className="text-sm font-medium">Outras</div>
-                      <div className="grid gap-2">
-                        {uncategorized.map(m => (
-                          <Button
-                            key={m.id}
-                            variant="outline"
-                            className="justify-start"
-                            onClick={() => { handleSendMessage(m.content); setQuickOpen(false); }}
-                          >
-                            {m.title || (m.content.length > 60 ? m.content.slice(0, 57) + "..." : m.content)}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </>
-            ) : (
-              <>
-                {[
-                  `Olá ${leadName && leadName.split(' ').length > 0 ? leadName.split(' ')[0] : 'cliente'}, tudo bem? Posso ajudar?`,
-                  'Estamos com uma condição especial hoje, posso te explicar?',
-                  'Consegue me enviar um áudio ou uma foto para entender melhor?'
-                ].map((msg) => (
-                  <Button key={msg} variant="outline" className="justify-start" onClick={() => { handleSendMessage(msg); setQuickOpen(false); }}>
-                    {msg}
-                  </Button>
-                ))}
-              </>
-            )}
+                  {/* Mensagens sem categoria */}
+                  {(() => {
+                    const knownCatIds = new Set(quickCategories.map(c => c.id));
+                    const uncategorized = quickMessages.filter(m => !knownCatIds.has(m.category));
+                    if (uncategorized.length === 0) return null;
+                    return (
+                      <Accordion type="single" collapsible className="w-full mt-2">
+                        <AccordionItem value="uncategorized">
+                          <AccordionTrigger className="hover:no-underline">
+                            <div className="flex items-center justify-between w-full pr-4">
+                              <span className="font-medium">Outras</span>
+                              <Badge variant="secondary">{uncategorized.length}</Badge>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                              {uncategorized.map((qm) => (
+                                <div
+                                  key={qm.id}
+                                  className="flex items-start justify-between p-3 bg-background rounded border hover:bg-muted/50 cursor-pointer transition-colors"
+                                  onClick={() => { handleSendMessage(qm.content); setQuickOpen(false); }}
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium">{qm.title}</p>
+                                    <p className="text-xs text-muted-foreground mt-1 break-words line-clamp-2">
+                                      {qm.content}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    className="ml-2 flex-shrink-0"
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      handleSendMessage(qm.content); 
+                                      setQuickOpen(false); 
+                                    }}
+                                  >
+                                    Enviar
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
           </div>
         </UIDialogContent>
       </UIDialog>

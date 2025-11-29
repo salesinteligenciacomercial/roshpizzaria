@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { User, Calendar as CalendarIcon, Trash2, ExternalLink, MessageSquare, Plus, GripVertical, Bell, Play, Pause, Clock, Paperclip, Link, FileText, Image, ChevronDown, ChevronUp, Pencil, X, Check } from "lucide-react";
+import { User, Calendar as CalendarIcon, Trash2, ExternalLink, MessageSquare, Plus, GripVertical, Bell, Play, Pause, Clock, Paperclip, Link, FileText, Image, ChevronDown, ChevronUp, Pencil, X, Check, CheckCircle2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EditarTarefaDialog } from "./EditarTarefaDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -60,7 +60,8 @@ interface Task {
   assignee_name?: string;
   responsaveis?: string[];
   responsaveis_names?: string[];
-  due_date: string | null;
+  start_date: string | null; // Data início do prazo
+  due_date: string | null; // Data final do prazo
   lead_id: string | null;
   lead_name?: string;
   checklist?: { id?: string; text: string; done: boolean }[];
@@ -652,6 +653,72 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     [task.description]
   );
 
+  // ✅ NOVO: Calcular progresso do checklist
+  const checklistProgress = useMemo(() => {
+    if (!localChecklist || localChecklist.length === 0) {
+      return { total: 0, completed: 0, percentage: 0, isComplete: false };
+    }
+    const total = localChecklist.length;
+    const completed = localChecklist.filter(i => i.done).length;
+    const percentage = Math.round((completed / total) * 100);
+    return { total, completed, percentage, isComplete: completed === total };
+  }, [localChecklist]);
+
+  // ✅ NOVO: Calcular dias restantes e duração do prazo
+  const deadlineInfo = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    
+    const startDate = task.start_date ? new Date(task.start_date) : null;
+    const endDate = task.due_date ? new Date(task.due_date) : null;
+    
+    if (startDate) startDate.setHours(0, 0, 0, 0);
+    if (endDate) endDate.setHours(0, 0, 0, 0);
+    
+    let daysRemaining = 0;
+    let totalDays = 0;
+    let daysElapsed = 0;
+    let timeProgress = 0;
+    let status: 'not_started' | 'in_progress' | 'overdue' | 'completed' = 'not_started';
+    
+    if (endDate) {
+      daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (startDate && endDate) {
+        totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        daysElapsed = Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (daysElapsed < 0) {
+          status = 'not_started';
+          timeProgress = 0;
+        } else if (daysRemaining < 0) {
+          status = 'overdue';
+          timeProgress = 100;
+        } else {
+          status = 'in_progress';
+          timeProgress = Math.min(100, Math.max(0, Math.round((daysElapsed / totalDays) * 100)));
+        }
+      } else {
+        if (daysRemaining < 0) {
+          status = 'overdue';
+        } else {
+          status = 'in_progress';
+        }
+      }
+    }
+    
+    return {
+      startDate,
+      endDate,
+      daysRemaining,
+      totalDays,
+      daysElapsed,
+      timeProgress,
+      status,
+      hasDeadline: !!endDate
+    };
+  }, [task.start_date, task.due_date]);
+
   return (
     <Card
       ref={setNodeRef}
@@ -660,24 +727,15 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       {...listeners}
       className={`group relative mb-3 border-0 shadow-card hover:shadow-lg transition-all duration-300 overflow-hidden cursor-grab active:cursor-grabbing ${
         isOverdue ? 'ring-2 ring-red-500/50 border-red-200' : ''
-      } ${!isOwnTask ? 'opacity-40 saturate-50' : ''}`}
+      } ${!isOwnTask ? 'opacity-40 saturate-50' : ''} ${
+        checklistProgress.isComplete ? 'ring-2 ring-green-500/60 shadow-green-500/20' : ''
+      }`}
     >
       <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       
       <CardHeader className="relative pb-3">
         <div className="flex items-start justify-between gap-2">
-          {/* Botão de expandir/minimizar movido para o início (esquerda) */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 flex-shrink-0"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
-            title={isExpanded ? 'Recolher' : 'Expandir'}
-          >
-            {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </Button>
-
+          {/* Conteúdo principal do card com mais espaço */}
           <div className="flex items-center gap-0.5 flex-1">
             <div className={`h-1 w-1 rounded-full ${getPriorityColor(task.priority)} animate-pulse`} />
             
@@ -714,13 +772,41 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                     </span>
                   )}
                   
-                  {/* Data movida para abaixo do título */}
-                  {task.due_date && (
-                    <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md self-start mt-1 ${
-                      isOverdue ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-muted/50 text-muted-foreground'
-                    }`}>
-                      <CalendarIcon className="h-3 w-3" />
-                      <span className="font-medium">{new Date(task.due_date).toLocaleDateString("pt-BR")}</span>
+                  {/* Prazo - Data Inicial e Final com Contador */}
+                  {deadlineInfo.hasDeadline && (
+                    <div className="flex flex-col gap-1 mt-1">
+                      <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md self-start ${
+                        deadlineInfo.status === 'overdue' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-muted/50 text-muted-foreground'
+                      }`}>
+                        <CalendarIcon className="h-3 w-3" />
+                        <span className="font-medium">
+                          {deadlineInfo.startDate && deadlineInfo.endDate 
+                            ? `${deadlineInfo.startDate.toLocaleDateString("pt-BR")} - ${deadlineInfo.endDate.toLocaleDateString("pt-BR")}`
+                            : deadlineInfo.endDate?.toLocaleDateString("pt-BR")
+                          }
+                        </span>
+                      </div>
+                      {/* Contador de dias e progresso */}
+                      <div className={`flex items-center gap-2 text-[10px] px-2 ${
+                        deadlineInfo.status === 'overdue' ? 'text-red-600' : 
+                        deadlineInfo.daysRemaining <= 2 ? 'text-orange-600' : 'text-muted-foreground'
+                      }`}>
+                        <span>
+                          {deadlineInfo.status === 'overdue' 
+                            ? `⚠️ Atrasado ${Math.abs(deadlineInfo.daysRemaining)} dia(s)`
+                            : deadlineInfo.daysRemaining === 0 
+                              ? '⏰ Vence hoje!'
+                              : deadlineInfo.daysRemaining === 1
+                                ? '⏰ Vence amanhã'
+                                : `📅 Faltam ${deadlineInfo.daysRemaining} dias`
+                          }
+                        </span>
+                        {deadlineInfo.totalDays > 0 && (
+                          <span className="text-muted-foreground">
+                            • Duração: {deadlineInfo.totalDays} dia(s)
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -739,23 +825,116 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                   </span>
                 )}
                 
-                {/* Data movida para abaixo do título */}
-                {task.due_date && (
-                  <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md self-start ${
-                    isOverdue ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-muted/50 text-muted-foreground'
-                  }`}>
-                    <CalendarIcon className="h-3 w-3" />
-                    <span className="font-medium">{new Date(task.due_date).toLocaleDateString("pt-BR")}</span>
+                {/* Prazo - Data Inicial e Final com Contador */}
+                {deadlineInfo.hasDeadline && (
+                  <div className="flex flex-col gap-1">
+                    <div className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md self-start ${
+                      deadlineInfo.status === 'overdue' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-muted/50 text-muted-foreground'
+                    }`}>
+                      <CalendarIcon className="h-3 w-3" />
+                      <span className="font-medium">
+                        {deadlineInfo.startDate && deadlineInfo.endDate 
+                          ? `${deadlineInfo.startDate.toLocaleDateString("pt-BR")} - ${deadlineInfo.endDate.toLocaleDateString("pt-BR")}`
+                          : deadlineInfo.endDate?.toLocaleDateString("pt-BR")
+                        }
+                      </span>
+                    </div>
+                    {/* Contador de dias e progresso */}
+                    <div className={`flex items-center gap-2 text-[10px] px-2 ${
+                      deadlineInfo.status === 'overdue' ? 'text-red-600' : 
+                      deadlineInfo.daysRemaining <= 2 ? 'text-orange-600' : 'text-muted-foreground'
+                    }`}>
+                      <span>
+                        {deadlineInfo.status === 'overdue' 
+                          ? `⚠️ Atrasado ${Math.abs(deadlineInfo.daysRemaining)} dia(s)`
+                          : deadlineInfo.daysRemaining === 0 
+                            ? '⏰ Vence hoje!'
+                            : deadlineInfo.daysRemaining === 1
+                              ? '⏰ Vence amanhã'
+                              : `📅 Faltam ${deadlineInfo.daysRemaining} dias`
+                        }
+                      </span>
+                      {deadlineInfo.totalDays > 0 && (
+                        <span className="text-muted-foreground">
+                          • Duração: {deadlineInfo.totalDays} dia(s)
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
             )}
           </div>
           
-          {/* Badge de prioridade no final (direita) */}
-          <Badge className={`${getPriorityColor(task.priority)} border-0 text-white shadow-sm flex-shrink-0`}>
-            {task.priority}
-          </Badge>
+          {/* Coluna direita: Indicador de progresso, botão expandir e prioridade */}
+          <div className="flex flex-col items-center gap-1 flex-shrink-0">
+            {/* ✅ Indicador de progresso do checklist - ACIMA do botão expandir */}
+            {(checklistProgress.total > 0 || deadlineInfo.hasDeadline) && (
+              <div 
+                className={`flex items-center justify-center transition-all duration-300 ${
+                  checklistProgress.isComplete 
+                    ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' 
+                    : deadlineInfo.status === 'overdue'
+                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                      : 'bg-background border-2 border-muted shadow-sm'
+                } rounded-full`}
+                style={{ width: '28px', height: '28px' }}
+                title={
+                  checklistProgress.isComplete 
+                    ? '✅ Checklist 100% Concluído - GANHO!' 
+                    : deadlineInfo.status === 'overdue'
+                      ? `⚠️ Atrasado ${Math.abs(deadlineInfo.daysRemaining)} dia(s) | Progresso: ${checklistProgress.percentage}%`
+                      : checklistProgress.total > 0
+                        ? `Progresso: ${checklistProgress.completed}/${checklistProgress.total} (${checklistProgress.percentage}%)`
+                        : `Faltam ${deadlineInfo.daysRemaining} dias para o prazo`
+                }
+              >
+                {checklistProgress.isComplete ? (
+                  <CheckCircle2 className="h-4 w-4 animate-pulse" />
+                ) : deadlineInfo.status === 'overdue' ? (
+                  <span className="text-[9px] font-bold">!</span>
+                ) : (
+                  <div className="relative flex items-center justify-center">
+                    <svg width="22" height="22" viewBox="0 0 22 22" className="transform -rotate-90">
+                      <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="2" className="text-muted/40" />
+                      <circle
+                        cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="2"
+                        strokeDasharray={`${(checklistProgress.percentage / 100) * 50.3} 50.3`}
+                        strokeLinecap="round"
+                        className={`transition-all duration-500 ${
+                          checklistProgress.percentage >= 75 ? 'text-green-500' :
+                          checklistProgress.percentage >= 50 ? 'text-yellow-500' :
+                          checklistProgress.percentage >= 25 ? 'text-orange-500' : 'text-blue-500'
+                        }`}
+                      />
+                    </svg>
+                    <span className={`absolute text-[7px] font-bold ${
+                      deadlineInfo.daysRemaining <= 2 && deadlineInfo.daysRemaining >= 0 ? 'text-orange-600' : 'text-foreground'
+                    }`}>
+                      {checklistProgress.total > 0 ? `${checklistProgress.percentage}%` : deadlineInfo.hasDeadline ? `${deadlineInfo.daysRemaining}d` : ''}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Botão de expandir/minimizar */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); setIsExpanded(v => !v); }}
+              title={isExpanded ? 'Recolher' : 'Expandir'}
+            >
+              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </Button>
+            
+            {/* Badge de prioridade */}
+            <Badge className={`${getPriorityColor(task.priority)} border-0 text-white shadow-sm text-[10px] px-1.5 py-0`}>
+              {task.priority}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       
@@ -788,23 +967,47 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
         )}
         
         <div className="flex items-center gap-4 text-xs flex-wrap">
+          {/* Responsáveis - Exibição com avatares */}
           {(task.assignee_name || (task.responsaveis_names && task.responsaveis_names.length > 0)) && (
-            <div className="flex items-center gap-1.5 text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
-              <User className="h-3 w-3" />
-              <div className="flex gap-1 items-center flex-wrap">
+            <div className="flex items-center gap-2">
+              {/* Avatares empilhados */}
+              <div className="flex -space-x-2">
                 {task.assignee_name && (
-                  <span className="font-medium">{task.assignee_name}</span>
+                  <div 
+                    className="h-6 w-6 rounded-full bg-primary/20 border-2 border-background flex items-center justify-center text-[10px] font-semibold text-primary"
+                    title={task.assignee_name}
+                  >
+                    {task.assignee_name.charAt(0).toUpperCase()}
+                  </div>
                 )}
-                {task.responsaveis_names && task.responsaveis_names.length > 0 && (
-                  <>
-                    {task.assignee_name && <span className="text-muted-foreground">, </span>}
-                    {task.responsaveis_names.map((name, idx) => (
-                      <span key={idx} className="font-medium">
-                        {name}
-                        {idx < task.responsaveis_names!.length - 1 && ', '}
-                      </span>
-                    ))}
-                  </>
+                {task.responsaveis_names && task.responsaveis_names.slice(0, 3).map((name, idx) => (
+                  <div 
+                    key={idx}
+                    className="h-6 w-6 rounded-full bg-blue-500/20 border-2 border-background flex items-center justify-center text-[10px] font-semibold text-blue-600"
+                    title={name}
+                  >
+                    {name.charAt(0).toUpperCase()}
+                  </div>
+                ))}
+                {task.responsaveis_names && task.responsaveis_names.length > 3 && (
+                  <div 
+                    className="h-6 w-6 rounded-full bg-muted border-2 border-background flex items-center justify-center text-[10px] font-semibold text-muted-foreground"
+                    title={`+${task.responsaveis_names.length - 3} mais`}
+                  >
+                    +{task.responsaveis_names.length - 3}
+                  </div>
+                )}
+              </div>
+              {/* Nomes dos responsáveis */}
+              <div className="flex flex-col text-muted-foreground">
+                <span className="text-[10px] font-medium truncate max-w-[120px]" title={task.assignee_name || ''}>
+                  {task.assignee_name || (task.responsaveis_names?.[0] || '')}
+                </span>
+                {((task.assignee_name && task.responsaveis_names && task.responsaveis_names.length > 0) || 
+                  (!task.assignee_name && task.responsaveis_names && task.responsaveis_names.length > 1)) && (
+                  <span className="text-[9px] text-muted-foreground/70">
+                    +{task.responsaveis_names!.length - (task.assignee_name ? 0 : 1)} responsável(is)
+                  </span>
                 )}
               </div>
             </div>

@@ -53,3 +53,6 @@ BEGIN
   RAISE NOTICE '   Sem assinatura (restantes): %', sem_assinatura;
 END $$;
 
+
+
+
