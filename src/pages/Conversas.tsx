@@ -287,6 +287,7 @@ function Conversas() {
   const [aiMode, setAiMode] = useState<Record<string, boolean>>({});
   const [quickMessages, setQuickMessages] = useState<QuickMessage[]>([]);
   const [quickCategories, setQuickCategories] = useState<QuickMessageCategory[]>([]);
+  const [showQuickRepliesPopup, setShowQuickRepliesPopup] = useState(false); // Estado para popup de respostas rápidas
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [scheduledMessages, setScheduledMessages] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -2832,7 +2833,7 @@ function Conversas() {
 
       // ETAPA 3: Buscar assignments (responsáveis) das conversas
       // Buscar assignments para todos os telefones (para mostrar responsável e filtrar se necessário)
-      let assignmentsMap = new Map<string, string | null>(); // telefone -> assigned_user_id
+      let assignmentsMap = new Map<string, string>(); // telefone -> nome do responsável
       
       // ⚡ CORREÇÃO: Buscar assignments de TODOS os telefones das conversas (sem limite)
       const telefonesParaBuscar = Array.from(conversasMap.keys())
@@ -2860,13 +2861,33 @@ function Conversas() {
           }
         }
         
-        // Processar todos os assignments encontrados
+        // ⚡ CORREÇÃO: Buscar nomes dos usuários atribuídos
+        const assignedUserIds = [...new Set(allAssignments.map(a => a.assigned_user_id).filter(Boolean))];
+        const assignedUserNamesMap = new Map<string, string>();
+        
+        if (assignedUserIds.length > 0) {
+          const { data: assignedProfiles } = await supabase
+            .from('profiles')
+            .select('id, full_name, email')
+            .in('id', assignedUserIds);
+          
+          if (assignedProfiles) {
+            assignedProfiles.forEach(profile => {
+              assignedUserNamesMap.set(profile.id, profile.full_name || profile.email || 'Usuário');
+            });
+          }
+        }
+        
+        // Processar todos os assignments encontrados - agora com NOMES
         allAssignments.forEach((assignment: any) => {
           const telKey = assignment.telefone_formatado?.replace(/[^0-9]/g, '') || '';
-          if (telKey) {
-            assignmentsMap.set(telKey, assignment.assigned_user_id);
+          if (telKey && assignment.assigned_user_id) {
+            const userName = assignedUserNamesMap.get(assignment.assigned_user_id) || 'Usuário';
+            assignmentsMap.set(telKey, userName);
           }
         });
+        
+        console.log('👥 [LOAD] Responsáveis carregados:', assignmentsMap.size, 'conversas com responsável');
       }
 
       // ETAPA 4: Criar lista de conversas (otimizado)
@@ -3020,14 +3041,48 @@ function Conversas() {
           if (ultimaMensagem.sender === 'user') {
             statusConversa = "answered";
           } else {
-            // Se última mensagem é do contato = aguardando resposta
-            statusConversa = "waiting";
+            // ⚡ MELHORIA: Verificar se é uma conversa "ao vivo" (interação recente)
+            // Se há mensagens do usuário nos últimos 5 minutos, considerar "em atendimento"
+            const TEMPO_CONVERSA_AO_VIVO = 5 * 60 * 1000; // 5 minutos em ms
+            const agora = Date.now();
+            
+            // Buscar última mensagem enviada pelo usuário
+            const ultimaMensagemDoUsuario = [...messagensFormatadas]
+              .reverse()
+              .find(m => m.sender === 'user');
+            
+            if (ultimaMensagemDoUsuario) {
+              const tempoUltimaMensagemUsuario = ultimaMensagemDoUsuario.timestamp instanceof Date 
+                ? ultimaMensagemDoUsuario.timestamp.getTime() 
+                : new Date(ultimaMensagemDoUsuario.timestamp).getTime();
+              
+              const tempoUltimaMensagemContato = ultimaMensagem.timestamp instanceof Date 
+                ? ultimaMensagem.timestamp.getTime() 
+                : new Date(ultimaMensagem.timestamp).getTime();
+              
+              // Se o usuário respondeu há menos de 5 minutos, é conversa ao vivo
+              const usuarioRespondeuRecentemente = (agora - tempoUltimaMensagemUsuario) < TEMPO_CONVERSA_AO_VIVO;
+              // Se a mensagem do contato é recente (últimos 5 min), é conversa ao vivo
+              const contatoRespondeuRecentemente = (agora - tempoUltimaMensagemContato) < TEMPO_CONVERSA_AO_VIVO;
+              
+              // Conversa ao vivo = ambos interagiram recentemente
+              if (usuarioRespondeuRecentemente && contatoRespondeuRecentemente) {
+                statusConversa = "answered"; // Manter em "Em Atendimento"
+                console.log('🔴 [STATUS] Conversa AO VIVO detectada - mantendo em atendimento');
+              } else {
+                // Conversa não está ao vivo - contato aguardando resposta
+                statusConversa = "waiting";
+              }
+            } else {
+              // Sem mensagem do usuário = aguardando primeira resposta
+              statusConversa = "waiting";
+            }
           }
         }
         
-        // Buscar responsável da conversa (se houver)
+        // Buscar responsável da conversa (se houver) - agora retorna NOME, não ID
         const telKey = telefone.replace(/[^0-9]/g, '');
-        const assignedUserId = assignmentsMap.get(telKey);
+        const assignedUserName = assignmentsMap.get(telKey); // ⚡ CORRIGIDO: Agora é o nome do usuário
         
         const conversaCriada = {
           id: telefone,
@@ -3043,7 +3098,7 @@ function Conversas() {
             ? `https://ui-avatars.com/api/?name=${encodeURIComponent('Grupo')}&background=10b981&color=fff`
             : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`,
           isGroup: isGroup, // ⚡ CORREÇÃO CRÍTICA: Definir isGroup corretamente
-          responsavel: assignedUserId || undefined // Adicionar responsável à conversa
+          responsavel: assignedUserName || undefined // ⚡ CORRIGIDO: Usar nome do usuário, não ID
         };
         
         // ⚡ LOG: Debug de conversa criada
@@ -3986,7 +4041,7 @@ function Conversas() {
           nome_contato: selectedConv.contactName,
           company_id: userRole?.company_id,
           owner_id: user?.id,
-          sent_by: userProfile?.full_name || userProfile?.email || 'Você',
+          sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
           fromme: true,
         }]);
       }
@@ -4140,7 +4195,7 @@ function Conversas() {
         mediaUrl: publicUrl, // ⚡ FASE 3: Usar URL do Storage
         fileName: file.name,
         mimeType: file.type,
-        sentBy: userProfile?.full_name || userName || "Você",
+        sentBy: userProfile?.full_name || userName || "Equipe",
       };
 
       // ⚡ CORREÇÃO CRÍTICA: Ordenar mensagens por timestamp após adicionar nova mensagem
@@ -4305,7 +4360,7 @@ function Conversas() {
         midia_url: storageUrl, // ⚡ CORREÇÃO CRÍTICA: Salvar URL do Storage
         company_id: userRole?.company_id,
         owner_id: user?.id,
-        sent_by: userProfile?.full_name || userProfile?.email || 'Você',
+        sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
         fromme: true,
       }]).select('id, midia_url').single();
       
@@ -4325,7 +4380,7 @@ function Conversas() {
         delivered: true,
         read: false,
         mediaUrl: storageUrl, // ⚡ CORREÇÃO CRÍTICA: Usar URL do Storage
-        sentBy: userName || "Você",
+        sentBy: userName || "Equipe",
       };
 
       // ⚡ CORREÇÃO CRÍTICA: Ordenar mensagens por timestamp após adicionar nova mensagem
@@ -4494,7 +4549,7 @@ function Conversas() {
           .eq('id', user.id)
           .single();
         
-        const sentByName = userProfile?.full_name || userProfile?.email || 'Você';
+        const sentByName = userProfile?.full_name || userProfile?.email || 'Equipe';
         console.log('👤 [ENVIO] Nome do usuário que envia:', sentByName);
         
         const { data: userRole } = await supabase
@@ -4596,7 +4651,7 @@ function Conversas() {
               .eq('id', user.id)
               .single();
             
-            const sentByName = userProfile?.full_name || userProfile?.email || 'Você';
+            const sentByName = userProfile?.full_name || userProfile?.email || 'Equipe';
             
             const { data: userRole } = await supabase
               .from('user_roles')
@@ -5455,7 +5510,7 @@ function Conversas() {
                     company_id: companyId,
                     lead_id: leadVinculado.id,
                     owner_id: user?.id,
-                    sent_by: userProfile?.full_name || userProfile?.email || 'Você',
+                    sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
                     fromme: true,
                   }]);
                   
@@ -6916,7 +6971,7 @@ function Conversas() {
         nome_contato: selectedConv.contactName,
         company_id: userRole?.company_id,
         owner_id: user?.id,
-        sent_by: userProfile?.full_name || userProfile?.email || 'Você',
+        sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
         fromme: true, // ⚡ CRÍTICO: Marcar como mensagem enviada para aparecer no lado direito
       }]);
 
@@ -7174,6 +7229,16 @@ function Conversas() {
               isGroup={conv.isGroup}
               isBlocked={blockedGroups.has(conv.phoneNumber || conv.id)}
               assignedUser={conv.assignedUser}
+              status={conv.status}
+              lastRespondedBy={(() => {
+                // ⚡ Buscar última mensagem enviada pelo usuário para mostrar quem respondeu
+                const userMessages = conv.messages.filter(m => m.sender === "user");
+                if (userMessages.length > 0) {
+                  const lastUserMsg = userMessages[userMessages.length - 1];
+                  return lastUserMsg.sentBy || undefined;
+                }
+                return undefined;
+              })()}
               onToggleBlock={conv.isGroup ? () => {
                 const groupId = conv.phoneNumber || conv.id;
                 const isBlocked = blockedGroups.has(groupId);
@@ -7485,6 +7550,121 @@ function Conversas() {
                       rows={1}
                     />
                     <AudioRecorder onSendAudio={handleSendAudio} />
+                    
+                    {/* Botão de Respostas Rápidas */}
+                    <Dialog open={showQuickRepliesPopup} onOpenChange={setShowQuickRepliesPopup}>
+                      <DialogTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          size="icon"
+                          className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 border-amber-300"
+                          title="Respostas Rápidas"
+                        >
+                          <Zap className="h-5 w-5" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2">
+                            <Zap className="h-5 w-5 text-amber-500" />
+                            Respostas Rápidas
+                          </DialogTitle>
+                        </DialogHeader>
+                        
+                        {/* Mensagens por Categoria */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium">Mensagens por Categoria:</h4>
+                          {quickCategories.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground border rounded-lg">
+                              <Zap className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                              <p>Nenhuma categoria criada</p>
+                              <p className="text-sm">Use o botão "Mensagens Rápidas" no painel lateral para criar</p>
+                            </div>
+                          ) : (
+                            <Accordion type="single" collapsible className="w-full">
+                              {quickCategories.map((category) => {
+                                const categoryMessages = quickMessages
+                                  .filter((msg) => msg.category === category.id)
+                                  .sort((a, b) => {
+                                    const indexA = quickMessages.findIndex(m => m.id === a.id);
+                                    const indexB = quickMessages.findIndex(m => m.id === b.id);
+                                    return indexA - indexB;
+                                  });
+                                return (
+                                  <AccordionItem key={category.id} value={category.id}>
+                                    <AccordionTrigger className="hover:no-underline">
+                                      <div className="flex items-center justify-between w-full pr-4">
+                                        <span className="font-medium">{category.name}</span>
+                                        <Badge variant="secondary">{categoryMessages.length}</Badge>
+                                      </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent>
+                                      {categoryMessages.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground py-2 px-4">
+                                          Nenhuma mensagem nesta categoria
+                                        </p>
+                                      ) : (
+                                        <div className="space-y-2">
+                                          {categoryMessages.map((qm) => (
+                                            <div
+                                              key={qm.id}
+                                              className="flex items-start justify-between p-3 bg-background rounded border"
+                                            >
+                                              <div className="flex-1 min-w-0 mr-3">
+                                                <p className="font-medium text-sm mb-1">{qm.title}</p>
+                                                {qm.type === "text" ? (
+                                                  <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                                                    {qm.content}
+                                                  </p>
+                                                ) : (
+                                                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                    {qm.type === "image" ? (
+                                                      <>
+                                                        <ImageIcon className="h-4 w-4" />
+                                                        <span>[Imagem]</span>
+                                                        {qm.mediaUrl && (
+                                                          <img 
+                                                            src={qm.mediaUrl} 
+                                                            alt="Preview" 
+                                                            className="h-12 w-12 object-cover rounded border"
+                                                          />
+                                                        )}
+                                                      </>
+                                                    ) : (
+                                                      <>
+                                                        <Video className="h-4 w-4" />
+                                                        <span>[Vídeo]</span>
+                                                      </>
+                                                    )}
+                                                  </div>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-1 flex-shrink-0">
+                                                <Button
+                                                  size="sm"
+                                                  onClick={() => {
+                                                    sendQuickMessage(qm);
+                                                    setShowQuickRepliesPopup(false);
+                                                  }}
+                                                  className="bg-primary hover:bg-primary/90"
+                                                >
+                                                  Enviar
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </AccordionContent>
+                                  </AccordionItem>
+                                );
+                              })}
+                            </Accordion>
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    
                     <Button 
                       onClick={() => {
                         handleSendMessage();

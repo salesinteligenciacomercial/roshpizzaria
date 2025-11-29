@@ -1320,7 +1320,7 @@ export default function Agenda() {
                     company_id: userRole.company_id,
                     lead_id: formData.lead_id,
                     owner_id: user?.id,
-                    sent_by: userProfile?.full_name || userProfile?.email || 'Você',
+                    sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
                     fromme: true,
                   }]);
                   
@@ -1580,7 +1580,7 @@ export default function Agenda() {
                         nome_contato: leadData.name,
                         company_id: userRole.company_id,
                         owner_id: user?.id,
-                        sent_by: userProfile?.full_name || userProfile?.email || 'Você',
+                        sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
                         fromme: true,
                         created_at: new Date().toISOString()
                       });

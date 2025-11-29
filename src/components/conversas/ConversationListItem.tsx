@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, Instagram, Facebook, MoreVertical, Edit, UserPlus, Trash2, Lock, Unlock } from "lucide-react";
+import { MessageSquare, Instagram, Facebook, MoreVertical, Edit, UserPlus, Trash2, Lock, Unlock, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -36,6 +36,8 @@ interface ConversationListItemProps {
     name: string;
     avatar?: string;
   };
+  lastRespondedBy?: string; // ⚡ Nome do último usuário que respondeu
+  status?: "waiting" | "answered" | "resolved"; // Status da conversa
 }
 
 function ConversationListItemComponent({
@@ -60,6 +62,8 @@ function ConversationListItemComponent({
   onDeleteConversation,
   onToggleBlock,
   assignedUser,
+  lastRespondedBy,
+  status,
 }: ConversationListItemProps) {
   const getChannelIcon = () => {
     switch (channel) {
@@ -184,6 +188,13 @@ function ConversationListItemComponent({
             )}
             
             <div className="flex flex-wrap gap-1.5 text-xs">
+              {/* ⚡ NOVO: Mostrar quem respondeu por último (Em Atendimento) */}
+              {status === "answered" && lastRespondedBy && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium">
+                  <User className="h-3 w-3" />
+                  {lastRespondedBy}
+                </span>
+              )}
               {responsavel && (
                 <span className="text-muted-foreground truncate">👤 {responsavel}</span>
               )}

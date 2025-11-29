@@ -22,6 +22,7 @@ export interface Message {
   read?: boolean;
   mediaUrl?: string;
   fileName?: string;
+  sentBy?: string; // ⚡ Nome do usuário que enviou a mensagem
 }
 
 export interface Conversation {
@@ -193,6 +194,7 @@ export const useConversationsCache = (companyId: string | null) => {
             timestamp: new Date(m.created_at || Date.now()),
             delivered: true,
             read: m.status !== 'Recebida',
+            sentBy: m.sent_by || undefined, // ⚡ CORREÇÃO: Incluir assinatura do banco
           }));
 
         // ⚡ Pegar primeiro nome_contato disponível (já está garantido pelo trigger)
@@ -206,6 +208,30 @@ export const useConversationsCache = (companyId: string | null) => {
           statusConversa = "resolved";
         } else if (ultimaMensagem?.sender === 'user') {
           statusConversa = "answered";
+        } else if (ultimaMensagem) {
+          // ⚡ MELHORIA: Verificar se é conversa "ao vivo" (interação recente)
+          const TEMPO_CONVERSA_AO_VIVO = 5 * 60 * 1000; // 5 minutos
+          const agora = Date.now();
+          
+          const ultimaMensagemDoUsuario = [...messagensFormatadas]
+            .reverse()
+            .find(m => m.sender === 'user');
+          
+          if (ultimaMensagemDoUsuario) {
+            const tempoUltimaMsgUsuario = ultimaMensagemDoUsuario.timestamp instanceof Date 
+              ? ultimaMensagemDoUsuario.timestamp.getTime() 
+              : new Date(ultimaMensagemDoUsuario.timestamp).getTime();
+            
+            const tempoUltimaMsgContato = ultimaMensagem.timestamp instanceof Date 
+              ? ultimaMensagem.timestamp.getTime() 
+              : new Date(ultimaMensagem.timestamp).getTime();
+            
+            // Conversa ao vivo = ambos interagiram nos últimos 5 min
+            if ((agora - tempoUltimaMsgUsuario) < TEMPO_CONVERSA_AO_VIVO && 
+                (agora - tempoUltimaMsgContato) < TEMPO_CONVERSA_AO_VIVO) {
+              statusConversa = "answered"; // Manter em "Em Atendimento"
+            }
+          }
         }
 
         const isGroup = mensagens[0]?.is_group || /@g\.us$/.test(telefone);

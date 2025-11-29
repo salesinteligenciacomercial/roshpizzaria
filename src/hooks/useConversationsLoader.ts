@@ -312,6 +312,34 @@ export const useConversationsLoader = () => {
           } else if (ultimaMensagem) {
             if (ultimaMensagem.sender === 'user') {
               statusConversa = "answered";
+            } else {
+              // ⚡ MELHORIA: Verificar se é uma conversa "ao vivo" (interação recente)
+              const TEMPO_CONVERSA_AO_VIVO = 5 * 60 * 1000; // 5 minutos
+              const agora = Date.now();
+              
+              const ultimaMensagemDoUsuario = [...messagensFormatadas]
+                .reverse()
+                .find(m => m.sender === 'user');
+              
+              if (ultimaMensagemDoUsuario) {
+                const tempoUltimaMsgUsuario = ultimaMensagemDoUsuario.timestamp instanceof Date 
+                  ? ultimaMensagemDoUsuario.timestamp.getTime() 
+                  : new Date(ultimaMensagemDoUsuario.timestamp).getTime();
+                
+                const tempoUltimaMsgContato = ultimaMensagem.timestamp instanceof Date 
+                  ? ultimaMensagem.timestamp.getTime() 
+                  : new Date(ultimaMensagem.timestamp).getTime();
+                
+                // Conversa ao vivo = ambos interagiram nos últimos 5 min
+                if ((agora - tempoUltimaMsgUsuario) < TEMPO_CONVERSA_AO_VIVO && 
+                    (agora - tempoUltimaMsgContato) < TEMPO_CONVERSA_AO_VIVO) {
+                  statusConversa = "answered"; // Manter em "Em Atendimento"
+                } else {
+                  statusConversa = "waiting";
+                }
+              } else {
+                statusConversa = "waiting";
+              }
             }
           }
 

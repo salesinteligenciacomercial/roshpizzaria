@@ -1126,33 +1126,46 @@ serve(async (req) => {
       fromme: validatedData.fromMe === true, // CORREÇÃO: fromme minúsculo (PostgreSQL converte para lowercase)
     };
     
-    // ⚡ CORREÇÃO: Se mensagem foi enviada pelo CRM (fromMe = true), buscar nome do usuário para assinatura
-    if (validatedData.fromMe === true && companyId) {
-      try {
-        // Buscar primeiro usuário admin ou qualquer usuário da empresa
-        const { data: companyUsers } = await supabase
-          .from('user_roles')
-          .select('user_id')
-          .eq('company_id', companyId)
-          .limit(1)
-          .single();
-        
-        if (companyUsers?.user_id) {
-          // Buscar nome do usuário
-          const { data: userProfile } = await supabase
-            .from('profiles')
-            .select('full_name, email')
-            .eq('id', companyUsers.user_id)
-            .single();
+    // ⚡ CORREÇÃO DEFINITIVA: Se mensagem foi enviada (fromMe = true), SEMPRE adicionar assinatura
+    if (validatedData.fromMe === true) {
+      // Primeiro, garantir que tenha uma assinatura padrão
+      insertData.sent_by = "Equipe";
+      
+      if (companyId) {
+        try {
+          // Buscar usuários da empresa para tentar identificar quem enviou
+          const { data: companyUsers } = await supabase
+            .from('user_roles')
+            .select('user_id, role')
+            .eq('company_id', companyId)
+            .order('role', { ascending: true }); // admin primeiro
           
-          if (userProfile) {
-            insertData.sent_by = userProfile.full_name || userProfile.email;
-            insertData.owner_id = companyUsers.user_id;
-            console.log('✅ [WEBHOOK] Assinatura adicionada:', insertData.sent_by);
+          if (companyUsers && companyUsers.length > 0) {
+            // Buscar nomes de todos os usuários da empresa
+            const userIds = companyUsers.map(u => u.user_id);
+            const { data: profiles } = await supabase
+              .from('profiles')
+              .select('id, full_name, email')
+              .in('id', userIds);
+            
+            if (profiles && profiles.length > 0) {
+              // Usar o primeiro usuário com nome preenchido
+              const userWithName = profiles.find(p => p.full_name && p.full_name.trim() !== '');
+              if (userWithName) {
+                insertData.sent_by = userWithName.full_name;
+                insertData.owner_id = userWithName.id;
+              } else if (profiles[0]) {
+                // Fallback: usar email se não tiver nome
+                insertData.sent_by = profiles[0].email || "Equipe";
+                insertData.owner_id = profiles[0].id;
+              }
+            }
           }
+          console.log('✅ [WEBHOOK] Assinatura DEFINITIVA adicionada:', insertData.sent_by);
+        } catch (error) {
+          console.error('⚠️ [WEBHOOK] Erro ao buscar assinatura, usando fallback "Equipe":', error);
+          // Manter o fallback "Equipe" já definido acima
         }
-      } catch (error) {
-        console.error('⚠️ [WEBHOOK] Erro ao buscar assinatura do usuário:', error);
       }
     }
     
