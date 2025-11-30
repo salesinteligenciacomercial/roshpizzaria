@@ -186,61 +186,71 @@ serve(async (req) => {
 
     // Verificar se é mídia (base64, URL) ou texto
     if (validatedData.mediaBase64) {
-      // Enviar mídia via base64 - Formato Evolution API
-      evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
-      
       // Normalizar tipo de mídia
       let mediaType = validatedData.tipo_mensagem || 'document';
       if (mediaType === 'texto') mediaType = 'text';
       if (mediaType === 'pdf') mediaType = 'document';
       
-      // Definir mimeType baseado no tipo de mídia e extensão do arquivo
-      let mimeType = validatedData.mimeType;
-      if (!mimeType) {
-        const fileName = validatedData.fileName?.toLowerCase() || '';
-        if (mediaType === 'image') {
-          if (fileName.endsWith('.png')) mimeType = 'image/png';
-          else if (fileName.endsWith('.gif')) mimeType = 'image/gif';
-          else if (fileName.endsWith('.webp')) mimeType = 'image/webp';
-          else mimeType = 'image/jpeg';
-        } else if (mediaType === 'audio') {
-          if (fileName.endsWith('.ogg')) mimeType = 'audio/ogg';
-          else if (fileName.endsWith('.wav')) mimeType = 'audio/wav';
-          else if (fileName.endsWith('.m4a')) mimeType = 'audio/mp4';
-          else mimeType = 'audio/mpeg';
-        } else if (mediaType === 'video') {
-          if (fileName.endsWith('.mov')) mimeType = 'video/quicktime';
-          else if (fileName.endsWith('.avi')) mimeType = 'video/x-msvideo';
-          else if (fileName.endsWith('.webm')) mimeType = 'video/webm';
-          else mimeType = 'video/mp4';
-        } else if (validatedData.tipo_mensagem === 'pdf' || fileName.endsWith('.pdf')) {
-          mimeType = 'application/pdf';
-        } else {
-          if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
-            mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-          } else if (fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) {
-            mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-          } else if (fileName.endsWith('.ppt') || fileName.endsWith('.pptx')) {
-            mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-          } else if (fileName.endsWith('.txt')) {
-            mimeType = 'text/plain';
-          } else if (fileName.endsWith('.zip')) {
-            mimeType = 'application/zip';
+      // ✅ CORREÇÃO: Usar endpoint específico para áudio (PTT/Voz)
+      if (mediaType === 'audio') {
+        // Endpoint específico para áudio de voz (Push To Talk)
+        // Usar sendWhatsAppAudio que envia como áudio de voz gravado
+        const baseUrl = INSTANCE_API_URL || EVOLUTION_API_URL;
+        evolutionUrl = `${baseUrl}/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`;
+        
+        bodyPayload = {
+          number: isGroup ? (target as any).groupId : (target as any).number,
+          audio: `data:audio/ogg;base64,${validatedData.mediaBase64}`, // Formato data URI
+          delay: 1200, // Delay para simular digitação
+        };
+        console.log(`🎤 Enviando áudio PTT via sendWhatsAppAudio para: ${bodyPayload.number}`);
+      } else {
+        // Enviar outras mídias via sendMedia - Formato Evolution API
+        evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
+        
+        // Definir mimeType baseado no tipo de mídia e extensão do arquivo
+        let mimeType = validatedData.mimeType;
+        if (!mimeType) {
+          const fileName = validatedData.fileName?.toLowerCase() || '';
+          if (mediaType === 'image') {
+            if (fileName.endsWith('.png')) mimeType = 'image/png';
+            else if (fileName.endsWith('.gif')) mimeType = 'image/gif';
+            else if (fileName.endsWith('.webp')) mimeType = 'image/webp';
+            else mimeType = 'image/jpeg';
+          } else if (mediaType === 'video') {
+            if (fileName.endsWith('.mov')) mimeType = 'video/quicktime';
+            else if (fileName.endsWith('.avi')) mimeType = 'video/x-msvideo';
+            else if (fileName.endsWith('.webm')) mimeType = 'video/webm';
+            else mimeType = 'video/mp4';
+          } else if (validatedData.tipo_mensagem === 'pdf' || fileName.endsWith('.pdf')) {
+            mimeType = 'application/pdf';
           } else {
-            mimeType = 'application/octet-stream';
+            if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
+              mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            } else if (fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) {
+              mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+            } else if (fileName.endsWith('.ppt') || fileName.endsWith('.pptx')) {
+              mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+            } else if (fileName.endsWith('.txt')) {
+              mimeType = 'text/plain';
+            } else if (fileName.endsWith('.zip')) {
+              mimeType = 'application/zip';
+            } else {
+              mimeType = 'application/octet-stream';
+            }
           }
         }
+        
+        bodyPayload = {
+          number: isGroup ? (target as any).groupId : (target as any).number,
+          mediatype: mediaType,
+          mimetype: mimeType,
+          caption: validatedData.caption || validatedData.mensagem || " ",
+          fileName: validatedData.fileName || 'arquivo',
+          media: validatedData.mediaBase64,
+        };
+        console.log(`📸 Enviando mídia base64 (${mediaType})`);
       }
-      
-      bodyPayload = {
-        number: isGroup ? (target as any).groupId : (target as any).number,
-        mediatype: mediaType,
-        mimetype: mimeType,
-        caption: validatedData.caption || validatedData.mensagem || " ",
-        fileName: validatedData.fileName || 'arquivo',
-        media: validatedData.mediaBase64,
-      };
-      console.log(`📸 Enviando mídia base64 (${mediaType})`);
     } else if (validatedData.mediaUrl) {
       // Enviar mídia via URL - Formato Evolution API
       evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
@@ -267,12 +277,41 @@ serve(async (req) => {
     }
 
     // Função auxiliar para tentativas com endpoints alternativos (compatibilidade Evolution)
-    const tryPost = async (urls: string[], payload: any) => {
+    const tryPost = async (urls: string[], payload: any, isAudio: boolean = false) => {
       let lastError: any = null;
+      const targetNumber = isGroup ? (target as any).groupId : (target as any).number;
+      
       for (const url of urls) {
         try {
           if (!INSTANCE_API_KEY) {
             throw new Error('API key não configurada');
+          }
+          
+          // Ajustar payload para diferentes endpoints de áudio
+          let currentPayload = payload;
+          if (isAudio && validatedData.mediaBase64) {
+            if (url.includes('sendWhatsAppAudio')) {
+              currentPayload = {
+                number: targetNumber,
+                audio: `data:audio/ogg;base64,${validatedData.mediaBase64}`,
+                delay: 1200,
+              };
+            } else if (url.includes('sendPtv')) {
+              currentPayload = {
+                number: targetNumber,
+                audio: `data:audio/ogg;base64,${validatedData.mediaBase64}`,
+              };
+            } else if (url.includes('sendMedia')) {
+              currentPayload = {
+                number: targetNumber,
+                mediatype: 'audio',
+                mimetype: 'audio/ogg',
+                caption: '',
+                fileName: 'audio.ogg',
+                media: validatedData.mediaBase64,
+              };
+            }
+            console.log(`🎤 Tentando endpoint: ${url}`);
           }
           
           const res = await fetch(url, {
@@ -281,7 +320,7 @@ serve(async (req) => {
               "Content-Type": "application/json",
               "apikey": INSTANCE_API_KEY,
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(currentPayload),
           });
           let parsed: any = null;
           try { parsed = await res.json(); } catch {}
@@ -301,11 +340,22 @@ serve(async (req) => {
 
     // Usar apenas o endpoint correto da Evolution API
     const base = (INSTANCE_API_URL || EVOLUTION_API_URL).replace(/\/$/, '');
-    const candidates: string[] = [evolutionUrl];
+    let candidates: string[] = [evolutionUrl];
     
-    console.log("📤 Enviando para:", evolutionUrl);
+    // Para áudio, adicionar endpoints alternativos caso o primeiro falhe
+    if (validatedData.tipo_mensagem === 'audio' && validatedData.mediaBase64) {
+      candidates = [
+        `${base}/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE}`,
+        `${base}/message/sendPtv/${EVOLUTION_INSTANCE}`, // Endpoint alternativo para PTT
+        `${base}/message/sendMedia/${EVOLUTION_INSTANCE}`, // Fallback para sendMedia
+      ];
+      console.log("🎤 Tentando endpoints de áudio:", candidates);
+    }
+    
+    console.log("📤 Enviando para:", candidates[0]);
 
-    const attempt = await tryPost(candidates, bodyPayload);
+    const isAudioMessage = validatedData.tipo_mensagem === 'audio' && !!validatedData.mediaBase64;
+    const attempt = await tryPost(candidates, bodyPayload, isAudioMessage);
     if (!attempt.ok) {
       console.error("❌ Evolution API falhou:", attempt.lastError);
       

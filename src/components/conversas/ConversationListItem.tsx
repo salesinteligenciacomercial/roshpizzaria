@@ -87,26 +87,7 @@ function ConversationListItemComponent({
       .slice(0, 2);
   };
 
-  const handleMenuClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-  };
 
-
-  // ⚡ GARANTIA: O botão sempre será renderizado, independente de qualquer coisa
-  const showMenuButton = true; // SEMPRE TRUE - nunca esconder
-  
-  console.log('🎨 [RENDER] ConversationListItem:', {
-    contactName,
-    hasAvatar: !!avatarUrl,
-    avatarUrl: avatarUrl?.substring(0, 50),
-    hasCallbacks: {
-      onEditName: !!onEditName,
-      onCreateLead: !!onCreateLead,
-      onDeleteConversation: !!onDeleteConversation
-    },
-    showMenuButton,
-    forcedVisible: true
-  });
 
   return (
     <div
@@ -114,7 +95,12 @@ function ConversationListItemComponent({
         isSelected ? "bg-muted/70" : ""
       }`}
       onClick={onClick}
-      style={{ position: 'relative', overflow: 'visible' }}
+      style={{ 
+        position: 'relative', 
+        overflow: 'visible',
+        isolation: 'isolate', // Cria novo contexto de empilhamento
+      }}
+      data-conversation-item="true"
     >
       <div className="flex gap-3 items-start">
         <div className="relative flex-shrink-0">
@@ -209,19 +195,43 @@ function ConversationListItemComponent({
         </div>
         
         {/* 🛡️ BOTÃO DE MENU - PROTEÇÃO MÁXIMA CONTRA DESAPARECIMENTO */}
-        <div className="absolute top-2 right-2 z-50 conversation-menu-button-protected">
+        <div 
+          className="conversation-menu-button-protected"
+          style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            zIndex: 99999,
+            display: 'flex',
+            opacity: 1,
+            visibility: 'visible',
+            pointerEvents: 'auto',
+          }}
+        >
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <Button 
                 variant="ghost" 
                 size="icon"
-                className="h-8 w-8 bg-background hover:bg-accent shadow-sm border border-border/50"
+                data-conversation-menu="true"
+                aria-label="Menu de opções"
+                style={{
+                  display: 'flex',
+                  opacity: 1,
+                  visibility: 'visible',
+                  pointerEvents: 'auto',
+                  width: '32px',
+                  height: '32px',
+                  minWidth: '32px',
+                  minHeight: '32px',
+                  flexShrink: 0,
+                }}
+                className="h-8 w-8 bg-background hover:bg-accent shadow-sm border border-border/50 !opacity-100 !visible"
                 onClick={(e) => {
                   e.stopPropagation();
-                  console.log('🔘 Menu clicado:', contactName);
                 }}
               >
-                <MoreVertical className="h-4 w-4" />
+                <MoreVertical className="h-4 w-4" style={{ opacity: 1, visibility: 'visible' }} />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>

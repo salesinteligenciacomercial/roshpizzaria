@@ -18,7 +18,7 @@ import {
   MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, 
   Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon,
   Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2,
-  RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2
+  RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog
 } from "lucide-react";
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useLocation } from "react-router-dom";
@@ -1333,6 +1333,9 @@ function Conversas() {
   const [reminderTitle, setReminderTitle] = useState("");
   const [reminderDatetime, setReminderDatetime] = useState("");
   const [reminderNotes, setReminderNotes] = useState("");
+  const [reminderMessage, setReminderMessage] = useState(""); // Mensagem a ser enviada
+  const [reminderDestinatario, setReminderDestinatario] = useState<"lead" | "responsavel" | "ambos">("lead"); // Destinatário
+  const [reminderEnviar, setReminderEnviar] = useState(true); // Se deve enviar mensagem
   const [scheduledContent, setScheduledContent] = useState("");
   const [scheduledDatetime, setScheduledDatetime] = useState("");
   const [meetingTitle, setMeetingTitle] = useState("");
@@ -5022,7 +5025,13 @@ function Conversas() {
 
   const addReminder = async () => {
     if (!selectedConv || !reminderTitle.trim() || !reminderDatetime) {
-      toast.error("Preencha todos os campos");
+      toast.error("Preencha o título e a data/hora");
+      return;
+    }
+    
+    // Se enviar está ativado, precisa ter mensagem
+    if (reminderEnviar && !reminderMessage.trim()) {
+      toast.error("Por favor, escreva a mensagem que será enviada");
       return;
     }
     
@@ -5044,10 +5053,23 @@ function Conversas() {
         toast.error("Lead sem company_id associado");
         return;
       }
-
-      // Buscar ou criar compromisso
-      const dataHoraCompromisso = new Date(reminderDatetime);
       
+      // Verificar se a data já passou
+      const dataHoraCompromisso = new Date(reminderDatetime);
+      const agora = new Date();
+      if (dataHoraCompromisso <= agora) {
+        toast.error("A data/hora do lembrete já passou. Por favor, escolha uma data futura.");
+        return;
+      }
+
+      // Buscar dados do responsável (usuário atual)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, phone')
+        .eq('id', user.id)
+        .maybeSingle();
+      
+      // Criar compromisso
       const { data: compromisso, error: compromissoError } = await supabase
         .from('compromissos')
         .insert({
@@ -5066,25 +5088,89 @@ function Conversas() {
 
       if (compromissoError) throw compromissoError;
 
-      // Criar lembrete
-      const { error: lembreteError } = await supabase
-        .from('lembretes')
-        .insert({
-          compromisso_id: compromisso.id,
-          canal: 'whatsapp',
-          horas_antecedencia: 24,
-          mensagem: `Olá! Lembramos: ${reminderTitle}`,
-          status_envio: 'pendente',
-          destinatario: 'lead',
-          company_id: companyId,
-        });
+      // Se envio de mensagem está ativado, criar o(s) lembrete(s)
+      if (reminderEnviar) {
+        const dataEnvio = new Date(reminderDatetime);
+        const telefoneDestino = leadVinculado.phone || leadVinculado.telefone || null;
+        
+        // Criar lembretes baseado no destinatário escolhido
+        const lembretesCriar = [];
+        
+        // Lembrete para o Lead
+        if (reminderDestinatario === 'lead' || reminderDestinatario === 'ambos') {
+          if (telefoneDestino) {
+            lembretesCriar.push({
+              compromisso_id: compromisso.id,
+              canal: 'whatsapp',
+              horas_antecedencia: 0,
+              data_envio: dataEnvio.toISOString(),
+              mensagem: reminderMessage,
+              status_envio: 'pendente',
+              destinatario: 'lead',
+              telefone_responsavel: telefoneDestino,
+              company_id: companyId,
+            });
+          } else {
+            toast.warning("Lead sem telefone cadastrado - lembrete para lead não será enviado");
+          }
+        }
+        
+        // Lembrete para o Responsável
+        if (reminderDestinatario === 'responsavel' || reminderDestinatario === 'ambos') {
+          // Buscar telefone do responsável
+          const { data: userRole } = await supabase
+            .from('user_roles')
+            .select('phone')
+            .eq('user_id', user.id)
+            .maybeSingle();
+          
+          const telefoneResponsavel = userRole?.phone || profile?.phone || null;
+          
+          if (telefoneResponsavel) {
+            // Mensagem personalizada para o responsável
+            const mensagemResponsavel = `🔔 Lembrete: ${reminderTitle}\n\nCliente: ${leadVinculado.name}\n\n${reminderMessage}`;
+            
+            lembretesCriar.push({
+              compromisso_id: compromisso.id,
+              canal: 'whatsapp',
+              horas_antecedencia: 0,
+              data_envio: dataEnvio.toISOString(),
+              mensagem: mensagemResponsavel,
+              status_envio: 'pendente',
+              destinatario: 'responsavel',
+              telefone_responsavel: telefoneResponsavel,
+              company_id: companyId,
+            });
+          } else {
+            toast.warning("Responsável sem telefone cadastrado - lembrete não será enviado para você");
+          }
+        }
+        
+        // Inserir lembretes
+        if (lembretesCriar.length > 0) {
+          const { error: lembreteError } = await supabase
+            .from('lembretes')
+            .insert(lembretesCriar);
 
-      if (lembreteError) throw lembreteError;
+          if (lembreteError) {
+            console.error('Erro ao criar lembrete:', lembreteError);
+            toast.warning("Compromisso criado, mas houve erro ao criar lembrete de envio");
+          }
+        }
+      }
 
+      // Limpar campos
       setReminderTitle("");
       setReminderDatetime("");
       setReminderNotes("");
-      toast.success("Lembrete criado e sincronizado!");
+      setReminderMessage("");
+      setReminderDestinatario("lead");
+      setReminderEnviar(true);
+      
+      const mensagemSucesso = reminderEnviar 
+        ? "Lembrete criado! Mensagem será enviada na data/hora programada."
+        : "Lembrete criado! (sem envio de mensagem)";
+      toast.success(mensagemSucesso);
       loadReminders();
     } catch (error) {
       console.error('Erro ao criar lembrete:', error);
@@ -8739,11 +8825,11 @@ function Conversas() {
 
                               <TabsContent value="criar" className="space-y-4">
                                 <div>
-                                  <Label>Título do Lembrete</Label>
+                                  <Label>Título do Lembrete <span className="text-xs text-muted-foreground">(para identificação)</span></Label>
                                   <Input
                                     value={reminderTitle}
                                     onChange={(e) => setReminderTitle(e.target.value)}
-                                    placeholder="Ex: Ligar para cliente"
+                                    placeholder="Ex: Ligar para cliente, Retornar proposta..."
                                   />
                                 </div>
                                 <div>
@@ -8755,13 +8841,87 @@ function Conversas() {
                                   />
                                 </div>
                                 <div>
-                                  <Label>Observações</Label>
+                                  <Label>Observações Internas <span className="text-xs text-muted-foreground">(não será enviado)</span></Label>
                                   <Textarea
                                     value={reminderNotes}
                                     onChange={(e) => setReminderNotes(e.target.value)}
-                                    placeholder="Notas adicionais..."
+                                    placeholder="Notas adicionais para você..."
+                                    rows={2}
                                   />
                                 </div>
+                                
+                                {/* Opção de enviar mensagem */}
+                                <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+                                  <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                      <Label className="text-base">Enviar mensagem de lembrete</Label>
+                                      <p className="text-xs text-muted-foreground">
+                                        Enviar mensagem via WhatsApp na data/hora programada
+                                      </p>
+                                    </div>
+                                    <Switch
+                                      checked={reminderEnviar}
+                                      onCheckedChange={setReminderEnviar}
+                                    />
+                                  </div>
+                                  
+                                  {reminderEnviar && (
+                                    <>
+                                      <div>
+                                        <Label>Enviar para</Label>
+                                        <Select 
+                                          value={reminderDestinatario} 
+                                          onValueChange={(value: "lead" | "responsavel" | "ambos") => setReminderDestinatario(value)}
+                                        >
+                                          <SelectTrigger>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="lead">
+                                              <div className="flex items-center gap-2">
+                                                <User className="h-4 w-4" />
+                                                <span>Apenas para o Lead/Cliente</span>
+                                              </div>
+                                            </SelectItem>
+                                            <SelectItem value="responsavel">
+                                              <div className="flex items-center gap-2">
+                                                <UserCog className="h-4 w-4" />
+                                                <span>Apenas para mim (Responsável)</span>
+                                              </div>
+                                            </SelectItem>
+                                            <SelectItem value="ambos">
+                                              <div className="flex items-center gap-2">
+                                                <Users className="h-4 w-4" />
+                                                <span>Lead e Responsável</span>
+                                              </div>
+                                            </SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      
+                                      <div>
+                                        <Label>Mensagem a ser enviada <span className="text-destructive">*</span></Label>
+                                        <Textarea
+                                          value={reminderMessage}
+                                          onChange={(e) => setReminderMessage(e.target.value)}
+                                          placeholder={
+                                            reminderDestinatario === 'responsavel' 
+                                              ? "Ex: Lembrar de retornar a proposta do cliente..." 
+                                              : "Ex: Olá! Passando para lembrar do nosso compromisso..."
+                                          }
+                                          rows={3}
+                                          className="resize-none"
+                                        />
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          {reminderDestinatario === 'lead' && "Esta mensagem será enviada para o cliente"}
+                                          {reminderDestinatario === 'responsavel' && "Esta mensagem será enviada para você"}
+                                          {reminderDestinatario === 'ambos' && "Esta mensagem será enviada para o cliente e para você"}
+                                        </p>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                                
                                 <Button 
                                   onClick={async () => {
                                     // CORREÇÃO: Garantir lead antes de criar lembrete
@@ -8785,9 +8945,9 @@ function Conversas() {
                                     await addReminder();
                                   }} 
                                   className="w-full"
-                                  disabled={!reminderTitle.trim() || !reminderDatetime}
+                                  disabled={!reminderTitle.trim() || !reminderDatetime || (reminderEnviar && !reminderMessage.trim())}
                                 >
-                                  Criar Lembrete
+                                  {reminderEnviar ? 'Criar Lembrete e Agendar Envio' : 'Criar Lembrete'}
                                 </Button>
                               </TabsContent>
 

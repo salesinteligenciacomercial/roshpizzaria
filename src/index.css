@@ -8,21 +8,41 @@ All colors MUST be HSL.
 
 /* ⚡ CORREÇÃO CRÍTICA: Garantir que botões de menu nas conversas sejam SEMPRE visíveis */
 /* 🛡️ REGRA ANTI-DESAPARECIMENTO: Esta regra protege os botões de três pontos */
+
+/* Container do botão - NUNCA esconder */
+.conversation-menu-button-protected {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  position: absolute !important;
+  top: 8px !important;
+  right: 8px !important;
+  z-index: 99999 !important;
+  flex-shrink: 0 !important;
+  overflow: visible !important;
+}
+
+/* Botão em si - NUNCA esconder */
 [data-radix-dropdown-menu-trigger],
 button[aria-haspopup="menu"],
 button[data-conversation-menu="true"],
 button[aria-label="Menu de opções"],
 .conversation-menu-button,
-.conversation-menu-button-protected,
 .conversation-menu-button-protected button {
   display: flex !important;
   opacity: 1 !important;
   visibility: visible !important;
   pointer-events: auto !important;
-  min-width: 36px !important;
-  min-height: 36px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  width: 32px !important;
+  height: 32px !important;
   flex-shrink: 0 !important;
-  z-index: 9999 !important;
+  z-index: 99999 !important;
+  overflow: visible !important;
+  transform: none !important;
+  transition: background-color 0.15s ease !important;
 }
 
 /* Garantir que ícones dentro do botão sejam visíveis */
@@ -37,8 +57,49 @@ button[aria-label="Menu de opções"] svg,
   opacity: 1 !important;
   visibility: visible !important;
   color: currentColor !important;
-  width: 20px !important;
-  height: 20px !important;
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0 !important;
+}
+
+/* Evitar que hover/focus esconda o botão */
+.conversation-menu-button-protected:hover,
+.conversation-menu-button-protected:focus,
+.conversation-menu-button-protected:active,
+.conversation-menu-button-protected button:hover,
+.conversation-menu-button-protected button:focus,
+.conversation-menu-button-protected button:active {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Garantir que o item da lista não esconda o botão */
+[class*="ConversationListItem"],
+[class*="conversation-list-item"],
+[data-conversation-item="true"] {
+  overflow: visible !important;
+}
+
+/* ScrollArea não deve cortar botões de menu */
+[data-radix-scroll-area-viewport] {
+  overflow-x: visible !important;
+}
+
+/* Garantir que containers pais não escondam o botão */
+[data-radix-scroll-area-viewport] > div {
+  overflow: visible !important;
+}
+
+/* Forçar visibilidade em qualquer estado */
+.conversation-menu-button-protected,
+.conversation-menu-button-protected *,
+button[data-conversation-menu="true"],
+button[data-conversation-menu="true"] * {
+  clip: auto !important;
+  clip-path: none !important;
+  -webkit-mask: none !important;
+  mask: none !important;
 }
 
 @layer base {

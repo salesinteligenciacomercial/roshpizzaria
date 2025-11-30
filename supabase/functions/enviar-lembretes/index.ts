@@ -52,7 +52,8 @@ serve(async (req) => {
     const BACKOFF_TIMES_HOURS = [1, 3, 24];
 
     // Buscar lembretes pendentes ou em retry que devem ser enviados agora
-    const agora = new Date().toISOString();
+    const agora = new Date();
+    const agoraISO = agora.toISOString();
     
     // Buscar lembretes pendentes com data_envio <= agora OU em retry com proxima_tentativa <= agora
     // Máximo 3 tentativas (0, 1, 2 = 3 tentativas)
@@ -75,7 +76,31 @@ serve(async (req) => {
         )
       `)
       .eq('status_envio', 'pendente')
-      .lte('data_envio', agora)
+      .lte('data_envio', agoraISO)
+      .lte('tentativas', 2);
+    
+    // ✅ CORREÇÃO: Buscar lembretes SEM data_envio definido (legado)
+    // Esses lembretes foram criados antes da correção e precisam ser processados
+    const { data: lembretesSemDataEnvio, error: semDataError } = await supabase
+      .from('lembretes')
+      .select(`
+        *,
+        compromisso:compromissos (
+          id,
+          data_hora_inicio,
+          tipo_servico,
+          lead_id,
+          company_id,
+          usuario_responsavel_id,
+          lead:leads (
+            name,
+            phone,
+            telefone
+          )
+        )
+      `)
+      .eq('status_envio', 'pendente')
+      .is('data_envio', null)
       .lte('tentativas', 2);
     
     const { data: lembretesRetry, error: retryError } = await supabase
@@ -97,18 +122,44 @@ serve(async (req) => {
         )
       `)
       .eq('status_envio', 'retry')
-      .lte('proxima_tentativa', agora)
+      .lte('proxima_tentativa', agoraISO)
       .lte('tentativas', 2);
     
-    if (pendentesError || retryError) {
-      const lembretesError = pendentesError || retryError;
+    if (pendentesError || retryError || semDataError) {
+      const lembretesError = pendentesError || retryError || semDataError;
       console.error('❌ Erro ao buscar lembretes:', lembretesError);
       throw lembretesError;
     }
     
+    // ✅ Processar lembretes sem data_envio - calcular baseado no compromisso
+    const lembretesSemDataProcessados = (lembretesSemDataEnvio || []).filter(lembrete => {
+      if (!lembrete.compromisso?.data_hora_inicio) {
+        console.log(`⚠️ Lembrete ${lembrete.id} sem compromisso associado - ignorando`);
+        return false;
+      }
+      
+      const dataCompromisso = new Date(lembrete.compromisso.data_hora_inicio);
+      const horasAntecedencia = lembrete.horas_antecedencia || 0;
+      const dataEnvioCalculada = new Date(dataCompromisso.getTime() - (horasAntecedencia * 60 * 60 * 1000));
+      
+      // Se a data de envio calculada já passou, deve enviar
+      if (dataEnvioCalculada <= agora) {
+        console.log(`📝 Lembrete ${lembrete.id} (legado): data_envio calculada = ${dataEnvioCalculada.toISOString()}`);
+        // Atualizar o lembrete com a data_envio calculada para futuras consultas
+        supabase
+          .from('lembretes')
+          .update({ data_envio: dataEnvioCalculada.toISOString() })
+          .eq('id', lembrete.id)
+          .then(() => console.log(`✅ Atualizado data_envio do lembrete ${lembrete.id}`));
+        return true;
+      }
+      
+      return false;
+    });
+    
     // Combinar resultados e remover duplicatas
     const lembretesMap = new Map();
-    [...(lembretesPendentes || []), ...(lembretesRetry || [])].forEach(lembrete => {
+    [...(lembretesPendentes || []), ...(lembretesSemDataProcessados || []), ...(lembretesRetry || [])].forEach(lembrete => {
       lembretesMap.set(lembrete.id, lembrete);
     });
     const lembretes = Array.from(lembretesMap.values());
