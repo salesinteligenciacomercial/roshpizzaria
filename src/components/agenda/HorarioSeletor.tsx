@@ -1,10 +1,10 @@
 import { useMemo } from "react";
-import { format, parse, isAfter, isBefore, addMinutes, isToday, isSameDay } from "date-fns";
+import { format, parse, isAfter, isBefore, addMinutes, isToday, isSameDay, getDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Clock, CheckCircle2, XCircle, Ban } from "lucide-react";
+import { Clock, CheckCircle2, XCircle, Ban, CalendarX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { HorarioComercial } from "./HorarioComercialConfig";
 
@@ -21,8 +21,30 @@ interface HorarioSeletorProps {
   horarioSelecionado?: string;
   duracaoMinutos?: number;
   permitirSimultaneo?: boolean;
+  diasFuncionamento?: string[]; // Dias da semana que a empresa funciona
   onSelecionarHorario: (horario: string) => void;
 }
+
+// Mapeamento de dia da semana (0=domingo, 1=segunda, etc) para string
+const diasSemanaMap: Record<number, string> = {
+  0: "domingo",
+  1: "segunda",
+  2: "terca",
+  3: "quarta",
+  4: "quinta",
+  5: "sexta",
+  6: "sabado",
+};
+
+const diasSemanaLabels: Record<string, string> = {
+  domingo: "Domingo",
+  segunda: "Segunda-feira",
+  terca: "Terça-feira",
+  quarta: "Quarta-feira",
+  quinta: "Quinta-feira",
+  sexta: "Sexta-feira",
+  sabado: "Sábado",
+};
 
 export function HorarioSeletor({
   data,
@@ -31,8 +53,15 @@ export function HorarioSeletor({
   horarioSelecionado,
   duracaoMinutos = 30,
   permitirSimultaneo = false,
+  diasFuncionamento = ["segunda", "terca", "quarta", "quinta", "sexta"],
   onSelecionarHorario,
 }: HorarioSeletorProps) {
+  // Verificar se o dia selecionado é um dia de funcionamento
+  const dataBase = parse(data, "yyyy-MM-dd", new Date());
+  const diaDaSemana = getDay(dataBase);
+  const diaDaSemanaStr = diasSemanaMap[diaDaSemana];
+  const ehDiaFuncionamento = diasFuncionamento.includes(diaDaSemanaStr);
+
   // Gerar lista de horários disponíveis baseado na configuração
   const horariosDisponiveis = useMemo(() => {
     const horarios: Array<{
@@ -42,7 +71,11 @@ export function HorarioSeletor({
       compromissos: Compromisso[];
     }> = [];
 
-    const dataBase = parse(data, "yyyy-MM-dd", new Date());
+    // Se não é dia de funcionamento, retornar lista vazia
+    if (!ehDiaFuncionamento) {
+      return horarios;
+    }
+
     const agora = new Date();
     const ehHoje = isSameDay(dataBase, agora);
 
@@ -117,11 +150,31 @@ export function HorarioSeletor({
     }
 
     return horarios;
-  }, [data, horarioComercial, compromissosExistentes, duracaoMinutos, permitirSimultaneo]);
+  }, [data, dataBase, horarioComercial, compromissosExistentes, duracaoMinutos, permitirSimultaneo, ehDiaFuncionamento]);
 
   const totalDisponiveis = horariosDisponiveis.filter((h) => h.disponivel).length;
   const totalOcupados = horariosDisponiveis.filter((h) => !h.disponivel && !h.passado).length;
   const totalPassados = horariosDisponiveis.filter((h) => h.passado).length;
+
+  // Se não é dia de funcionamento, mostrar mensagem
+  if (!ehDiaFuncionamento) {
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col items-center justify-center py-8 text-center border rounded-lg bg-orange-50 dark:bg-orange-950/20">
+          <CalendarX className="h-12 w-12 text-orange-500 mb-3" />
+          <h3 className="font-medium text-orange-700 dark:text-orange-400">
+            {diasSemanaLabels[diaDaSemanaStr]} - Não é dia de funcionamento
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            A empresa não funciona neste dia da semana.
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            Dias de funcionamento: {diasFuncionamento.map(d => diasSemanaLabels[d]?.substring(0, 3)).join(", ")}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

@@ -127,6 +127,9 @@ export default function Agenda() {
   const [horarioComercial, setHorarioComercial] = useState<HorarioComercial>(criarHorarioPadrao());
   const [tempoMedioPadrao, setTempoMedioPadrao] = useState<number>(30);
   const [canalLembretePadrao, setCanalLembretePadrao] = useState<string>("whatsapp");
+  const [diasFuncionamento, setDiasFuncionamento] = useState<string[]>([
+    "segunda", "terca", "quarta", "quinta", "sexta"
+  ]); // Dias da semana que a empresa funciona (padrão: seg-sex)
   const [lembretes, setLembretes] = useState<Lembrete[]>([]);
   const [activeTab, setActiveTab] = useState<string>("agenda");
   const [filtroStatusLembrete, setFiltroStatusLembrete] = useState<string>("all");
@@ -729,9 +732,16 @@ export default function Agenda() {
         if ((agenda.disponibilidade as any)?.canal_lembrete_padrao) {
           setCanalLembretePadrao((agenda.disponibilidade as any).canal_lembrete_padrao);
         }
+        
+        // Carregar dias de funcionamento
+        if ((agenda.disponibilidade as any)?.dias_funcionamento) {
+          setDiasFuncionamento((agenda.disponibilidade as any).dias_funcionamento);
+          console.log('📅 [Agenda] Dias de funcionamento carregados:', (agenda.disponibilidade as any).dias_funcionamento);
+        }
       } else {
-        console.log('📅 [Agenda] Nenhuma agenda encontrada, usando padrão 30 min');
+        console.log('📅 [Agenda] Nenhuma agenda encontrada, usando padrões');
         setTempoMedioPadrao(30);
+        setDiasFuncionamento(["segunda", "terca", "quarta", "quinta", "sexta"]);
       }
     } catch (error) {
       console.error('❌ [Agenda] Erro ao carregar configurações:', error);
@@ -2076,6 +2086,41 @@ export default function Agenda() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label>Dias de Funcionamento</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Selecione os dias da semana em que a empresa funciona.
+                  </p>
+                  <div className="grid grid-cols-7 gap-2">
+                    {[
+                      { id: "domingo", label: "Dom" },
+                      { id: "segunda", label: "Seg" },
+                      { id: "terca", label: "Ter" },
+                      { id: "quarta", label: "Qua" },
+                      { id: "quinta", label: "Qui" },
+                      { id: "sexta", label: "Sex" },
+                      { id: "sabado", label: "Sáb" },
+                    ].map((dia) => (
+                      <Button
+                        key={dia.id}
+                        type="button"
+                        variant={diasFuncionamento.includes(dia.id) ? "default" : "outline"}
+                        size="sm"
+                        className="h-10"
+                        onClick={() => {
+                          if (diasFuncionamento.includes(dia.id)) {
+                            setDiasFuncionamento(diasFuncionamento.filter(d => d !== dia.id));
+                          } else {
+                            setDiasFuncionamento([...diasFuncionamento, dia.id]);
+                          }
+                        }}
+                      >
+                        {dia.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
                   <Label>Horário Comercial</Label>
                   <p className="text-xs text-muted-foreground mb-2">
                     Configure os períodos de atendimento. Cada empresa/profissional pode ter horários personalizados.
@@ -2127,10 +2172,12 @@ export default function Agenda() {
                         periodos: horarioComercial,
                         tempo_medio_servico: tempoMedioPadrao,
                         canal_lembrete_padrao: canalLembretePadrao,
+                        dias_funcionamento: diasFuncionamento,
                       };
 
                       console.log('💾 [Agenda] Salvando configurações:', {
                         tempoMedioPadrao,
+                        diasFuncionamento,
                         disponibilidade,
                         agendaExistente: agendaExistente?.id
                       });
@@ -2312,6 +2359,7 @@ export default function Agenda() {
                     horarioSelecionado={formData.hora_inicio}
                     duracaoMinutos={tempoMedioPadrao}
                     permitirSimultaneo={formAgendaSelecionada?.permite_simultaneo || false}
+                    diasFuncionamento={diasFuncionamento}
                     onSelecionarHorario={handleSelecionarHorarioForm}
                   />
                 </div>
