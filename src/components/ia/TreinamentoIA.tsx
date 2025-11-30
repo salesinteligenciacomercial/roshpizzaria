@@ -106,25 +106,25 @@ export function TreinamentoIA() {
 
   const loadConfig = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-      const { data: userRole } = await supabase
-        .from('user_roles')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .single();
+    const { data: userRole } = await supabase
+      .from('user_roles')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .single();
 
-      if (!userRole) return;
+    if (!userRole) return;
 
       const { data } = await supabase
-        .from('ia_configurations')
+      .from('ia_configurations')
         .select('learning_mode, auto_optimization, collaborative_mode')
-        .eq('company_id', userRole.company_id)
-        .maybeSingle();
+      .eq('company_id', userRole.company_id)
+      .maybeSingle();
 
-      if (data) {
-        setConfig({
+    if (data) {
+      setConfig({
           learning_mode: data.learning_mode ?? true,
           auto_optimization: data.auto_optimization ?? true,
           collaborative_mode: data.collaborative_mode ?? true
@@ -428,29 +428,29 @@ export function TreinamentoIA() {
 
   const updateConfig = async (field: string, value: boolean) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-      const { data: userRole } = await supabase
-        .from('user_roles')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .single();
+    const { data: userRole } = await supabase
+      .from('user_roles')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .single();
 
-      if (!userRole) return;
+    if (!userRole) return;
 
       const newConfig = { ...config, [field]: value };
 
-      const { error } = await supabase
-        .from('ia_configurations')
-        .upsert({
-          company_id: userRole.company_id,
+    const { error } = await supabase
+      .from('ia_configurations')
+      .upsert({
+        company_id: userRole.company_id,
           learning_mode: newConfig.learning_mode,
           auto_optimization: newConfig.auto_optimization,
           collaborative_mode: newConfig.collaborative_mode
-        }, {
-          onConflict: 'company_id'
-        });
+      }, {
+        onConflict: 'company_id'
+      });
 
       if (error) throw error;
 
@@ -654,7 +654,7 @@ export function TreinamentoIA() {
                           <Badge variant="secondary">{pattern.tipo}</Badge>
                           <Badge variant="outline" className="text-xs">
                             {pattern.frequencia} ocorrências
-                          </Badge>
+                  </Badge>
                         </div>
                         <p className="text-sm">{pattern.descricao}</p>
                       </div>
@@ -662,7 +662,7 @@ export function TreinamentoIA() {
                         <div className="text-lg font-bold text-primary">{pattern.confianca.toFixed(0)}%</div>
                         <p className="text-xs text-muted-foreground">confiança</p>
                       </div>
-                    </div>
+                  </div>
                     <Progress value={pattern.confianca} className="mt-3 h-1" />
                   </CardContent>
                 </Card>
@@ -678,7 +678,7 @@ export function TreinamentoIA() {
                   </CardContent>
                 </Card>
               )}
-            </div>
+                </div>
           </ScrollArea>
         </TabsContent>
 
@@ -692,22 +692,22 @@ export function TreinamentoIA() {
                       <div className="flex items-start gap-3">
                         <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
                           <MessageSquare className="h-4 w-4 text-blue-600" />
-                        </div>
+                    </div>
                         <div className="flex-1">
                           <p className="text-xs text-muted-foreground mb-1">Pergunta do Lead:</p>
                           <p className="text-sm font-medium">{data.pergunta}</p>
-                        </div>
-                      </div>
+                  </div>
+                    </div>
 
                       <div className="flex items-start gap-3">
                         <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
                           <Brain className="h-4 w-4 text-green-600" />
-                        </div>
+                  </div>
                         <div className="flex-1">
                           <p className="text-xs text-muted-foreground mb-1">Resposta da IA:</p>
                           <p className="text-sm">{data.resposta}</p>
-                        </div>
-                      </div>
+                    </div>
+                  </div>
 
                       <div className="flex items-center justify-between pt-2 border-t">
                         <span className="text-xs text-muted-foreground">
@@ -731,22 +731,22 @@ export function TreinamentoIA() {
                           >
                             <ThumbsDown className="h-4 w-4" />
                           </Button>
-                        </div>
-                      </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
 
               {trainingData.length === 0 && (
-                <Card>
+          <Card>
                   <CardContent className="p-8 text-center">
                     <BookOpen className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
                     <p className="text-muted-foreground">
                       Os dados de treinamento aparecerão aqui conforme a IA interagir com os leads
-                    </p>
-                  </CardContent>
-                </Card>
+              </p>
+            </CardContent>
+          </Card>
               )}
             </div>
           </ScrollArea>
