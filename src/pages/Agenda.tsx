@@ -366,6 +366,9 @@ export default function Agenda() {
   });
   const [formCompromissosExistentes, setFormCompromissosExistentes] = useState<any[]>([]);
   const [formAgendaSelecionada, setFormAgendaSelecionada] = useState<any>(null);
+  const [formDiasFuncionamento, setFormDiasFuncionamento] = useState<string[]>([
+    "segunda", "terca", "quarta", "quinta", "sexta"
+  ]); // Dias de funcionamento da agenda selecionada no formulário
 
   const filteredLeads = useMemo(() => {
     if (!leadSearch.trim()) return leads;
@@ -788,21 +791,49 @@ export default function Agenda() {
   };
 
   // Carregar horário comercial para o seletor de horários do formulário
+  // IMPORTANTE: Se uma agenda específica foi selecionada, usar os dados dessa agenda
   const carregarFormHorarioComercial = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: agendas } = await supabase
-        .from("agendas")
-        .select("*")
-        .eq("owner_id", user.id)
-        .eq("tipo", "principal")
-        .single();
+      let agenda = null;
 
-      if (agendas && agendas.disponibilidade && typeof agendas.disponibilidade === 'object') {
-        setFormAgendaSelecionada(agendas);
-        const disp = agendas.disponibilidade as any;
+      // Se uma agenda específica foi selecionada, buscar os dados dela
+      if (formData.agenda_id) {
+        const { data: agendaSelecionada } = await supabase
+          .from("agendas")
+          .select("*")
+          .eq("id", formData.agenda_id)
+          .single();
+        
+        agenda = agendaSelecionada;
+        console.log('📅 [Agenda] Carregando horário da agenda selecionada:', agenda?.nome);
+      } else {
+        // Se não, buscar a agenda principal
+        const { data: agendaPrincipal } = await supabase
+          .from("agendas")
+          .select("*")
+          .eq("owner_id", user.id)
+          .eq("tipo", "principal")
+          .single();
+        
+        agenda = agendaPrincipal;
+        console.log('📅 [Agenda] Carregando horário da agenda principal');
+      }
+
+      if (agenda && agenda.disponibilidade && typeof agenda.disponibilidade === 'object') {
+        setFormAgendaSelecionada(agenda);
+        const disp = agenda.disponibilidade as any;
+        
+        // Carregar dias de funcionamento da agenda selecionada
+        if (disp.dias_funcionamento && Array.isArray(disp.dias_funcionamento)) {
+          setFormDiasFuncionamento(disp.dias_funcionamento);
+          console.log('📅 [Agenda] Dias de funcionamento carregados:', disp.dias_funcionamento);
+        } else {
+          // Padrão: segunda a sexta
+          setFormDiasFuncionamento(["segunda", "terca", "quarta", "quinta", "sexta"]);
+        }
         
         // O horário comercial é salvo em disponibilidade.periodos
         const periodos = disp.periodos || disp;
@@ -857,6 +888,11 @@ export default function Agenda() {
             },
           });
         }
+      } else if (!agenda) {
+        // Se não encontrou nenhuma agenda, usar valores padrão
+        console.log('📅 [Agenda] Nenhuma agenda encontrada, usando valores padrão');
+        setFormDiasFuncionamento(["segunda", "terca", "quarta", "quinta", "sexta"]);
+        setFormHorarioComercial(criarHorarioPadrao());
       }
     } catch (error) {
       console.error("Erro ao carregar horário comercial do formulário:", error);
@@ -2387,7 +2423,7 @@ export default function Agenda() {
                     horarioSelecionado={formData.hora_inicio}
                     duracaoMinutos={tempoMedioPadrao}
                     permitirSimultaneo={formAgendaSelecionada?.permite_simultaneo || false}
-                    diasFuncionamento={diasFuncionamento}
+                    diasFuncionamento={formDiasFuncionamento}
                     onSelecionarHorario={handleSelecionarHorarioForm}
                   />
                 </div>
