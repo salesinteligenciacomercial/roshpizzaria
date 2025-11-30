@@ -5117,14 +5117,14 @@ function Conversas() {
         
         // Lembrete para o Responsável
         if (reminderDestinatario === 'responsavel' || reminderDestinatario === 'ambos') {
-          // Buscar telefone do responsável
-          const { data: userRole } = await supabase
-            .from('user_roles')
-            .select('phone')
+          // Buscar telefone do responsável no perfil do profissional
+          const { data: profissional } = await supabase
+            .from('profissionais')
+            .select('telefone')
             .eq('user_id', user.id)
             .maybeSingle();
           
-          const telefoneResponsavel = userRole?.phone || profile?.phone || null;
+          const telefoneResponsavel = profissional?.telefone || null;
           
           if (telefoneResponsavel) {
             // Mensagem personalizada para o responsável

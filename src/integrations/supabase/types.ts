@@ -638,34 +638,55 @@ export type Database = {
       ia_configurations: {
         Row: {
           auto_optimization: boolean | null
+          block_by_funnel: boolean | null
+          block_by_tags: boolean | null
+          blocked_funnels: string[] | null
+          blocked_stages: string[] | null
+          blocked_tags: string[] | null
           collaborative_mode: boolean | null
           company_id: string
           created_at: string | null
           custom_prompts: Json | null
+          history_messages_count: number | null
           id: string
           learning_mode: boolean | null
+          read_conversation_history: boolean | null
           training_preferences: Json | null
           updated_at: string | null
         }
         Insert: {
           auto_optimization?: boolean | null
+          block_by_funnel?: boolean | null
+          block_by_tags?: boolean | null
+          blocked_funnels?: string[] | null
+          blocked_stages?: string[] | null
+          blocked_tags?: string[] | null
           collaborative_mode?: boolean | null
           company_id: string
           created_at?: string | null
           custom_prompts?: Json | null
+          history_messages_count?: number | null
           id?: string
           learning_mode?: boolean | null
+          read_conversation_history?: boolean | null
           training_preferences?: Json | null
           updated_at?: string | null
         }
         Update: {
           auto_optimization?: boolean | null
+          block_by_funnel?: boolean | null
+          block_by_tags?: boolean | null
+          blocked_funnels?: string[] | null
+          blocked_stages?: string[] | null
+          blocked_tags?: string[] | null
           collaborative_mode?: boolean | null
           company_id?: string
           created_at?: string | null
           custom_prompts?: Json | null
+          history_messages_count?: number | null
           id?: string
           learning_mode?: boolean | null
+          read_conversation_history?: boolean | null
           training_preferences?: Json | null
           updated_at?: string | null
         }

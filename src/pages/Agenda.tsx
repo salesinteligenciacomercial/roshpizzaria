@@ -760,7 +760,7 @@ export default function Agenda() {
         .order('nome');
 
       if (error) throw error;
-      setAgendas((data || []) as unknown as Agenda[]);
+      setAgendas((data || []) as any[]);
     } catch (error) {
       console.error('Erro ao carregar agendas:', error);
     }
@@ -1054,7 +1054,7 @@ export default function Agenda() {
             .from('agendas')
             .select('*')
             .eq('status', 'ativo');
-          agendasDisponiveis = (agendasData || []) as unknown as Agenda[];
+          agendasDisponiveis = (agendasData || []) as any[];
         }
         
         const agendaSelecionada = agendasDisponiveis.find(a => a.id === formData.agenda_id);
@@ -1074,8 +1074,8 @@ export default function Agenda() {
         const diaSemanaAbreviado = diasSemanaAbreviado[indiceDia];
         
         // Verificar em ambos campos e formatos
-        const diasConfig = agendaSelecionada.disponibilidade?.dias_funcionamento || 
-                          agendaSelecionada.disponibilidade?.dias;
+        const disp: any = agendaSelecionada.disponibilidade || {};
+        const diasConfig = disp.dias_funcionamento || disp.dias;
         
         const diaValido = !diasConfig || // Se não tem config, aceita qualquer dia
                           diasConfig.includes(diaSemanaCompleto) || 
@@ -1088,7 +1088,6 @@ export default function Agenda() {
 
         // Validar disponibilidade - horário
         // Suporta formato novo (periodos) e antigo (horario_inicio/horario_fim)
-        const disp = agendaSelecionada.disponibilidade || {};
         let horarioInicioStr = "08:00";
         let horarioFimStr = "18:00";
         

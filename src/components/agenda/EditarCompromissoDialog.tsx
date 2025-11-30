@@ -267,8 +267,8 @@ export function EditarCompromissoDialog({
         const diaSemanaAbreviado = diasSemanaAbreviado[indiceDia];
         
         // Verificar em ambos campos e formatos
-        const diasConfig = agendaSelecionada.disponibilidade?.dias_funcionamento || 
-                          agendaSelecionada.disponibilidade?.dias;
+        const disp: any = agendaSelecionada.disponibilidade || {};
+        const diasConfig = disp.dias_funcionamento || disp.dias;
         
         const diaValido = !diasConfig || // Se não tem config, aceita qualquer dia
                           diasConfig.includes(diaSemanaCompleto) || 
@@ -281,7 +281,6 @@ export function EditarCompromissoDialog({
 
         // Validar disponibilidade - horário
         // Suporta formato novo (periodos) e antigo (horario_inicio/horario_fim)
-        const disp = agendaSelecionada.disponibilidade || {};
         let horarioInicioStr = "08:00";
         let horarioFimStr = "18:00";
         
