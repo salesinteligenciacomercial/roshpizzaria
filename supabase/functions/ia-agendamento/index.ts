@@ -26,6 +26,15 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const supabase = createClient(supabaseUrl!, supabaseKey!);
 
+    // Buscar configuração e prompt personalizado
+    const { data: iaConfig } = await supabase
+      .from('ia_configurations')
+      .select('custom_prompts')
+      .eq('company_id', companyId)
+      .single();
+
+    const customPrompt = iaConfig?.custom_prompts?.agendamento?.custom_prompt;
+
     // Funções disponíveis para a IA
     const tools = [
       {
@@ -110,24 +119,23 @@ Telefone: ${leadData.phone || 'Não informado'}
 Email: ${leadData.email || 'Não informado'}
 ` : '';
 
-    const systemPrompt = `Você é uma IA especializada em agendamentos para ${companyId}.
+    const defaultPrompt = `Você é a assistente de agendamentos. Gerencie compromissos e horários.
 
 CONTEXTO:
 ${leadContext}
 
-PRINCÍPIOS DO AGENDAMENTO:
-1. Seja cordial e eficiente
-2. Confirme sempre os detalhes antes de agendar
-3. Ofereça opções de horário quando disponível
-4. Explique claramente os passos do agendamento
-5. Confirme o agendamento após criá-lo
+REGRAS:
+- Confirme dados antes de agendar
+- Ofereça opções de horário
+- Pergunte tipo de serviço
+- Confirme data e hora
+- Seja objetiva (máximo 4 linhas)
 
-FLUXO DE AGENDAMENTO:
-1. Perguntar o tipo de serviço desejado
-2. Verificar horários disponíveis
-3. Confirmar data e hora com o cliente
-4. Criar o compromisso
-5. Enviar confirmação com detalhes
+AÇÕES (use no final se aplicável):
+- [VERIFICAR_HORARIOS:YYYY-MM-DD] - buscar horários disponíveis
+- [AGENDAR:DATA|SERVICO] - criar agendamento
+- [CANCELAR:ID] - cancelar compromisso
+- [TRANSFERIR_HUMANO] - passar para atendente humano
 
 Use as funções disponíveis para:
 - buscar_horarios_disponiveis: verificar disponibilidade
@@ -137,6 +145,8 @@ Use as funções disponíveis para:
 - buscar_compromissos_lead: ver agendamentos existentes
 
 Responda de forma natural e helpful. Máximo 5 linhas.`;
+
+    const systemPrompt = customPrompt || defaultPrompt;
 
     console.log('📅 IA Agendamento - Processando:', { conversationId, message: message.substring(0, 50) });
 

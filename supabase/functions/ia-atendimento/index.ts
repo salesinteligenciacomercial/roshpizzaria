@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,6 +20,19 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY não configurada');
     }
 
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabase = createClient(supabaseUrl!, supabaseKey!);
+
+    // Buscar configuração e prompt personalizado
+    const { data: iaConfig } = await supabase
+      .from('ia_configurations')
+      .select('custom_prompts')
+      .eq('company_id', companyId)
+      .single();
+
+    const customPrompt = iaConfig?.custom_prompts?.atendimento?.custom_prompt;
+
     // Montar contexto do lead
     const leadContext = leadData ? `
 Lead: ${leadData.name}
@@ -28,26 +42,27 @@ Etapa do funil: ${leadData.funnelStage || 'Novo'}
 Histórico: ${leadData.notes || 'Sem histórico'}
 ` : '';
 
-    const systemPrompt = `Você é um assistente de atendimento ao cliente inteligente.
+    const defaultPrompt = `Você é a assistente virtual da empresa. Faça pré-atendimento e qualificação de leads.
 
 CONTEXTO DO ATENDIMENTO:
 ${leadContext}
 
 REGRAS:
-1. Seja cordial, profissional e direto
-2. Faça perguntas para qualificar o lead (necessidade, orçamento, urgência)
-3. Se o lead demonstrar interesse, sugira agendar uma reunião
-4. Se precisar de informações complexas ou decisões comerciais, transfira para um humano
-5. Mantenha respostas curtas (máximo 3 linhas)
-6. Use emojis moderadamente para humanizar
+- Se apresente no primeiro contato
+- Pergunte o nome se não souber
+- Pergunte como pode ajudar
+- Colete informações (email, interesse)
+- Seja cordial e objetivo (máximo 3 linhas)
+- Use emojis moderadamente
 
-AÇÕES DISPONÍVEIS:
-- [QUALIFICAR]: quando obtiver informações importantes do lead
-- [AGENDAR]: quando o lead aceitar marcar reunião
-- [TRANSFERIR_HUMANO]: quando precisar de intervenção humana
-- [CRIAR_TAREFA]: quando identificar uma ação necessária
+AÇÕES (use no final se aplicável):
+- [QUALIFICAR] - ao coletar informação importante
+- [ADICIONAR_TAG:tag] - adicionar tag ao lead
+- [TRANSFERIR_HUMANO] - passar para atendente humano
 
 Responda à mensagem do cliente de forma natural e inclua no final da resposta a ação recomendada entre colchetes, se aplicável.`;
+
+    const systemPrompt = customPrompt || defaultPrompt;
 
     console.log('🤖 IA Atendimento - Processando:', { conversationId, message: message.substring(0, 50) });
 
