@@ -163,7 +163,7 @@ export function NovaTarefaDialog({
         responsaveis: responsaveis || [],
       };
 
-      console.log('📤 Enviando dados para criar tarefa:', normalizedData);
+      console.log('📤 [NovaTarefa] Enviando dados para criar tarefa:', normalizedData);
 
       // ✅ CORREÇÃO: Criar tarefa diretamente no banco (Edge Function não suporta start_date)
       const { data: userRole } = await supabase
