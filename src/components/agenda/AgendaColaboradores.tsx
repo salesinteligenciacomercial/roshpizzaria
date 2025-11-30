@@ -36,11 +36,22 @@ export function AgendaColaboradores() {
     capacidade_simultanea: 1,
     tempo_medio_servico: 30,
     horarioComercial: criarHorarioPadrao(),
-    dias_semana: ["seg", "ter", "qua", "qui", "sex"],
+    dias_funcionamento: ["segunda", "terca", "quarta", "quinta", "sexta"],
     email: "",
     senha: "",
     telefone: "",
   });
+
+  // Configuração dos dias da semana
+  const diasSemanaConfig = [
+    { id: "domingo", label: "Dom" },
+    { id: "segunda", label: "Seg" },
+    { id: "terca", label: "Ter" },
+    { id: "quarta", label: "Qua" },
+    { id: "quinta", label: "Qui" },
+    { id: "sexta", label: "Sex" },
+    { id: "sabado", label: "Sáb" },
+  ];
 
   useEffect(() => {
     console.log('🔄 [AgendaColaboradores] Componente montado, carregando agendas...');
@@ -157,7 +168,7 @@ export function AgendaColaboradores() {
           capacidade_simultanea: formData.capacidade_simultanea,
           tempo_medio_servico: formData.tempo_medio_servico,
           disponibilidade: {
-            dias: formData.dias_semana,
+            dias_funcionamento: formData.dias_funcionamento,
             periodos: formData.horarioComercial,
           } as any,
           owner_id: user.id,
@@ -185,7 +196,7 @@ export function AgendaColaboradores() {
         capacidade_simultanea: 1,
         tempo_medio_servico: 30,
         horarioComercial: criarHorarioPadrao(),
-        dias_semana: ["seg", "ter", "qua", "qui", "sex"],
+        dias_funcionamento: ["segunda", "terca", "quarta", "quinta", "sexta"],
         email: "",
         senha: "",
         telefone: "",
@@ -385,6 +396,39 @@ export function AgendaColaboradores() {
               </div>
 
               <div className="space-y-2">
+                <Label>Dias de Funcionamento</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Selecione os dias da semana em que este colaborador trabalha
+                </p>
+                <div className="grid grid-cols-7 gap-1">
+                  {diasSemanaConfig.map((dia) => (
+                    <Button
+                      key={dia.id}
+                      type="button"
+                      variant={formData.dias_funcionamento.includes(dia.id) ? "default" : "outline"}
+                      size="sm"
+                      className="h-9 px-2"
+                      onClick={() => {
+                        if (formData.dias_funcionamento.includes(dia.id)) {
+                          setFormData({
+                            ...formData,
+                            dias_funcionamento: formData.dias_funcionamento.filter(d => d !== dia.id)
+                          });
+                        } else {
+                          setFormData({
+                            ...formData,
+                            dias_funcionamento: [...formData.dias_funcionamento, dia.id]
+                          });
+                        }
+                      }}
+                    >
+                      {dia.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
                 <Label>Horário de Funcionamento</Label>
                 <p className="text-xs text-muted-foreground mb-2">
                   Configure os períodos de atendimento para este colaborador
@@ -496,49 +540,77 @@ export function AgendaColaboradores() {
                 <span>Tempo médio: {agenda.tempo_medio_servico} min</span>
               </div>
               {agenda.disponibilidade && (
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Clock className="h-4 w-4" />
-                    <span>Horários:</span>
+                <>
+                  {/* Dias de funcionamento */}
+                  {agenda.disponibilidade.dias_funcionamento && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"].map((dia) => {
+                        const diasLabels: Record<string, string> = {
+                          domingo: "Dom",
+                          segunda: "Seg",
+                          terca: "Ter",
+                          quarta: "Qua",
+                          quinta: "Qui",
+                          sexta: "Sex",
+                          sabado: "Sáb",
+                        };
+                        const ativo = agenda.disponibilidade.dias_funcionamento?.includes(dia);
+                        return (
+                          <Badge
+                            key={dia}
+                            variant={ativo ? "default" : "outline"}
+                            className={`text-xs ${!ativo ? "opacity-40" : ""}`}
+                          >
+                            {diasLabels[dia]}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Clock className="h-4 w-4" />
+                      <span>Horários:</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground pl-6 space-y-0.5">
+                      {(() => {
+                        const disponibilidade = agenda.disponibilidade;
+                        if (disponibilidade?.periodos) {
+                          // Novo formato com períodos
+                          const periodos = disponibilidade.periodos;
+                          const periodosAtivos = [];
+                          if (periodos.manha?.ativo) {
+                            periodosAtivos.push(
+                              <div key="manha">🌅 Manhã: {periodos.manha.inicio} - {periodos.manha.fim}</div>
+                            );
+                          }
+                          if (periodos.intervalo_almoco?.ativo) {
+                            periodosAtivos.push(
+                              <div key="almoco" className="text-muted-foreground/70">
+                                ☕ Almoço: {periodos.intervalo_almoco.inicio} - {periodos.intervalo_almoco.fim}
+                              </div>
+                            );
+                          }
+                          if (periodos.tarde?.ativo) {
+                            periodosAtivos.push(
+                              <div key="tarde">🕐 Tarde: {periodos.tarde.inicio} - {periodos.tarde.fim}</div>
+                            );
+                          }
+                          if (periodos.noite?.ativo) {
+                            periodosAtivos.push(
+                              <div key="noite">🌙 Noite: {periodos.noite.inicio} - {periodos.noite.fim}</div>
+                            );
+                          }
+                          return periodosAtivos.length > 0 ? periodosAtivos : <span>Não configurado</span>;
+                        } else if (disponibilidade?.horario_inicio && disponibilidade?.horario_fim) {
+                          // Formato antigo
+                          return <span>{disponibilidade.horario_inicio} - {disponibilidade.horario_fim}</span>;
+                        }
+                        return <span>Não configurado</span>;
+                      })()}
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground pl-6 space-y-0.5">
-                    {(() => {
-                      const disponibilidade = agenda.disponibilidade;
-                      if (disponibilidade?.periodos) {
-                        // Novo formato com períodos
-                        const periodos = disponibilidade.periodos;
-                        const periodosAtivos = [];
-                        if (periodos.manha?.ativo) {
-                          periodosAtivos.push(
-                            <div key="manha">🌅 Manhã: {periodos.manha.inicio} - {periodos.manha.fim}</div>
-                          );
-                        }
-                        if (periodos.intervalo_almoco?.ativo) {
-                          periodosAtivos.push(
-                            <div key="almoco" className="text-muted-foreground/70">
-                              ☕ Almoço: {periodos.intervalo_almoco.inicio} - {periodos.intervalo_almoco.fim}
-                            </div>
-                          );
-                        }
-                        if (periodos.tarde?.ativo) {
-                          periodosAtivos.push(
-                            <div key="tarde">🕐 Tarde: {periodos.tarde.inicio} - {periodos.tarde.fim}</div>
-                          );
-                        }
-                        if (periodos.noite?.ativo) {
-                          periodosAtivos.push(
-                            <div key="noite">🌙 Noite: {periodos.noite.inicio} - {periodos.noite.fim}</div>
-                          );
-                        }
-                        return periodosAtivos.length > 0 ? periodosAtivos : <span>Não configurado</span>;
-                      } else if (disponibilidade?.horario_inicio && disponibilidade?.horario_fim) {
-                        // Formato antigo
-                        return <span>{disponibilidade.horario_inicio} - {disponibilidade.horario_fim}</span>;
-                      }
-                      return <span>Não configurado</span>;
-                    })()}
-                  </div>
-                </div>
+                </>
               )}
             </CardContent>
           </Card>
