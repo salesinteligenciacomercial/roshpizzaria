@@ -827,12 +827,15 @@ export default function Agenda() {
         const disp = agenda.disponibilidade as any;
         
         // Carregar dias de funcionamento da agenda selecionada
-        if (disp.dias_funcionamento && Array.isArray(disp.dias_funcionamento)) {
-          setFormDiasFuncionamento(disp.dias_funcionamento);
-          console.log('📅 [Agenda] Dias de funcionamento carregados:', disp.dias_funcionamento);
+        // Suporta tanto 'dias_funcionamento' (novo) quanto 'dias' (antigo)
+        const diasConfig = disp.dias_funcionamento || disp.dias;
+        if (diasConfig && Array.isArray(diasConfig)) {
+          setFormDiasFuncionamento(diasConfig);
+          console.log('📅 [Agenda] Dias de funcionamento carregados:', diasConfig);
         } else {
-          // Padrão: segunda a sexta
-          setFormDiasFuncionamento(["segunda", "terca", "quarta", "quinta", "sexta"]);
+          // Padrão: todos os dias para evitar bloqueio incorreto
+          setFormDiasFuncionamento(["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"]);
+          console.log('📅 [Agenda] Dias de funcionamento não encontrados, usando todos os dias');
         }
         
         // O horário comercial é salvo em disponibilidade.periodos
@@ -889,9 +892,9 @@ export default function Agenda() {
           });
         }
       } else if (!agenda) {
-        // Se não encontrou nenhuma agenda, usar valores padrão
+        // Se não encontrou nenhuma agenda, usar valores padrão (todos os dias para não bloquear)
         console.log('📅 [Agenda] Nenhuma agenda encontrada, usando valores padrão');
-        setFormDiasFuncionamento(["segunda", "terca", "quarta", "quinta", "sexta"]);
+        setFormDiasFuncionamento(["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"]);
         setFormHorarioComercial(criarHorarioPadrao());
       }
     } catch (error) {
