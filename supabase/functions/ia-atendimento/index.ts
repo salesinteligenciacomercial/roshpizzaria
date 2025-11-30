@@ -1,9 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// ========================
+// IA DE ATENDIMENTO AVANÇADA
+// ========================
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -12,44 +17,153 @@ serve(async (req) => {
 
   try {
     const startTime = Date.now();
-    const { conversationId, message, leadData, companyId } = await req.json();
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    const { conversationId, message, leadData, companyId, customPrompt } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY não configurada');
     }
 
-    // Montar contexto do lead
-    const leadContext = leadData ? `
-Lead: ${leadData.name}
-Empresa: ${leadData.company || 'Não informado'}
-Telefone: ${leadData.phone || 'Não informado'}
-Etapa do funil: ${leadData.funnelStage || 'Novo'}
-Histórico: ${leadData.notes || 'Sem histórico'}
-` : '';
+    // Buscar contexto adicional
+    let leadContext = '';
+    let funilContext = '';
+    let tarefasContext = '';
+    
+    if (leadData) {
+      leadContext = `
+DADOS DO CLIENTE:
+- Nome: ${leadData.name || 'Não informado'}
+- Telefone: ${leadData.phone || leadData.telefone || 'Não informado'}
+- Email: ${leadData.email || 'Não informado'}
+- Empresa: ${leadData.company || 'Não informado'}
+- CPF: ${leadData.cpf || 'Não informado'}
+- Valor em negociação: ${leadData.value ? `R$ ${leadData.value}` : 'Não definido'}
+- Status: ${leadData.status || 'novo'}
+- Tags: ${leadData.tags?.join(', ') || 'Nenhuma'}
+- Observações: ${leadData.notes || 'Nenhuma'}
+`;
 
-    const systemPrompt = `Você é um assistente de atendimento ao cliente inteligente.
+      // Buscar etapa/funil do lead
+      if (leadData.etapa_id) {
+        const { data: etapa } = await supabase
+          .from('etapas')
+          .select('nome, funil:funis(nome)')
+          .eq('id', leadData.etapa_id)
+          .single();
+        
+        if (etapa) {
+          funilContext = `
+POSIÇÃO NO FUNIL:
+- Funil: ${(etapa as any).funil?.nome || 'Não definido'}
+- Etapa: ${etapa.nome}
+`;
+        }
+      }
+      
+      // Buscar tarefas do lead
+      if (leadData.id) {
+        const { data: tarefas } = await supabase
+          .from('tasks')
+          .select('title, status, priority, due_date')
+          .eq('lead_id', leadData.id)
+          .in('status', ['pendente', 'em_andamento'])
+          .limit(5);
+        
+        if (tarefas && tarefas.length > 0) {
+          tarefasContext = `
+TAREFAS PENDENTES:
+${tarefas.map((t: any) => `- ${t.title} (${t.priority}) - ${t.status}`).join('\n')}
+`;
+        }
+      }
+    }
 
-CONTEXTO DO ATENDIMENTO:
+    // Buscar histórico recente da conversa
+    let historicoContext = '';
+    if (conversationId && companyId) {
+      const { data: historico } = await supabase
+        .from('conversas')
+        .select('mensagem, fromme, created_at')
+        .eq('telefone_formatado', leadData?.telefone || leadData?.phone)
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      if (historico && historico.length > 1) {
+        historicoContext = `
+HISTÓRICO RECENTE:
+${historico.slice(1).reverse().map((h: any) => 
+  `${h.fromme ? 'Você' : 'Cliente'}: ${h.mensagem?.substring(0, 100)}`
+).join('\n')}
+`;
+      }
+    }
+
+    // Buscar funis disponíveis para sugerir movimentação
+    let funisDisponiveis = '';
+    if (companyId) {
+      const { data: funis } = await supabase
+        .from('funis')
+        .select('id, nome, etapas(id, nome)')
+        .eq('company_id', companyId)
+        .limit(3);
+      
+      if (funis && funis.length > 0) {
+        funisDisponiveis = `
+FUNIS DISPONÍVEIS:
+${funis.map((f: any) => `- ${f.nome}: ${f.etapas?.map((e: any) => e.nome).join(' → ') || 'Sem etapas'}`).join('\n')}
+`;
+      }
+    }
+
+    const systemPrompt = customPrompt || `Você é uma assistente de atendimento inteligente e proativa. Seu papel é:
+1. Fazer pré-atendimento e triagem
+2. Qualificar leads (entender necessidade, orçamento, urgência)
+3. Coletar informações importantes (CPF, email, empresa)
+4. Identificar oportunidades de agendamento ou venda
+5. Criar tarefas de follow-up quando necessário
+6. Saber quando transferir para um humano
+
 ${leadContext}
+${funilContext}
+${tarefasContext}
+${historicoContext}
+${funisDisponiveis}
 
-REGRAS:
-1. Seja cordial, profissional e direto
-2. Faça perguntas para qualificar o lead (necessidade, orçamento, urgência)
-3. Se o lead demonstrar interesse, sugira agendar uma reunião
-4. Se precisar de informações complexas ou decisões comerciais, transfira para um humano
-5. Mantenha respostas curtas (máximo 3 linhas)
-6. Use emojis moderadamente para humanizar
+REGRAS DE COMPORTAMENTO:
+1. Seja cordial, profissional e empático
+2. Faça perguntas inteligentes para qualificar (não seja interrogativo)
+3. Se detectar interesse em agendar, pergunte a data preferida
+4. Se detectar interesse em comprar, explore necessidades
+5. Colete informações naturalmente durante a conversa
+6. Mantenha respostas curtas (máximo 4 linhas)
+7. Use emojis moderadamente para humanizar
+8. Se o cliente pedir atendente humano, transfira imediatamente
 
-AÇÕES DISPONÍVEIS:
-- [QUALIFICAR]: quando obtiver informações importantes do lead
-- [AGENDAR]: quando o lead aceitar marcar reunião
-- [TRANSFERIR_HUMANO]: quando precisar de intervenção humana
-- [CRIAR_TAREFA]: quando identificar uma ação necessária
+AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes):
+- [QUALIFICAR] - quando obtiver informações importantes do lead
+- [COLETAR_DADOS:campo] - quando coletar CPF, email, telefone, empresa (ex: [COLETAR_DADOS:cpf=12345678901])
+- [ADICIONAR_TAG:nome] - quando identificar uma característica (ex: [ADICIONAR_TAG:interessado])
+- [MOVER_FUNIL:etapa] - quando o lead avançar na jornada (ex: [MOVER_FUNIL:qualificado])
+- [CRIAR_TAREFA:titulo] - quando identificar ação necessária (ex: [CRIAR_TAREFA:Enviar proposta])
+- [AGENDAR] - quando cliente quiser marcar horário
+- [TRANSFERIR_HUMANO] - quando precisar de intervenção humana
 
-Responda à mensagem do cliente de forma natural e inclua no final da resposta a ação recomendada entre colchetes, se aplicável.`;
+EXEMPLOS DE COLETA NATURAL:
+- "Qual seu CPF para eu consultar seu cadastro?" → depois [COLETAR_DADOS:cpf=123.456.789-01]
+- "Me passa seu e-mail que envio mais informações" → depois [COLETAR_DADOS:email=cliente@email.com]
 
-    console.log('🤖 IA Atendimento - Processando:', { conversationId, message: message.substring(0, 50) });
+Responda à mensagem do cliente de forma natural:`;
+
+    console.log('🤖 IA Atendimento - Processando:', { 
+      conversationId, 
+      message: message.substring(0, 50),
+      hasLead: !!leadData 
+    });
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -64,7 +178,7 @@ Responda à mensagem do cliente de forma natural e inclua no final da resposta a
           { role: 'user', content: message }
         ],
         temperature: 0.7,
-        max_tokens: 500,
+        max_tokens: 600,
       }),
     });
 
@@ -89,31 +203,145 @@ Responda à mensagem do cliente de forma natural e inclua no final da resposta a
     const data = await response.json();
     const aiResponse = data.choices[0].message.content;
 
-    // Extrair ação recomendada
-    const actionMatch = aiResponse.match(/\[(QUALIFICAR|AGENDAR|TRANSFERIR_HUMANO|CRIAR_TAREFA)\]/);
-    const action = actionMatch ? actionMatch[1] : null;
+    // Extrair ação e parâmetros da resposta
+    const actionPattern = /\[(QUALIFICAR|COLETAR_DADOS|ADICIONAR_TAG|MOVER_FUNIL|CRIAR_TAREFA|AGENDAR|TRANSFERIR_HUMANO)(:([^\]]+))?\]/;
+    const actionMatch = aiResponse.match(actionPattern);
     
-    // Remover a ação da resposta final
-    const cleanResponse = aiResponse.replace(/\[(QUALIFICAR|AGENDAR|TRANSFERIR_HUMANO|CRIAR_TAREFA)\]/g, '').trim();
+    const action = actionMatch ? actionMatch[1] : null;
+    const actionParams = actionMatch ? actionMatch[3] : null;
+    
+    // Remover ação da resposta
+    const cleanResponse = aiResponse.replace(actionPattern, '').trim();
+
+    // Executar ações automaticamente
+    let actionResult = null;
+    
+    if (action && leadData?.id) {
+      switch (action) {
+        case 'COLETAR_DADOS':
+          if (actionParams) {
+            const [campo, valor] = actionParams.split('=');
+            if (campo && valor) {
+              const { error } = await supabase
+                .from('leads')
+                .update({ 
+                  [campo]: valor.trim(),
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', leadData.id);
+              
+              actionResult = { success: !error, campo, valor: valor.trim() };
+              console.log(`📝 Dados coletados: ${campo}=${valor}`);
+            }
+          }
+          break;
+          
+        case 'ADICIONAR_TAG':
+          if (actionParams) {
+            const tagsAtuais = leadData.tags || [];
+            const novasTags = [...new Set([...tagsAtuais, actionParams.trim()])];
+            
+            const { error } = await supabase
+              .from('leads')
+              .update({ 
+                tags: novasTags,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', leadData.id);
+            
+            actionResult = { success: !error, tag: actionParams.trim() };
+            console.log(`🏷️ Tag adicionada: ${actionParams}`);
+          }
+          break;
+          
+        case 'MOVER_FUNIL':
+          if (actionParams && companyId) {
+            // Buscar etapa pelo nome
+            const { data: etapa } = await supabase
+              .from('etapas')
+              .select('id')
+              .eq('company_id', companyId)
+              .ilike('nome', `%${actionParams.trim()}%`)
+              .limit(1)
+              .single();
+            
+            if (etapa) {
+              const { error } = await supabase
+                .from('leads')
+                .update({ 
+                  etapa_id: etapa.id,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', leadData.id);
+              
+              actionResult = { success: !error, etapa: actionParams.trim() };
+              console.log(`📋 Lead movido para: ${actionParams}`);
+            }
+          }
+          break;
+          
+        case 'CRIAR_TAREFA':
+          if (actionParams && companyId) {
+            const { data: userRole } = await supabase
+              .from('user_roles')
+              .select('user_id')
+              .eq('company_id', companyId)
+              .eq('role', 'company_admin')
+              .limit(1)
+              .single();
+            
+            const { data: tarefa, error } = await supabase
+              .from('tasks')
+              .insert({
+                title: actionParams.trim(),
+                lead_id: leadData.id,
+                description: `Tarefa criada pela IA após conversa. Mensagem: "${message.substring(0, 200)}"`,
+                priority: 'alta',
+                status: 'pendente',
+                company_id: companyId,
+                owner_id: userRole?.user_id || leadData.owner_id
+              })
+              .select()
+              .single();
+            
+            actionResult = { success: !error, tarefa_id: tarefa?.id };
+            console.log(`📋 Tarefa criada: ${actionParams}`);
+          }
+          break;
+          
+        case 'QUALIFICAR':
+          const { error: qualError } = await supabase
+            .from('leads')
+            .update({ 
+              status: 'qualificado',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', leadData.id);
+          
+          actionResult = { success: !qualError };
+          console.log('✅ Lead qualificado');
+          break;
+      }
+    }
 
     // Registrar no sistema de aprendizado
     try {
-      await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ia-aprendizado`, {
+      await fetch(`${supabaseUrl}/functions/v1/ia-aprendizado`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          'Authorization': `Bearer ${supabaseKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           action: 'record_interaction',
           data: {
-            company_id: leadData?.company_id,
+            company_id: companyId || leadData?.company_id,
             agent_type: 'atendimento',
             conversation_id: conversationId,
             lead_id: leadData?.id,
             input_message: message,
             ai_response: cleanResponse,
-            context_data: { action, leadData }
+            context_data: { action, actionParams, actionResult, leadData }
           }
         })
       });
@@ -121,40 +349,19 @@ Responda à mensagem do cliente de forma natural e inclua no final da resposta a
       console.log('Erro ao registrar aprendizado:', e);
     }
 
-    console.log('✅ IA Atendimento - Resposta gerada:', { action, response: cleanResponse.substring(0, 50) });
-
-    // Registrar log de execução e métricas
-    try {
-      const execTime = Date.now() - startTime;
-      await fetch(`${Deno.env.get('SUPABASE_URL')}/rest/v1/ia_execution_logs`, {
-        method: 'POST',
-        headers: {
-          'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          company_id: leadData?.company_id || companyId,
-          agent_type: 'atendimento',
-          conversation_id: conversationId,
-          lead_id: leadData?.id,
-          input_message: message,
-          output_response: cleanResponse,
-          execution_time_ms: execTime,
-          success: true,
-          action_taken: action || 'RESPONDER',
-          confidence_score: 0.8,
-          model_version: 'google/gemini-2.5-flash'
-        })
-      });
-    } catch (e) {
-      console.log('Erro ao registrar ia_execution_logs:', e);
-    }
+    const execTime = Date.now() - startTime;
+    console.log(`✅ IA Atendimento - Resposta em ${execTime}ms:`, { 
+      action, 
+      actionParams,
+      response: cleanResponse.substring(0, 50) 
+    });
 
     return new Response(
       JSON.stringify({ 
         response: cleanResponse,
         action,
+        actionParams,
+        actionResult,
         conversationId 
       }),
       { 
@@ -165,23 +372,6 @@ Responda à mensagem do cliente de forma natural e inclua no final da resposta a
 
   } catch (error: any) {
     console.error('❌ Erro na função ia-atendimento:', error);
-    // Registrar falha
-    try {
-      await fetch(`${Deno.env.get('SUPABASE_URL')}/rest/v1/ia_execution_logs`, {
-        method: 'POST',
-        headers: {
-          'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          company_id: (await req.json())?.companyId || null,
-          agent_type: 'atendimento',
-          success: false,
-          error_message: error.message || 'Erro ao processar IA',
-        })
-      });
-    } catch (_e) {}
     return new Response(
       JSON.stringify({ error: error.message || 'Erro ao processar IA de atendimento' }),
       { 

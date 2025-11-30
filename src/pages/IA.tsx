@@ -17,7 +17,7 @@ import { Navigate } from "react-router-dom";
 
 export default function IA() {
   const { canAccess, isAdmin, loading: permissionsLoading } = usePermissions();
-  const [agentStates, setAgentStates] = useState({ atendimento: true, vendedora: true, suporte: false });
+  const [agentStates, setAgentStates] = useState({ atendimento: true, agendamento: true, vendedora: true, suporte: false });
   const { getAgentConfigs, updateAgentConfig } = useAIAgents();
 
   // Verificar permissão de acesso à Automação
@@ -36,7 +36,7 @@ export default function IA() {
         .single();
       if (!userRole?.company_id) return;
       const configs = await getAgentConfigs();
-      const state = { atendimento: true, vendedora: true, suporte: false } as any;
+      const state = { atendimento: true, agendamento: true, vendedora: true, suporte: false } as any;
       if (configs && Array.isArray(configs)) {
         configs.forEach((c: any) => { state[c.agent_type] = !!c.enabled; });
       }
@@ -62,7 +62,7 @@ export default function IA() {
     {
       id: "atendimento",
       name: "IA de Atendimento",
-      description: "Pré-atendimento e triagem inicial automática",
+      description: "Pré-atendimento, qualificação e gestão de leads",
       icon: Bot,
       color: "bg-blue-500",
       active: agentStates.atendimento,
@@ -73,9 +73,22 @@ export default function IA() {
       }
     },
     {
+      id: "agendamento",
+      name: "IA de Agendamento",
+      description: "Agenda, remarca e cancela compromissos automaticamente",
+      icon: Target,
+      color: "bg-emerald-500",
+      active: agentStates.agendamento ?? true,
+      stats: {
+        conversationsHandled: 18,
+        avgResponseTime: "5s",
+        successRate: "98%",
+      }
+    },
+    {
       id: "vendedora",
       name: "IA Vendedora",
-      description: "Conversão e negociação automatizada",
+      description: "Conversão, negociação e fechamento de vendas",
       icon: Sparkles,
       color: "bg-purple-500",
       active: agentStates.vendedora,
@@ -159,7 +172,7 @@ export default function IA() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {aiAgents.map((agent) => (
               <IAAgentCard
                 key={agent.id}

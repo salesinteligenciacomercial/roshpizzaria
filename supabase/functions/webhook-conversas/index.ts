@@ -1333,6 +1333,94 @@ serve(async (req) => {
     }
     */
 
+    // ========================
+    // 🤖 INTEGRAÇÃO COM IA - RESPOSTA AUTOMÁTICA
+    // ========================
+    if (isReceivedMessage && !isGroup && companyId && leadId) {
+      try {
+        console.log('🤖 [WEBHOOK-IA] Verificando se IA está ativada para responder...');
+        
+        // Chamar orchestrator de IA de forma assíncrona (não bloqueia o webhook)
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        
+        // Buscar dados do lead para contexto
+        const { data: leadDataForIA } = await supabase
+          .from('leads')
+          .select('*')
+          .eq('id', leadId)
+          .single();
+        
+        // Chamar IA de forma assíncrona (fire and forget)
+        fetch(`${supabaseUrl}/functions/v1/ia-orchestrator`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            conversationId: data.id,
+            message: validatedData.mensagem,
+            numero: numeroLimpo,
+            leadData: leadDataForIA,
+            companyId: companyId
+          })
+        }).then(async (iaResponse) => {
+          if (!iaResponse.ok) {
+            console.log('⚠️ [WEBHOOK-IA] IA não respondeu (pode estar desativada)');
+            return;
+          }
+          
+          const iaResult = await iaResponse.json();
+          
+          if (!iaResult.active) {
+            console.log('⚠️ [WEBHOOK-IA] IA desativada para esta empresa');
+            return;
+          }
+          
+          if (iaResult.shouldTransfer) {
+            console.log('👤 [WEBHOOK-IA] IA solicitou transferência para humano');
+            return;
+          }
+          
+          if (iaResult.response) {
+            console.log('🤖 [WEBHOOK-IA] IA gerou resposta, enviando via WhatsApp...');
+            
+            // Enviar resposta da IA via WhatsApp
+            const sendResponse = await fetch(`${supabaseUrl}/functions/v1/enviar-whatsapp`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${supabaseKey}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                numero: numeroLimpo,
+                mensagem: iaResult.response,
+                tipo_mensagem: 'text',
+                company_id: companyId
+              })
+            });
+            
+            if (sendResponse.ok) {
+              console.log('✅ [WEBHOOK-IA] Resposta da IA enviada com sucesso!', {
+                agentUsed: iaResult.agentUsed,
+                action: iaResult.action
+              });
+            } else {
+              console.error('❌ [WEBHOOK-IA] Erro ao enviar resposta da IA');
+            }
+          }
+        }).catch((iaError) => {
+          console.error('❌ [WEBHOOK-IA] Erro ao chamar IA:', iaError);
+        });
+        
+      } catch (iaError) {
+        console.error('❌ [WEBHOOK-IA] Erro ao processar IA:', iaError);
+        // Não bloqueia o webhook mesmo se IA falhar
+      }
+    }
+    // ========================
+
     return new Response(
       JSON.stringify({
         success: true,
