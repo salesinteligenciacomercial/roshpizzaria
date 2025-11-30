@@ -613,6 +613,7 @@ export default function Agenda() {
     carregarLeads();
     carregarAgendas();
     carregarLembretes();
+    carregarConfiguracoes(); // Carregar tempo médio padrão e outras configurações
     // eslint-disable-next-line react-hooks/exhaustive-deps
     
     // Subscrever para atualizações em tempo real
@@ -703,10 +704,14 @@ export default function Agenda() {
           setHorarioComercial(converterHorarioAntigo(agenda.disponibilidade));
         }
 
-        // Carregar outras configurações
-        if (agenda.tempo_medio_servico) {
-          setTempoMedioPadrao(agenda.tempo_medio_servico);
-        }
+        // Carregar tempo médio - primeiro tenta do campo direto, depois do disponibilidade
+        const tempoMedio = agenda.tempo_medio_servico || 
+                          (agenda.disponibilidade as any)?.tempo_medio_servico || 
+                          30;
+        setTempoMedioPadrao(tempoMedio);
+        console.log('📅 [Agenda] Tempo médio padrão carregado:', tempoMedio);
+        
+        // Carregar canal de lembrete
         if ((agenda.disponibilidade as any)?.canal_lembrete_padrao) {
           setCanalLembretePadrao((agenda.disponibilidade as any).canal_lembrete_padrao);
         }
