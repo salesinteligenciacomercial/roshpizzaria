@@ -229,7 +229,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
 
       // ✅ CORREÇÃO: Usar atualização direta ao invés da Edge Function
       // A Edge Function pode não suportar o campo start_date
-      console.log('📤 [EditarTarefa] Usando atualização direta no banco...');
+      console.log('📤 [EditarTarefa] Atualizando tarefa diretamente no banco...');
       
       // Buscar company_id atual
       const { data: { user } } = await supabase.auth.getUser();
