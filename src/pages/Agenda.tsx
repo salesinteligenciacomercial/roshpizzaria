@@ -63,7 +63,7 @@ interface Lembrete {
   };
 }
 
-interface Agenda {
+interface AgendaItem {
   id: string;
   nome: string;
   tipo: string;
@@ -111,13 +111,15 @@ interface Lead {
 }
 
 export default function Agenda() {
+  console.log("🗓️ [Agenda] Componente iniciado!");
+  
   // Hook de notificações para escutar lembretes enviados e enviar push notifications
   useNotifications();
   
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [compromissos, setCompromissos] = useState<Compromisso[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [agendas, setAgendas] = useState<Agenda[]>([]);
+  const [agendas, setAgendas] = useState<AgendaItem[]>([]);
   const [viewMode, setViewMode] = useState<"month" | "week" | "day">("month");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [novoCompromissoOpen, setNovoCompromissoOpen] = useState(false);
@@ -875,13 +877,13 @@ export default function Agenda() {
       // === VALIDAÇÕES FRONTEND ===
       
       // 1. Validar data e horários
-      if (!formData.data || !formData.hora_inicio || !formData.duracao_minutos) {
+      if (!formData.data || !formData.hora_inicio) {
         toast.error("Por favor, preencha data, horário e duração");
         return;
       }
 
       const dataHoraInicio = new Date(`${formData.data}T${formData.hora_inicio}:00`);
-      const duracaoMin = parseInt(formData.duracao_minutos) || 30;
+      const duracaoMin = tempoMedioPadrao;
       const dataHoraFim = new Date(dataHoraInicio.getTime() + duracaoMin * 60000);
       
       // 3. Validar se data/hora não está no passado (com margem de 1 minuto para evitar falsos positivos)
@@ -945,7 +947,7 @@ export default function Agenda() {
         tipo_servico: formData.tipo_servico,
         data: formData.data,
         hora_inicio: formData.hora_inicio,
-        duracao_minutos: formData.duracao_minutos,
+        duracao_minutos: tempoMedioPadrao,
         agenda_id: formData.agenda_id || 'nenhuma',
         lead_id: formData.lead_id || 'nenhum',
         custo_estimado: formData.custo_estimado || '0'
@@ -986,7 +988,7 @@ export default function Agenda() {
         const fimDisponivel = horaFimDisponivel * 60 + minutoFimDisponivel;
         
         const [horaInicio, minutoInicio] = formData.hora_inicio.split(':').map(Number);
-        const duracaoMin = parseInt(formData.duracao_minutos) || 30;
+        const duracaoMin = tempoMedioPadrao;
         const inicioSolicitado = horaInicio * 60 + minutoInicio;
         const fimSolicitado = inicioSolicitado + duracaoMin;
 
@@ -1601,7 +1603,7 @@ export default function Agenda() {
       console.error('  FormData:', {
         tipo_servico: formData.tipo_servico,
         data: formData.data,
-        horarios: `${formData.hora_inicio} + ${formData.duracao_minutos}min`,
+        horarios: `${formData.hora_inicio} + ${tempoMedioPadrao}min`,
         agenda: formData.agenda_id || 'nenhuma',
         lead: formData.lead_id || 'nenhum'
       });
@@ -2258,61 +2260,32 @@ export default function Agenda() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Data <span className="text-destructive">*</span></Label>
-                    <Input 
-                      type="date" 
-                      value={formData.data}
-                      min={format(new Date(), "yyyy-MM-dd")}
-                      onChange={(e) => setFormData({...formData, data: e.target.value})}
-                      className={!formData.data ? "border-amber-500" : ""}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Duração <span className="text-destructive">*</span></Label>
-                    <Select
-                      value={formData.duracao_minutos}
-                      onValueChange={(value) => setFormData({ ...formData, duracao_minutos: value })}
-                    >
-                      <SelectTrigger className={!formData.duracao_minutos ? "border-amber-500" : ""}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="10">10 min</SelectItem>
-                        <SelectItem value="15">15 min</SelectItem>
-                        <SelectItem value="20">20 min</SelectItem>
-                        <SelectItem value="25">25 min</SelectItem>
-                        <SelectItem value="30">30 min</SelectItem>
-                        <SelectItem value="40">40 min</SelectItem>
-                        <SelectItem value="45">45 min</SelectItem>
-                        <SelectItem value="50">50 min</SelectItem>
-                        <SelectItem value="60">1 hora</SelectItem>
-                        <SelectItem value="75">1h 15min</SelectItem>
-                        <SelectItem value="90">1h 30min</SelectItem>
-                        <SelectItem value="120">2 horas</SelectItem>
-                        <SelectItem value="150">2h 30min</SelectItem>
-                        <SelectItem value="180">3 horas</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label>Data <span className="text-destructive">*</span></Label>
+                  <Input 
+                    type="date" 
+                    value={formData.data}
+                    min={format(new Date(), "yyyy-MM-dd")}
+                    onChange={(e) => setFormData({...formData, data: e.target.value})}
+                    className={!formData.data ? "border-amber-500" : ""}
+                  />
                 </div>
 
                 {/* Seletor de Horários Disponíveis - igual ao menu Conversas */}
                 <div className="space-y-2">
                   <Label>Selecione o Horário <span className="text-destructive">*</span></Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Duração do compromisso: <strong>{tempoMedioPadrao} minutos</strong> (configurado nas configurações)
+                  </p>
                   <HorarioSeletor
                     data={formData.data}
                     horarioComercial={formHorarioComercial}
                     compromissosExistentes={formCompromissosExistentes}
                     horarioSelecionado={formData.hora_inicio}
-                    duracaoMinutos={parseInt(formData.duracao_minutos) || 30}
+                    duracaoMinutos={tempoMedioPadrao}
                     permitirSimultaneo={formAgendaSelecionada?.permite_simultaneo || false}
                     onSelecionarHorario={handleSelecionarHorarioForm}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    O horário de término será calculado automaticamente baseado na duração
-                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -2477,9 +2450,9 @@ export default function Agenda() {
                 <Button 
                   className="w-full" 
                   onClick={criarCompromisso}
-                  disabled={!formData.data || !formData.hora_inicio || !formData.duracao_minutos}
+                  disabled={!formData.data || !formData.hora_inicio}
                 >
-                  {!formData.data || !formData.hora_inicio || !formData.duracao_minutos 
+                  {!formData.data || !formData.hora_inicio 
                     ? "Preencha os campos obrigatórios (data, horário e duração)"
                     : "Criar Agendamento"
                   }

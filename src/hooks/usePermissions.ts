@@ -22,6 +22,20 @@ export function usePermissions() {
     const fetchPermissions = async () => {
       setLoading(true);
       try {
+        // Verificar se Supabase está configurado
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+        const isSupabaseConfigured = supabaseUrl && supabaseKey && 
+          supabaseUrl !== "http://localhost:54321" && 
+          supabaseKey !== "anon-key";
+        
+        if (!isSupabaseConfigured) {
+          console.log("⚠️ [usePermissions] Supabase não configurado - usando permissões padrão");
+          setIsAdmin(true); // Em modo dev, dar acesso admin
+          setLoading(false);
+          return;
+        }
+        
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
           setLoading(false);

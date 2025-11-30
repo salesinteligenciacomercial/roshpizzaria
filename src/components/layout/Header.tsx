@@ -67,6 +67,23 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
     try {
       console.log("🔍 Carregando dados do usuário...");
       
+      // Verificar se Supabase está configurado
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const isSupabaseConfigured = supabaseUrl && supabaseKey && 
+        supabaseUrl !== "http://localhost:54321" && 
+        supabaseKey !== "anon-key";
+      
+      // Se Supabase não está configurado, usar dados mock
+      if (!isSupabaseConfigured) {
+        console.log("⚠️ Supabase não configurado - usando dados mock");
+        setUserName("Usuário Dev");
+        setUserRole("Desenvolvedor");
+        setCompanyName("Ambiente Dev");
+        setLoading(false);
+        return;
+      }
+      
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
