@@ -349,7 +349,7 @@ Responda à mensagem do cliente de forma natural:`;
       console.log('Erro ao registrar aprendizado:', e);
     }
 
-    const execTime = Date.now() - startTime;
+      const execTime = Date.now() - startTime;
     console.log(`✅ IA Atendimento - Resposta em ${execTime}ms:`, { 
       action, 
       actionParams,

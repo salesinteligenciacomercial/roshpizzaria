@@ -20,3 +20,5 @@ CREATE INDEX IF NOT EXISTS idx_tasks_responsaveis ON tasks USING GIN(responsavei
 
 
 
+
+

@@ -372,6 +372,11 @@ function Conversas() {
           }, timeout);
         });
 
+        // ⚡ CORREÇÃO: Verificar se supabase.functions existe antes de chamar
+        if (!supabase || !supabase.functions) {
+          throw new Error('Supabase functions não está disponível. Verifique a conexão.');
+        }
+
         // Promise da edge function
         const functionPromise = supabase.functions.invoke(functionName, { body });
 
@@ -495,6 +500,11 @@ function Conversas() {
           }
         });
         
+        // ⚡ CORREÇÃO: Verificar se supabase.functions existe antes de chamar
+        if (!supabase || !supabase.functions) {
+          throw new Error('Supabase functions não está disponível. Verifique a conexão.');
+        }
+
         // ⚡ CORREÇÃO: Adicionar timeout explícito para evitar travamento
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('Timeout após 30 segundos')), 30000);
@@ -3999,14 +4009,32 @@ function Conversas() {
     try {
       console.log('📤 [FASE 3] Enviando mídia via edge function...');
 
+      // ⚡ FASE 3: Validar usuário autenticado primeiro
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
+        console.error('❌ [MEDIA] Usuário não autenticado');
+        toast.error('Erro: usuário não autenticado');
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
+      }
+
+      const userId = authUser.id;
+
       // ⚡ FASE 3: Fazer upload para Supabase Storage ANTES de enviar pelo WhatsApp
-      const { data: userRole } = await supabase
+      const { data: userRole, error: userRoleError } = await supabase
         .from('user_roles')
         .select('company_id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .eq('user_id', userId)
         .single();
-      
-      const userId = (await supabase.auth.getUser()).data.user?.id;
+
+      if (userRoleError || !userRole?.company_id) {
+        console.error('❌ [MEDIA] Erro ao buscar company_id:', userRoleError);
+        toast.error('Erro: não foi possível identificar a empresa');
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
+      }
       const timestamp = Date.now();
       const filePath = `${userRole?.company_id}/${userId}/${timestamp}_${file.name}`;
       
@@ -4055,6 +4083,14 @@ function Conversas() {
 
       // Enviar via edge function (retry via wrapper interno)
       const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
+      if (!numeroNormalizado) {
+        console.error('❌ [MEDIA] Número de telefone inválido');
+        toast.error('Erro: número de telefone inválido');
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
+      }
+
       const quotedPayload = replyingTo && selectedConv.messages.find(m => m.id === replyingTo)
         ? {
             quoted: {
@@ -4064,14 +4100,14 @@ function Conversas() {
             quotedMessageId: replyingTo
           }
         : {};
-
+      
       console.log('📤 Enviando mídia via WhatsApp:', {
         tipo: type,
         fileName: file.name,
         hasBase64: !!base64,
         base64Length: base64.length,
         caption: caption || '[sem legenda]',
-        companyId: userRole?.company_id
+        companyId: userRole.company_id // Já validado acima
       });
 
       const { data, error } = await enviarWhatsApp({
@@ -4082,17 +4118,74 @@ function Conversas() {
         fileName: file.name,
         mimeType: file.type,
         caption: caption || '',
-        company_id: userRole?.company_id,
+        company_id: userRole.company_id, // Já validado acima
         ...quotedPayload,
       });
 
-      if (error) {
-        throw error;
+      // ⚡ CORREÇÃO CRÍTICA: Log detalhado da resposta para debug
+      console.log('🔍 [MEDIA] Resposta completa do enviarWhatsApp:', {
+        tipo: type,
+        fileName: file.name,
+        hasError: !!error,
+        errorMessage: error?.message,
+        hasData: !!data,
+        dataSuccess: data?.success,
+        dataErrorCode: data?.errorCode,
+        dataMessage: data?.message
+      });
+
+      // ⚡ CORREÇÃO CRÍTICA: Verificação combinada de erro e sucesso
+      // Verificar se há erro OU se data não existe OU se success não é true
+      const hasError = !!error;
+      const hasData = !!data;
+      const isSuccess = hasData && data.success === true;
+      
+      // ⚡ DECISÃO FINAL: Só continuar se NÃO houver erro E data existe E success é true
+      if (hasError || !hasData || !isSuccess) {
+        const errorMessage = error?.message || data?.message || data?.errorCode || `Erro ao enviar ${type}`;
+        console.error('❌ [MEDIA] Mídia NÃO foi enviada. Detalhes:', {
+          tipo: type,
+          fileName: file.name,
+          hasError,
+          hasData,
+          isSuccess,
+          errorMessage: error?.message,
+          dataSuccess: data?.success,
+          dataErrorCode: data?.errorCode,
+          dataMessage: data?.message
+        });
+        toast.error(`Erro ao enviar ${type}: ${errorMessage}`);
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return; // ⚡ CORREÇÃO CRÍTICA: Retornar aqui para não salvar no banco nem atualizar UI
       }
 
-      console.log('✅ [FASE 3] Mídia enviada com sucesso via WhatsApp');
+      // ⚡ VALIDAÇÃO FINAL: Confirmar que realmente foi bem-sucedido antes de continuar
+      // Se chegou aqui, significa que: !hasError && hasData && isSuccess
+      console.log('✅ [MEDIA] Mídia enviada com sucesso via WhatsApp. Confirmação final:', {
+        tipo: type,
+        fileName: file.name,
+        success: data.success,
+        numero: numeroNormalizado
+      });
+
+      // ⚡ PROTEÇÃO FINAL ABSOLUTA: Verificar novamente antes de salvar (redundância de segurança)
+      // Esta verificação é redundante mas garante que não salvamos por engano
+      if (error || !data || data.success !== true) {
+        console.error('❌ [MEDIA] ERRO CRÍTICO: Tentativa de salvar mídia que não foi enviada! Bloqueando salvamento.');
+        toast.error(`Erro crítico: ${type} não foi enviado`);
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
+      }
 
       // ⚡ FASE 3: Salvar no banco com URL do Storage (não BASE64)
+      // ⚡ PROTEÇÃO: Verificar novamente antes de cada operação crítica
+      if (!data || data.success !== true) {
+        console.error('❌ [MEDIA] ERRO: Tentativa de salvar após verificação falhou!');
+        return;
+      }
+
       // Buscar nome do usuário para assinatura
       const { data: userProfile } = await supabase
         .from('profiles')
@@ -4110,7 +4203,7 @@ function Conversas() {
         nome_contato: selectedConv.contactName,
         arquivo_nome: file.name,
         midia_url: publicUrl, // ⚡ FASE 3: Salvar URL do Storage (não BASE64!)
-        company_id: userRole?.company_id,
+        company_id: userRole.company_id, // Já validado acima
         owner_id: userId,
         sent_by: userProfile?.full_name, // ⚡ FASE 1: Adicionar assinatura permanente
         fromme: true,
@@ -4123,7 +4216,7 @@ function Conversas() {
         fileName: file.name,
         hasStorageUrl: !!publicUrl,
         storageUrlLength: publicUrl?.length || 0,
-        companyId: userRole?.company_id,
+        companyId: userRole.company_id, // Já validado acima
         contactName: selectedConv.contactName
       });
 
@@ -4196,7 +4289,7 @@ function Conversas() {
           .from('conversas')
           .update({ status: 'Enviada' })
           .eq('telefone_formatado', telefoneFormatado)
-          .eq('company_id', userCompanyId);
+          .eq('company_id', userRole.company_id); // Usar company_id validado
 
         if (updateError) {
           console.error('❌ Erro ao atualizar status no banco:', updateError);
@@ -4274,14 +4367,39 @@ function Conversas() {
       });
 
       // 3️⃣ Buscar company_id para envio via WhatsApp
-      const { data: userRole } = await supabase
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
+        console.error('❌ Usuário não autenticado');
+        toast.error('Erro: usuário não autenticado');
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
+      }
+
+      const { data: userRole, error: userRoleError } = await supabase
         .from('user_roles')
         .select('company_id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .eq('user_id', authUser.id)
         .single();
+
+      if (userRoleError || !userRole?.company_id) {
+        console.error('❌ Erro ao buscar company_id:', userRoleError);
+        toast.error('Erro: não foi possível identificar a empresa');
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
+      }
 
       // Enviar via WhatsApp com company_id
       const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
+      if (!numeroNormalizado) {
+        console.error('❌ Número de telefone inválido');
+        toast.error('Erro: número de telefone inválido');
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
+      }
+
       const quotedPayload = replyingTo && selectedConv.messages.find(m => m.id === replyingTo)
         ? {
             quoted: {
@@ -4296,7 +4414,7 @@ function Conversas() {
         numeroNormalizado,
         hasBase64: !!base64,
         base64Length: base64.length,
-        companyId: userRole?.company_id
+        companyId: userRole.company_id
       });
 
       const { data, error } = await enviarWhatsApp({
@@ -4307,25 +4425,81 @@ function Conversas() {
         fileName: 'audio.ogg',
         mimeType: 'audio/ogg; codecs=opus',
         caption: '',
-        company_id: userRole?.company_id,
+        company_id: userRole.company_id,
         ...quotedPayload,
       });
 
-      if (error) {
-        console.error('❌ Erro ao enviar áudio via WhatsApp:', error);
-        toast.error('Erro ao enviar áudio. Tente novamente.');
-        throw error;
+      // ⚡ CORREÇÃO CRÍTICA: Log detalhado da resposta para debug
+      console.log('🔍 [AUDIO] Resposta completa do enviarWhatsApp:', {
+        hasError: !!error,
+        errorMessage: error?.message,
+        hasData: !!data,
+        dataSuccess: data?.success,
+        dataErrorCode: data?.errorCode,
+        dataMessage: data?.message,
+        dataType: typeof data,
+        dataKeys: data ? Object.keys(data) : []
+      });
+
+      // ⚡ CORREÇÃO CRÍTICA: Verificação simplificada e direta
+      // REGRA: Só continuar se NÃO houver erro E data existe E data.success é explicitamente true
+      const canContinue = !error && data && data.success === true;
+      
+      if (!canContinue) {
+        // Determinar mensagem de erro
+        let errorMessage = 'Erro ao enviar áudio';
+        if (error?.message) {
+          errorMessage = error.message;
+        } else if (data?.message) {
+          errorMessage = data.message;
+        } else if (data?.errorCode) {
+          errorMessage = `Erro: ${data.errorCode}`;
+        }
+        
+        console.error('❌ [AUDIO] Áudio NÃO foi enviado. Bloqueando salvamento. Detalhes:', {
+          hasError: !!error,
+          errorMessage: error?.message,
+          hasData: !!data,
+          dataSuccess: data?.success,
+          dataSuccessType: typeof data?.success,
+          dataErrorCode: data?.errorCode,
+          dataMessage: data?.message,
+          canContinue: false
+        });
+        toast.error(`Erro ao enviar áudio: ${errorMessage}`);
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return; // ⚡ CORREÇÃO CRÍTICA: Retornar aqui para não salvar no banco nem atualizar UI
       }
 
-      console.log('✅ Áudio enviado com sucesso via WhatsApp');
+      // ⚡ VALIDAÇÃO FINAL: Confirmar que realmente foi bem-sucedido antes de continuar
+      // Se chegou aqui, significa que: !hasError && hasData && isSuccess
+      console.log('✅ [AUDIO] Áudio enviado com sucesso via WhatsApp. Confirmação final:', {
+        success: data.success,
+        numero: numeroNormalizado,
+        hasError: false,
+        hasData: true,
+        isSuccess: true
+      });
 
-      // 4️⃣ Salvar no banco com URL do Storage
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: userProfile } = user ? await supabase
+      // ⚡ PROTEÇÃO FINAL ABSOLUTA: Verificar novamente antes de salvar (redundância de segurança)
+      // Esta verificação é redundante mas garante que não salvamos por engano
+      if (error || !data || data.success !== true) {
+        console.error('❌ [AUDIO] ERRO CRÍTICO: Tentativa de salvar áudio que não foi enviado! Bloqueando salvamento.');
+        toast.error('Erro crítico: áudio não foi enviado');
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
+      }
+
+      // 4️⃣ Salvar no banco com URL do Storage (só se o envio foi bem-sucedido)
+      // ⚠️ ATENÇÃO: Este código só executa se todas as verificações passaram
+
+      const { data: userProfile } = await supabase
         .from('profiles')
         .select('full_name, email')
-        .eq('id', user.id)
-        .single() : { data: null };
+        .eq('id', authUser.id)
+        .single();
       
       const { data: inserted, error: dbError } = await supabase.from('conversas').insert([{
         numero: numeroNormalizado,
@@ -4337,8 +4511,8 @@ function Conversas() {
         nome_contato: selectedConv.contactName,
         arquivo_nome: 'audio.ogg',
         midia_url: storageUrl, // ⚡ CORREÇÃO CRÍTICA: Salvar URL do Storage
-        company_id: userRole?.company_id,
-        owner_id: user?.id,
+        company_id: userRole.company_id, // Já validado acima
+        owner_id: authUser.id, // Já validado acima
         sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
         fromme: true,
       }]).select('id, midia_url').single();
@@ -4401,7 +4575,7 @@ function Conversas() {
           .from('conversas')
           .update({ status: 'Enviada' })
           .eq('telefone_formatado', telefoneFormatado)
-          .eq('company_id', userCompanyId);
+          .eq('company_id', userRole.company_id); // Usar company_id validado
         console.log('✅ Status atualizado no banco após enviar áudio');
       } catch (error) {
         console.error('❌ Erro ao sincronizar status do áudio:', error);
@@ -5589,6 +5763,13 @@ function Conversas() {
                 company_id: companyId,
                 mensagemLength: mensagemConfirmacao.length
               });
+              
+              // ⚡ CORREÇÃO: Verificar se supabase.functions existe antes de chamar
+              if (!supabase || !supabase.functions) {
+                console.error('❌ [CONFIRMAÇÃO] Supabase functions não está disponível');
+                toast.warning("Compromisso criado, mas não foi possível enviar a confirmação imediata.");
+                return;
+              }
               
               const { data: resultConfirmacao, error: confirmacaoError } = await supabase.functions.invoke('enviar-whatsapp', {
                 body: {
@@ -6974,13 +7155,27 @@ function Conversas() {
     console.log('📞 [ENVIAR-WHATSAPP] Resultado do sendWhatsAppWithRetry:', {
       success: result?.success,
       errorCode: result?.errorCode,
-      message: result?.message
+      message: result?.message,
+      hasResult: !!result
     });
     
-    if (result && result.success) {
+    // ⚡ CORREÇÃO CRÍTICA: Verificar explicitamente se result existe E se success é true
+    if (result && result.success === true) {
+      console.log('✅ [ENVIAR-WHATSAPP] Envio bem-sucedido, retornando data sem erro');
       return { data: result, error: null } as const;
     }
-    return { data: result, error: { message: result?.message || 'Falha ao enviar mensagem' } } as const;
+    
+    // ⚡ CORREÇÃO CRÍTICA: Se result não existe ou success não é true, retornar erro
+    const errorMessage = result?.message || result?.errorCode || 'Falha ao enviar mensagem';
+    console.error('❌ [ENVIAR-WHATSAPP] Envio falhou, retornando erro:', {
+      hasResult: !!result,
+      success: result?.success,
+      errorMessage
+    });
+    return { 
+      data: result || null, 
+      error: { message: errorMessage } 
+    } as const;
   };
 
   // Normaliza destino: preserva JID de grupo (@g.us). Para contatos, mantém apenas dígitos com prefixo 55.
