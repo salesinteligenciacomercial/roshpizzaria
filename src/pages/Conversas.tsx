@@ -6786,32 +6786,45 @@ function Conversas() {
     
     try {
       setSyncStatus('syncing');
-      const lead = await findLead(selectedConv);
       
-      if (lead) {
-        // CORREÇÃO: setLeadVinculado deve receber o objeto lead, não true
-        setLeadVinculado(lead);
-        setMostrarBotaoCriarLead(false);
+      // Primeiro tentar encontrar lead existente
+      let lead = await findLead(selectedConv);
+      
+      // Se não encontrou, criar novo lead
+      if (!lead) {
+        console.log('📝 [LEAD] Lead não encontrado - criando novo lead...');
+        lead = await createLeadManually(selectedConv);
         
-        // Atualizar mapeamento de leads vinculados
-        const phoneKey = selectedConv.phoneNumber || selectedConv.id;
-        const formatted = safeFormatPhoneNumber(phoneKey);
-        setLeadsVinculados(prev => ({
-          ...prev,
-          [phoneKey]: lead.id,
-          ...(formatted ? { [formatted]: lead.id } : {})
-        }));
+        if (!lead) {
+          toast.error('Erro ao criar lead no CRM');
+          setSyncStatus('error');
+          setTimeout(() => setSyncStatus('idle'), 2000);
+          return;
+        }
         
-        setSyncStatus('synced');
-        setTimeout(() => setSyncStatus('idle'), 1000);
-      } else {
-        setSyncStatus('error');
-        setTimeout(() => setSyncStatus('idle'), 2000);
+        toast.success('Lead criado com sucesso!');
       }
+      
+      // Vincular lead à conversa
+      setLeadVinculado(lead);
+      setMostrarBotaoCriarLead(false);
+      
+      // Atualizar mapeamento de leads vinculados
+      const phoneKey = selectedConv.phoneNumber || selectedConv.id;
+      const formatted = safeFormatPhoneNumber(phoneKey);
+      setLeadsVinculados(prev => ({
+        ...prev,
+        [phoneKey]: lead.id,
+        ...(formatted ? { [formatted]: lead.id } : {})
+      }));
+      
+      setSyncStatus('synced');
+      setTimeout(() => setSyncStatus('idle'), 1000);
     } catch (error) {
       console.error('Erro ao criar lead:', error);
       setSyncStatus('error');
       setTimeout(() => setSyncStatus('idle'), 2000);
+      toast.error('Erro ao processar lead');
     }
   };
 
@@ -7180,35 +7193,79 @@ function Conversas() {
             <h1 className="text-xl font-semibold text-foreground">Conversas</h1>
             <div className="flex gap-2 items-center">
               <NovaConversaDialog
-                onNovaConversa={(nome, numero) => {
-                  // Verificar se já existe conversa com esse número
-                  const existente = conversations.find(c => c.id === numero || c.phoneNumber === numero);
-                  
-                  if (existente) {
-                    setSelectedConv(existente);
-                    toast.info("Conversa já existe!");
-                    return;
+                onNovaConversa={async (nome, numero) => {
+                  try {
+                    // Verificar se já existe conversa com esse número
+                    const existente = conversations.find(c => c.id === numero || c.phoneNumber === numero);
+                    
+                    if (existente) {
+                      setSelectedConv(existente);
+                      toast.info("Conversa já existe!");
+                      return;
+                    }
+                    
+                    // Salvar conversa no banco de dados primeiro
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) {
+                      toast.error('Usuário não autenticado');
+                      return;
+                    }
+
+                    const { data: userRole } = await supabase
+                      .from('user_roles')
+                      .select('company_id')
+                      .eq('user_id', user.id)
+                      .maybeSingle();
+
+                    if (!userRole?.company_id) {
+                      toast.error('Configuração de empresa não encontrada');
+                      return;
+                    }
+
+                    // Inserir conversa no banco
+                    const { error: insertError } = await supabase
+                      .from('conversas')
+                      .insert({
+                        numero: numero,
+                        nome_contato: nome,
+                        mensagem: 'Nova conversa criada',
+                        telefone_formatado: numero,
+                        company_id: userRole.company_id,
+                        owner_id: user.id,
+                        fromme: true,
+                        status: 'Enviada',
+                        origem: 'WhatsApp',
+                      });
+
+                    if (insertError) {
+                      console.error('Erro ao salvar conversa:', insertError);
+                      toast.error('Erro ao salvar contato no banco de dados');
+                      return;
+                    }
+                    
+                    // Criar conversa local
+                    const novaConversa: Conversation = {
+                      id: numero,
+                      contactName: nome,
+                      channel: "whatsapp",
+                      status: "waiting",
+                      lastMessage: "Nova conversa",
+                      unread: 0,
+                      messages: [],
+                      tags: [],
+                      phoneNumber: numero,
+                    };
+                    
+                    const updated = [novaConversa, ...conversations];
+                    setConversations(updated);
+                    setSelectedConv(novaConversa);
+                    saveConversations(updated);
+                    
+                    toast.success(`Contato ${nome} salvo com sucesso!`);
+                  } catch (error) {
+                    console.error('Erro ao criar contato:', error);
+                    toast.error('Erro ao criar contato');
                   }
-                  
-                  // Criar nova conversa
-                  const novaConversa: Conversation = {
-                    id: numero,
-                    contactName: nome,
-                    channel: "whatsapp",
-                    status: "waiting",
-                    lastMessage: "Nova conversa",
-                    unread: 0,
-                    messages: [],
-                    tags: [],
-                    phoneNumber: numero,
-                  };
-                  
-                  const updated = [novaConversa, ...conversations];
-                  setConversations(updated);
-                  setSelectedConv(novaConversa);
-                  saveConversations(updated);
-                  
-                  toast.success(`Contato ${nome} salvo!`);
                 }}
               />
               <Button 
