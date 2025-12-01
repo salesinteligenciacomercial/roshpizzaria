@@ -3997,7 +3997,19 @@ function Conversas() {
     setSyncStatus('syncing');
 
     try {
-      console.log('🚀 [INICIO] Processo de envio de mídia');
+      console.log('🚀 [INICIO] Processo de envio de mídia:', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: type,
+        mimeType: file.type
+      });
+
+      // ⚡ VALIDAÇÃO CRÍTICA: Verificar se arquivo não está vazio
+      if (file.size === 0) {
+        console.error('❌ [CRITICAL] Arquivo está vazio (0 bytes)!');
+        toast.error('O arquivo está vazio. Por favor, selecione outro arquivo.');
+        return;
+      }
 
       // FASE 1: Obter informações do usuário
       const { data: userRole } = await supabase

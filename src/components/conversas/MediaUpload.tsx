@@ -13,6 +13,30 @@ export function MediaUpload({ onFileSelected }: MediaUploadProps) {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    console.log('📎 [MEDIA-UPLOAD] Arquivo selecionado:', {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: file.lastModified
+    });
+
+    // ⚡ VALIDAÇÃO: Rejeitar arquivos vazios
+    if (file.size === 0) {
+      console.error('❌ [MEDIA-UPLOAD] Arquivo está vazio (0 bytes)');
+      alert('O arquivo selecionado está vazio. Por favor, escolha outro arquivo.');
+      // Resetar input para permitir nova seleção
+      event.target.value = '';
+      return;
+    }
+
+    // ⚡ VALIDAÇÃO: Limite de tamanho (16MB)
+    if (file.size > 16 * 1024 * 1024) {
+      console.error('❌ [MEDIA-UPLOAD] Arquivo muito grande:', file.size);
+      alert('O arquivo é muito grande. Tamanho máximo: 16MB');
+      event.target.value = '';
+      return;
+    }
+
     setUploading(true);
     try {
       // ⚡ CORREÇÃO: Determinar tipo do arquivo baseado no mimeType
@@ -27,9 +51,16 @@ export function MediaUpload({ onFileSelected }: MediaUploadProps) {
         fileType = 'pdf';
       }
 
+      console.log('✅ [MEDIA-UPLOAD] Passando arquivo para envio:', {
+        type: fileType,
+        size: file.size
+      });
+
       onFileSelected(file, '', fileType);
     } finally {
       setUploading(false);
+      // Resetar input após envio para permitir reenvio do mesmo arquivo
+      event.target.value = '';
     }
   };
 
