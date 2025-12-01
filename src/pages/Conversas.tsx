@@ -4037,7 +4037,17 @@ function Conversas() {
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64String = reader.result as string;
-          resolve(base64String.split(',')[1]);
+          if (!base64String || !base64String.includes(',')) {
+            reject(new Error('Erro ao converter arquivo para base64'));
+            return;
+          }
+          const base64Data = base64String.split(',')[1];
+          if (!base64Data || base64Data.length === 0) {
+            reject(new Error('Base64 vazio após conversão'));
+            return;
+          }
+          console.log('✅ Arquivo convertido para base64, tamanho:', base64Data.length);
+          resolve(base64Data);
         };
         reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
         reader.readAsDataURL(file);
@@ -4055,14 +4065,29 @@ function Conversas() {
           }
         : {};
 
+      // ⚡ CORREÇÃO: Para PDF e documentos, enviar mensagem descritiva ao invés de espaço vazio
+      const mensagemEnvio = caption.trim() 
+        ? caption 
+        : (type === 'pdf' || type === 'document') 
+          ? `Documento: ${file.name}` 
+          : 'Mídia enviada';
+
+      console.log('📤 Enviando mídia via WhatsApp:', {
+        tipo: type,
+        fileName: file.name,
+        hasBase64: !!base64,
+        base64Length: base64.length,
+        mensagem: mensagemEnvio
+      });
+
       const { data, error } = await enviarWhatsApp({
         numero: numeroNormalizado,
-        mensagem: caption || ' ',
+        mensagem: mensagemEnvio,
         tipo_mensagem: type,
         mediaBase64: base64,
         fileName: file.name,
         mimeType: file.type,
-        caption: caption || ' ',
+        caption: mensagemEnvio,
         ...quotedPayload,
       });
 
@@ -4237,7 +4262,17 @@ function Conversas() {
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64String = reader.result as string;
-          resolve(base64String.split(',')[1]);
+          if (!base64String || !base64String.includes(',')) {
+            reject(new Error('Erro ao converter áudio para base64'));
+            return;
+          }
+          const base64Data = base64String.split(',')[1];
+          if (!base64Data || base64Data.length === 0) {
+            reject(new Error('Base64 de áudio vazio após conversão'));
+            return;
+          }
+          console.log('✅ Áudio convertido para base64, tamanho:', base64Data.length);
+          resolve(base64Data);
         };
         reader.onerror = () => reject(new Error('Erro ao ler áudio'));
         reader.readAsDataURL(audioBlob);
@@ -4255,22 +4290,30 @@ function Conversas() {
           }
         : {};
       
+      console.log('🎤 Enviando áudio via WhatsApp:', {
+        numeroNormalizado,
+        hasBase64: !!base64,
+        base64Length: base64.length
+      });
+
       const { data, error } = await enviarWhatsApp({
         numero: numeroNormalizado,
-        mensagem: '[Áudio]',
+        mensagem: 'Áudio de voz',
         tipo_mensagem: 'audio',
         mediaBase64: base64,
         fileName: 'audio.ogg',
         mimeType: 'audio/ogg; codecs=opus',
-        caption: '',
+        caption: 'Áudio de voz',
         ...quotedPayload,
       });
 
       if (error) {
-        console.warn('⚠️ Erro ao enviar áudio via WhatsApp, mas mídia já foi salva:', error);
-        // Continuar mesmo com erro de envio - a mídia já está no Storage
+        console.error('❌ Erro ao enviar áudio via WhatsApp:', error);
+        toast.error('Erro ao enviar áudio pelo WhatsApp. Tente novamente.');
+        throw error; // Interromper processo se falhar o envio
       } else {
         console.log('✅ Áudio enviado com sucesso via WhatsApp');
+        toast.success('Áudio enviado com sucesso!');
       }
 
       // 4️⃣ Salvar no banco com URL do Storage

@@ -55,7 +55,7 @@ export default function IA() {
       .eq('user_id', user.id)
       .single();
     if (!userRole?.company_id) return;
-    await updateAgentConfig();
+    await updateAgentConfig(id, { enabled: active });
   };
 
   const aiAgents = [

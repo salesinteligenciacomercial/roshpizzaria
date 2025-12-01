@@ -157,7 +157,10 @@ export function RecomendacoesIA() {
           ? (mensagensIA.length / mensagensClientes.length) * 100 
           : 0;
 
-        if (taxaRespostaIA < 50 && !iaConfig?.custom_prompts?.atendimento?.enabled) {
+        const customPrompts = iaConfig?.custom_prompts as any;
+        const atendimentoEnabled = customPrompts?.atendimento?.enabled || false;
+        
+        if (taxaRespostaIA < 50 && !atendimentoEnabled) {
           recomendacoes.push({
             id: 'rec-1',
             tipo: 'oportunidade',
@@ -274,7 +277,8 @@ export function RecomendacoesIA() {
       }
 
       // Análise 6: Base de conhecimento vazia
-      if (iaConfig && (!iaConfig.knowledge_base || Object.keys(iaConfig.knowledge_base).length === 0)) {
+      const knowledgeBase = (iaConfig as any)?.knowledge_base;
+      if (iaConfig && (!knowledgeBase || Object.keys(knowledgeBase).length === 0)) {
         recomendacoes.push({
           id: 'rec-6',
           tipo: 'melhoria',

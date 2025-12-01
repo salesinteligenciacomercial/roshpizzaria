@@ -273,19 +273,22 @@ serve(async (req) => {
     if (action) {
       const tools = await createTools(supabase);
       
+      // Parse body if needed
+      const bodyData = req.body ? await req.json() : {};
+      
       switch (action) {
         case 'buscar_horarios':
-          const horarios = await tools.buscar_horarios_disponiveis(req.body);
+          const horarios = await tools.buscar_horarios_disponiveis(bodyData);
           return new Response(JSON.stringify(horarios), { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           });
         case 'listar_profissionais':
-          const profissionais = await tools.listar_profissionais(req.body);
+          const profissionais = await tools.listar_profissionais(bodyData);
           return new Response(JSON.stringify(profissionais), { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           });
         case 'criar_compromisso':
-          const novoCompromisso = await tools.criar_compromisso(req.body);
+          const novoCompromisso = await tools.criar_compromisso(bodyData);
           return new Response(JSON.stringify(novoCompromisso), { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           });

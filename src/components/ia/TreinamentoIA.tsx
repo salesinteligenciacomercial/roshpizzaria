@@ -401,12 +401,12 @@ export function TreinamentoIA() {
           
           // Pegar pergunta do cliente e resposta da IA
           for (let i = 0; i < msgs.length - 1; i++) {
-            const clienteMsg = msgs[i];
-            const iaMsg = msgs[i + 1];
+            const clienteMsg = msgs[i] as any;
+            const iaMsg = msgs[i + 1] as any;
             
             if (!clienteMsg.fromme && iaMsg.fromme) {
               trainingDataFromConversas.push({
-                id: `conv-${clienteMsg.id}`,
+                id: `conv-${clienteMsg.id || i}`,
                 pergunta: clienteMsg.mensagem,
                 resposta: iaMsg.mensagem,
                 feedback: null,
