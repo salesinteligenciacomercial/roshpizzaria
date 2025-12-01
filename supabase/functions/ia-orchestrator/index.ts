@@ -220,6 +220,12 @@ serve(async (req) => {
       lead = leadFound;
     }
     
+    // Detectar intenção PRIMEIRO
+    const { intent, confidence, suggestedAgent } = detectIntent(message);
+    const agentToUse = forceAgent || suggestedAgent;
+    
+    console.log('🎯 [ORCHESTRATOR] Intenção detectada:', { intent, confidence, agentToUse });
+    
     // Verificar se IA está ativada para a empresa
     const { data: iaConfig } = await supabase
       .from('ia_configurations')
@@ -227,7 +233,7 @@ serve(async (req) => {
       .eq('company_id', companyId)
       .maybeSingle();
     
-    // Se IA não está configurada ou desabilitada, retornar null
+    // Se IA não está configurada ou desabilitada globalmente, retornar null
     if (!iaConfig || !iaConfig.learning_mode) {
       console.log('⚠️ [ORCHESTRATOR] IA não ativada para empresa:', companyId);
       return new Response(
@@ -239,11 +245,23 @@ serve(async (req) => {
       );
     }
     
-    // Detectar intenção
-    const { intent, confidence, suggestedAgent } = detectIntent(message);
-    const agentToUse = forceAgent || suggestedAgent;
+    // Verificar se o agente específico está habilitado
+    const customPrompts = iaConfig.custom_prompts || {};
+    const agentConfig = customPrompts[agentToUse];
     
-    console.log('🎯 [ORCHESTRATOR] Intenção detectada:', { intent, confidence, agentToUse });
+    if (!agentConfig || agentConfig.enabled !== true) {
+      console.log(`⚠️ [ORCHESTRATOR] Agente ${agentToUse} desabilitado para empresa:`, companyId);
+      return new Response(
+        JSON.stringify({ 
+          active: false, 
+          message: `Agente ${agentToUse} não está ativado` 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    console.log(`✅ [ORCHESTRATOR] Agente ${agentToUse} ativado - processando...`);
+    
     
     // Contexto da conversa
     const context: ConversationContext = {
