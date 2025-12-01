@@ -9,7 +9,6 @@ import {
 import { 
   MoreVertical, 
   Reply, 
-  Edit, 
   Trash2, 
   Smile,
   Heart,
@@ -178,30 +177,17 @@ export function MessageActions({
           )}
           
           {sender === "user" && (
-            <>
-              <DropdownMenuItem onClick={() => {
-                const newContent = prompt("Editar mensagem:", content);
-                if (newContent && newContent !== content) {
-                  onEdit(messageId, newContent);
-                }
+            <DropdownMenuItem 
+              onClick={() => {
+                const confirmDelete = window.confirm("Excluir mensagem para todos?");
+                onDelete(messageId, confirmDelete);
                 setShowEmojiPicker(false);
-              }}>
-                <Edit className="h-4 w-4 mr-2" />
-                Editar
-              </DropdownMenuItem>
-              
-              <DropdownMenuItem 
-                onClick={() => {
-                  const confirmDelete = window.confirm("Excluir mensagem para todos?");
-                  onDelete(messageId, confirmDelete);
-                  setShowEmojiPicker(false);
-                }}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Excluir
-              </DropdownMenuItem>
-            </>
+              }}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Excluir
+            </DropdownMenuItem>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
