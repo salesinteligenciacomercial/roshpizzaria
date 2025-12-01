@@ -4236,77 +4236,25 @@ function Conversas() {
       }
 
       // ⚡ FASE 3: Usar URL do Storage para exibição
-      const newMessage: Message = {
-        id: (inserted?.id || Date.now()).toString(),
-        content: caption || '[Mídia]',
-        type: type as "image" | "audio" | "pdf" | "video",
-        sender: "user",
-        timestamp: new Date(),
-        delivered: true,
-        read: false,
-        mediaUrl: publicUrl, // ⚡ FASE 3: Usar URL do Storage
-        fileName: file.name,
-        mimeType: file.type,
-        sentBy: userProfile?.full_name || userName || "Equipe",
-      };
+      // ⚡ CORREÇÃO: Não adicionar mensagem ao estado local aqui
+      // A mensagem será carregada do banco ao recarregar conversas
+      console.log('✅ [MEDIA] Mensagem salva no banco, será carregada ao recarregar conversas');
 
-      // ⚡ CORREÇÃO CRÍTICA: Ordenar mensagens por timestamp após adicionar nova mensagem
-      const sortMessagesByTimestamp = (messages: Message[]): Message[] => {
-        return [...messages].sort((a, b) => {
-          const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-          const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-          return timeA - timeB;
-        });
-      };
-
-      // ⚡ CORREÇÃO: Calcular status dinamicamente
-      const sortedMessagesWithNew = sortMessagesByTimestamp([...selectedConv.messages, newMessage]);
-      const newStatus = calculateConversationStatus(sortedMessagesWithNew);
-
-      const updatedConversations = conversations.map((conv) =>
-        conv.id === selectedConv.id
-          ? {
-              ...conv,
-              messages: sortedMessagesWithNew,
-              lastMessage: newMessage.content,
-              status: newStatus,
-              unread: 0,
-            }
-          : conv
-      );
-
-      saveConversations(updatedConversations);
-      setSelectedConv({
-        ...selectedConv,
-        messages: sortedMessagesWithNew,
-        status: newStatus,
-      });
-
-      // Atualizar status no banco de dados para sincronização em tempo real
+      // ⚡ CORREÇÃO CRÍTICA: Recarregar conversas do banco para exibir mensagem enviada
+      // Isso garante que a mensagem apareça no CRM após envio
+      console.log('🔄 [MEDIA] Recarregando conversas para exibir mensagem enviada...');
+      
       try {
-        const telefoneFormatado = selectedConv.phoneNumber?.replace(/[^0-9]/g, '') || selectedConv.id.replace(/[^0-9]/g, '');
-        const { error: updateError } = await supabase
-          .from('conversas')
-          .update({ status: 'Enviada' })
-          .eq('telefone_formatado', telefoneFormatado)
-          .eq('company_id', userRole.company_id); // Usar company_id validado
-
-        if (updateError) {
-          console.error('❌ Erro ao atualizar status no banco:', updateError);
-        } else {
-          console.log('✅ Status atualizado no banco para "Enviada"');
-        }
+        await loadSupabaseConversations();
+        console.log('✅ [MEDIA] Conversas recarregadas com sucesso');
       } catch (error) {
-        console.error('❌ Erro ao sincronizar status:', error);
+        console.error('❌ [MEDIA] Erro ao recarregar conversas:', error);
       }
-
-      // já salvo acima
 
       setSyncStatus('synced');
       setTimeout(() => setSyncStatus('idle'), 1000);
       
-      // Não mostrar notificação ao enviar mídia - apenas logs
-      console.log('✅ Mídia enviada com sucesso');
+      toast.success('Mídia enviada com sucesso');
     } catch (error) {
       console.error("❌ Erro ao enviar mídia:", error);
       setSyncStatus('error');
@@ -4524,61 +4472,19 @@ function Conversas() {
         console.log('✅ Mensagem de áudio salva no banco com Storage URL:', inserted?.midia_url);
       }
 
-      const newMessage: Message = {
-        id: (inserted?.id || Date.now()).toString(),
-        content: "[Áudio]",
-        type: "audio",
-        sender: "user",
-        timestamp: new Date(),
-        delivered: true,
-        read: false,
-        mediaUrl: storageUrl, // ⚡ CORREÇÃO CRÍTICA: Usar URL do Storage
-        sentBy: userName || "Equipe",
-      };
+      // ⚡ CORREÇÃO: Não adicionar mensagem ao estado local aqui
+      // A mensagem será carregada do banco ao recarregar conversas
+      console.log('✅ [AUDIO] Mensagem salva no banco, será carregada ao recarregar conversas');
 
-      // ⚡ CORREÇÃO CRÍTICA: Ordenar mensagens por timestamp após adicionar nova mensagem
-      const sortMessagesByTimestamp = (messages: Message[]): Message[] => {
-        return [...messages].sort((a, b) => {
-          const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-          const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-          return timeA - timeB;
-        });
-      };
-
-      // ⚡ CORREÇÃO: Calcular status dinamicamente
-      const sortedMessagesWithNew = sortMessagesByTimestamp([...selectedConv.messages, newMessage]);
-      const newStatus = calculateConversationStatus(sortedMessagesWithNew);
-
-      const updatedConversations = conversations.map((conv) =>
-        conv.id === selectedConv.id
-          ? {
-              ...conv,
-              messages: sortedMessagesWithNew,
-              lastMessage: "[Áudio]",
-              status: newStatus,
-              unread: 0,
-            }
-          : conv
-      );
-
-      saveConversations(updatedConversations);
-      setSelectedConv({
-        ...selectedConv,
-        messages: sortedMessagesWithNew,
-        status: newStatus,
-      });
-
-      // Atualizar status no banco de dados
+      // ⚡ CORREÇÃO CRÍTICA: Recarregar conversas do banco para exibir mensagem enviada
+      // Isso garante que a mensagem apareça no CRM após envio
+      console.log('🔄 [AUDIO] Recarregando conversas para exibir áudio enviado...');
+      
       try {
-        const telefoneFormatado = selectedConv.phoneNumber?.replace(/[^0-9]/g, '') || selectedConv.id.replace(/[^0-9]/g, '');
-        await supabase
-          .from('conversas')
-          .update({ status: 'Enviada' })
-          .eq('telefone_formatado', telefoneFormatado)
-          .eq('company_id', userRole.company_id); // Usar company_id validado
-        console.log('✅ Status atualizado no banco após enviar áudio');
+        await loadSupabaseConversations();
+        console.log('✅ [AUDIO] Conversas recarregadas com sucesso');
       } catch (error) {
-        console.error('❌ Erro ao sincronizar status do áudio:', error);
+        console.error('❌ [AUDIO] Erro ao recarregar conversas:', error);
       }
 
       // Iniciar transcrição automática
@@ -4593,8 +4499,7 @@ function Conversas() {
       setSyncStatus('synced');
       setTimeout(() => setSyncStatus('idle'), 1000);
       
-      // Não mostrar notificação ao enviar áudio - apenas logs
-      console.log('✅ Áudio enviado com sucesso');
+      toast.success('Áudio enviado com sucesso');
     } catch (error) {
       console.error("❌ Erro ao enviar áudio:", error);
       setSyncStatus('error');
