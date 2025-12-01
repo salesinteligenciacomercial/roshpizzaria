@@ -252,7 +252,13 @@ serve(async (req) => {
           fileName: validatedData.fileName || 'arquivo',
           media: validatedData.mediaBase64,
         };
-        console.log(`📸 Enviando mídia base64 (${mediaType}), caption: "${captionToUse}"`);
+        console.log(`📸 [PDF-SEND] Enviando mídia base64 (${mediaType}):`, {
+          caption: captionToUse,
+          fileName: validatedData.fileName,
+          mimeType,
+          base64Length: validatedData.mediaBase64.length,
+          targetNumber: bodyPayload.number
+        });
       }
     } else if (validatedData.mediaUrl) {
       // Enviar mídia via URL - Formato Evolution API

@@ -4032,24 +4032,46 @@ function Conversas() {
       
       console.log('📍 [FASE 3] URL pública da mídia:', publicUrl);
 
+      // ⚡ Verificar tamanho do arquivo antes de converter
+      const fileSizeMB = file.size / (1024 * 1024);
+      console.log('📊 [PDF-SEND] Tamanho do arquivo:', {
+        bytes: file.size,
+        mb: fileSizeMB.toFixed(2),
+        tipo: type,
+        nome: file.name
+      });
+      
+      if (fileSizeMB > 16) {
+        toast.error(`Arquivo muito grande (${fileSizeMB.toFixed(1)}MB). Máximo: 16MB`);
+        throw new Error('Arquivo excede tamanho máximo de 16MB');
+      }
+
       // Converter arquivo para base64 para enviar pelo WhatsApp
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64String = reader.result as string;
           if (!base64String || !base64String.includes(',')) {
+            console.error('❌ [PDF-SEND] Base64 string inválida');
             reject(new Error('Erro ao converter arquivo para base64'));
             return;
           }
           const base64Data = base64String.split(',')[1];
           if (!base64Data || base64Data.length === 0) {
+            console.error('❌ [PDF-SEND] Base64 vazio após split');
             reject(new Error('Base64 vazio após conversão'));
             return;
           }
-          console.log('✅ Arquivo convertido para base64, tamanho:', base64Data.length);
+          console.log('✅ [PDF-SEND] Arquivo convertido para base64:', {
+            tamanhoBase64: base64Data.length,
+            inicio: base64Data.substring(0, 50)
+          });
           resolve(base64Data);
         };
-        reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
+        reader.onerror = (error) => {
+          console.error('❌ [PDF-SEND] Erro ao ler arquivo:', error);
+          reject(new Error('Erro ao ler arquivo'));
+        };
         reader.readAsDataURL(file);
       });
 
@@ -4065,13 +4087,15 @@ function Conversas() {
           }
         : {};
 
-      console.log('📤 Enviando mídia via WhatsApp:', {
+      console.log('📤 [PDF-SEND] Enviando mídia via WhatsApp:', {
         tipo: type,
         fileName: file.name,
+        mimeType: file.type,
         hasBase64: !!base64,
         base64Length: base64.length,
         caption: caption || '[sem legenda]',
-        companyId: userRole?.company_id
+        companyId: userRole?.company_id,
+        numeroNormalizado
       });
 
       const { data, error } = await enviarWhatsApp({
@@ -4087,8 +4111,17 @@ function Conversas() {
       });
 
       if (error) {
+        console.error('❌ [PDF-SEND] Erro ao enviar via WhatsApp:', {
+          error,
+          message: error.message,
+          tipo: type,
+          fileName: file.name
+        });
+        toast.error(`Erro ao enviar ${type}: ${error.message || 'Erro desconhecido'}`);
         throw error;
       }
+
+      console.log('✅ [PDF-SEND] Resposta do envio WhatsApp:', data);
 
       console.log('✅ [FASE 3] Mídia enviada com sucesso via WhatsApp');
 
