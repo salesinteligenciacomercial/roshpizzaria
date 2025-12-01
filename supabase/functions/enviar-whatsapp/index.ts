@@ -200,7 +200,7 @@ serve(async (req) => {
         
         bodyPayload = {
           number: isGroup ? (target as any).groupId : (target as any).number,
-          audio: `data:audio/ogg;base64,${validatedData.mediaBase64}`, // Formato data URI
+          audio: validatedData.mediaBase64, // ⚡ Base64 puro sem prefixo
           delay: 1200, // Delay para simular digitação
         };
         console.log(`🎤 Enviando áudio PTT via sendWhatsAppAudio para: ${bodyPayload.number}`);
@@ -296,13 +296,13 @@ serve(async (req) => {
             if (url.includes('sendWhatsAppAudio')) {
               currentPayload = {
                 number: targetNumber,
-                audio: `data:audio/ogg;base64,${validatedData.mediaBase64}`,
+                audio: validatedData.mediaBase64, // ⚡ Base64 puro
                 delay: 1200,
               };
             } else if (url.includes('sendPtv')) {
               currentPayload = {
                 number: targetNumber,
-                audio: `data:audio/ogg;base64,${validatedData.mediaBase64}`,
+                video: validatedData.mediaBase64, // ⚡ PTV usa campo 'video'
               };
             } else if (url.includes('sendMedia')) {
               currentPayload = {
@@ -311,7 +311,7 @@ serve(async (req) => {
                 mimetype: 'audio/ogg',
                 caption: '',
                 fileName: 'audio.ogg',
-                media: validatedData.mediaBase64,
+                media: validatedData.mediaBase64, // ⚡ Base64 puro
               };
             }
             console.log(`🎤 Tentando endpoint: ${url}`);
