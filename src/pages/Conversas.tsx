@@ -3997,9 +3997,9 @@ function Conversas() {
     setSyncStatus('syncing');
 
     try {
-      console.log('📤 [FASE 3] Enviando mídia via edge function...');
+      console.log('🚀 [INICIO] Processo de envio de mídia');
 
-      // ⚡ FASE 3: Fazer upload para Supabase Storage ANTES de enviar pelo WhatsApp
+      // FASE 1: Obter informações do usuário
       const { data: userRole } = await supabase
         .from('user_roles')
         .select('company_id')
@@ -4007,10 +4007,47 @@ function Conversas() {
         .single();
       
       const userId = (await supabase.auth.getUser()).data.user?.id;
+      
+      // FASE 2: Converter arquivo para base64 PRIMEIRO
+      console.log('🔄 [FASE 2] Convertendo arquivo para base64...');
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          if (!result) {
+            console.error('❌ FileReader retornou resultado vazio');
+            reject(new Error('Erro ao ler arquivo'));
+            return;
+          }
+          
+          // Extrair base64 (remover prefixo data:...)
+          const base64 = result.includes(',') ? result.split(',')[1] : result;
+          
+          if (!base64 || base64.length === 0) {
+            console.error('❌ Base64 vazio após extração');
+            reject(new Error('Erro ao converter arquivo'));
+            return;
+          }
+          
+          console.log('✅ [FASE 2] Conversão concluída:', {
+            tamanhoOriginal: file.size,
+            tamanhoBase64: base64.length,
+            tipo: type
+          });
+          resolve(base64);
+        };
+        reader.onerror = (error) => {
+          console.error('❌ Erro no FileReader:', error);
+          reject(new Error('Erro ao ler arquivo'));
+        };
+        reader.readAsDataURL(file);
+      });
+
+      // FASE 3: Upload para Supabase Storage
+      console.log('📤 [FASE 3] Fazendo upload para Storage...');
       const timestamp = Date.now();
       const filePath = `${userRole?.company_id}/${userId}/${timestamp}_${file.name}`;
       
-      // Upload para Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('conversation-media')
         .upload(filePath, file, {
@@ -4019,63 +4056,21 @@ function Conversas() {
         });
       
       if (uploadError) {
-        console.error('❌ Erro ao fazer upload para Storage:', uploadError);
+        console.error('❌ Erro ao fazer upload:', uploadError);
         throw new Error('Erro ao fazer upload da mídia');
       }
       
-      console.log('✅ [FASE 3] Upload para Storage concluído:', uploadData.path);
+      console.log('✅ [FASE 3] Upload concluído:', uploadData.path);
       
-      // Gerar URL pública da mídia
+      // Gerar URL pública
       const { data: { publicUrl } } = supabase.storage
         .from('conversation-media')
         .getPublicUrl(uploadData.path);
       
-      console.log('📍 [FASE 3] URL pública da mídia:', publicUrl);
+      console.log('📍 [FASE 3] URL pública:', publicUrl);
 
-      // ⚡ Verificar tamanho do arquivo antes de converter
-      const fileSizeMB = file.size / (1024 * 1024);
-      console.log('📊 [PDF-SEND] Tamanho do arquivo:', {
-        bytes: file.size,
-        mb: fileSizeMB.toFixed(2),
-        tipo: type,
-        nome: file.name
-      });
-      
-      if (fileSizeMB > 16) {
-        toast.error(`Arquivo muito grande (${fileSizeMB.toFixed(1)}MB). Máximo: 16MB`);
-        throw new Error('Arquivo excede tamanho máximo de 16MB');
-      }
-
-      // Converter arquivo para base64 para enviar pelo WhatsApp
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64String = reader.result as string;
-          if (!base64String || !base64String.includes(',')) {
-            console.error('❌ [PDF-SEND] Base64 string inválida');
-            reject(new Error('Erro ao converter arquivo para base64'));
-            return;
-          }
-          const base64Data = base64String.split(',')[1];
-          if (!base64Data || base64Data.length === 0) {
-            console.error('❌ [PDF-SEND] Base64 vazio após split');
-            reject(new Error('Base64 vazio após conversão'));
-            return;
-          }
-          console.log('✅ [PDF-SEND] Arquivo convertido para base64:', {
-            tamanhoBase64: base64Data.length,
-            inicio: base64Data.substring(0, 50)
-          });
-          resolve(base64Data);
-        };
-        reader.onerror = (error) => {
-          console.error('❌ [PDF-SEND] Erro ao ler arquivo:', error);
-          reject(new Error('Erro ao ler arquivo'));
-        };
-        reader.readAsDataURL(file);
-      });
-
-      // Enviar via edge function (retry via wrapper interno)
+      // FASE 4: Enviar via WhatsApp usando base64
+      console.log('📤 [FASE 4] Enviando via WhatsApp...');
       const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
       const quotedPayload = replyingTo && selectedConv.messages.find(m => m.id === replyingTo)
         ? {
@@ -4087,22 +4082,11 @@ function Conversas() {
           }
         : {};
 
-      console.log('📤 [PDF-SEND] Enviando mídia via WhatsApp:', {
-        tipo: type,
-        fileName: file.name,
-        mimeType: file.type,
-        hasBase64: !!base64,
-        base64Length: base64.length,
-        caption: caption || '[sem legenda]',
-        companyId: userRole?.company_id,
-        numeroNormalizado
-      });
-
       const { data, error } = await enviarWhatsApp({
         numero: numeroNormalizado,
         mensagem: caption || '',
         tipo_mensagem: type,
-        mediaBase64: base64,
+        mediaBase64: base64Data,
         fileName: file.name,
         mimeType: file.type,
         caption: caption || '',
@@ -4111,22 +4095,14 @@ function Conversas() {
       });
 
       if (error) {
-        console.error('❌ [PDF-SEND] Erro ao enviar via WhatsApp:', {
-          error,
-          message: error.message,
-          tipo: type,
-          fileName: file.name
-        });
+        console.error('❌ Erro ao enviar:', error);
         toast.error(`Erro ao enviar ${type}: ${error.message || 'Erro desconhecido'}`);
         throw error;
       }
 
-      console.log('✅ [PDF-SEND] Resposta do envio WhatsApp:', data);
+      console.log('✅ [FASE 4] Enviado com sucesso');
 
-      console.log('✅ [FASE 3] Mídia enviada com sucesso via WhatsApp');
-
-      // ⚡ FASE 3: Salvar no banco com URL do Storage (não BASE64)
-      // Buscar nome do usuário para assinatura
+      // FASE 5: Salvar no banco com URL do Storage
       const { data: userProfile } = await supabase
         .from('profiles')
         .select('full_name')
@@ -4142,10 +4118,10 @@ function Conversas() {
         tipo_mensagem: type,
         nome_contato: selectedConv.contactName,
         arquivo_nome: file.name,
-        midia_url: publicUrl, // ⚡ FASE 3: Salvar URL do Storage (não BASE64!)
+        midia_url: publicUrl,
         company_id: userRole?.company_id,
         owner_id: userId,
-        sent_by: userProfile?.full_name, // ⚡ FASE 1: Adicionar assinatura permanente
+        sent_by: userProfile?.full_name,
         fromme: true,
       }).select('id, midia_url').single();
 
