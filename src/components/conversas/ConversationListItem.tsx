@@ -37,7 +37,7 @@ interface ConversationListItemProps {
     avatar?: string;
   };
   lastRespondedBy?: string; // ⚡ Nome do último usuário que respondeu
-  status?: "waiting" | "answered" | "resolved" | "Resolvida" | "Enviada" | "Recebida"; // Status da conversa
+  status?: "waiting" | "answered" | "resolved"; // Status da conversa
 }
 
 function ConversationListItemComponent({

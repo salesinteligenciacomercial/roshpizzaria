@@ -74,7 +74,7 @@ interface Conversation {
   id: string;
   contactName: string;
   channel: "whatsapp" | "instagram" | "facebook";
-  status: "waiting" | "answered" | "resolved" | "Resolvida" | "Enviada" | "Recebida";
+  status: "waiting" | "answered" | "resolved";
   lastMessage: string;
   unread: number;
   messages: Message[];
@@ -713,33 +713,12 @@ function Conversas() {
     }
   };
 
-  // ⏰ Tempo limite para considerar conversa "ao vivo" (5 minutos)
-  const ACTIVE_CONVERSATION_THRESHOLD = 5 * 60 * 1000; // 5 minutos em milissegundos
-
   // Contador de conversas aguardando resposta
   const waitingCount = useMemo(() => {
-    return conversations.filter((conv) => {
-      if (conv.isGroup === true) return false;
-      
-      const lastMessage = conv.messages?.[conv.messages.length - 1];
-      if (!lastMessage) return false;
-      
-      // ✅ CORREÇÃO: Incluir conversas finalizadas que receberam nova mensagem do contato
-      if (conv.status === 'resolved') {
-        return lastMessage.sender === 'contact';
-      }
-      
-      // Para conversas não finalizadas, aplicar regra de tempo (5 minutos)
-      const lastMsgTime = lastMessage.timestamp instanceof Date 
-        ? lastMessage.timestamp.getTime() 
-        : new Date(lastMessage.timestamp).getTime();
-      const now = Date.now();
-      const timeSinceLastMsg = now - lastMsgTime;
-      
-      // ✅ Só vai para "Esperando" se: última mensagem é do contato E passou mais de 5 minutos
-      return lastMessage.sender === 'contact' && timeSinceLastMsg > ACTIVE_CONVERSATION_THRESHOLD;
-    }).length;
-  }, [conversations]);
+    return conversations.filter(
+      (conv) => conv.status === "waiting" && conv.isGroup !== true
+    ).length;
+  }, [conversations, blockedGroups]);
 
   // Contador de conversas em atendimento
   const answeredCount = useMemo(() => {
@@ -750,15 +729,7 @@ function Conversas() {
       const lastMessage = conv.messages?.[conv.messages.length - 1];
       if (!lastMessage) return false;
       
-      // Verificar tempo desde última mensagem
-      const lastMsgTime = lastMessage.timestamp instanceof Date 
-        ? lastMessage.timestamp.getTime() 
-        : new Date(lastMessage.timestamp).getTime();
-      const now = Date.now();
-      const timeSinceLastMsg = now - lastMsgTime;
-      
-      // ✅ Está em atendimento se: última mensagem é do usuário OU houve interação nos últimos 5 minutos
-      return lastMessage.sender === 'user' || timeSinceLastMsg <= ACTIVE_CONVERSATION_THRESHOLD;
+      return lastMessage.sender === 'user';
     }).length;
   }, [conversations]);
 
@@ -781,67 +752,39 @@ function Conversas() {
       // ✅ Filtro "Grupos": Mostrar APENAS grupos (bloqueados e não bloqueados aparecem aqui)
       filtered = filtered.filter((conv) => conv.isGroup === true);
     } else if (filter === "waiting") {
-      // ✅ Filtro "Aguardando": Contatos que enviaram mensagem e aguardam resposta
-      // Critérios:
-      // 1. Conversas não finalizadas: última mensagem é do contato + passou mais de 5 minutos sem interação
-      // 2. Conversas finalizadas: qualquer nova mensagem do contato (independente do tempo)
-      filtered = filtered.filter((conv) => {
-        if (conv.isGroup === true) return false; // Excluir grupos
-        
-        const lastMessage = conv.messages?.[conv.messages.length - 1];
-        if (!lastMessage) return false;
-        
-        // ✅ CORREÇÃO: Se conversa finalizada recebeu nova mensagem do contato, mostrar em "Esperando"
-        if (conv.status === 'resolved') {
-          // Conversa finalizada que recebeu nova mensagem do contato deve aparecer em "Esperando"
-          return lastMessage.sender === 'contact';
-        }
-        
-        // Para conversas não finalizadas, aplicar regra de tempo (5 minutos)
-        const lastMsgTime = lastMessage.timestamp instanceof Date 
-          ? lastMessage.timestamp.getTime() 
-          : new Date(lastMessage.timestamp).getTime();
-        const now = Date.now();
-        const timeSinceLastMsg = now - lastMsgTime;
-        
-        // ✅ Só mostra em "Esperando" se última mensagem é do contato E passou mais de 5 minutos
-        return lastMessage.sender === 'contact' && timeSinceLastMsg > ACTIVE_CONVERSATION_THRESHOLD;
-      });
-    } else if (filter === "answered") {
-      // ✅ Filtro "Em Atendimento": Conversas ativas em tempo real
-      // Critérios: última mensagem é do usuário OU houve interação nos últimos 5 minutos
-      // Quando há diálogo ao vivo, a conversa permanece aqui mesmo que contato responda
+      // ✅ Filtro "Aguardando": Contatos que enviaram mensagem e ainda não foram respondidos
+      // Critérios: última mensagem é do contato (sender === 'contact') + não está finalizada
       filtered = filtered.filter((conv) => {
         if (conv.isGroup === true) return false; // Excluir grupos
         if (conv.status === 'resolved') return false; // Excluir finalizadas
         
+        // Verificar se a última mensagem é do contato (aguardando resposta)
         const lastMessage = conv.messages?.[conv.messages.length - 1];
         if (!lastMessage) return false;
         
-        // Verificar tempo desde última mensagem
-        const lastMsgTime = lastMessage.timestamp instanceof Date 
-          ? lastMessage.timestamp.getTime() 
-          : new Date(lastMessage.timestamp).getTime();
-        const now = Date.now();
-        const timeSinceLastMsg = now - lastMsgTime;
-        
-        // ✅ Está em atendimento se: última mensagem é do usuário OU houve interação nos últimos 5 minutos
-        // Isso mantém conversas em tempo real em "Em Atendimento" mesmo quando contato responde
-        return lastMessage.sender === 'user' || timeSinceLastMsg <= ACTIVE_CONVERSATION_THRESHOLD;
+        // ✅ Se última mensagem é do contato = aguardando resposta
+        return lastMessage.sender === 'contact';
       });
-    } else if (filter === "resolved") {
-      // ✅ Filtro "Resolvidos": Conversas finalizadas que NÃO receberam novas mensagens do contato
+    } else if (filter === "answered") {
+      // ✅ Filtro "Em Atendimento": Conversas ativas onde já houve resposta nossa
+      // Critérios: última mensagem é do usuário (sender === 'user') + não está finalizada
+      // Quando responder uma conversa que estava em "aguardando", ela vai para "em atendimento"
       filtered = filtered.filter((conv) => {
         if (conv.isGroup === true) return false; // Excluir grupos
-        // ✅ CORREÇÃO: Verificar ambos status (português e inglês)
-        if (conv.status !== 'resolved' && conv.status !== 'Resolvida') return false; // Apenas finalizadas
+        if (conv.status === 'resolved') return false; // Excluir finalizadas
         
+        // Verificar se a última mensagem é do usuário (foi respondida)
         const lastMessage = conv.messages?.[conv.messages.length - 1];
-        if (!lastMessage) return true; // Se não tem mensagem, mantém no resolvidos
+        if (!lastMessage) return false;
         
-        // ✅ CORREÇÃO: Se última mensagem é do contato, conversa deve ir para "Esperando", não "Resolvidos"
-        // Apenas conversas finalizadas SEM novas mensagens do contato ficam em "Resolvidos"
-        return lastMessage.sender !== 'contact';
+        // ✅ Se última mensagem é do usuário = foi respondida
+        return lastMessage.sender === 'user';
+      });
+    } else if (filter === "resolved") {
+      // ✅ Filtro "Finalizados": Conversas marcadas como finalizadas com o botão "Finalizar atendimento"
+      filtered = filtered.filter((conv) => {
+        if (conv.isGroup === true) return false; // Excluir grupos
+        return conv.status === 'resolved';
       });
     }
 
@@ -1194,8 +1137,8 @@ function Conversas() {
                   });
                   
                   // Atualizar status baseado na última mensagem
-                  let novoStatus = prevSelected.status;
-                  if (prevSelected.status !== 'resolved' && prevSelected.status !== 'Resolvida') {
+                  let novoStatus: "waiting" | "answered" | "resolved" = prevSelected.status;
+                  if (prevSelected.status !== 'resolved') {
                     if (novaMensagemObj.sender === 'user') {
                       novoStatus = 'answered';
                     } else if (novaMensagemObj.sender === 'contact') {
@@ -1240,8 +1183,8 @@ function Conversas() {
                       
                       // Atualizar status baseado na última mensagem
                       // ⚡ CORREÇÃO: Verificar se conversa está "ao vivo" antes de mudar para waiting
-                      let novoStatus = conv.status;
-                      if (conv.status !== 'resolved' && conv.status !== 'Resolvida') {
+                      let novoStatus: "waiting" | "answered" | "resolved" = conv.status;
+                      if (conv.status !== 'resolved') {
                         if (novaMensagemObj.sender === 'user') {
                           novoStatus = 'answered';
                         } else if (novaMensagemObj.sender === 'contact') {
@@ -4212,28 +4155,12 @@ function Conversas() {
         .eq('id', userId)
         .single();
       
-      // ⚡ CORREÇÃO: Verificar status atual antes de salvar mídia
-      const { data: currentConv } = await supabase
-        .from('conversas')
-        .select('status')
-        .eq('telefone_formatado', numeroNormalizado)
-        .eq('company_id', userRole?.company_id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-      
-      console.log('🔍 Status atual antes de enviar mídia:', currentConv?.status);
-      
-      // Se estava resolvido (português ou inglês), usar 'answered' para ir para "Em Atendimento"
-      const isResolved = currentConv?.status === 'resolved' || currentConv?.status === 'Resolvida';
-      const messageStatus = isResolved ? 'answered' : 'Enviada';
-      
       const { data: inserted, error: dbError } = await supabase.from('conversas').insert({
         numero: numeroNormalizado,
         telefone_formatado: numeroNormalizado,
         mensagem: caption || '[Mídia]',
         origem: 'WhatsApp',
-        status: messageStatus,
+        status: 'Enviada',
         tipo_mensagem: type,
         nome_contato: selectedConv.contactName,
         arquivo_nome: file.name,
@@ -4243,8 +4170,6 @@ function Conversas() {
         sent_by: userProfile?.full_name,
         fromme: true,
       }).select('id, midia_url').single();
-      
-      console.log(`✅ Mídia salva com status "${messageStatus}" (era "${currentConv?.status}")`);
 
       // ⚡ Log detalhado para debugging
       console.log('📊 [MEDIA-SEND] Tentativa de salvar no banco:', {
@@ -4457,28 +4382,12 @@ function Conversas() {
         .eq('id', user.id)
         .single() : { data: null };
       
-      // ⚡ CORREÇÃO: Verificar status atual antes de salvar áudio
-      const { data: currentConv } = await supabase
-        .from('conversas')
-        .select('status')
-        .eq('telefone_formatado', numeroNormalizado)
-        .eq('company_id', userRole?.company_id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-      
-      console.log('🔍 Status atual antes de salvar áudio no banco:', currentConv?.status);
-      
-      // Se estava resolvido (português ou inglês), usar 'answered' para ir para "Em Atendimento"
-      const isResolved = currentConv?.status === 'resolved' || currentConv?.status === 'Resolvida';
-      const messageStatus = isResolved ? 'answered' : 'Enviada';
-      
       const { data: inserted, error: dbError } = await supabase.from('conversas').insert([{
         numero: numeroNormalizado,
         telefone_formatado: numeroNormalizado,
         mensagem: '[Áudio]',
         origem: 'WhatsApp',
-        status: messageStatus,
+        status: 'Enviada',
         tipo_mensagem: 'audio',
         nome_contato: selectedConv.contactName,
         arquivo_nome: 'audio.ogg',
@@ -4488,8 +4397,6 @@ function Conversas() {
         sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
         fromme: true,
       }]).select('id, midia_url').single();
-      
-      console.log(`✅ Áudio salvo com status "${messageStatus}" (era "${currentConv?.status}")`);
       
       if (dbError) {
         console.error('❌ Erro ao salvar mensagem no banco:', dbError);
@@ -4542,32 +4449,15 @@ function Conversas() {
         status: newStatus,
       });
 
-      // ⚡ CORREÇÃO: Se a conversa estava como 'Resolvida', mudar para 'answered' ao responder
+      // Atualizar status no banco de dados
       try {
         const telefoneFormatado = selectedConv.phoneNumber?.replace(/[^0-9]/g, '') || selectedConv.id.replace(/[^0-9]/g, '');
-        
-        // Verificar status atual
-        const { data: currentConv } = await supabase
-          .from('conversas')
-          .select('status')
-          .eq('telefone_formatado', telefoneFormatado)
-          .eq('company_id', userCompanyId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
-        
-        console.log('🔍 Status atual antes de enviar áudio:', currentConv?.status);
-        
-        // Se estava resolvido (português ou inglês), mudar para 'answered' para ir para "Em Atendimento"
-        const isResolved = currentConv?.status === 'resolved' || currentConv?.status === 'Resolvida';
-        const newStatus = isResolved ? 'answered' : 'Enviada';
-        
         await supabase
           .from('conversas')
-          .update({ status: newStatus })
+          .update({ status: 'Enviada' })
           .eq('telefone_formatado', telefoneFormatado)
           .eq('company_id', userCompanyId);
-        console.log(`✅ Status atualizado de "${currentConv?.status}" para "${newStatus}" após enviar áudio`);
+        console.log('✅ Status atualizado no banco após enviar áudio');
       } catch (error) {
         console.error('❌ Erro ao sincronizar status do áudio:', error);
       }
@@ -4649,32 +4539,15 @@ function Conversas() {
     // Limpar input imediatamente para feedback visual
     setMessageInput("");
 
-    // ⚡ CORREÇÃO: Se a conversa estava como 'Resolvida', mudar para 'answered' ao responder
+    // Atualizar status no banco de dados para sincronização em tempo real
     try {
       const telefoneFormatado = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
-      
-      // Verificar status atual
-      const { data: currentConv } = await supabase
-        .from('conversas')
-        .select('status')
-        .eq('telefone_formatado', telefoneFormatado)
-        .eq('company_id', userCompanyId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-      
-      console.log('🔍 Status atual antes de responder:', currentConv?.status);
-      
-      // Se estava resolvido (português ou inglês), mudar para 'answered' para ir para "Em Atendimento"
-      const isResolved = currentConv?.status === 'resolved' || currentConv?.status === 'Resolvida';
-      const newStatus = isResolved ? 'answered' : 'Enviada';
-      
       await supabase
         .from('conversas')
-        .update({ status: newStatus })
+        .update({ status: 'Enviada' })
         .eq('telefone_formatado', telefoneFormatado)
         .eq('company_id', userCompanyId);
-      console.log(`✅ Status atualizado de "${currentConv?.status}" para "${newStatus}" após enviar mensagem`);
+      console.log('✅ Status atualizado no banco após enviar mensagem');
     } catch (error) {
       console.error('❌ Erro ao sincronizar status:', error);
     }
@@ -7572,32 +7445,7 @@ function Conversas() {
               channel={conv.channel}
               lastMessage={conv.lastMessage}
               timestamp={new Date(conv.messages[conv.messages.length - 1]?.timestamp)}
-              unread={(() => {
-                // ✅ Calcular mensagens não lidas apenas para conversas em atendimento ativo
-                const lastMessage = conv.messages?.[conv.messages.length - 1];
-                if (!lastMessage) return 0;
-                
-                const lastMsgTime = lastMessage.timestamp instanceof Date 
-                  ? lastMessage.timestamp.getTime() 
-                  : new Date(lastMessage.timestamp).getTime();
-                const now = Date.now();
-                const timeSinceLastMsg = now - lastMsgTime;
-                
-                // Se está em atendimento ativo (menos de 5min) e última mensagem é do contato
-                // mostrar contador de mensagens não lidas do contato
-                if (timeSinceLastMsg <= ACTIVE_CONVERSATION_THRESHOLD && lastMessage.sender === 'contact') {
-                  // Contar mensagens do contato desde última mensagem do usuário
-                  let unreadCount = 0;
-                  for (let i = conv.messages.length - 1; i >= 0; i--) {
-                    const msg = conv.messages[i];
-                    if (msg.sender === 'user') break; // Parar ao encontrar mensagem do usuário
-                    if (msg.sender === 'contact') unreadCount++;
-                  }
-                  return unreadCount;
-                }
-                
-                return conv.unread || 0;
-              })()}
+              unread={conv.unread}
               isSelected={selectedConv?.id === conv.id}
               avatarUrl={conv.avatarUrl}
               tags={conv.tags}
