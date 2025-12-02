@@ -499,6 +499,9 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
           {/* Seletor de Horários Disponíveis */}
           <div>
             <Label className="text-sm mb-2 block">Selecione o Horário *</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Duração do compromisso: <strong>{formData.duracao_minutos} minutos</strong> (configurado nas configurações)
+            </p>
             <HorarioSeletor
               data={formData.data}
               horarioComercial={horarioComercial}
