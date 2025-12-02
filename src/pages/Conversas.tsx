@@ -74,7 +74,7 @@ interface Conversation {
   id: string;
   contactName: string;
   channel: "whatsapp" | "instagram" | "facebook";
-  status: "waiting" | "answered" | "resolved";
+  status: "waiting" | "answered" | "resolved" | "Resolvida" | "Enviada" | "Recebida";
   lastMessage: string;
   unread: number;
   messages: Message[];
@@ -833,7 +833,8 @@ function Conversas() {
       // ✅ Filtro "Resolvidos": Conversas finalizadas que NÃO receberam novas mensagens do contato
       filtered = filtered.filter((conv) => {
         if (conv.isGroup === true) return false; // Excluir grupos
-        if (conv.status !== 'resolved') return false; // Apenas finalizadas
+        // ✅ CORREÇÃO: Verificar ambos status (português e inglês)
+        if (conv.status !== 'resolved' && conv.status !== 'Resolvida') return false; // Apenas finalizadas
         
         const lastMessage = conv.messages?.[conv.messages.length - 1];
         if (!lastMessage) return true; // Se não tem mensagem, mantém no resolvidos
@@ -1193,8 +1194,8 @@ function Conversas() {
                   });
                   
                   // Atualizar status baseado na última mensagem
-                  let novoStatus: "waiting" | "answered" | "resolved" = prevSelected.status;
-                  if (prevSelected.status !== 'resolved') {
+                  let novoStatus = prevSelected.status;
+                  if (prevSelected.status !== 'resolved' && prevSelected.status !== 'Resolvida') {
                     if (novaMensagemObj.sender === 'user') {
                       novoStatus = 'answered';
                     } else if (novaMensagemObj.sender === 'contact') {
@@ -1239,8 +1240,8 @@ function Conversas() {
                       
                       // Atualizar status baseado na última mensagem
                       // ⚡ CORREÇÃO: Verificar se conversa está "ao vivo" antes de mudar para waiting
-                      let novoStatus: "waiting" | "answered" | "resolved" = conv.status;
-                      if (conv.status !== 'resolved') {
+                      let novoStatus = conv.status;
+                      if (conv.status !== 'resolved' && conv.status !== 'Resolvida') {
                         if (novaMensagemObj.sender === 'user') {
                           novoStatus = 'answered';
                         } else if (novaMensagemObj.sender === 'contact') {
@@ -4211,7 +4212,7 @@ function Conversas() {
         .eq('id', userId)
         .single();
       
-      // ⚡ CORREÇÃO: Verificar status atual antes de salvar
+      // ⚡ CORREÇÃO: Verificar status atual antes de salvar mídia
       const { data: currentConv } = await supabase
         .from('conversas')
         .select('status')
@@ -4221,8 +4222,11 @@ function Conversas() {
         .limit(1)
         .single();
       
-      // Se estava resolvido, usar 'answered' para ir para "Em Atendimento"
-      const messageStatus = currentConv?.status === 'resolved' ? 'answered' : 'Enviada';
+      console.log('🔍 Status atual antes de enviar mídia:', currentConv?.status);
+      
+      // Se estava resolvido (português ou inglês), usar 'answered' para ir para "Em Atendimento"
+      const isResolved = currentConv?.status === 'resolved' || currentConv?.status === 'Resolvida';
+      const messageStatus = isResolved ? 'answered' : 'Enviada';
       
       const { data: inserted, error: dbError } = await supabase.from('conversas').insert({
         numero: numeroNormalizado,
@@ -4239,6 +4243,8 @@ function Conversas() {
         sent_by: userProfile?.full_name,
         fromme: true,
       }).select('id, midia_url').single();
+      
+      console.log(`✅ Mídia salva com status "${messageStatus}" (era "${currentConv?.status}")`);
 
       // ⚡ Log detalhado para debugging
       console.log('📊 [MEDIA-SEND] Tentativa de salvar no banco:', {
@@ -4451,7 +4457,7 @@ function Conversas() {
         .eq('id', user.id)
         .single() : { data: null };
       
-      // ⚡ CORREÇÃO: Verificar status atual antes de salvar
+      // ⚡ CORREÇÃO: Verificar status atual antes de salvar áudio
       const { data: currentConv } = await supabase
         .from('conversas')
         .select('status')
@@ -4461,8 +4467,11 @@ function Conversas() {
         .limit(1)
         .single();
       
-      // Se estava resolvido, usar 'answered' para ir para "Em Atendimento"
-      const messageStatus = currentConv?.status === 'resolved' ? 'answered' : 'Enviada';
+      console.log('🔍 Status atual antes de salvar áudio no banco:', currentConv?.status);
+      
+      // Se estava resolvido (português ou inglês), usar 'answered' para ir para "Em Atendimento"
+      const isResolved = currentConv?.status === 'resolved' || currentConv?.status === 'Resolvida';
+      const messageStatus = isResolved ? 'answered' : 'Enviada';
       
       const { data: inserted, error: dbError } = await supabase.from('conversas').insert([{
         numero: numeroNormalizado,
@@ -4479,6 +4488,8 @@ function Conversas() {
         sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
         fromme: true,
       }]).select('id, midia_url').single();
+      
+      console.log(`✅ Áudio salvo com status "${messageStatus}" (era "${currentConv?.status}")`);
       
       if (dbError) {
         console.error('❌ Erro ao salvar mensagem no banco:', dbError);
@@ -4531,7 +4542,7 @@ function Conversas() {
         status: newStatus,
       });
 
-      // ⚡ CORREÇÃO: Se a conversa estava como 'resolved', mudar para 'answered' ao responder
+      // ⚡ CORREÇÃO: Se a conversa estava como 'Resolvida', mudar para 'answered' ao responder
       try {
         const telefoneFormatado = selectedConv.phoneNumber?.replace(/[^0-9]/g, '') || selectedConv.id.replace(/[^0-9]/g, '');
         
@@ -4545,15 +4556,18 @@ function Conversas() {
           .limit(1)
           .single();
         
-        // Se estava resolvido, mudar para 'answered' para sair de "Resolvidos" e ir para "Em Atendimento"
-        const newStatus = currentConv?.status === 'resolved' ? 'answered' : 'Enviada';
+        console.log('🔍 Status atual antes de enviar áudio:', currentConv?.status);
+        
+        // Se estava resolvido (português ou inglês), mudar para 'answered' para ir para "Em Atendimento"
+        const isResolved = currentConv?.status === 'resolved' || currentConv?.status === 'Resolvida';
+        const newStatus = isResolved ? 'answered' : 'Enviada';
         
         await supabase
           .from('conversas')
           .update({ status: newStatus })
           .eq('telefone_formatado', telefoneFormatado)
           .eq('company_id', userCompanyId);
-        console.log(`✅ Status atualizado para ${newStatus} após enviar áudio`);
+        console.log(`✅ Status atualizado de "${currentConv?.status}" para "${newStatus}" após enviar áudio`);
       } catch (error) {
         console.error('❌ Erro ao sincronizar status do áudio:', error);
       }
@@ -4635,7 +4649,7 @@ function Conversas() {
     // Limpar input imediatamente para feedback visual
     setMessageInput("");
 
-    // ⚡ CORREÇÃO: Se a conversa estava como 'resolved', mudar para 'answered' ao responder
+    // ⚡ CORREÇÃO: Se a conversa estava como 'Resolvida', mudar para 'answered' ao responder
     try {
       const telefoneFormatado = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
       
@@ -4649,15 +4663,18 @@ function Conversas() {
         .limit(1)
         .single();
       
-      // Se estava resolvido, mudar para 'answered' para sair de "Resolvidos" e ir para "Em Atendimento"
-      const newStatus = currentConv?.status === 'resolved' ? 'answered' : 'Enviada';
+      console.log('🔍 Status atual antes de responder:', currentConv?.status);
+      
+      // Se estava resolvido (português ou inglês), mudar para 'answered' para ir para "Em Atendimento"
+      const isResolved = currentConv?.status === 'resolved' || currentConv?.status === 'Resolvida';
+      const newStatus = isResolved ? 'answered' : 'Enviada';
       
       await supabase
         .from('conversas')
         .update({ status: newStatus })
         .eq('telefone_formatado', telefoneFormatado)
         .eq('company_id', userCompanyId);
-      console.log(`✅ Status atualizado para ${newStatus} após enviar mensagem`);
+      console.log(`✅ Status atualizado de "${currentConv?.status}" para "${newStatus}" após enviar mensagem`);
     } catch (error) {
       console.error('❌ Erro ao sincronizar status:', error);
     }
