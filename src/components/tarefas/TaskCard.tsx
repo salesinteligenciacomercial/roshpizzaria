@@ -920,8 +920,6 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
               >
                 {checklistProgress.isComplete ? (
                   <CheckCircle2 className="h-4 w-4 animate-pulse" />
-                ) : deadlineInfo.status === 'overdue' ? (
-                  <span className="text-[9px] font-bold">!</span>
                 ) : (
                   <div className="relative flex items-center justify-center">
                     <svg width="22" height="22" viewBox="0 0 22 22" className="transform -rotate-90">
@@ -931,6 +929,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                         strokeDasharray={`${(checklistProgress.percentage / 100) * 50.3} 50.3`}
                         strokeLinecap="round"
                         className={`transition-all duration-500 ${
+                          deadlineInfo.status === 'overdue' ? 'text-red-500' :
                           checklistProgress.percentage >= 75 ? 'text-green-500' :
                           checklistProgress.percentage >= 50 ? 'text-yellow-500' :
                           checklistProgress.percentage >= 25 ? 'text-orange-500' : 'text-blue-500'
@@ -938,6 +937,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                       />
                     </svg>
                     <span className={`absolute text-[7px] font-bold ${
+                      deadlineInfo.status === 'overdue' ? 'text-white' :
                       deadlineInfo.daysRemaining <= 2 && deadlineInfo.daysRemaining >= 0 ? 'text-orange-600' : 'text-foreground'
                     }`}>
                       {checklistProgress.total > 0 ? `${checklistProgress.percentage}%` : deadlineInfo.hasDeadline ? `${deadlineInfo.daysRemaining}d` : ''}
