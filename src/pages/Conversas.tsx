@@ -4211,12 +4211,25 @@ function Conversas() {
         .eq('id', userId)
         .single();
       
+      // ⚡ CORREÇÃO: Verificar status atual antes de salvar
+      const { data: currentConv } = await supabase
+        .from('conversas')
+        .select('status')
+        .eq('telefone_formatado', numeroNormalizado)
+        .eq('company_id', userRole?.company_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      // Se estava resolvido, usar 'answered' para ir para "Em Atendimento"
+      const messageStatus = currentConv?.status === 'resolved' ? 'answered' : 'Enviada';
+      
       const { data: inserted, error: dbError } = await supabase.from('conversas').insert({
         numero: numeroNormalizado,
         telefone_formatado: numeroNormalizado,
         mensagem: caption || '[Mídia]',
         origem: 'WhatsApp',
-        status: 'Enviada',
+        status: messageStatus,
         tipo_mensagem: type,
         nome_contato: selectedConv.contactName,
         arquivo_nome: file.name,
@@ -4438,12 +4451,25 @@ function Conversas() {
         .eq('id', user.id)
         .single() : { data: null };
       
+      // ⚡ CORREÇÃO: Verificar status atual antes de salvar
+      const { data: currentConv } = await supabase
+        .from('conversas')
+        .select('status')
+        .eq('telefone_formatado', numeroNormalizado)
+        .eq('company_id', userRole?.company_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      // Se estava resolvido, usar 'answered' para ir para "Em Atendimento"
+      const messageStatus = currentConv?.status === 'resolved' ? 'answered' : 'Enviada';
+      
       const { data: inserted, error: dbError } = await supabase.from('conversas').insert([{
         numero: numeroNormalizado,
         telefone_formatado: numeroNormalizado,
         mensagem: '[Áudio]',
         origem: 'WhatsApp',
-        status: 'Enviada',
+        status: messageStatus,
         tipo_mensagem: 'audio',
         nome_contato: selectedConv.contactName,
         arquivo_nome: 'audio.ogg',
@@ -4505,15 +4531,29 @@ function Conversas() {
         status: newStatus,
       });
 
-      // Atualizar status no banco de dados
+      // ⚡ CORREÇÃO: Se a conversa estava como 'resolved', mudar para 'answered' ao responder
       try {
         const telefoneFormatado = selectedConv.phoneNumber?.replace(/[^0-9]/g, '') || selectedConv.id.replace(/[^0-9]/g, '');
+        
+        // Verificar status atual
+        const { data: currentConv } = await supabase
+          .from('conversas')
+          .select('status')
+          .eq('telefone_formatado', telefoneFormatado)
+          .eq('company_id', userCompanyId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        // Se estava resolvido, mudar para 'answered' para sair de "Resolvidos" e ir para "Em Atendimento"
+        const newStatus = currentConv?.status === 'resolved' ? 'answered' : 'Enviada';
+        
         await supabase
           .from('conversas')
-          .update({ status: 'Enviada' })
+          .update({ status: newStatus })
           .eq('telefone_formatado', telefoneFormatado)
           .eq('company_id', userCompanyId);
-        console.log('✅ Status atualizado no banco após enviar áudio');
+        console.log(`✅ Status atualizado para ${newStatus} após enviar áudio`);
       } catch (error) {
         console.error('❌ Erro ao sincronizar status do áudio:', error);
       }
@@ -4595,15 +4635,29 @@ function Conversas() {
     // Limpar input imediatamente para feedback visual
     setMessageInput("");
 
-    // Atualizar status no banco de dados para sincronização em tempo real
+    // ⚡ CORREÇÃO: Se a conversa estava como 'resolved', mudar para 'answered' ao responder
     try {
       const telefoneFormatado = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
+      
+      // Verificar status atual
+      const { data: currentConv } = await supabase
+        .from('conversas')
+        .select('status')
+        .eq('telefone_formatado', telefoneFormatado)
+        .eq('company_id', userCompanyId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      // Se estava resolvido, mudar para 'answered' para sair de "Resolvidos" e ir para "Em Atendimento"
+      const newStatus = currentConv?.status === 'resolved' ? 'answered' : 'Enviada';
+      
       await supabase
         .from('conversas')
-        .update({ status: 'Enviada' })
+        .update({ status: newStatus })
         .eq('telefone_formatado', telefoneFormatado)
         .eq('company_id', userCompanyId);
-      console.log('✅ Status atualizado no banco após enviar mensagem');
+      console.log(`✅ Status atualizado para ${newStatus} após enviar mensagem`);
     } catch (error) {
       console.error('❌ Erro ao sincronizar status:', error);
     }
