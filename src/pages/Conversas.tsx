@@ -7463,7 +7463,13 @@ function Conversas() {
                 const userMessages = conv.messages.filter(m => m.sender === "user");
                 if (userMessages.length > 0) {
                   const lastUserMsg = userMessages[userMessages.length - 1];
-                  return lastUserMsg.sentBy || undefined;
+                  // Se tem sentBy, usar o nome do usuário
+                  // Se não tem sentBy mas é mensagem enviada (fromme=true), significa que veio do WhatsApp celular
+                  if (lastUserMsg.sentBy) {
+                    return lastUserMsg.sentBy;
+                  }
+                  // Mensagem enviada sem sentBy = enviada pelo WhatsApp do celular
+                  return "WhatsApp";
                 }
                 return undefined;
               })()}
