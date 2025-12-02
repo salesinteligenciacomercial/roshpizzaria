@@ -69,6 +69,16 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
 
       if (agendas && agendas.disponibilidade && typeof agendas.disponibilidade === 'object') {
         setAgendaSelecionada(agendas);
+        
+        // Atualizar duração do compromisso com o tempo_medio_servico configurado
+        if (agendas.tempo_medio_servico && agendas.tempo_medio_servico > 0) {
+          setFormData(prev => ({
+            ...prev,
+            duracao_minutos: agendas.tempo_medio_servico.toString()
+          }));
+          console.log('✅ [AgendaModal] Duração atualizada para:', agendas.tempo_medio_servico, 'minutos');
+        }
+        
         const disp = agendas.disponibilidade as any;
         
         // O horário comercial é salvo em disponibilidade.periodos
@@ -384,7 +394,7 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
         tipo_servico: "reuniao",
         observacoes: "",
         custo_estimado: "",
-        duracao_minutos: "30",
+        duracao_minutos: agendaSelecionada?.tempo_medio_servico?.toString() || "30",
         enviar_confirmacao: false,
         notificar_responsavel: true,
         enviar_lembrete: true,
