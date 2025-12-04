@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2, Download } from "lucide-react";
+import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2, Download, CheckSquare, Square, Trash2, Edit, GitBranch, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
@@ -22,6 +22,7 @@ import { useNavigate } from "react-router-dom";
 import { useLeadsSync } from "@/hooks/useLeadsSync";
 import { useGlobalSync } from "@/hooks/useGlobalSync";
 import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +33,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Lead {
   id: string;
@@ -74,12 +82,214 @@ export default function Leads() {
   const [leadParaTarefa, setLeadParaTarefa] = useState<Lead | null>(null);
   const [showTarefaDialog, setShowTarefaDialog] = useState(false);
   const [leadAvatars, setLeadAvatars] = useState<Record<string, string>>({});
+  
+  // Estados para seleção em massa
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [showBulkTagDialog, setShowBulkTagDialog] = useState(false);
+  const [showBulkFunnelDialog, setShowBulkFunnelDialog] = useState(false);
+  const [bulkTagInput, setBulkTagInput] = useState("");
+  const [funis, setFunis] = useState<{id: string; nome: string}[]>([]);
+  const [etapas, setEtapas] = useState<{id: string; nome: string; funil_id: string}[]>([]);
+  const [selectedFunilId, setSelectedFunilId] = useState<string>("");
+  const [selectedEtapaId, setSelectedEtapaId] = useState<string>("");
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  
   const PAGE_SIZE = 50; // Carregar 50 leads por vez
   const { toast } = useToast();
   const navigate = useNavigate();
   const observerRef = useRef<HTMLDivElement>(null);
   const companyIdRef = useRef<string | null>(null); // Cache de company_id
   const avatarFetchingRef = useRef<Set<string>>(new Set()); // Controle de fetching
+
+  // Carregar funis e etapas para seleção em massa
+  useEffect(() => {
+    const carregarFunis = async () => {
+      if (!companyIdRef.current) return;
+      const { data } = await supabase
+        .from('funis')
+        .select('id, nome')
+        .eq('company_id', companyIdRef.current);
+      if (data) setFunis(data);
+    };
+    carregarFunis();
+  }, []);
+
+  useEffect(() => {
+    const carregarEtapas = async () => {
+      if (!selectedFunilId) {
+        setEtapas([]);
+        return;
+      }
+      const { data } = await supabase
+        .from('etapas')
+        .select('id, nome, funil_id')
+        .eq('funil_id', selectedFunilId)
+        .order('posicao');
+      if (data) setEtapas(data);
+    };
+    carregarEtapas();
+  }, [selectedFunilId]);
+
+  // Funções de seleção em massa
+  const toggleSelectionMode = () => {
+    setSelectionMode(!selectionMode);
+    setSelectedLeads(new Set());
+  };
+
+  const toggleLeadSelection = (leadId: string) => {
+    const newSelected = new Set(selectedLeads);
+    if (newSelected.has(leadId)) {
+      newSelected.delete(leadId);
+    } else {
+      newSelected.add(leadId);
+    }
+    setSelectedLeads(newSelected);
+  };
+
+  const selectAllVisible = () => {
+    const allIds = new Set(filteredLeads.map(l => l.id));
+    setSelectedLeads(allIds);
+  };
+
+  const deselectAll = () => {
+    setSelectedLeads(new Set());
+  };
+
+  // Excluir leads em massa
+  const confirmarExclusaoEmMassa = async () => {
+    if (selectedLeads.size === 0 || !companyIdRef.current) return;
+    setBulkProcessing(true);
+
+    try {
+      const { error } = await supabase
+        .from("leads")
+        .delete()
+        .in("id", Array.from(selectedLeads))
+        .eq("company_id", companyIdRef.current);
+
+      if (error) throw error;
+
+      toast({
+        title: "Leads excluídos",
+        description: `${selectedLeads.size} leads foram excluídos com sucesso.`,
+      });
+
+      setLeads(prev => prev.filter(lead => !selectedLeads.has(lead.id)));
+      setSelectedLeads(new Set());
+      setShowBulkDeleteDialog(false);
+      setSelectionMode(false);
+    } catch (error) {
+      console.error("Erro ao excluir leads em massa:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao excluir leads",
+        description: "Não foi possível excluir os leads selecionados.",
+      });
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  // Adicionar tag em massa
+  const adicionarTagEmMassa = async () => {
+    if (selectedLeads.size === 0 || !bulkTagInput.trim() || !companyIdRef.current) return;
+    setBulkProcessing(true);
+
+    try {
+      const newTag = bulkTagInput.trim();
+      const leadsToUpdate = leads.filter(l => selectedLeads.has(l.id));
+
+      for (const lead of leadsToUpdate) {
+        const currentTags = lead.tags || [];
+        if (!currentTags.includes(newTag)) {
+          await supabase
+            .from("leads")
+            .update({ tags: [...currentTags, newTag] })
+            .eq("id", lead.id)
+            .eq("company_id", companyIdRef.current);
+        }
+      }
+
+      toast({
+        title: "Tags adicionadas",
+        description: `Tag "${newTag}" adicionada a ${selectedLeads.size} leads.`,
+      });
+
+      // Atualizar estado local
+      setLeads(prev => prev.map(lead => {
+        if (selectedLeads.has(lead.id)) {
+          const currentTags = lead.tags || [];
+          if (!currentTags.includes(newTag)) {
+            return { ...lead, tags: [...currentTags, newTag] };
+          }
+        }
+        return lead;
+      }));
+
+      setBulkTagInput("");
+      setShowBulkTagDialog(false);
+      setSelectedLeads(new Set());
+      setSelectionMode(false);
+    } catch (error) {
+      console.error("Erro ao adicionar tags em massa:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao adicionar tags",
+        description: "Não foi possível adicionar as tags.",
+      });
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  // Adicionar ao funil em massa
+  const adicionarAoFunilEmMassa = async () => {
+    if (selectedLeads.size === 0 || !selectedFunilId || !selectedEtapaId || !companyIdRef.current) return;
+    setBulkProcessing(true);
+
+    try {
+      const { error } = await supabase
+        .from("leads")
+        .update({ funil_id: selectedFunilId, etapa_id: selectedEtapaId })
+        .in("id", Array.from(selectedLeads))
+        .eq("company_id", companyIdRef.current);
+
+      if (error) throw error;
+
+      const funilNome = funis.find(f => f.id === selectedFunilId)?.nome || "";
+      const etapaNome = etapas.find(e => e.id === selectedEtapaId)?.nome || "";
+
+      toast({
+        title: "Leads movidos",
+        description: `${selectedLeads.size} leads foram movidos para ${funilNome} > ${etapaNome}.`,
+      });
+
+      // Atualizar estado local
+      setLeads(prev => prev.map(lead => {
+        if (selectedLeads.has(lead.id)) {
+          return { ...lead, funil_id: selectedFunilId, etapa_id: selectedEtapaId };
+        }
+        return lead;
+      }));
+
+      setSelectedFunilId("");
+      setSelectedEtapaId("");
+      setShowBulkFunnelDialog(false);
+      setSelectedLeads(new Set());
+      setSelectionMode(false);
+    } catch (error) {
+      console.error("Erro ao mover leads em massa:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao mover leads",
+        description: "Não foi possível mover os leads para o funil.",
+      });
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
 
   const abrirConversa = (lead: Lead) => {
     setLeadParaConversa(lead);
@@ -758,13 +968,76 @@ export default function Leads() {
               Novos
             </Button>
             <Button
-              variant={selectedStatus === "qualificado" ? "default" : "outline"}
-              onClick={() => setSelectedStatus("qualificado")}
+              variant={selectionMode ? "default" : "outline"}
+              onClick={toggleSelectionMode}
+              className={selectionMode ? "bg-primary" : ""}
             >
-              Qualificados
+              <CheckSquare className="mr-2 h-4 w-4" />
+              Seleção em Massa
             </Button>
           </div>
         </div>
+
+        {/* Barra de ações em massa */}
+        {selectionMode && (
+          <div className="flex items-center gap-3 p-4 bg-primary/10 rounded-lg border border-primary/20">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={selectedLeads.size === filteredLeads.length && filteredLeads.length > 0}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    selectAllVisible();
+                  } else {
+                    deselectAll();
+                  }
+                }}
+              />
+              <span className="text-sm font-medium">
+                {selectedLeads.size > 0 
+                  ? `${selectedLeads.size} lead(s) selecionado(s)` 
+                  : "Selecionar todos"}
+              </span>
+            </div>
+            
+            {selectedLeads.size > 0 && (
+              <div className="flex gap-2 ml-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowBulkTagDialog(true)}
+                >
+                  <Tag className="mr-2 h-4 w-4" />
+                  Adicionar Tag
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowBulkFunnelDialog(true)}
+                >
+                  <GitBranch className="mr-2 h-4 w-4" />
+                  Adicionar ao Funil
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setShowBulkDeleteDialog(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Excluir
+                </Button>
+              </div>
+            )}
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleSelectionMode}
+              className="ml-2"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
 
         {/* Filtro ativo de tag */}
         {selectedTag && (
@@ -788,9 +1061,22 @@ export default function Leads() {
 
       <div className="grid gap-4">
         {filteredLeads.map((lead) => (
-          <Card key={lead.id} className="transition-all hover:shadow-lg">
+          <Card 
+            key={lead.id} 
+            className={`transition-all hover:shadow-lg ${selectionMode && selectedLeads.has(lead.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}
+            onClick={selectionMode ? () => toggleLeadSelection(lead.id) : undefined}
+          >
             <CardContent className="p-6">
               <div className="flex items-start justify-between">
+                {selectionMode && (
+                  <div className="mr-4 flex items-center">
+                    <Checkbox
+                      checked={selectedLeads.has(lead.id)}
+                      onCheckedChange={() => toggleLeadSelection(lead.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                )}
                 <div className="flex-1 space-y-3">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-12 w-12">
@@ -842,16 +1128,21 @@ export default function Leads() {
                       <div className="flex items-center gap-2">
                         <Phone className="h-4 w-4" />
                         {lead.phone}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 ml-2 text-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10 transition-all"
-                          onClick={() => abrirConversa(lead)}
-                          title="Abrir Conversa no WhatsApp"
-                        >
-                          <MessageSquare className="h-3.5 w-3.5 mr-1" />
-                          <span className="text-xs font-medium">WhatsApp</span>
-                        </Button>
+                        {!selectionMode && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 ml-2 text-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10 transition-all"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              abrirConversa(lead);
+                            }}
+                            title="Abrir Conversa no WhatsApp"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5 mr-1" />
+                            <span className="text-xs font-medium">WhatsApp</span>
+                          </Button>
+                        )}
                       </div>
                     )}
                     {lead.company && (
@@ -866,29 +1157,31 @@ export default function Leads() {
                   <div className="text-xl font-bold text-primary">
                     R$ {Number(lead.value).toLocaleString("pt-BR")}
                   </div>
-                  <div className="flex gap-2">
-                    <LeadQuickActions 
-                      leadId={lead.id} 
-                      leadName={lead.name} 
-                      leadPhone={lead.phone || lead.telefone || undefined}
-                      onEdit={() => handleEditarLead(lead)}
-                      onDelete={() => handleExcluirLead(lead)}
-                      onOpenConversa={() => abrirConversa(lead)}
-                      onOpenAgenda={() => abrirAgenda(lead)}
-                      onOpenTarefa={() => abrirTarefa(lead)}
-                    />
-                    <LeadTagsDialog 
-                      leadId={lead.id}
-                      currentTags={lead.tags}
-                      onTagsUpdated={carregarLeads}
-                      triggerButton={
-                        <Button variant="outline" size="sm">
-                          <Tag className="h-4 w-4 mr-2" />
-                          Tags
-                        </Button>
-                      }
-                    />
-                  </div>
+                  {!selectionMode && (
+                    <div className="flex gap-2">
+                      <LeadQuickActions 
+                        leadId={lead.id} 
+                        leadName={lead.name} 
+                        leadPhone={lead.phone || lead.telefone || undefined}
+                        onEdit={() => handleEditarLead(lead)}
+                        onDelete={() => handleExcluirLead(lead)}
+                        onOpenConversa={() => abrirConversa(lead)}
+                        onOpenAgenda={() => abrirAgenda(lead)}
+                        onOpenTarefa={() => abrirTarefa(lead)}
+                      />
+                      <LeadTagsDialog 
+                        leadId={lead.id}
+                        currentTags={lead.tags}
+                        onTagsUpdated={carregarLeads}
+                        triggerButton={
+                          <Button variant="outline" size="sm">
+                            <Tag className="h-4 w-4 mr-2" />
+                            Tags
+                          </Button>
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -1049,6 +1342,107 @@ export default function Leads() {
           }}
         />
       )}
+
+      {/* Dialog de Exclusão em Massa */}
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão em massa</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir {selectedLeads.size} lead(s) selecionado(s)? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkProcessing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmarExclusaoEmMassa}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={bulkProcessing}
+            >
+              {bulkProcessing ? "Excluindo..." : `Excluir ${selectedLeads.size} lead(s)`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog de Adicionar Tag em Massa */}
+      <AlertDialog open={showBulkTagDialog} onOpenChange={setShowBulkTagDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Adicionar Tag em Massa</AlertDialogTitle>
+            <AlertDialogDescription>
+              Digite a tag que deseja adicionar aos {selectedLeads.size} lead(s) selecionado(s).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <Input
+              placeholder="Nome da tag"
+              value={bulkTagInput}
+              onChange={(e) => setBulkTagInput(e.target.value)}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkProcessing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={adicionarTagEmMassa}
+              disabled={bulkProcessing || !bulkTagInput.trim()}
+            >
+              {bulkProcessing ? "Adicionando..." : "Adicionar Tag"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog de Adicionar ao Funil em Massa */}
+      <AlertDialog open={showBulkFunnelDialog} onOpenChange={setShowBulkFunnelDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Adicionar ao Funil em Massa</AlertDialogTitle>
+            <AlertDialogDescription>
+              Selecione o funil e a etapa para mover {selectedLeads.size} lead(s) selecionado(s).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Funil</label>
+              <Select value={selectedFunilId} onValueChange={setSelectedFunilId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um funil" />
+                </SelectTrigger>
+                <SelectContent>
+                  {funis.map(f => (
+                    <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedFunilId && (
+              <div>
+                <label className="text-sm font-medium mb-2 block">Etapa</label>
+                <Select value={selectedEtapaId} onValueChange={setSelectedEtapaId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma etapa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {etapas.map(e => (
+                      <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkProcessing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={adicionarAoFunilEmMassa}
+              disabled={bulkProcessing || !selectedFunilId || !selectedEtapaId}
+            >
+              {bulkProcessing ? "Movendo..." : "Mover para Funil"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
