@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { MessageSquarePlus } from "lucide-react";
 import { toast } from "sonner";
+import { robustFormatPhoneNumber } from "@/utils/phoneFormatter";
 
 interface NovaConversaDialogProps {
   onNovaConversa: (nome: string, numero: string) => void;
@@ -21,18 +22,34 @@ export function NovaConversaDialog({ onNovaConversa }: NovaConversaDialogProps) 
       return;
     }
 
-    // Remove tudo que não é número
-    const numeroLimpo = numeroSemCodigo.replace(/\D/g, '');
+    // Remove tudo que não é número e zeros à esquerda
+    let numeroLimpo = numeroSemCodigo.replace(/\D/g, '');
+    
+    // Remove zero inicial se presente (087... -> 87...)
+    if (numeroLimpo.startsWith('0')) {
+      numeroLimpo = numeroLimpo.substring(1);
+    }
     
     if (numeroLimpo.length < 10 || numeroLimpo.length > 11) {
       toast.error("Digite um número válido (DDD + número)");
       return;
     }
 
-    // Adiciona +55 automaticamente
-    const numeroCompleto = `55${numeroLimpo}`;
+    // Usa formatação robusta para garantir formato consistente 55DDDXXXXXXXX
+    const { formatted, isValid } = robustFormatPhoneNumber(numeroLimpo);
     
-    onNovaConversa(nome, numeroCompleto);
+    if (!isValid || !formatted) {
+      toast.error("Número de telefone inválido");
+      return;
+    }
+    
+    console.log('📱 [NovaConversa] Número formatado:', {
+      input: numeroSemCodigo,
+      limpo: numeroLimpo,
+      formatado: formatted
+    });
+    
+    onNovaConversa(nome, formatted);
     
     // Limpar e fechar
     setNome("");

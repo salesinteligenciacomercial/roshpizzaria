@@ -131,6 +131,30 @@ export function robustFormatPhoneNumber(phone: string | undefined | null): { for
 }
 
 /**
+ * Normaliza número de telefone para comparação
+ * Garante formato consistente: 55DDDXXXXXXXX (12-13 dígitos)
+ * Use esta função ao comparar números de diferentes fontes
+ */
+export function normalizePhoneForComparison(phone: string | null | undefined): string {
+  if (!phone) return '';
+  
+  // Remove tudo que não é número
+  let digits = String(phone).replace(/\D/g, '');
+  
+  // Remove zeros à esquerda
+  if (digits.startsWith('0')) {
+    digits = digits.substring(1);
+  }
+  
+  // Se não começa com 55, adiciona código do país
+  if (digits.length >= 10 && digits.length <= 11 && !digits.startsWith('55')) {
+    digits = `55${digits}`;
+  }
+  
+  return digits;
+}
+
+/**
  * Formata número para exibição: +55 (85) 98765-4321
  */
 export function displayPhoneNumber(phone: string): string {

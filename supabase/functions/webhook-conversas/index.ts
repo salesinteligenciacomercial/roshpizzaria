@@ -963,11 +963,50 @@ serve(async (req) => {
     }
 
     // ====================================================================
-    // MELHORIA CRÍTICA: Garantir que SEMPRE tenha um lead vinculado
+    // MELHORIA CRÍTICA: Buscar conversa/lead existente ANTES de criar novos
     // ====================================================================
     
     // 🔥 VALIDAÇÃO CRÍTICA: NUNCA criar lead com número @lid ou inválido
     const isStillLidNumber = numeroLimpo && (numeroLimpo.length < 10 || validatedData.numero.includes('@lid'));
+    
+    // 🔥 CORREÇÃO: Buscar conversa existente pelo telefone_formatado normalizado
+    // Isso evita criar duplicatas quando o número chega com formato diferente
+    if (!leadId && !isGroup && numeroLimpo && companyId && !isStillLidNumber) {
+      console.log('🔍 [WEBHOOK] Buscando conversa existente para evitar duplicação:', numeroLimpo);
+      
+      // Preparar variações do número para busca mais abrangente
+      const numeroBusca = numeroLimpo;
+      const numeroSem55 = numeroBusca.startsWith('55') ? numeroBusca.substring(2) : numeroBusca;
+      const numeroCom55 = numeroBusca.startsWith('55') ? numeroBusca : `55${numeroBusca}`;
+      
+      const { data: conversaExistente } = await supabase
+        .from('conversas')
+        .select('id, lead_id, nome_contato, telefone_formatado')
+        .eq('company_id', companyId)
+        .or(`telefone_formatado.eq.${numeroBusca},telefone_formatado.eq.${numeroSem55},telefone_formatado.eq.${numeroCom55}`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (conversaExistente?.lead_id) {
+        leadId = conversaExistente.lead_id;
+        console.log('✅ [WEBHOOK] Conversa existente encontrada! Usando lead_id:', {
+          leadId,
+          nome_contato: conversaExistente.nome_contato,
+          telefone_formatado: conversaExistente.telefone_formatado,
+          numeroBuscado: numeroBusca
+        });
+      } else if (conversaExistente) {
+        console.log('⚠️ [WEBHOOK] Conversa existente encontrada mas sem lead_id:', {
+          telefone_formatado: conversaExistente.telefone_formatado
+        });
+      } else {
+        console.log('ℹ️ [WEBHOOK] Nenhuma conversa existente encontrada para:', {
+          numeroBuscado: numeroBusca,
+          variacoes: [numeroBusca, numeroSem55, numeroCom55]
+        });
+      }
+    }
     
     // Se não tem lead e não é grupo, tentar criar automaticamente
     if (!leadId && !isGroup && numeroLimpo && companyId && !isStillLidNumber) {

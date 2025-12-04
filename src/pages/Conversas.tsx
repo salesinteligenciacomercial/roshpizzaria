@@ -37,7 +37,7 @@ import { AgendaModal } from "@/components/agenda/AgendaModal";
 import { HorarioSeletor } from "@/components/agenda/HorarioSeletor";
 import { HorarioComercial, criarHorarioPadrao } from "@/components/agenda/HorarioComercialConfig";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
-import { formatPhoneNumber, safeFormatPhoneNumber } from "@/utils/phoneFormatter";
+import { formatPhoneNumber, safeFormatPhoneNumber, normalizePhoneForComparison } from "@/utils/phoneFormatter";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { useLeadsSync } from "@/hooks/useLeadsSync";
 import { useGlobalSync } from "@/hooks/useGlobalSync";
@@ -7249,8 +7249,20 @@ function Conversas() {
               <NovaConversaDialog
                 onNovaConversa={async (nome, numero) => {
                   try {
-                    // Verificar se já existe conversa com esse número
-                    const existente = conversations.find(c => c.id === numero || c.phoneNumber === numero);
+                    // Normalizar número para comparação (garante formato 55DDDXXXXXXXX)
+                    const numeroNormalizado = normalizePhoneForComparison(numero);
+                    
+                    console.log('📱 [NovaConversa] Verificando existência:', {
+                      numeroRecebido: numero,
+                      numeroNormalizado
+                    });
+                    
+                    // Verificar se já existe conversa com esse número (comparação normalizada)
+                    const existente = conversations.find(c => {
+                      const idNorm = normalizePhoneForComparison(c.id);
+                      const phoneNorm = normalizePhoneForComparison(c.phoneNumber);
+                      return idNorm === numeroNormalizado || phoneNorm === numeroNormalizado;
+                    });
                     
                     if (existente) {
                       setSelectedConv(existente);
@@ -7276,14 +7288,14 @@ function Conversas() {
                       return;
                     }
 
-                    // Inserir conversa no banco
+                    // Inserir conversa no banco com número normalizado
                     const { error: insertError } = await supabase
                       .from('conversas')
                       .insert({
-                        numero: numero,
+                        numero: numeroNormalizado,
                         nome_contato: nome,
                         mensagem: 'Nova conversa criada',
-                        telefone_formatado: numero,
+                        telefone_formatado: numeroNormalizado,
                         company_id: userRole.company_id,
                         owner_id: user.id,
                         fromme: true,
@@ -7297,9 +7309,11 @@ function Conversas() {
                       return;
                     }
                     
-                    // Criar conversa local
+                    console.log('✅ [NovaConversa] Conversa salva com número:', numeroNormalizado);
+                    
+                    // Criar conversa local com número normalizado
                     const novaConversa: Conversation = {
-                      id: numero,
+                      id: numeroNormalizado,
                       contactName: nome,
                       channel: "whatsapp",
                       status: "waiting",
@@ -7307,7 +7321,7 @@ function Conversas() {
                       unread: 0,
                       messages: [],
                       tags: [],
-                      phoneNumber: numero,
+                      phoneNumber: numeroNormalizado,
                     };
                     
                     const updated = [novaConversa, ...conversations];
