@@ -7106,49 +7106,48 @@ function Conversas() {
           </div>
           
           {/* Filters */}
-          <div className="flex gap-1 flex-wrap -mx-1">
-            <Button variant={filter === "all" ? "default" : "ghost"} size="sm" onClick={() => setFilter("all")} className="relative flex flex-col items-center gap-0.5 h-auto py-1.5">
-              {conversations.length > 0 && <Badge variant="secondary" className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
-                  {conversations.filter(c => !c.isGroup || !blockedGroups.has(c.phoneNumber || c.id)).length}
-                </Badge>}
-              <span>Todos</span>
+          <div className="flex gap-1 flex-wrap">
+            <Button variant={filter === "all" ? "default" : "ghost"} size="sm" onClick={() => setFilter("all")} className="relative flex flex-col items-center gap-0.5 h-auto py-1 px-2">
+              <Badge variant="secondary" className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
+                {conversations.filter(c => !c.isGroup || !blockedGroups.has(c.phoneNumber || c.id)).length}
+              </Badge>
+              <span className="text-xs">Todos</span>
             </Button>
-            <Button variant={filter === "waiting" ? "default" : "ghost"} size="sm" onClick={() => setFilter("waiting")} className="relative flex flex-col items-center gap-0.5 h-auto py-1.5">
-              {waitingCount > 0 && <Badge variant="destructive" className="bg-red-500 hover:bg-red-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
-                  {waitingCount}
-                </Badge>}
-              <span>Esperando</span>
+            <Button variant={filter === "waiting" ? "default" : "ghost"} size="sm" onClick={() => setFilter("waiting")} className="relative flex flex-col items-center gap-0.5 h-auto py-1 px-2">
+              <Badge variant="destructive" className="bg-red-500 hover:bg-red-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
+                {waitingCount}
+              </Badge>
+              <span className="text-xs">Esperando</span>
             </Button>
-            <Button variant={filter === "answered" ? "default" : "ghost"} size="sm" onClick={() => setFilter("answered")} className="relative flex flex-col items-center gap-0.5 h-auto py-1.5">
-              {answeredCount > 0 && <Badge variant="default" className="bg-blue-500 hover:bg-blue-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
-                  {answeredCount}
-                </Badge>}
-              <span>Em Atendimento</span>
+            <Button variant={filter === "answered" ? "default" : "ghost"} size="sm" onClick={() => setFilter("answered")} className="relative flex flex-col items-center gap-0.5 h-auto py-1 px-2">
+              <Badge variant="default" className="bg-blue-500 hover:bg-blue-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
+                {answeredCount}
+              </Badge>
+              <span className="text-xs">Em Atend.</span>
             </Button>
-            <Button variant={filter === "resolved" ? "default" : "ghost"} size="sm" onClick={() => setFilter("resolved")} className="relative flex flex-col items-center gap-0.5 h-auto py-1.5">
-              {conversations.filter(c => !c.isGroup && c.status === 'resolved').length > 0 && <Badge variant="secondary" className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
-                  {conversations.filter(c => !c.isGroup && c.status === 'resolved').length}
-                </Badge>}
-              <span>Finalizados  
-            </span>
+            <Button variant={filter === "resolved" ? "default" : "ghost"} size="sm" onClick={() => setFilter("resolved")} className="relative flex flex-col items-center gap-0.5 h-auto py-1 px-2">
+              <Badge variant="secondary" className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
+                {conversations.filter(c => !c.isGroup && c.status === 'resolved').length}
+              </Badge>
+              <span className="text-xs">Finalizados</span>
             </Button>
-            <Button variant={filter === "group" ? "default" : "ghost"} size="sm" onClick={() => setFilter("group")} className="relative flex flex-col items-center gap-0.5 h-auto py-1.5">
-              {conversations.filter(c => c.isGroup === true).length > 0 && <Badge variant="secondary" className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
-                  {conversations.filter(c => c.isGroup === true).length}
-                </Badge>}
-              <span>Grupos</span>
+            <Button variant={filter === "group" ? "default" : "ghost"} size="sm" onClick={() => setFilter("group")} className="relative flex flex-col items-center gap-0.5 h-auto py-1 px-2">
+              <Badge variant="secondary" className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
+                {conversations.filter(c => c.isGroup === true).length}
+              </Badge>
+              <span className="text-xs">Grupos</span>
             </Button>
-            <Button variant={filter === "responsible" ? "default" : "ghost"} size="sm" onClick={() => setFilter("responsible")} className="relative flex flex-col items-center gap-0.5 h-auto py-1.5">
-              {conversations.filter(c => !c.isGroup && (c.responsavel === currentUserId || c.assignedUser?.id === currentUserId)).length > 0 && <Badge variant="secondary" className="bg-green-500 hover:bg-green-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
-                  {conversations.filter(c => !c.isGroup && (c.responsavel === currentUserId || c.assignedUser?.id === currentUserId)).length}
-                </Badge>}
-              <span>Responsável</span>
+            <Button variant={filter === "responsible" ? "default" : "ghost"} size="sm" onClick={() => setFilter("responsible")} className="relative flex flex-col items-center gap-0.5 h-auto py-1 px-2">
+              <Badge variant="secondary" className="bg-green-500 hover:bg-green-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
+                {conversations.filter(c => !c.isGroup && (c.responsavel === currentUserId || c.assignedUser?.id === currentUserId)).length}
+              </Badge>
+              <span className="text-xs">Responsável</span>
             </Button>
-            <Button variant={filter === "transferred" ? "default" : "ghost"} size="sm" onClick={() => setFilter("transferred")} className="relative flex flex-col items-center gap-0.5 h-auto py-1.5">
-              {conversations.filter(c => !c.isGroup && c.assignedUser?.id === currentUserId).length > 0 && <Badge variant="secondary" className="bg-purple-500 hover:bg-purple-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
-                  {conversations.filter(c => !c.isGroup && c.assignedUser?.id === currentUserId).length}
-                </Badge>}
-              <span>Transferidos</span>
+            <Button variant={filter === "transferred" ? "default" : "ghost"} size="sm" onClick={() => setFilter("transferred")} className="relative flex flex-col items-center gap-0.5 h-auto py-1 px-2">
+              <Badge variant="secondary" className="bg-purple-500 hover:bg-purple-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
+                {conversations.filter(c => !c.isGroup && c.assignedUser?.id === currentUserId).length}
+              </Badge>
+              <span className="text-xs">Transferidos</span>
             </Button>
           </div>
         </div>
