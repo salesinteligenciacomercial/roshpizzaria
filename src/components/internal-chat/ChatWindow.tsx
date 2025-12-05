@@ -178,9 +178,23 @@ export const ChatWindow = ({ conversation, currentUserId }: ChatWindowProps) => 
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+              <DropdownMenuItem onClick={() => {
+                if (fileInputRef.current) {
+                  fileInputRef.current.accept = 'image/*';
+                  fileInputRef.current.click();
+                }
+              }}>
                 <Image className="h-4 w-4 mr-2" />
-                Imagem/Vídeo
+                Imagem
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                if (fileInputRef.current) {
+                  fileInputRef.current.accept = 'video/*';
+                  fileInputRef.current.click();
+                }
+              }}>
+                <Video className="h-4 w-4 mr-2" />
+                Vídeo
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => {
                 if (fileInputRef.current) {
@@ -234,7 +248,6 @@ export const ChatWindow = ({ conversation, currentUserId }: ChatWindowProps) => 
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,video/*"
           className="hidden"
           onChange={(e) => handleFileSelect(e, 'media')}
         />
