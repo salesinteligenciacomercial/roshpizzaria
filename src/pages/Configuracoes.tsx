@@ -24,6 +24,7 @@ import {
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { WhatsAppQRCode } from "@/components/configuracoes/WhatsAppQRCode";
+import { MetaApiConfig } from "@/components/configuracoes/MetaApiConfig";
 import { SubcontasManager } from "@/components/configuracoes/SubcontasManager";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { UsuariosSubcontaDialog } from "@/components/configuracoes/UsuariosSubcontaDialog";
@@ -1191,6 +1192,7 @@ export default function Configuracoes() {
 
         <TabsContent value="channels" className="space-y-4">
           <WhatsAppQRCode />
+          {currentCompany?.id && <MetaApiConfig companyId={currentCompany.id} />}
 
           <div className="grid gap-4 md:grid-cols-2">
             <Card>
