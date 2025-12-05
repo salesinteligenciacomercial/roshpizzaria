@@ -4,6 +4,7 @@ import { Header } from "./Header";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
+import { FloatingChatButton } from "@/components/internal-chat/FloatingChatButton";
 
 export function MainLayout() {
   const [session, setSession] = useState<Session | null>(null);
@@ -161,6 +162,9 @@ export function MainLayout() {
           <Outlet />
         </main>
       </div>
+      
+      {/* Botão flutuante do chat interno da equipe */}
+      {session && <FloatingChatButton />}
     </div>
   );
 }
