@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useInternalChat, InternalConversation } from '@/hooks/useInternalChat';
 import { useInternalMessages } from '@/hooks/useInternalMessages';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -14,17 +15,23 @@ import {
   Send, 
   Paperclip, 
   Image as ImageIcon, 
-  File, 
+  File as FileIcon, 
   Share2,
   Users,
   MoreVertical,
-  ArrowLeft
+  ArrowLeft,
+  Video,
+  Mic,
+  Square,
+  Loader2,
+  X
 } from 'lucide-react';
 import { NewConversationDialog } from '@/components/internal-chat/NewConversationDialog';
 import { ShareItemDialog } from '@/components/internal-chat/ShareItemDialog';
 import { MessageItem } from '@/components/internal-chat/MessageItem';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { toast } from 'sonner';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,8 +46,19 @@ export default function ChatInterno() {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [messageText, setMessageText] = useState('');
   const [showMobileList, setShowMobileList] = useState(true);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const { 
     conversations, 
@@ -70,6 +88,15 @@ export default function ChatInterno() {
     }
   }, [selectedConversation, markAsRead]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '40px';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      textareaRef.current.style.height = Math.min(scrollHeight, 200) + 'px';
+    }
+  }, [messageText]);
+
   const filteredConversations = conversations.filter(conv => {
     if (!searchTerm) return true;
     const name = conv.name || conv.participants?.map(p => p.profile?.full_name).join(', ') || '';
@@ -77,9 +104,42 @@ export default function ChatInterno() {
   });
 
   const handleSendMessage = async () => {
-    if (!messageText.trim() || !selectedConversation) return;
-    await sendMessage(messageText.trim());
-    setMessageText('');
+    if ((!messageText.trim() && !selectedFile) || !selectedConversation) return;
+    
+    try {
+      if (selectedFile) {
+        await handleSendFile(selectedFile);
+        setSelectedFile(null);
+      }
+      
+      if (messageText.trim()) {
+        await sendMessage(messageText.trim());
+        setMessageText('');
+      }
+    } catch (error) {
+      toast.error('Erro ao enviar mensagem');
+    }
+  };
+
+  const handleSendFile = async (file: File) => {
+    setUploadingMedia(true);
+    try {
+      const url = await uploadMedia(file);
+      if (!url) {
+        toast.error('Erro ao fazer upload do arquivo');
+        return;
+      }
+
+      let messageType = 'document';
+      if (file.type.startsWith('image/')) messageType = 'image';
+      else if (file.type.startsWith('video/')) messageType = 'video';
+      else if (file.type.startsWith('audio/')) messageType = 'audio';
+      else if (file.type === 'application/pdf') messageType = 'pdf';
+
+      await sendMessage('', messageType, url, file.name);
+    } finally {
+      setUploadingMedia(false);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -89,21 +149,101 @@ export default function ChatInterno() {
     }
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedConversation) return;
-    
-    let messageType: 'image' | 'video' | 'audio' | 'document' = 'document';
-    if (file.type.startsWith('image/')) messageType = 'image';
-    else if (file.type.startsWith('video/')) messageType = 'video';
-    else if (file.type.startsWith('audio/')) messageType = 'audio';
-    
-    const mediaUrl = await uploadMedia(file);
-    if (mediaUrl) {
-      await sendMessage(file.name, messageType, mediaUrl, file.name);
+  // Handle paste for images
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          setSelectedFile(file);
+          toast.info('Imagem colada! Clique em enviar.');
+        }
+        return;
+      }
     }
-    
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, []);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error('Arquivo muito grande. Máximo: 50MB');
+        return;
+      }
+      setSelectedFile(file);
+    }
+    e.target.value = '';
+  };
+
+  // Audio Recording
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioFile = new File([audioBlob], `audio_${Date.now()}.webm`, { type: 'audio/webm' });
+        
+        stream.getTracks().forEach(track => track.stop());
+        
+        if (audioFile.size > 0) {
+          setSelectedFile(audioFile);
+          toast.info('Áudio gravado! Clique em enviar.');
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+
+      toast.info('Gravando áudio...');
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      toast.error('Erro ao acessar o microfone');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+    }
+  };
+
+  const formatRecordingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const getFileIcon = () => {
+    if (!selectedFile) return <FileIcon className="h-4 w-4" />;
+    if (selectedFile.type.startsWith('image/')) return <ImageIcon className="h-4 w-4" />;
+    if (selectedFile.type.startsWith('video/')) return <Video className="h-4 w-4" />;
+    if (selectedFile.type.startsWith('audio/')) return <Mic className="h-4 w-4" />;
+    return <FileIcon className="h-4 w-4" />;
   };
 
   const handleConversationSelect = (conv: InternalConversation) => {
@@ -300,59 +440,162 @@ export default function ChatInterno() {
               )}
             </ScrollArea>
 
+            {/* Selected file preview */}
+            {selectedFile && (
+              <div className="px-4 py-2 border-t border-border bg-accent/30">
+                <div className="flex items-center gap-2">
+                  {getFileIcon()}
+                  <span className="text-sm truncate flex-1">{selectedFile.name}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setSelectedFile(null)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Recording indicator */}
+            {isRecording && (
+              <div className="px-4 py-2 border-t border-border bg-destructive/10">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-destructive rounded-full animate-pulse" />
+                  <span className="text-sm text-destructive font-medium">
+                    Gravando... {formatRecordingTime(recordingTime)}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Input de Mensagem */}
             <div className="p-4 border-t border-border bg-card">
-              <div className="flex items-center gap-2">
+              <div className="flex items-end gap-2">
+                {/* Hidden file inputs */}
                 <input
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileSelect}
                   className="hidden"
-                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
+                  accept="image/*"
+                />
+                <input
+                  type="file"
+                  ref={videoInputRef}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  accept="video/*"
+                />
+                <input
+                  type="file"
+                  ref={audioInputRef}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  accept="audio/*"
                 />
                 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" className="shrink-0" disabled={uploadingMedia || isRecording}>
                       <Paperclip className="h-5 w-5" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem onClick={() => {
-                      if (fileInputRef.current) {
-                        fileInputRef.current.accept = 'image/*';
-                        fileInputRef.current.click();
-                      }
-                    }}>
+                  <DropdownMenuContent align="start" className="min-w-[160px] bg-popover border shadow-lg z-50">
+                    <DropdownMenuItem 
+                      className="cursor-pointer"
+                      onClick={() => {
+                        if (fileInputRef.current) {
+                          fileInputRef.current.click();
+                        }
+                      }}
+                    >
                       <ImageIcon className="h-4 w-4 mr-2" />
                       Imagem
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => {
-                      if (fileInputRef.current) {
-                        fileInputRef.current.accept = '.pdf,.doc,.docx,.xls,.xlsx';
-                        fileInputRef.current.click();
-                      }
-                    }}>
-                      <File className="h-4 w-4 mr-2" />
+                    <DropdownMenuItem 
+                      className="cursor-pointer"
+                      onClick={() => {
+                        if (videoInputRef.current) {
+                          videoInputRef.current.click();
+                        }
+                      }}
+                    >
+                      <Video className="h-4 w-4 mr-2" />
+                      Vídeo
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      className="cursor-pointer"
+                      onClick={() => {
+                        if (audioInputRef.current) {
+                          audioInputRef.current.click();
+                        }
+                      }}
+                    >
+                      <Mic className="h-4 w-4 mr-2" />
+                      Áudio
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      className="cursor-pointer"
+                      onClick={() => {
+                        if (fileInputRef.current) {
+                          fileInputRef.current.accept = '.pdf,.doc,.docx,.xls,.xlsx';
+                          fileInputRef.current.click();
+                        }
+                      }}
+                    >
+                      <FileIcon className="h-4 w-4 mr-2" />
                       Documento
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setShareDialogOpen(true)}>
+                    <DropdownMenuItem 
+                      className="cursor-pointer"
+                      onClick={() => setShareDialogOpen(true)}
+                    >
                       <Share2 className="h-4 w-4 mr-2" />
                       Item do CRM
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <Input
-                  placeholder="Digite sua mensagem..."
+                {/* Record audio button */}
+                <Button 
+                  variant={isRecording ? "destructive" : "ghost"} 
+                  size="icon" 
+                  className="shrink-0"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  disabled={uploadingMedia}
+                >
+                  {isRecording ? (
+                    <Square className="h-5 w-5" />
+                  ) : (
+                    <Mic className="h-5 w-5" />
+                  )}
+                </Button>
+
+                <Textarea
+                  ref={textareaRef}
+                  placeholder="Digite sua mensagem... (Ctrl+V para colar imagem)"
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  className="flex-1"
+                  onKeyDown={handleKeyPress}
+                  onPaste={handlePaste}
+                  className="min-h-[40px] max-h-[200px] resize-none flex-1"
+                  rows={1}
+                  disabled={isRecording}
                 />
                 
-                <Button onClick={handleSendMessage} disabled={!messageText.trim()}>
-                  <Send className="h-5 w-5" />
+                <Button 
+                  onClick={handleSendMessage} 
+                  disabled={(!messageText.trim() && !selectedFile) || uploadingMedia || isRecording}
+                  size="icon"
+                  className="shrink-0"
+                >
+                  {uploadingMedia ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Send className="h-5 w-5" />
+                  )}
                 </Button>
               </div>
             </div>
