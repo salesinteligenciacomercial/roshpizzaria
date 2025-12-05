@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bot, Sparkles, TrendingUp, Target, Workflow, BarChart3, Send, Brain, Lightbulb, BookOpen, Zap } from "lucide-react";
+import { Bot, Sparkles, TrendingUp, Target, Workflow, BarChart3, Send, Brain, Lightbulb, BookOpen, Zap, AlertTriangle } from "lucide-react";
 import { N8nIntegration } from "@/components/ia/N8nIntegration";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FluxoAutomacaoBuilder } from "@/components/fluxos/FluxoAutomacaoBuilder";
@@ -15,10 +15,13 @@ import { useAIAgents } from "@/hooks/useAIAgents";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Navigate } from "react-router-dom";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function IA() {
   const { canAccess, isAdmin, loading: permissionsLoading } = usePermissions();
-  const [agentStates, setAgentStates] = useState({ atendimento: true, agendamento: true });
+  const [agentStates, setAgentStates] = useState({ atendimento: false, agendamento: false });
+  const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
+  const [loadingAiPermission, setLoadingAiPermission] = useState(true);
   const { getAgentConfigs, updateAgentConfig } = useAIAgents();
 
   // Verificar permissão de acesso à Automação
@@ -36,8 +39,20 @@ export default function IA() {
         .eq('user_id', user.id)
         .single();
       if (!userRole?.company_id) return;
+      
+      // Verificar se a empresa tem permissão para usar IA
+      const { data: company } = await supabase
+        .from('companies')
+        .select('allow_ai_features')
+        .eq('id', userRole.company_id)
+        .single();
+      
+      setAiEnabled(company?.allow_ai_features ?? false);
+      setLoadingAiPermission(false);
+      
+      // Carregar configs dos agentes (sempre desativados por padrão)
       const configs = await getAgentConfigs();
-      const state = { atendimento: true, agendamento: true } as any;
+      const state = { atendimento: false, agendamento: false } as any;
       if (configs && Array.isArray(configs)) {
         configs.forEach((c: any) => { state[c.agent_type] = !!c.enabled; });
       }
@@ -99,6 +114,17 @@ export default function IA() {
         </p>
       </div>
 
+      {/* Alerta quando IA não está habilitada para esta subconta */}
+      {!loadingAiPermission && aiEnabled === false && (
+        <Alert variant="destructive" className="border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Funcionalidade de IA não habilitada</AlertTitle>
+          <AlertDescription>
+            Os agentes de IA não estão disponíveis para sua conta. Entre em contato com o administrador para contratar e ativar esta funcionalidade.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Tabs defaultValue="agentes" className="w-full">
         <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="agentes" className="gap-2">
@@ -132,64 +158,82 @@ export default function IA() {
         </TabsList>
 
         <TabsContent value="agentes" className="space-y-6 mt-6">
-          <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-accent/5">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Sparkles className="h-5 w-5 text-primary" />
+          {aiEnabled === false ? (
+            <Card className="border-destructive/20 bg-destructive/5">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 rounded-lg bg-destructive/10">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                  </div>
+                  <h3 className="font-semibold">Agentes de IA Bloqueados</h3>
                 </div>
-                <h3 className="font-semibold">IAs Ativadas e Funcionando</h3>
+                <p className="text-sm text-muted-foreground">
+                  Os agentes de IA não estão habilitados para sua conta. Esta funcionalidade precisa ser contratada e ativada pelo administrador.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-accent/5">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Sparkles className="h-5 w-5 text-primary" />
+                    </div>
+                    <h3 className="font-semibold">Agentes de IA Disponíveis</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Os agentes de IA estão disponíveis e podem responder automaticamente conversas em tempo real.
+                    Ative cada agente individualmente para começar a usar.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-6 md:grid-cols-2">
+                {aiAgents.map((agent) => (
+                  <IAAgentCard
+                    key={agent.id}
+                    {...agent}
+                    onToggle={handleAgentToggle}
+                  />
+                ))}
               </div>
-              <p className="text-sm text-muted-foreground">
-                Os agentes de IA estão ativos e podem responder automaticamente conversas em tempo real.
-                Configure cada agente para personalizar o comportamento.
-              </p>
-            </CardContent>
-          </Card>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            {aiAgents.map((agent) => (
-              <IAAgentCard
-                key={agent.id}
-                {...agent}
-                onToggle={handleAgentToggle}
-              />
-            ))}
-          </div>
+              <Card className="border-0 shadow-card">
+                <CardHeader>
+                  <CardTitle>Modo Híbrido: IA + Humano</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Configure quando a IA deve transferir conversas para atendimento humano:
+                  </p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="p-4 border rounded-lg">
+                      <h4 className="font-semibold mb-2">Transferência Automática</h4>
+                      <ul className="text-sm space-y-1 text-muted-foreground">
+                        <li>• Quando não souber responder</li>
+                        <li>• Cliente solicitar atendente</li>
+                        <li>• Negociação acima de R$ 10.000</li>
+                        <li>• Reclamação detectada</li>
+                      </ul>
+                    </div>
+                    <div className="p-4 border rounded-lg">
+                      <h4 className="font-semibold mb-2">Sugestões ao Humano</h4>
+                      <ul className="text-sm space-y-1 text-muted-foreground">
+                        <li>• IA sugere respostas</li>
+                        <li>• Humano pode aceitar ou editar</li>
+                        <li>• Histórico completo disponível</li>
+                        <li>• Transição suave</li>
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card className="border-0 shadow-card">
-            <CardHeader>
-              <CardTitle>Modo Híbrido: IA + Humano</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Configure quando a IA deve transferir conversas para atendimento humano:
-              </p>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="p-4 border rounded-lg">
-                  <h4 className="font-semibold mb-2">Transferência Automática</h4>
-                  <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>• Quando não souber responder</li>
-                    <li>• Cliente solicitar atendente</li>
-                    <li>• Negociação acima de R$ 10.000</li>
-                    <li>• Reclamação detectada</li>
-                  </ul>
-                </div>
-                <div className="p-4 border rounded-lg">
-                  <h4 className="font-semibold mb-2">Sugestões ao Humano</h4>
-                  <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>• IA sugere respostas</li>
-                    <li>• Humano pode aceitar ou editar</li>
-                    <li>• Histórico completo disponível</li>
-                    <li>• Transição suave</li>
-                  </ul>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Integração n8n */}
-          <N8nIntegration />
+              {/* Integração n8n */}
+              <N8nIntegration />
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="conhecimento" className="space-y-6 mt-6">

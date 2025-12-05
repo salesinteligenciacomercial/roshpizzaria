@@ -201,6 +201,7 @@ export type Database = {
       }
       companies: {
         Row: {
+          allow_ai_features: boolean | null
           allow_group_messages: boolean | null
           cnpj: string | null
           created_at: string | null
@@ -220,6 +221,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          allow_ai_features?: boolean | null
           allow_group_messages?: boolean | null
           cnpj?: string | null
           created_at?: string | null
@@ -239,6 +241,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          allow_ai_features?: boolean | null
           allow_group_messages?: boolean | null
           cnpj?: string | null
           created_at?: string | null

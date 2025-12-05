@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Building2, Plus, Pencil, Trash2, Users, RefreshCw, CheckCircle2, AlertCircle, UsersRound } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Users, RefreshCw, CheckCircle2, AlertCircle, UsersRound, Bot } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +31,7 @@ interface Subconta {
   created_at: string;
   settings: any;
   allow_group_messages: boolean;
+  allow_ai_features: boolean;
 }
 
 export function SubcontasManager() {
@@ -284,6 +285,38 @@ export function SubcontasManager() {
     }
   };
 
+  const toggleAIFeatures = async (subcontaId: string, currentValue: boolean) => {
+    try {
+      const newValue = !currentValue;
+      
+      const { error } = await supabase
+        .from('companies')
+        .update({ allow_ai_features: newValue })
+        .eq('id', subcontaId);
+
+      if (error) throw error;
+
+      // Atualizar estado local
+      setSubcontas(prev => prev.map(s => 
+        s.id === subcontaId ? { ...s, allow_ai_features: newValue } : s
+      ));
+
+      toast({
+        title: newValue ? 'IA Ativada' : 'IA Desativada',
+        description: newValue 
+          ? 'Esta subconta agora pode utilizar os agentes de IA.'
+          : 'Esta subconta não poderá mais utilizar os agentes de IA.',
+      });
+    } catch (error: any) {
+      console.error('Erro ao alterar configuração de IA:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao alterar configuração',
+        description: error.message,
+      });
+    }
+  };
+
   const getPlanBadge = (plan: string) => {
     const variants: Record<string, any> = {
       free: 'secondary',
@@ -406,17 +439,33 @@ export function SubcontasManager() {
                         <strong>Contato:</strong> {subconta.settings.responsavel} • {subconta.settings.email}
                       </div>
                     )}
-                    {/* Toggle de Grupos */}
-                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50">
-                      <UsersRound className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Receber mensagens de grupos:</span>
-                      <Switch
-                        checked={subconta.allow_group_messages || false}
-                        onCheckedChange={() => toggleGroupMessages(subconta.id, subconta.allow_group_messages || false)}
-                      />
-                      <span className={`text-xs font-medium ${subconta.allow_group_messages ? 'text-green-600' : 'text-muted-foreground'}`}>
-                        {subconta.allow_group_messages ? 'Ativado' : 'Desativado'}
-                      </span>
+                    {/* Toggles de Funcionalidades */}
+                    <div className="flex flex-wrap items-center gap-4 mt-2 pt-2 border-t border-border/50">
+                      {/* Toggle de Grupos */}
+                      <div className="flex items-center gap-2">
+                        <UsersRound className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Grupos:</span>
+                        <Switch
+                          checked={subconta.allow_group_messages || false}
+                          onCheckedChange={() => toggleGroupMessages(subconta.id, subconta.allow_group_messages || false)}
+                        />
+                        <span className={`text-xs font-medium ${subconta.allow_group_messages ? 'text-green-600' : 'text-muted-foreground'}`}>
+                          {subconta.allow_group_messages ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </div>
+                      
+                      {/* Toggle de IA */}
+                      <div className="flex items-center gap-2">
+                        <Bot className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Agentes IA:</span>
+                        <Switch
+                          checked={subconta.allow_ai_features || false}
+                          onCheckedChange={() => toggleAIFeatures(subconta.id, subconta.allow_ai_features || false)}
+                        />
+                        <span className={`text-xs font-medium ${subconta.allow_ai_features ? 'text-green-600' : 'text-muted-foreground'}`}>
+                          {subconta.allow_ai_features ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
