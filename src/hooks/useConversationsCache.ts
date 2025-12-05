@@ -136,30 +136,52 @@ export const useConversationsCache = (companyId: string | null) => {
     }
   }, [companyId]);
 
-  // 📡 FASE 2.1: Carregar do banco (otimizado)
+  // 📡 FASE 2.1: Carregar do banco (otimizado) - CORRIGIDO para buscar TODAS as conversas
   const loadFromDatabase = useCallback(async (): Promise<Conversation[]> => {
     if (!companyId) return [];
 
     try {
-      console.log('📡 [DATABASE] Carregando histórico...');
+      console.log('📡 [DATABASE] Carregando histórico completo...');
 
-      // ⚡ OTIMIZADO: Query com campos essenciais
-      const { data: conversasData, error } = await supabase
-        .from('conversas')
-        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme, arquivo_nome, sent_by, owner_id, midia_url')
-        .eq('company_id', companyId)
-        .order('created_at', { ascending: false })
-        .limit(300); // ⚡ Reduzido para 300 (mais rápido)
+      // ⚡ CORREÇÃO: Buscar TODAS as mensagens para garantir todas as conversas únicas
+      // Usar paginação para buscar mais dados sem timeout
+      let allConversasData: any[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      let hasMore = true;
 
-      if (error) throw error;
+      while (hasMore) {
+        const { data: batch, error } = await supabase
+          .from('conversas')
+          .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme, arquivo_nome, sent_by, owner_id, midia_url')
+          .eq('company_id', companyId)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + batchSize - 1);
 
-      console.log(`📊 [DATABASE] ${conversasData?.length || 0} mensagens carregadas`);
+        if (error) throw error;
+
+        if (batch && batch.length > 0) {
+          allConversasData = [...allConversasData, ...batch];
+          offset += batchSize;
+          hasMore = batch.length === batchSize;
+          console.log(`📊 [DATABASE] Batch carregado: ${batch.length} mensagens (total: ${allConversasData.length})`);
+        } else {
+          hasMore = false;
+        }
+
+        // Limite de segurança: máximo 10.000 mensagens
+        if (allConversasData.length >= 10000) {
+          console.warn('⚠️ [DATABASE] Limite de 10.000 mensagens atingido');
+          hasMore = false;
+        }
+      }
+
+      console.log(`📊 [DATABASE] ${allConversasData.length} mensagens totais carregadas`);
 
       // Validar e filtrar
-      const validConversas = (conversasData || []).filter(conv => 
+      const validConversas = allConversasData.filter(conv => 
         conv.numero && !conv.numero.includes('{{') &&
-        conv.mensagem && !conv.mensagem.includes('{{') &&
-        conv.nome_contato // ✅ Garantir que tem nome (trigger já preencheu)
+        conv.mensagem && !conv.mensagem.includes('{{')
       );
 
       console.log(`✅ [DATABASE] ${validConversas.length} mensagens válidas`);

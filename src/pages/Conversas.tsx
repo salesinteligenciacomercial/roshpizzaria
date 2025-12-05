@@ -7479,8 +7479,17 @@ function Conversas() {
               variant={filter === "all" ? "default" : "ghost"}
               size="sm"
               onClick={() => setFilter("all")}
+              className="relative flex flex-col items-center gap-0.5 h-auto py-1.5"
             >
-              Todos
+              {conversations.length > 0 && (
+                <Badge 
+                  variant="secondary" 
+                  className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs"
+                >
+                  {conversations.filter(c => !c.isGroup || !blockedGroups.has(c.phoneNumber || c.id)).length}
+                </Badge>
+              )}
+              <span>Todos</span>
             </Button>
             <Button
               variant={filter === "waiting" ? "default" : "ghost"}
@@ -7518,15 +7527,33 @@ function Conversas() {
               variant={filter === "resolved" ? "default" : "ghost"}
               size="sm"
               onClick={() => setFilter("resolved")}
+              className="relative flex flex-col items-center gap-0.5 h-auto py-1.5"
             >
-              Resolvidos
+              {conversations.filter(c => !c.isGroup && c.status === 'resolved').length > 0 && (
+                <Badge 
+                  variant="secondary" 
+                  className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs"
+                >
+                  {conversations.filter(c => !c.isGroup && c.status === 'resolved').length}
+                </Badge>
+              )}
+              <span>Resolvidos</span>
             </Button>
             <Button
               variant={filter === "group" ? "default" : "ghost"}
               size="sm"
               onClick={() => setFilter("group")}
+              className="relative flex flex-col items-center gap-0.5 h-auto py-1.5"
             >
-              Grupos
+              {conversations.filter(c => c.isGroup === true).length > 0 && (
+                <Badge 
+                  variant="secondary" 
+                  className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs"
+                >
+                  {conversations.filter(c => c.isGroup === true).length}
+                </Badge>
+              )}
+              <span>Grupos</span>
             </Button>
           </div>
         </div>

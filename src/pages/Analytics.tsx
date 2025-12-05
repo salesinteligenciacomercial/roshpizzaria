@@ -398,14 +398,25 @@ export default function Analytics() {
       const wonDeals = leads?.filter((l) => l.status === "ganho").length || 0;
       const conversionRate = totalLeads > 0 ? (wonDeals / totalLeads) * 100 : 0;
 
-      // ✅ CORREÇÃO: Contar CONVERSAS ÚNICAS (números únicos), não mensagens
-      const { data: conversasData } = await supabase
+      // ✅ CORREÇÃO: Contar CONVERSAS ÚNICAS (números únicos) APENAS da empresa do usuário
+      let conversasQuery = supabase
         .from("conversas")
-        .select("numero, telefone_formatado");
+        .select("numero, telefone_formatado, is_group");
+      
+      // Aplicar filtro de empresa se disponível
+      if (userCompanyId) {
+        conversasQuery = conversasQuery.eq('company_id', userCompanyId);
+      }
+      
+      const { data: conversasData } = await conversasQuery;
       
       const numerosUnicos = new Set<string>();
       conversasData?.forEach((c: any) => {
-        const numero = (c.telefone_formatado || c.numero || '').replace(/[^0-9]/g, '');
+        // Incluir grupos também na contagem
+        const isGroup = c.is_group || /@g\.us$/.test(c.numero || '');
+        const numero = isGroup 
+          ? c.numero 
+          : (c.telefone_formatado || c.numero || '').replace(/[^0-9]/g, '');
         if (numero && numero.length >= 8) {
           numerosUnicos.add(numero);
         }
