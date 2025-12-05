@@ -6,6 +6,9 @@ verify_jwt = false
 [functions.webhook-conversas]
 verify_jwt = false
 
+[functions.webhook-meta]
+verify_jwt = false
+
 [functions.api-funil-vendas]
 verify_jwt = true
 
@@ -13,6 +16,9 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.enviar-whatsapp]
+verify_jwt = true
+
+[functions.enviar-whatsapp-meta]
 verify_jwt = true
 
 [functions.transcrever-audio]

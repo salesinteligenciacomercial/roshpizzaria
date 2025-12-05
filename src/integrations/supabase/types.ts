@@ -1761,6 +1761,7 @@ export type Database = {
       }
       whatsapp_connections: {
         Row: {
+          api_provider: string | null
           company_id: string
           created_at: string | null
           evolution_api_key: string | null
@@ -1768,6 +1769,11 @@ export type Database = {
           id: string
           instance_name: string
           last_connected_at: string | null
+          meta_access_token: string | null
+          meta_business_account_id: string | null
+          meta_phone_number_id: string | null
+          meta_token_expires_at: string | null
+          meta_webhook_verify_token: string | null
           qr_code: string | null
           qr_code_expires_at: string | null
           status: string | null
@@ -1775,6 +1781,7 @@ export type Database = {
           whatsapp_number: string | null
         }
         Insert: {
+          api_provider?: string | null
           company_id: string
           created_at?: string | null
           evolution_api_key?: string | null
@@ -1782,6 +1789,11 @@ export type Database = {
           id?: string
           instance_name: string
           last_connected_at?: string | null
+          meta_access_token?: string | null
+          meta_business_account_id?: string | null
+          meta_phone_number_id?: string | null
+          meta_token_expires_at?: string | null
+          meta_webhook_verify_token?: string | null
           qr_code?: string | null
           qr_code_expires_at?: string | null
           status?: string | null
@@ -1789,6 +1801,7 @@ export type Database = {
           whatsapp_number?: string | null
         }
         Update: {
+          api_provider?: string | null
           company_id?: string
           created_at?: string | null
           evolution_api_key?: string | null
@@ -1796,6 +1809,11 @@ export type Database = {
           id?: string
           instance_name?: string
           last_connected_at?: string | null
+          meta_access_token?: string | null
+          meta_business_account_id?: string | null
+          meta_phone_number_id?: string | null
+          meta_token_expires_at?: string | null
+          meta_webhook_verify_token?: string | null
           qr_code?: string | null
           qr_code_expires_at?: string | null
           status?: string | null
