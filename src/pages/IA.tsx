@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bot, Sparkles, TrendingUp, Target, Workflow, BarChart3, Send, Brain, Lightbulb, BookOpen } from "lucide-react";
+import { Bot, Sparkles, TrendingUp, Target, Workflow, BarChart3, Send, Brain, Lightbulb, BookOpen, Zap } from "lucide-react";
+import { N8nIntegration } from "@/components/ia/N8nIntegration";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FluxoAutomacaoBuilder } from "@/components/fluxos/FluxoAutomacaoBuilder";
 import { IAAgentCard } from "@/components/ia/IAAgentCard";
@@ -186,6 +187,9 @@ export default function IA() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Integração n8n */}
+          <N8nIntegration />
         </TabsContent>
 
         <TabsContent value="conhecimento" className="space-y-6 mt-6">
