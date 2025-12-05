@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // ========================
-// IA DE ATENDIMENTO AVANÇADA
+// IA DE ATENDIMENTO - PROMPT PERSONALIZADO
 // ========================
 
 serve(async (req) => {
@@ -28,13 +28,32 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY não configurada');
     }
 
-    // Buscar contexto adicional
-    let leadContext = '';
-    let funilContext = '';
-    let tarefasContext = '';
+    // ========================================
+    // BUSCAR PROMPT PERSONALIZADO DA BASE DE DADOS
+    // ========================================
+    let promptPersonalizado = customPrompt || null;
+    
+    if (!promptPersonalizado && companyId) {
+      const { data: iaConfig } = await supabase
+        .from('ia_configurations')
+        .select('custom_prompts')
+        .eq('company_id', companyId)
+        .single();
+      
+      // Buscar prompt específico para agente de atendimento
+      if (iaConfig?.custom_prompts) {
+        const customPrompts = iaConfig.custom_prompts as any;
+        promptPersonalizado = customPrompts.atendimento || customPrompts.default || null;
+      }
+    }
+
+    // ========================================
+    // MONTAR CONTEXTO DINÂMICO (DADOS DO LEAD)
+    // ========================================
+    let contextoDinamico = '';
     
     if (leadData) {
-      leadContext = `
+      contextoDinamico += `
 DADOS DO CLIENTE:
 - Nome: ${leadData.name || 'Não informado'}
 - Telefone: ${leadData.phone || leadData.telefone || 'Não informado'}
@@ -56,7 +75,7 @@ DADOS DO CLIENTE:
           .single();
         
         if (etapa) {
-          funilContext = `
+          contextoDinamico += `
 POSIÇÃO NO FUNIL:
 - Funil: ${(etapa as any).funil?.nome || 'Não definido'}
 - Etapa: ${etapa.nome}
@@ -74,7 +93,7 @@ POSIÇÃO NO FUNIL:
           .limit(5);
         
         if (tarefas && tarefas.length > 0) {
-          tarefasContext = `
+          contextoDinamico += `
 TAREFAS PENDENTES:
 ${tarefas.map((t: any) => `- ${t.title} (${t.priority}) - ${t.status}`).join('\n')}
 `;
@@ -83,86 +102,71 @@ ${tarefas.map((t: any) => `- ${t.title} (${t.priority}) - ${t.status}`).join('\n
     }
 
     // Buscar histórico recente da conversa
-    let historicoContext = '';
-    if (conversationId && companyId) {
+    if (conversationId && companyId && leadData) {
       const { data: historico } = await supabase
         .from('conversas')
         .select('mensagem, fromme, created_at')
         .eq('telefone_formatado', leadData?.telefone || leadData?.phone)
         .eq('company_id', companyId)
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(10);
       
       if (historico && historico.length > 1) {
-        historicoContext = `
-HISTÓRICO RECENTE:
+        contextoDinamico += `
+HISTÓRICO RECENTE DA CONVERSA:
 ${historico.slice(1).reverse().map((h: any) => 
-  `${h.fromme ? 'Você' : 'Cliente'}: ${h.mensagem?.substring(0, 100)}`
+  `${h.fromme ? 'Você' : 'Cliente'}: ${h.mensagem?.substring(0, 150)}`
 ).join('\n')}
 `;
       }
     }
 
-    // Buscar funis disponíveis para sugerir movimentação
-    let funisDisponiveis = '';
-    if (companyId) {
-      const { data: funis } = await supabase
-        .from('funis')
-        .select('id, nome, etapas(id, nome)')
-        .eq('company_id', companyId)
-        .limit(3);
+    // ========================================
+    // CONSTRUIR PROMPT FINAL
+    // ========================================
+    let systemPrompt = '';
+    
+    // Se tem prompt personalizado, usar SOMENTE ele + contexto dinâmico
+    if (promptPersonalizado && promptPersonalizado.trim()) {
+      // Substituir variáveis no prompt personalizado
+      let promptComVariaveis = promptPersonalizado
+        .replace(/{lead\.name}/g, leadData?.name || 'Cliente')
+        .replace(/{lead\.phone}/g, leadData?.phone || leadData?.telefone || '')
+        .replace(/{lead\.email}/g, leadData?.email || '')
+        .replace(/{lead\.company}/g, leadData?.company || '')
+        .replace(/{company\.name}/g, 'Empresa');
       
-      if (funis && funis.length > 0) {
-        funisDisponiveis = `
-FUNIS DISPONÍVEIS:
-${funis.map((f: any) => `- ${f.nome}: ${f.etapas?.map((e: any) => e.nome).join(' → ') || 'Sem etapas'}`).join('\n')}
-`;
-      }
-    }
+      systemPrompt = `${promptComVariaveis}
 
-    const systemPrompt = customPrompt || `Você é uma assistente de atendimento inteligente e proativa. Seu papel é:
-1. Fazer pré-atendimento e triagem
-2. Qualificar leads (entender necessidade, orçamento, urgência)
-3. Coletar informações importantes (CPF, email, empresa)
-4. Identificar oportunidades de agendamento ou venda
-5. Criar tarefas de follow-up quando necessário
-6. Saber quando transferir para um humano
+${contextoDinamico}
 
-${leadContext}
-${funilContext}
-${tarefasContext}
-${historicoContext}
-${funisDisponiveis}
-
-REGRAS DE COMPORTAMENTO:
-1. Seja cordial, profissional e empático
-2. Faça perguntas inteligentes para qualificar (não seja interrogativo)
-3. Se detectar interesse em agendar, pergunte a data preferida
-4. Se detectar interesse em comprar, explore necessidades
-5. Colete informações naturalmente durante a conversa
-6. Mantenha respostas curtas (máximo 4 linhas)
-7. Use emojis moderadamente para humanizar
-8. Se o cliente pedir atendente humano, transfira imediatamente
-
-AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes):
-- [QUALIFICAR] - quando obtiver informações importantes do lead
-- [COLETAR_DADOS:campo] - quando coletar CPF, email, telefone, empresa (ex: [COLETAR_DADOS:cpf=12345678901])
-- [ADICIONAR_TAG:nome] - quando identificar uma característica (ex: [ADICIONAR_TAG:interessado])
-- [MOVER_FUNIL:etapa] - quando o lead avançar na jornada (ex: [MOVER_FUNIL:qualificado])
-- [CRIAR_TAREFA:titulo] - quando identificar ação necessária (ex: [CRIAR_TAREFA:Enviar proposta])
+AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se aplicável):
+- [COLETAR_DADOS:campo=valor] - para coletar CPF, email, telefone, empresa
+- [ADICIONAR_TAG:nome] - para adicionar tag ao lead
+- [MOVER_FUNIL:etapa] - para mover lead no funil
+- [CRIAR_TAREFA:titulo] - para criar tarefa de follow-up
 - [AGENDAR] - quando cliente quiser marcar horário
-- [TRANSFERIR_HUMANO] - quando precisar de intervenção humana
+- [TRANSFERIR_HUMANO] - para transferir para atendente humano`;
+    } else {
+      // Se NÃO tem prompt personalizado, usar prompt padrão básico
+      systemPrompt = `Você é uma assistente de atendimento. Responda de forma cordial e profissional.
 
-EXEMPLOS DE COLETA NATURAL:
-- "Qual seu CPF para eu consultar seu cadastro?" → depois [COLETAR_DADOS:cpf=123.456.789-01]
-- "Me passa seu e-mail que envio mais informações" → depois [COLETAR_DADOS:email=cliente@email.com]
+${contextoDinamico}
 
-Responda à mensagem do cliente de forma natural:`;
+AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se aplicável):
+- [COLETAR_DADOS:campo=valor] - para coletar CPF, email, telefone, empresa
+- [ADICIONAR_TAG:nome] - para adicionar tag ao lead
+- [MOVER_FUNIL:etapa] - para mover lead no funil
+- [CRIAR_TAREFA:titulo] - para criar tarefa de follow-up
+- [AGENDAR] - quando cliente quiser marcar horário
+- [TRANSFERIR_HUMANO] - para transferir para atendente humano`;
+    }
 
     console.log('🤖 IA Atendimento - Processando:', { 
       conversationId, 
       message: message.substring(0, 50),
-      hasLead: !!leadData 
+      hasLead: !!leadData,
+      hasCustomPrompt: !!promptPersonalizado
     });
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -177,7 +181,6 @@ Responda à mensagem do cliente de forma natural:`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message }
         ],
-        temperature: 0.7,
         max_tokens: 600,
       }),
     });
@@ -256,11 +259,10 @@ Responda à mensagem do cliente de forma natural:`;
           
         case 'MOVER_FUNIL':
           if (actionParams && companyId) {
-            // Buscar etapa pelo nome
+            // Buscar etapa por nome
             const { data: etapa } = await supabase
               .from('etapas')
-              .select('id')
-              .eq('company_id', companyId)
+              .select('id, funil_id')
               .ilike('nome', `%${actionParams.trim()}%`)
               .limit(1)
               .single();
@@ -270,91 +272,66 @@ Responda à mensagem do cliente de forma natural:`;
                 .from('leads')
                 .update({ 
                   etapa_id: etapa.id,
+                  funil_id: etapa.funil_id,
                   updated_at: new Date().toISOString()
                 })
                 .eq('id', leadData.id);
               
               actionResult = { success: !error, etapa: actionParams.trim() };
-              console.log(`📋 Lead movido para: ${actionParams}`);
+              console.log(`📊 Lead movido para: ${actionParams}`);
             }
           }
           break;
           
         case 'CRIAR_TAREFA':
           if (actionParams && companyId) {
-            const { data: userRole } = await supabase
+            const { data: user } = await supabase
               .from('user_roles')
               .select('user_id')
               .eq('company_id', companyId)
-              .eq('role', 'company_admin')
               .limit(1)
               .single();
             
-            const { data: tarefa, error } = await supabase
-              .from('tasks')
-              .insert({
-                title: actionParams.trim(),
-                lead_id: leadData.id,
-                description: `Tarefa criada pela IA após conversa. Mensagem: "${message.substring(0, 200)}"`,
-                priority: 'alta',
-                status: 'pendente',
-                company_id: companyId,
-                owner_id: userRole?.user_id || leadData.owner_id
-              })
-              .select()
-              .single();
-            
-            actionResult = { success: !error, tarefa_id: tarefa?.id };
-            console.log(`📋 Tarefa criada: ${actionParams}`);
+            if (user) {
+              const { error } = await supabase
+                .from('tasks')
+                .insert({
+                  title: actionParams.trim(),
+                  lead_id: leadData.id,
+                  company_id: companyId,
+                  owner_id: user.user_id,
+                  status: 'pendente',
+                  priority: 'media'
+                });
+              
+              actionResult = { success: !error, titulo: actionParams.trim() };
+              console.log(`✅ Tarefa criada: ${actionParams}`);
+            }
           }
-          break;
-          
-        case 'QUALIFICAR':
-          const { error: qualError } = await supabase
-            .from('leads')
-            .update({ 
-              status: 'qualificado',
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', leadData.id);
-          
-          actionResult = { success: !qualError };
-          console.log('✅ Lead qualificado');
           break;
       }
     }
 
-    // Registrar no sistema de aprendizado
+    // Log da interação para aprendizado
     try {
-      await fetch(`${supabaseUrl}/functions/v1/ia-aprendizado`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          action: 'record_interaction',
-          data: {
-            company_id: companyId || leadData?.company_id,
-            agent_type: 'atendimento',
-            conversation_id: conversationId,
-            lead_id: leadData?.id,
-            input_message: message,
-            ai_response: cleanResponse,
-            context_data: { action, actionParams, actionResult, leadData }
-          }
-        })
+      await supabase.functions.invoke('ia-aprendizado', {
+        body: {
+          companyId,
+          agentType: 'atendimento',
+          inputMessage: message,
+          aiResponse: cleanResponse,
+          action,
+          actionParams,
+          actionResult,
+          leadId: leadData?.id
+        }
       });
     } catch (e) {
-      console.log('Erro ao registrar aprendizado:', e);
+      console.warn('⚠️ Erro ao registrar aprendizado:', e);
     }
 
-    const execTime = Date.now() - startTime;
-    console.log(`✅ IA Atendimento - Resposta em ${execTime}ms:`, { 
-      action, 
-      actionParams,
-      response: cleanResponse.substring(0, 50) 
-    });
+    const executionTime = Date.now() - startTime;
+    console.log(`✅ IA Atendimento - Concluído em ${executionTime}ms`);
 
     return new Response(
       JSON.stringify({ 
@@ -362,22 +339,19 @@ Responda à mensagem do cliente de forma natural:`;
         action,
         actionParams,
         actionResult,
-        conversationId 
+        executionTime
       }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-  } catch (error: any) {
-    console.error('❌ Erro na função ia-atendimento:', error);
+  } catch (error) {
+    console.error('❌ Erro na IA Atendimento:', error);
     return new Response(
-      JSON.stringify({ error: error.message || 'Erro ao processar IA de atendimento' }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
+      JSON.stringify({ 
+        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        response: 'Desculpe, estou com dificuldades técnicas. Um atendente humano irá te ajudar em breve.'
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

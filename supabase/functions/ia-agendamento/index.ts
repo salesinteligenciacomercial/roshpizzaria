@@ -21,11 +21,9 @@ interface IATools {
 
 async function createTools(supabase: any): Promise<IATools> {
   return {
-    // Buscar horários disponíveis em uma data
     buscar_horarios_disponiveis: async ({ data, profissional_id, duracao_minutos = 30 }) => {
       console.log('🔍 [TOOL] Buscando horários disponíveis:', { data, profissional_id, duracao_minutos });
       
-      // Buscar compromissos do dia
       const dataInicio = `${data}T00:00:00`;
       const dataFim = `${data}T23:59:59`;
       
@@ -47,13 +45,11 @@ async function createTools(supabase: any): Promise<IATools> {
         return { error: 'Erro ao buscar horários' };
       }
       
-      // Horário comercial padrão (pode ser customizado por empresa)
       const horariosBase = [
         '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
         '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
       ];
       
-      // Filtrar horários ocupados
       const horariosOcupados = (compromissosExistentes || []).map((c: any) => {
         const hora = new Date(c.data_hora_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         return hora;
@@ -69,7 +65,6 @@ async function createTools(supabase: any): Promise<IATools> {
       };
     },
     
-    // Listar profissionais/especialistas
     listar_profissionais: async ({ especialidade, company_id }) => {
       console.log('🔍 [TOOL] Listando profissionais:', { especialidade, company_id });
       
@@ -95,7 +90,6 @@ async function createTools(supabase: any): Promise<IATools> {
       };
     },
     
-    // Criar novo compromisso
     criar_compromisso: async ({ lead_id, profissional_id, data_hora, tipo_servico, duracao_minutos = 30, observacoes, company_id, owner_id }) => {
       console.log('📅 [TOOL] Criando compromisso:', { lead_id, data_hora, tipo_servico });
       
@@ -150,87 +144,51 @@ async function createTools(supabase: any): Promise<IATools> {
       };
     },
     
-    // Alterar compromisso existente
     alterar_compromisso: async ({ compromisso_id, novos_dados }) => {
       console.log('✏️ [TOOL] Alterando compromisso:', { compromisso_id, novos_dados });
       
-      const updateData: any = {};
-      
-      if (novos_dados.data_hora) {
-        const dataHoraInicio = new Date(novos_dados.data_hora);
-        const duracao = novos_dados.duracao_minutos || 30;
-        const dataHoraFim = new Date(dataHoraInicio.getTime() + duracao * 60 * 1000);
-        updateData.data_hora_inicio = dataHoraInicio.toISOString();
-        updateData.data_hora_fim = dataHoraFim.toISOString();
-      }
-      
-      if (novos_dados.tipo_servico) updateData.tipo_servico = novos_dados.tipo_servico;
-      if (novos_dados.observacoes) updateData.observacoes = novos_dados.observacoes;
-      if (novos_dados.profissional_id) updateData.profissional_id = novos_dados.profissional_id;
-      if (novos_dados.status) updateData.status = novos_dados.status;
-      
-      updateData.updated_at = new Date().toISOString();
-      
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('compromissos')
-        .update(updateData)
-        .eq('id', compromisso_id)
-        .select()
-        .single();
+        .update({
+          ...novos_dados,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', compromisso_id);
       
       if (error) {
         console.error('Erro ao alterar compromisso:', error);
         return { success: false, error: 'Erro ao alterar compromisso' };
       }
       
-      return {
-        success: true,
-        compromisso: data,
-        mensagem: 'Compromisso alterado com sucesso'
-      };
+      return { success: true, mensagem: 'Compromisso alterado com sucesso' };
     },
     
-    // Cancelar compromisso
     cancelar_compromisso: async ({ compromisso_id, motivo }) => {
       console.log('❌ [TOOL] Cancelando compromisso:', { compromisso_id, motivo });
       
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('compromissos')
         .update({
           status: 'cancelado',
-          observacoes: motivo ? `Cancelado: ${motivo}` : 'Cancelado pelo cliente',
+          observacoes: motivo ? `Cancelado: ${motivo}` : 'Cancelado',
           updated_at: new Date().toISOString()
         })
-        .eq('id', compromisso_id)
-        .select()
-        .single();
+        .eq('id', compromisso_id);
       
       if (error) {
         console.error('Erro ao cancelar compromisso:', error);
         return { success: false, error: 'Erro ao cancelar compromisso' };
       }
       
-      return {
-        success: true,
-        mensagem: 'Compromisso cancelado com sucesso'
-      };
+      return { success: true, mensagem: 'Compromisso cancelado com sucesso' };
     },
     
-    // Buscar compromissos de um lead
     buscar_compromissos_lead: async ({ lead_id }) => {
-      console.log('🔍 [TOOL] Buscando compromissos do lead:', lead_id);
+      console.log('🔍 [TOOL] Buscando compromissos do lead:', { lead_id });
       
       const { data: compromissos, error } = await supabase
         .from('compromissos')
-        .select(`
-          id,
-          data_hora_inicio,
-          data_hora_fim,
-          tipo_servico,
-          status,
-          observacoes,
-          profissional:profissionais(nome, especialidade)
-        `)
+        .select('*')
         .eq('lead_id', lead_id)
         .order('data_hora_inicio', { ascending: true });
       
@@ -253,7 +211,7 @@ async function createTools(supabase: any): Promise<IATools> {
 }
 
 // ========================
-// FUNÇÃO PRINCIPAL
+// FUNÇÃO PRINCIPAL - PROMPT PERSONALIZADO
 // ========================
 
 serve(async (req) => {
@@ -272,8 +230,6 @@ serve(async (req) => {
     // Se for uma chamada direta de ferramenta
     if (action) {
       const tools = await createTools(supabase);
-      
-      // Parse body if needed
       const bodyData = req.body ? await req.json() : {};
       
       switch (action) {
@@ -302,10 +258,31 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY não configurada');
     }
 
-    // Contexto do lead
+    // ========================================
+    // BUSCAR PROMPT PERSONALIZADO DA BASE DE DADOS
+    // ========================================
+    let promptPersonalizado = null;
+    
+    if (companyId) {
+      const { data: iaConfig } = await supabase
+        .from('ia_configurations')
+        .select('custom_prompts')
+        .eq('company_id', companyId)
+        .single();
+      
+      // Buscar prompt específico para agente de agendamento
+      if (iaConfig?.custom_prompts) {
+        const customPrompts = iaConfig.custom_prompts as any;
+        promptPersonalizado = customPrompts.agendamento || customPrompts.default || null;
+      }
+    }
+
+    // ========================================
+    // MONTAR CONTEXTO DINÂMICO
+    // ========================================
     const leadContext = leadData ? `
 DADOS DO CLIENTE:
-- Nome: ${leadData.name}
+- Nome: ${leadData.name || 'Não informado'}
 - Telefone: ${leadData.phone || leadData.telefone || 'Não informado'}
 - Email: ${leadData.email || 'Não informado'}
 - Empresa: ${leadData.company || 'Não informado'}
@@ -343,36 +320,54 @@ Hoje (${hoje}): ${horariosHoje.horarios_disponiveis?.slice(0, 5).join(', ') || '
 Amanhã (${amanha}): ${horariosAmanha.horarios_disponiveis?.slice(0, 5).join(', ') || 'Nenhum'} ${horariosAmanha.horarios_disponiveis?.length > 5 ? `e mais ${horariosAmanha.horarios_disponiveis.length - 5}` : ''}
 `;
 
-    const systemPrompt = `Você é uma assistente especializada em agendamentos. Seu papel é ajudar clientes a:
-1. Verificar disponibilidade de horários
-2. Agendar novos compromissos/consultas
-3. Alterar compromissos existentes
-4. Cancelar compromissos
-5. Tirar dúvidas sobre horários
+    // ========================================
+    // CONSTRUIR PROMPT FINAL
+    // ========================================
+    let systemPrompt = '';
+    
+    // Se tem prompt personalizado, usar SOMENTE ele + contexto dinâmico
+    if (promptPersonalizado && promptPersonalizado.trim()) {
+      // Substituir variáveis no prompt personalizado
+      let promptComVariaveis = promptPersonalizado
+        .replace(/{lead\.name}/g, leadData?.name || 'Cliente')
+        .replace(/{lead\.phone}/g, leadData?.phone || leadData?.telefone || '')
+        .replace(/{lead\.email}/g, leadData?.email || '')
+        .replace(/{lead\.company}/g, leadData?.company || '')
+        .replace(/{company\.name}/g, 'Empresa');
+      
+      systemPrompt = `${promptComVariaveis}
 
 ${leadContext}
 ${compromissosContext}
 ${horariosContext}
 
-REGRAS IMPORTANTES:
-1. Sempre seja cordial e profissional
-2. Confirme os dados antes de agendar (data, horário, tipo de serviço)
-3. Se o cliente quiser agendar, pergunte a data e horário preferidos
-4. Se não houver horário disponível, sugira alternativas
-5. Mantenha respostas curtas (máximo 4 linhas)
-6. Use emojis moderadamente
+AÇÕES DISPONÍVEIS (inclua no final da resposta entre colchetes, se aplicável):
+- [VERIFICAR_HORARIOS:YYYY-MM-DD] - para verificar horários de uma data
+- [AGENDAR:YYYY-MM-DDTHH:MM|TIPO_SERVICO] - para confirmar agendamento
+- [ALTERAR:COMPROMISSO_ID|NOVOS_DADOS] - para alterar compromisso
+- [CANCELAR:COMPROMISSO_ID] - para cancelar compromisso
+- [TRANSFERIR_HUMANO] - para transferir para atendente humano`;
+    } else {
+      // Se NÃO tem prompt personalizado, usar prompt padrão básico
+      systemPrompt = `Você é uma assistente especializada em agendamentos. Ajude clientes a agendar, alterar ou cancelar compromissos.
 
-AÇÕES DISPONÍVEIS (inclua no final da resposta entre colchetes):
-- [VERIFICAR_HORARIOS:YYYY-MM-DD] - quando cliente perguntar horários de uma data específica
-- [AGENDAR:YYYY-MM-DDTHH:MM|TIPO_SERVICO] - quando confirmar agendamento
-- [ALTERAR:COMPROMISSO_ID|NOVOS_DADOS] - quando alterar compromisso
-- [CANCELAR:COMPROMISSO_ID] - quando cancelar compromisso
-- [TRANSFERIR_HUMANO] - quando precisar de ajuda humana
-- [CONFIRMAR_DADOS] - quando precisar confirmar dados do cliente
+${leadContext}
+${compromissosContext}
+${horariosContext}
 
-Responda à mensagem do cliente de forma natural e inclua a ação no final, se aplicável.`;
+AÇÕES DISPONÍVEIS (inclua no final da resposta entre colchetes, se aplicável):
+- [VERIFICAR_HORARIOS:YYYY-MM-DD] - para verificar horários de uma data
+- [AGENDAR:YYYY-MM-DDTHH:MM|TIPO_SERVICO] - para confirmar agendamento
+- [ALTERAR:COMPROMISSO_ID|NOVOS_DADOS] - para alterar compromisso
+- [CANCELAR:COMPROMISSO_ID] - para cancelar compromisso
+- [TRANSFERIR_HUMANO] - para transferir para atendente humano`;
+    }
 
-    console.log('📅 IA Agendamento - Processando:', { conversationId, message: message.substring(0, 50) });
+    console.log('📅 IA Agendamento - Processando:', { 
+      conversationId, 
+      message: message.substring(0, 50),
+      hasCustomPrompt: !!promptPersonalizado
+    });
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -386,93 +381,105 @@ Responda à mensagem do cliente de forma natural e inclua a ação no final, se 
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message }
         ],
-        temperature: 0.7,
         max_tokens: 600,
       }),
     });
 
     if (!response.ok) {
-      if (response.status === 429 || response.status === 402) {
+      if (response.status === 429) {
         return new Response(
-          JSON.stringify({ error: response.status === 429 ? 'Rate limit' : 'Créditos insuficientes' }),
-          { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: 'Limite de requisições atingido.' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: 'Créditos insuficientes.' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const errorText = await response.text();
+      console.error('❌ Erro da IA:', response.status, errorText);
       throw new Error(`Erro da IA: ${response.status}`);
     }
 
     const data = await response.json();
     const aiResponse = data.choices[0].message.content;
 
-    // Extrair ação da resposta
-    const actionMatch = aiResponse.match(/\[(VERIFICAR_HORARIOS|AGENDAR|ALTERAR|CANCELAR|TRANSFERIR_HUMANO|CONFIRMAR_DADOS)(:([^\]]+))?\]/);
+    // Extrair e executar ações
+    const actionPattern = /\[(VERIFICAR_HORARIOS|AGENDAR|ALTERAR|CANCELAR|TRANSFERIR_HUMANO|CONFIRMAR_DADOS)(:([^\]]+))?\]/;
+    const actionMatch = aiResponse.match(actionPattern);
+    
     const actionType = actionMatch ? actionMatch[1] : null;
     const actionParams = actionMatch ? actionMatch[3] : null;
     
-    // Remover ação da resposta
-    const cleanResponse = aiResponse.replace(/\[(VERIFICAR_HORARIOS|AGENDAR|ALTERAR|CANCELAR|TRANSFERIR_HUMANO|CONFIRMAR_DADOS)(:([^\]]+))?\]/g, '').trim();
+    const cleanResponse = aiResponse.replace(actionPattern, '').trim();
 
-    // Executar ação automaticamente se aplicável
     let actionResult = null;
-    
-    if (actionType === 'AGENDAR' && actionParams && leadData?.id) {
-      const [dataHora, tipoServico] = actionParams.split('|');
-      
-      // Buscar owner_id e company_id
-      const { data: userRole } = await supabase
+
+    if (actionType && leadData?.id && companyId) {
+      const { data: user } = await supabase
         .from('user_roles')
         .select('user_id')
         .eq('company_id', companyId)
-        .eq('role', 'company_admin')
         .limit(1)
         .single();
       
-      const owner_id = userRole?.user_id || leadData.owner_id;
-      
-      actionResult = await tools.criar_compromisso({
-        lead_id: leadData.id,
-        data_hora: dataHora,
-        tipo_servico: tipoServico || 'Consulta',
-        company_id: companyId,
-        owner_id
-      });
-    }
-    
-    if (actionType === 'VERIFICAR_HORARIOS' && actionParams) {
-      actionResult = await tools.buscar_horarios_disponiveis({ data: actionParams });
-    }
-    
-    if (actionType === 'CANCELAR' && actionParams) {
-      actionResult = await tools.cancelar_compromisso({ compromisso_id: actionParams });
+      const ownerId = user?.user_id;
+
+      switch (actionType) {
+        case 'VERIFICAR_HORARIOS':
+          if (actionParams) {
+            const horariosData = await tools.buscar_horarios_disponiveis({ data: actionParams });
+            actionResult = horariosData;
+          }
+          break;
+          
+        case 'AGENDAR':
+          if (actionParams && ownerId) {
+            const [dataHora, tipoServico] = actionParams.split('|');
+            if (dataHora && tipoServico) {
+              const resultado = await tools.criar_compromisso({
+                lead_id: leadData.id,
+                data_hora: dataHora,
+                tipo_servico: tipoServico,
+                company_id: companyId,
+                owner_id: ownerId
+              });
+              actionResult = resultado;
+            }
+          }
+          break;
+          
+        case 'CANCELAR':
+          if (actionParams) {
+            const resultado = await tools.cancelar_compromisso({ compromisso_id: actionParams });
+            actionResult = resultado;
+          }
+          break;
+      }
     }
 
-    // Registrar no sistema de aprendizado
+    // Log da interação para aprendizado
     try {
-      await fetch(`${supabaseUrl}/functions/v1/ia-aprendizado`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          action: 'record_interaction',
-          data: {
-            company_id: companyId,
-            agent_type: 'agendamento',
-            conversation_id: conversationId,
-            lead_id: leadData?.id,
-            input_message: message,
-            ai_response: cleanResponse,
-            context_data: { action: actionType, actionParams, actionResult }
-          }
-        })
+      await supabase.functions.invoke('ia-aprendizado', {
+        body: {
+          companyId,
+          agentType: 'agendamento',
+          inputMessage: message,
+          aiResponse: cleanResponse,
+          action: actionType,
+          actionParams,
+          actionResult,
+          leadId: leadData?.id
+        }
       });
     } catch (e) {
-      console.log('Erro ao registrar aprendizado:', e);
+      console.warn('⚠️ Erro ao registrar aprendizado:', e);
     }
 
-    const execTime = Date.now() - startTime;
-    console.log('✅ IA Agendamento - Resposta gerada em', execTime, 'ms:', { action: actionType, response: cleanResponse.substring(0, 50) });
+    const executionTime = Date.now() - startTime;
+    console.log(`✅ IA Agendamento - Concluído em ${executionTime}ms`);
 
     return new Response(
       JSON.stringify({ 
@@ -480,20 +487,19 @@ Responda à mensagem do cliente de forma natural e inclua a ação no final, se 
         action: actionType,
         actionParams,
         actionResult,
-        conversationId 
+        executionTime
       }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-  } catch (error: any) {
-    console.error('❌ Erro na ia-agendamento:', error);
+  } catch (error) {
+    console.error('❌ Erro na IA Agendamento:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        response: 'Desculpe, tive um problema técnico. Um atendente humano irá te ajudar.'
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
-
