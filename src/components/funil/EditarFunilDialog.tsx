@@ -161,20 +161,37 @@ export function EditarFunilDialog({ funilId, funilNome, onFunilUpdated }: Editar
 
       console.log(`🗑️ Excluindo funil "${nomeFunil}" (ID: ${funilId})`);
 
-      // Verificar quantos leads serão afetados
-      const { data: leadsCount } = await supabase
+      // 1. Primeiro, atualizar leads para remover referências ao funil
+      const { error: leadsUpdateError } = await supabase
         .from("leads")
-        .select("id", { count: "exact", head: true })
+        .update({ funil_id: null, etapa_id: null })
         .eq("funil_id", funilId);
 
-      console.log(`📊 Leads que serão excluídos: ${leadsCount || 0}`);
+      if (leadsUpdateError) {
+        console.error("⚠️ Erro ao atualizar leads:", leadsUpdateError);
+        // Não bloquear, tentar continuar
+      } else {
+        console.log("✅ Leads desvinculados do funil");
+      }
 
-      // Deletar funil (cascade irá deletar etapas e leads)
+      // 2. Deletar etapas do funil
+      const { error: etapasError } = await supabase
+        .from("etapas")
+        .delete()
+        .eq("funil_id", funilId);
+
+      if (etapasError) {
+        console.error("⚠️ Erro ao excluir etapas:", etapasError);
+        // Não bloquear, tentar continuar
+      } else {
+        console.log("✅ Etapas excluídas");
+      }
+
+      // 3. Deletar funil (RLS cuida da permissão via company_id)
       const { error: deleteError } = await supabase
         .from("funis")
         .delete()
-        .eq("id", funilId)
-        .eq("owner_id", session.user.id);
+        .eq("id", funilId);
 
       if (deleteError) {
         console.error("❌ Erro ao excluir funil:", deleteError);
