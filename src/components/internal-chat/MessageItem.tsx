@@ -1,12 +1,13 @@
 import { InternalMessage } from '@/hooks/useInternalMessages';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { format } from 'date-fns';
-import { FileText, Download, ExternalLink, Image, Video, Music } from 'lucide-react';
+import { Download, ExternalLink, Image, Video, Music } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { MediaPreviewDialog } from './MediaPreviewDialog';
+import { PDFThumbnail } from './PDFThumbnail';
 
 interface MessageItemProps {
   message: InternalMessage;
@@ -165,25 +166,33 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
       case 'pdf':
       case 'document':
         return (
-          <div 
-            className="flex items-center gap-2 p-2 bg-background/50 rounded-lg cursor-pointer hover:bg-background/70 transition-colors"
-            onClick={() => setPreviewOpen(true)}
-          >
-            <FileText className="h-8 w-8 text-primary flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">
+          <div className="space-y-2">
+            <div 
+              className="relative group cursor-pointer"
+              onClick={() => setPreviewOpen(true)}
+            >
+              <PDFThumbnail 
+                url={message.media_url || ''} 
+                className="hover:opacity-90 transition-opacity"
+              />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                <span className="text-white text-xs">Clique para visualizar</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground truncate flex-1">
                 {message.file_name || 'Documento'}
               </p>
-              <p className="text-xs text-muted-foreground">Clique para visualizar</p>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={handleDownload}
+                title="Baixar"
+              >
+                <Download className="h-3 w-3" />
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleDownload}
-              title="Baixar"
-            >
-              <Download className="h-4 w-4" />
-            </Button>
           </div>
         );
 
