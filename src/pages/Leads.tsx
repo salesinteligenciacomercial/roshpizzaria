@@ -159,33 +159,70 @@ export default function Leads() {
 
   // Excluir leads em massa
   const confirmarExclusaoEmMassa = async () => {
-    if (selectedLeads.size === 0 || !companyIdRef.current) return;
+    if (selectedLeads.size === 0) {
+      toast({
+        variant: "destructive",
+        title: "Nenhum lead selecionado",
+        description: "Selecione pelo menos um lead para excluir.",
+      });
+      return;
+    }
+    
+    if (!companyIdRef.current) {
+      toast({
+        variant: "destructive",
+        title: "Erro de autenticação",
+        description: "Company ID não encontrado. Recarregue a página.",
+      });
+      return;
+    }
+    
     setBulkProcessing(true);
+    const leadsToDelete = Array.from(selectedLeads);
+    console.log(`🗑️ [Leads] Iniciando exclusão em massa de ${leadsToDelete.length} leads:`, leadsToDelete);
+    console.log(`🗑️ [Leads] Company ID:`, companyIdRef.current);
 
     try {
-      const { error } = await supabase
-        .from("leads")
-        .delete()
-        .in("id", Array.from(selectedLeads))
-        .eq("company_id", companyIdRef.current);
+      // Deletar leads um a um para garantir que cada um seja removido
+      let deletedCount = 0;
+      let errorCount = 0;
+      
+      for (const leadId of leadsToDelete) {
+        const { error, count } = await supabase
+          .from("leads")
+          .delete()
+          .eq("id", leadId)
+          .eq("company_id", companyIdRef.current);
 
-      if (error) throw error;
+        if (error) {
+          console.error(`❌ Erro ao excluir lead ${leadId}:`, error);
+          errorCount++;
+        } else {
+          console.log(`✅ Lead ${leadId} excluído com sucesso`);
+          deletedCount++;
+        }
+      }
 
-      toast({
-        title: "Leads excluídos",
-        description: `${selectedLeads.size} leads foram excluídos com sucesso.`,
-      });
+      if (deletedCount > 0) {
+        toast({
+          title: "Leads excluídos",
+          description: `${deletedCount} leads foram excluídos permanentemente do banco de dados.${errorCount > 0 ? ` (${errorCount} falharam)` : ''}`,
+        });
 
-      setLeads(prev => prev.filter(lead => !selectedLeads.has(lead.id)));
-      setSelectedLeads(new Set());
-      setShowBulkDeleteDialog(false);
-      setSelectionMode(false);
-    } catch (error) {
-      console.error("Erro ao excluir leads em massa:", error);
+        // Atualizar estado local removendo os leads excluídos
+        setLeads(prev => prev.filter(lead => !selectedLeads.has(lead.id)));
+        setSelectedLeads(new Set());
+        setShowBulkDeleteDialog(false);
+        setSelectionMode(false);
+      } else {
+        throw new Error("Nenhum lead foi excluído. Verifique suas permissões.");
+      }
+    } catch (error: any) {
+      console.error("❌ Erro ao excluir leads em massa:", error);
       toast({
         variant: "destructive",
         title: "Erro ao excluir leads",
-        description: "Não foi possível excluir os leads selecionados.",
+        description: error?.message || "Não foi possível excluir os leads selecionados.",
       });
     } finally {
       setBulkProcessing(false);
