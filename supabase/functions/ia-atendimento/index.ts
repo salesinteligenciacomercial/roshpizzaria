@@ -21,11 +21,43 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    const { conversationId, message, leadData, companyId, customPrompt } = await req.json();
+    const { conversationId, message, leadData, companyId, customPrompt, files } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY não configurada');
+    }
+
+    // ========================================
+    // PROCESSAR ARQUIVOS (IMAGENS, PDFs, etc)
+    // ========================================
+    let filesContent: any[] = [];
+    let filesDescription = '';
+    
+    if (files && Array.isArray(files) && files.length > 0) {
+      console.log('📎 Processando arquivos:', files.length);
+      
+      for (const fileData of files) {
+        if (fileData.type === 'image') {
+          // Imagens: enviar diretamente para o modelo multimodal
+          filesContent.push({
+            type: 'image_url',
+            image_url: {
+              url: `data:${fileData.mimeType};base64,${fileData.base64}`
+            }
+          });
+          filesDescription += `\n[Imagem anexada: ${fileData.name}]`;
+        } else if (fileData.type === 'pdf') {
+          // PDFs: adicionar descrição (modelo não lê PDFs nativamente)
+          filesDescription += `\n[PDF anexado: ${fileData.name}] - Por favor, descreva o que você espera encontrar neste documento.`;
+        } else if (fileData.type === 'audio') {
+          // Áudios: adicionar descrição
+          filesDescription += `\n[Áudio anexado: ${fileData.name}] - O áudio precisa ser transcrito para análise.`;
+        } else if (fileData.type === 'video') {
+          // Vídeos: adicionar descrição
+          filesDescription += `\n[Vídeo anexado: ${fileData.name}] - O vídeo precisa ser processado para análise.`;
+        }
+      }
     }
 
     // ========================================
@@ -164,10 +196,25 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
 
     console.log('🤖 IA Atendimento - Processando:', { 
       conversationId, 
-      message: message.substring(0, 50),
+      message: message?.substring(0, 50),
       hasLead: !!leadData,
-      hasCustomPrompt: !!promptPersonalizado
+      hasCustomPrompt: !!promptPersonalizado,
+      hasFiles: filesContent.length > 0
     });
+
+    // Construir conteúdo da mensagem (texto + arquivos multimodais)
+    let userContent: any;
+    
+    if (filesContent.length > 0) {
+      // Formato multimodal com imagens
+      userContent = [
+        { type: 'text', text: (message || 'Analise este arquivo.') + filesDescription },
+        ...filesContent
+      ];
+    } else {
+      // Apenas texto
+      userContent = message + filesDescription;
+    }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -179,9 +226,9 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
         model: 'google/gemini-2.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: message }
+          { role: 'user', content: userContent }
         ],
-        max_tokens: 600,
+        max_tokens: 800,
       }),
     });
 

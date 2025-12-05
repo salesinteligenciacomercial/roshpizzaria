@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +6,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Brain, TrendingUp, Target, Zap, CheckCircle, AlertCircle, BookOpen, MessageSquare, ThumbsUp, ThumbsDown, Loader2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Brain, TrendingUp, Target, Zap, CheckCircle, AlertCircle, BookOpen, MessageSquare, ThumbsUp, ThumbsDown, Loader2, Image, FileText, Video, Mic, Send, X, Upload, Play } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -27,6 +28,12 @@ interface Pattern {
   confianca: number;
 }
 
+interface TestFile {
+  file: File;
+  type: 'image' | 'pdf' | 'video' | 'audio';
+  preview?: string;
+}
+
 export function TreinamentoIA() {
   const [config, setConfig] = useState({
     learning_mode: true,
@@ -43,6 +50,18 @@ export function TreinamentoIA() {
     aprendizado: 0,
     conversoes: 0
   });
+  
+  // Estados para Testar IA
+  const [testMessage, setTestMessage] = useState('');
+  const [testFiles, setTestFiles] = useState<TestFile[]>([]);
+  const [testResponse, setTestResponse] = useState('');
+  const [testLoading, setTestLoading] = useState(false);
+  const [testHistory, setTestHistory] = useState<{role: 'user' | 'assistant'; content: string; files?: TestFile[]}[]>([]);
+  
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadConfig();
@@ -521,6 +540,140 @@ export function TreinamentoIA() {
     toast.success(feedback === 'positivo' ? 'Feedback positivo registrado!' : 'Feedback negativo registrado. A IA vai aprender com isso.');
   };
 
+  // Funções para Testar IA
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'pdf' | 'video' | 'audio') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Validar tamanho (max 20MB)
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error('Arquivo muito grande. Máximo 20MB.');
+      return;
+    }
+    
+    let preview: string | undefined;
+    
+    if (type === 'image') {
+      preview = URL.createObjectURL(file);
+    }
+    
+    setTestFiles(prev => [...prev, { file, type, preview }]);
+    toast.success(`${type === 'image' ? 'Imagem' : type === 'pdf' ? 'PDF' : type === 'video' ? 'Vídeo' : 'Áudio'} anexado!`);
+    
+    // Limpar input
+    e.target.value = '';
+  };
+
+  const removeTestFile = (index: number) => {
+    setTestFiles(prev => {
+      const newFiles = [...prev];
+      if (newFiles[index].preview) {
+        URL.revokeObjectURL(newFiles[index].preview!);
+      }
+      newFiles.splice(index, 1);
+      return newFiles;
+    });
+  };
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+    });
+  };
+
+  const handleTestIA = async () => {
+    if (!testMessage.trim() && testFiles.length === 0) {
+      toast.error('Digite uma mensagem ou anexe um arquivo');
+      return;
+    }
+    
+    setTestLoading(true);
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Usuário não autenticado');
+        return;
+      }
+
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!userRole) {
+        toast.error('Empresa não encontrada');
+        return;
+      }
+
+      // Preparar arquivos para envio
+      const filesData: { type: string; base64: string; name: string; mimeType: string }[] = [];
+      
+      for (const testFile of testFiles) {
+        const base64 = await fileToBase64(testFile.file);
+        filesData.push({
+          type: testFile.type,
+          base64: base64.split(',')[1], // Remove prefix data:...;base64,
+          name: testFile.file.name,
+          mimeType: testFile.file.type
+        });
+      }
+
+      // Adicionar mensagem do usuário ao histórico
+      setTestHistory(prev => [...prev, { 
+        role: 'user', 
+        content: testMessage || `[Arquivo: ${testFiles.map(f => f.file.name).join(', ')}]`,
+        files: testFiles.length > 0 ? [...testFiles] : undefined
+      }]);
+
+      // Chamar edge function de teste
+      const { data, error } = await supabase.functions.invoke('ia-atendimento', {
+        body: {
+          message: testMessage || 'Analise este arquivo e me diga o que você vê/entende.',
+          companyId: userRole.company_id,
+          files: filesData.length > 0 ? filesData : undefined,
+          leadData: {
+            name: 'Teste',
+            phone: '11999999999'
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      const aiResponse = data?.response || 'Sem resposta da IA';
+      
+      // Adicionar resposta ao histórico
+      setTestHistory(prev => [...prev, { role: 'assistant', content: aiResponse }]);
+      setTestResponse(aiResponse);
+      
+      // Limpar inputs
+      setTestMessage('');
+      setTestFiles([]);
+      
+    } catch (error) {
+      console.error('Erro ao testar IA:', error);
+      toast.error('Erro ao testar a IA');
+      setTestHistory(prev => [...prev, { 
+        role: 'assistant', 
+        content: 'Erro: Não foi possível processar sua solicitação. Verifique se a IA está configurada corretamente.'
+      }]);
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  const clearTestHistory = () => {
+    setTestHistory([]);
+    setTestResponse('');
+    setTestMessage('');
+    setTestFiles([]);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header com estatísticas */}
@@ -625,11 +778,237 @@ export function TreinamentoIA() {
       </div>
 
       {/* Abas */}
-      <Tabs defaultValue="padroes" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+      <Tabs defaultValue="testar" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="testar">Testar IA</TabsTrigger>
           <TabsTrigger value="padroes">Padrões Identificados</TabsTrigger>
           <TabsTrigger value="treinamento">Dados de Treinamento</TabsTrigger>
         </TabsList>
+
+        {/* Aba Testar IA */}
+        <TabsContent value="testar" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Play className="h-5 w-5 text-primary" />
+                Testar IA com Arquivos
+              </CardTitle>
+              <CardDescription>
+                Envie mensagens de texto, imagens, PDFs, vídeos ou áudios para testar a capacidade da IA
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Inputs de arquivo ocultos */}
+              <input
+                type="file"
+                ref={imageInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={(e) => handleFileSelect(e, 'image')}
+              />
+              <input
+                type="file"
+                ref={pdfInputRef}
+                className="hidden"
+                accept=".pdf"
+                onChange={(e) => handleFileSelect(e, 'pdf')}
+              />
+              <input
+                type="file"
+                ref={videoInputRef}
+                className="hidden"
+                accept="video/*"
+                onChange={(e) => handleFileSelect(e, 'video')}
+              />
+              <input
+                type="file"
+                ref={audioInputRef}
+                className="hidden"
+                accept="audio/*"
+                onChange={(e) => handleFileSelect(e, 'audio')}
+              />
+
+              {/* Botões de anexo */}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="gap-2"
+                >
+                  <Image className="h-4 w-4" />
+                  Imagem
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => pdfInputRef.current?.click()}
+                  className="gap-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => videoInputRef.current?.click()}
+                  className="gap-2"
+                >
+                  <Video className="h-4 w-4" />
+                  Vídeo
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => audioInputRef.current?.click()}
+                  className="gap-2"
+                >
+                  <Mic className="h-4 w-4" />
+                  Áudio
+                </Button>
+              </div>
+
+              {/* Arquivos anexados */}
+              {testFiles.length > 0 && (
+                <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-muted/50">
+                  {testFiles.map((tf, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-background px-3 py-2 rounded-md border">
+                      {tf.type === 'image' && tf.preview && (
+                        <img src={tf.preview} alt="preview" className="h-8 w-8 object-cover rounded" />
+                      )}
+                      {tf.type === 'pdf' && <FileText className="h-5 w-5 text-red-500" />}
+                      {tf.type === 'video' && <Video className="h-5 w-5 text-blue-500" />}
+                      {tf.type === 'audio' && <Mic className="h-5 w-5 text-green-500" />}
+                      <span className="text-sm max-w-[150px] truncate">{tf.file.name}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => removeTestFile(idx)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Input de texto */}
+              <div className="flex gap-2">
+                <Textarea
+                  placeholder="Digite uma mensagem para testar a IA..."
+                  value={testMessage}
+                  onChange={(e) => setTestMessage(e.target.value)}
+                  className="min-h-[80px]"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleTestIA();
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Botões de ação */}
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={clearTestHistory} disabled={testHistory.length === 0}>
+                  Limpar Histórico
+                </Button>
+                <Button onClick={handleTestIA} disabled={testLoading}>
+                  {testLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processando...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Enviar
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Histórico de conversa */}
+          {testHistory.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Histórico do Teste</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[300px]">
+                  <div className="space-y-4">
+                    {testHistory.map((msg, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`max-w-[80%] p-3 rounded-lg ${
+                            msg.role === 'user'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted'
+                          }`}
+                        >
+                          {msg.files && msg.files.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-2">
+                              {msg.files.map((f, fidx) => (
+                                <Badge key={fidx} variant="secondary" className="text-xs">
+                                  {f.type === 'image' && <Image className="h-3 w-3 mr-1" />}
+                                  {f.type === 'pdf' && <FileText className="h-3 w-3 mr-1" />}
+                                  {f.type === 'video' && <Video className="h-3 w-3 mr-1" />}
+                                  {f.type === 'audio' && <Mic className="h-3 w-3 mr-1" />}
+                                  {f.file.name}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Capacidades da IA */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                Capacidades da IA
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <span>Mensagens de texto</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <span>Análise de imagens</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <AlertCircle className="h-4 w-4 text-yellow-500" />
+                  <span>PDFs (extração de texto)</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <AlertCircle className="h-4 w-4 text-yellow-500" />
+                  <span>Áudios (transcrição necessária)</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <AlertCircle className="h-4 w-4 text-yellow-500" />
+                  <span>Vídeos (frames + transcrição)</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="padroes" className="space-y-4 mt-4">
           <div className="flex justify-end">
