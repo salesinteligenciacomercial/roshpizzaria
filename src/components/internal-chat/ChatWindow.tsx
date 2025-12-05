@@ -177,49 +177,52 @@ export const ChatWindow = ({ conversation, currentUserId }: ChatWindowProps) => 
                 <Paperclip className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.accept = 'image/*';
-                  fileInputRef.current.click();
-                }
-              }}>
+            <DropdownMenuContent align="start" className="min-w-[150px]">
+              <DropdownMenuItem 
+                onClick={() => {
+                  if (fileInputRef.current) {
+                    fileInputRef.current.accept = 'image/*';
+                    fileInputRef.current.click();
+                  }
+                }}
+              >
                 <Image className="h-4 w-4 mr-2" />
                 Imagem
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.accept = 'video/*';
-                  fileInputRef.current.click();
-                }
-              }}>
+              <DropdownMenuItem 
+                onClick={() => {
+                  if (fileInputRef.current) {
+                    fileInputRef.current.accept = 'video/*';
+                    fileInputRef.current.click();
+                  }
+                }}
+              >
                 <Video className="h-4 w-4 mr-2" />
                 Vídeo
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.accept = '.pdf,.doc,.docx,.xls,.xlsx,.txt';
-                  fileInputRef.current.click();
-                }
-              }}>
-                <FileText className="h-4 w-4 mr-2" />
-                Documento
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => audioInputRef.current?.click()}>
+              <DropdownMenuItem 
+                onClick={() => audioInputRef.current?.click()}
+              >
                 <Mic className="h-4 w-4 mr-2" />
                 Áudio
               </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => {
+                  if (fileInputRef.current) {
+                    fileInputRef.current.accept = '.pdf,.doc,.docx,.xls,.xlsx,.txt';
+                    fileInputRef.current.click();
+                  }
+                }}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Documento
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowShareDialog(true)}>
+                <Share2 className="h-4 w-4 mr-2" />
+                Item do CRM
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="shrink-0"
-            onClick={() => setShowShareDialog(true)}
-          >
-            <Share2 className="h-5 w-5" />
-          </Button>
 
           <Textarea
             value={message}
