@@ -7,8 +7,9 @@ const corsHeaders = {
 };
 
 // ========================
-// ORQUESTRADOR CENTRAL DE IAS
-// Decide qual IA usar e executa ações automaticamente
+// ORQUESTRADOR CENTRAL DE IAs
+// Decide qual IA usar: atendimento ou agendamento
+// Vendas e suporte são tratados pelo atendimento
 // ========================
 
 interface ConversationContext {
@@ -29,68 +30,43 @@ interface AIResponse {
   nextAgent?: string;
 }
 
-// Detectar intenção da mensagem
+// Detectar intenção da mensagem - Simplificado para 2 agentes
 function detectIntent(message: string): {
   intent: string;
   confidence: number;
-  suggestedAgent: 'atendimento' | 'agendamento' | 'vendedora' | 'suporte';
+  suggestedAgent: 'atendimento' | 'agendamento';
 } {
   const msgLower = message.toLowerCase();
   
   // Intenções de AGENDAMENTO (alta prioridade)
   const agendamentoKeywords = [
-    'agendar', 'marcar', 'horário', 'horario', 'consulta', 'atendimento',
+    'agendar', 'marcar', 'horário', 'horario', 'consulta', 
     'disponível', 'disponivel', 'vaga', 'dia', 'data', 'quando',
     'desmarcar', 'cancelar', 'remarcar', 'alterar', 'mudar',
-    'agenda', 'compromisso', 'reunião', 'reuniao'
+    'agenda', 'compromisso', 'reunião', 'reuniao', 'visita'
   ];
   
   const agendamentoScore = agendamentoKeywords.filter(k => msgLower.includes(k)).length;
   
+  // Frases específicas de agendamento
   if (agendamentoScore >= 2 || 
       msgLower.includes('quero agendar') || 
       msgLower.includes('marcar horário') ||
       msgLower.includes('qual horário') ||
       msgLower.includes('tem vaga') ||
-      msgLower.includes('posso marcar')) {
+      msgLower.includes('posso marcar') ||
+      msgLower.includes('quero marcar') ||
+      msgLower.includes('remarcar para') ||
+      msgLower.includes('cancelar meu')) {
     return { intent: 'agendamento', confidence: 0.9, suggestedAgent: 'agendamento' };
   }
   
-  // Intenções de VENDAS
-  const vendasKeywords = [
-    'preço', 'preco', 'valor', 'quanto custa', 'orçamento', 'orcamento',
-    'comprar', 'adquirir', 'contratar', 'plano', 'pacote',
-    'desconto', 'promoção', 'promocao', 'oferta', 'condição', 'condicao',
-    'parcelar', 'pagamento', 'pagar'
-  ];
-  
-  const vendasScore = vendasKeywords.filter(k => msgLower.includes(k)).length;
-  
-  if (vendasScore >= 2 || 
-      msgLower.includes('quanto é') ||
-      msgLower.includes('qual o valor') ||
-      msgLower.includes('me passa o preço')) {
-    return { intent: 'vendas', confidence: 0.85, suggestedAgent: 'vendedora' };
-  }
-  
-  // Intenções de SUPORTE
-  const suporteKeywords = [
-    'problema', 'erro', 'não funciona', 'não consigo', 'ajuda',
-    'dúvida', 'duvida', 'como faço', 'como faco', 'reclamação', 'reclamacao',
-    'devolver', 'devolução', 'reembolso', 'trocar', 'troca'
-  ];
-  
-  const suporteScore = suporteKeywords.filter(k => msgLower.includes(k)).length;
-  
-  if (suporteScore >= 2) {
-    return { intent: 'suporte', confidence: 0.8, suggestedAgent: 'suporte' };
-  }
-  
-  // Default: Atendimento (pré-atendimento/qualificação)
-  return { intent: 'atendimento', confidence: 0.7, suggestedAgent: 'atendimento' };
+  // Tudo mais vai para atendimento (vendas, suporte, qualificação, etc)
+  // O agente de atendimento é polivalente e trata todos os casos
+  return { intent: 'atendimento', confidence: 0.85, suggestedAgent: 'atendimento' };
 }
 
-// Chamar uma IA específica
+// Chamar uma IA específica com timeout
 async function callAgent(
   agent: string, 
   context: ConversationContext,
@@ -101,6 +77,8 @@ async function callAgent(
   console.log(`🤖 [ORCHESTRATOR] Chamando agente: ${agent}`);
   
   const functionName = `ia-${agent}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
   
   try {
     const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
@@ -114,8 +92,11 @@ async function callAgent(
         message: context.message,
         leadData: context.leadData,
         companyId: context.companyId
-      })
+      }),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -134,7 +115,14 @@ async function callAgent(
       nextAgent: result.nextAgent
     };
   } catch (error: any) {
-    console.error(`❌ Erro no agente ${agent}:`, error);
+    clearTimeout(timeoutId);
+    
+    if (error.name === 'AbortError') {
+      console.error(`⏱️ Timeout ao chamar agente ${agent}`);
+    } else {
+      console.error(`❌ Erro no agente ${agent}:`, error);
+    }
+    
     return {
       response: 'Desculpe, estou com dificuldades técnicas. Um atendente humano irá te ajudar em breve.',
       agentUsed: agent,
@@ -194,7 +182,7 @@ serve(async (req) => {
       numero,
       leadData, 
       companyId,
-      forceAgent, // Forçar uso de um agente específico
+      forceAgent, // Forçar uso de um agente específico (atendimento ou agendamento)
       autoExecute = true // Executar ações automaticamente
     } = body;
     
@@ -220,9 +208,14 @@ serve(async (req) => {
       lead = leadFound;
     }
     
-    // Detectar intenção PRIMEIRO
+    // Detectar intenção
     const { intent, confidence, suggestedAgent } = detectIntent(message);
-    const agentToUse = forceAgent || suggestedAgent;
+    
+    // Validar agente forçado (só aceita atendimento ou agendamento)
+    let agentToUse = suggestedAgent;
+    if (forceAgent && (forceAgent === 'atendimento' || forceAgent === 'agendamento')) {
+      agentToUse = forceAgent;
+    }
     
     console.log('🎯 [ORCHESTRATOR] Intenção detectada:', { intent, confidence, agentToUse });
     
@@ -233,7 +226,7 @@ serve(async (req) => {
       .eq('company_id', companyId)
       .maybeSingle();
     
-    // Se IA não está configurada ou desabilitada globalmente, retornar null
+    // Se IA não está configurada ou desabilitada globalmente, retornar
     if (!iaConfig || !iaConfig.learning_mode) {
       console.log('⚠️ [ORCHESTRATOR] IA não ativada para empresa:', companyId);
       return new Response(
@@ -251,17 +244,26 @@ serve(async (req) => {
     
     if (!agentConfig || agentConfig.enabled !== true) {
       console.log(`⚠️ [ORCHESTRATOR] Agente ${agentToUse} desabilitado para empresa:`, companyId);
-      return new Response(
-        JSON.stringify({ 
-          active: false, 
-          message: `Agente ${agentToUse} não está ativado` 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      
+      // Tentar fallback para o outro agente
+      const fallbackAgent = agentToUse === 'atendimento' ? 'agendamento' : 'atendimento';
+      const fallbackConfig = customPrompts[fallbackAgent];
+      
+      if (fallbackConfig && fallbackConfig.enabled === true) {
+        console.log(`🔄 [ORCHESTRATOR] Usando fallback: ${fallbackAgent}`);
+        agentToUse = fallbackAgent as 'atendimento' | 'agendamento';
+      } else {
+        return new Response(
+          JSON.stringify({ 
+            active: false, 
+            message: `Nenhum agente de IA está ativado` 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
     
     console.log(`✅ [ORCHESTRATOR] Agente ${agentToUse} ativado - processando...`);
-    
     
     // Contexto da conversa
     const context: ConversationContext = {
@@ -282,7 +284,6 @@ serve(async (req) => {
       
       // Ações de qualificação
       if (action === 'QUALIFICAR' && lead?.id) {
-        // Detectar informações na mensagem para qualificar
         const qualResult = await executeCRMAction('qualificar_lead', {
           lead_id: lead.id,
           qualificacao: {
@@ -352,4 +353,3 @@ serve(async (req) => {
     );
   }
 });
-
