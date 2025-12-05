@@ -245,7 +245,7 @@ function Conversas() {
   
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
-  const [filter, setFilter] = useState<"all" | "waiting" | "answered" | "resolved" | "group">("all");
+  const [filter, setFilter] = useState<"all" | "waiting" | "answered" | "resolved" | "group" | "responsible" | "transferred">("all");
   const [searchTerm, setSearchTerm] = useState("");
   // MELHORIA: Estado para busca debounced (otimização de performance)
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -797,6 +797,21 @@ function Conversas() {
         if (conv.isGroup === true) return false; // Excluir grupos
         return conv.status === 'resolved';
       });
+    } else if (filter === "responsible") {
+      // ✅ Filtro "Responsável": Conversas onde o usuário atual é responsável pelo contato/lead
+      filtered = filtered.filter((conv) => {
+        if (conv.isGroup === true) return false; // Excluir grupos
+        // Verificar se o usuário atual é responsável (via responsavel ou assignedUser)
+        return conv.responsavel === currentUserId || 
+               (conv.assignedUser?.id === currentUserId);
+      });
+    } else if (filter === "transferred") {
+      // ✅ Filtro "Transferência": Conversas que foram transferidas para o usuário atual
+      filtered = filtered.filter((conv) => {
+        if (conv.isGroup === true) return false; // Excluir grupos
+        // Verificar se tem atribuição de usuário (foi transferida)
+        return conv.assignedUser?.id === currentUserId;
+      });
     }
 
     console.log('📊 [DEBUG] Após filtro de status:', filtered.length);
@@ -832,7 +847,7 @@ function Conversas() {
     // ⚡ CORREÇÃO CRÍTICA: REMOVER limite de exibição - todas as conversas devem ser exibidas
     // Todas as conversas do WhatsApp precisam aparecer no CRM
     return filtered; // Removido .slice(0, conversationsLimit) para exibir TODAS as conversas
-  }, [conversations, filter, debouncedSearchTerm]);
+  }, [conversations, filter, debouncedSearchTerm, currentUserId, blockedGroups]);
 
   // Mensagens exibidas: sempre refletir state atual da conversa selecionada (evitar cache obsoleto)
   // ⚡ CORREÇÃO: Não limitar mensagens exibidas - mostrar todas para preservar histórico
@@ -7590,6 +7605,38 @@ function Conversas() {
                 </Badge>
               )}
               <span>Grupos</span>
+            </Button>
+            <Button
+              variant={filter === "responsible" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setFilter("responsible")}
+              className="relative flex flex-col items-center gap-0.5 h-auto py-1.5"
+            >
+              {conversations.filter(c => !c.isGroup && (c.responsavel === currentUserId || c.assignedUser?.id === currentUserId)).length > 0 && (
+                <Badge 
+                  variant="secondary" 
+                  className="bg-green-500 hover:bg-green-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs"
+                >
+                  {conversations.filter(c => !c.isGroup && (c.responsavel === currentUserId || c.assignedUser?.id === currentUserId)).length}
+                </Badge>
+              )}
+              <span>Responsável</span>
+            </Button>
+            <Button
+              variant={filter === "transferred" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setFilter("transferred")}
+              className="relative flex flex-col items-center gap-0.5 h-auto py-1.5"
+            >
+              {conversations.filter(c => !c.isGroup && c.assignedUser?.id === currentUserId).length > 0 && (
+                <Badge 
+                  variant="secondary" 
+                  className="bg-purple-500 hover:bg-purple-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs"
+                >
+                  {conversations.filter(c => !c.isGroup && c.assignedUser?.id === currentUserId).length}
+                </Badge>
+              )}
+              <span>Transferência</span>
             </Button>
           </div>
         </div>
