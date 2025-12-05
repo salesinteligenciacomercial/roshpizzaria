@@ -1,7 +1,7 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Download, X, FileText } from 'lucide-react';
-import { useState } from 'react';
+import { Download, X, FileText, Music } from 'lucide-react';
+import { PDFViewer } from './PDFViewer';
 
 interface MediaPreviewDialogProps {
   open: boolean;
@@ -18,7 +18,6 @@ export const MediaPreviewDialog = ({
   mediaType,
   fileName
 }: MediaPreviewDialogProps) => {
-  const [pdfError, setPdfError] = useState(false);
 
   const handleDownload = () => {
     const a = document.createElement('a');
@@ -55,7 +54,7 @@ export const MediaPreviewDialog = ({
         return (
           <div className="flex flex-col items-center gap-4 p-8">
             <div className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center">
-              <FileText className="w-12 h-12 text-primary" />
+              <Music className="w-12 h-12 text-primary" />
             </div>
             <p className="text-sm text-muted-foreground">{fileName || 'Áudio'}</p>
             <audio
@@ -70,24 +69,8 @@ export const MediaPreviewDialog = ({
       case 'pdf':
       case 'document':
         return (
-          <div className="w-full h-[70vh] flex flex-col">
-            {!pdfError ? (
-              <iframe
-                src={`${mediaUrl}#toolbar=1`}
-                className="w-full h-full rounded-lg border-0"
-                title={fileName || 'Documento'}
-                onError={() => setPdfError(true)}
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full gap-4">
-                <FileText className="w-16 h-16 text-muted-foreground" />
-                <p className="text-muted-foreground">Não foi possível visualizar o documento</p>
-                <Button onClick={handleDownload} variant="outline">
-                  <Download className="w-4 h-4 mr-2" />
-                  Baixar documento
-                </Button>
-              </div>
-            )}
+          <div className="w-full h-[70vh]">
+            <PDFViewer url={mediaUrl} />
           </div>
         );
 
