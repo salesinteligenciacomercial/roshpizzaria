@@ -1045,14 +1045,16 @@ function Conversas() {
     }
   }, [cachedConversations]);
 
-  // ✅ SINCRONIZAÇÃO REALTIME: Escutar novas mensagens e atualizações
+  // ✅ SINCRONIZAÇÃO REALTIME MULTI-USER: Escutar novas mensagens e atualizações em tempo real
   useEffect(() => {
     if (!userCompanyId) return;
 
-    console.log('🔴 [REALTIME] Iniciando escuta de mensagens em tempo real...');
+    // ⚡ CRÍTICO MULTI-USER: Usar channel name único por sessão para evitar conflitos entre usuários
+    const uniqueChannelId = `conversas-realtime-${userCompanyId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    console.log('🔴 [REALTIME-MULTIUSER] Iniciando escuta com canal único:', uniqueChannelId);
     
     const channel = supabase
-      .channel('conversas-realtime')
+      .channel(uniqueChannelId)
       .on(
         'postgres_changes',
         {
@@ -1062,41 +1064,42 @@ function Conversas() {
           filter: `company_id=eq.${userCompanyId}`
         },
         async (payload) => {
-          console.log('📨 [REALTIME] Nova mensagem recebida:', payload);
+          const newData = payload.new as any;
+          console.log('📨 [REALTIME-MULTIUSER] Evento recebido:', payload.eventType, '- ID:', newData?.id);
           
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const novaMensagem = payload.new;
             
-            // Validar company_id e telefone
+            // Validar company_id
             if (novaMensagem.company_id !== userCompanyId) {
-              console.warn('⚠️ [REALTIME] Mensagem de outra company ignorada');
+              console.warn('⚠️ [REALTIME-MULTIUSER] Mensagem de outra company ignorada');
               return;
             }
             
             const telefone = (novaMensagem.telefone_formatado || novaMensagem.numero || '').replace(/[^0-9]/g, '');
             if (telefone.length < 11 || telefone.length > 13) {
-              console.warn('⚠️ [REALTIME] Telefone inválido ignorado:', telefone);
+              console.warn('⚠️ [REALTIME-MULTIUSER] Telefone inválido ignorado:', telefone);
               return;
             }
             
             const isFromMe = novaMensagem.fromme === true || String(novaMensagem.fromme) === 'true';
             
-            // ⚡ FASE 1: Buscar sent_by do banco (permanente) ou buscar do owner_id se necessário
+            // ⚡ MULTI-USER: Buscar sent_by do banco - CRÍTICO para saber qual colega enviou
             let sentBy = novaMensagem.sent_by || undefined;
             
-            // Se não tem sent_by mas tem owner_id, buscar nome do usuário
+            // Se não tem sent_by mas tem owner_id, buscar nome do usuário (pode ser outro colega)
             if (!sentBy && novaMensagem.owner_id && isFromMe) {
               const { data: profile } = await supabase
                 .from('profiles')
                 .select('full_name')
                 .eq('id', novaMensagem.owner_id)
                 .single();
-              sentBy = profile?.full_name;
+              sentBy = profile?.full_name || 'Colega';
             }
             
-            console.log('🔍 [REALTIME] Usando sent_by:', sentBy);
+            console.log('🔍 [REALTIME-MULTIUSER] Mensagem de:', sentBy || (isFromMe ? 'Usuário' : 'Contato'), '| owner_id:', novaMensagem.owner_id);
             
-            // ⚡ CORREÇÃO: Mapear tipos de mensagem corretamente (document → pdf)
+            // Mapear tipos de mensagem corretamente
             const tipoMensagem = novaMensagem.tipo_mensagem === 'texto' ? 'text' :
                                 novaMensagem.tipo_mensagem === 'image' ? 'image' :
                                 novaMensagem.tipo_mensagem === 'audio' ? 'audio' :
@@ -1122,55 +1125,48 @@ function Conversas() {
               sentBy: sentBy,
             };
             
-            console.log('📨 [REALTIME] Mensagem criada com sentBy:', {
-              id: novaMensagemObj.id,
-              sender: novaMensagemObj.sender,
-              sentBy: novaMensagemObj.sentBy,
-              owner_id: novaMensagem.owner_id
-            });
-            
-            // ⚡ CRÍTICO: Atualizar conversa selecionada em tempo real
+            // ⚡ CRÍTICO MULTI-USER: Atualizar conversa selecionada em tempo real para TODOS
             setSelectedConv(prevSelected => {
               if (!prevSelected) return prevSelected;
               
               // Verificar se a mensagem pertence à conversa selecionada
               const telSelected = (prevSelected.phoneNumber || prevSelected.id || '').replace(/[^0-9]/g, '');
               if (telSelected === telefone) {
-                // Verificar se mensagem já existe
+                // ⚡ DEDUPLICAÇÃO: Verificar se mensagem já existe por ID
                 const mensagemJaExiste = prevSelected.messages.some(m => m.id === novaMensagem.id);
-                if (!mensagemJaExiste) {
-                  console.log('✅ [REALTIME] Atualizando conversa SELECIONADA com nova mensagem');
-                  
-                  const novasMensagens = [...prevSelected.messages, novaMensagemObj].sort((a, b) => {
-                    const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-                    const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-                    return timeA - timeB;
-                  });
-                  
-                  // Atualizar status baseado na última mensagem
-                  // ⚡ CORREÇÃO: Se conversa estava 'resolved' e contato enviou mensagem, mover para 'waiting'
-                  let novoStatus: "waiting" | "answered" | "resolved" = prevSelected.status;
-                  if (novaMensagemObj.sender === 'user') {
-                    novoStatus = 'answered';
-                  } else if (novaMensagemObj.sender === 'contact') {
-                    // ⚡ CRÍTICO: Sempre mudar para 'waiting' quando contato envia mensagem
-                    // Isso inclui conversas que estavam 'resolved' - contato respondeu!
-                    novoStatus = 'waiting';
-                  }
-                  
-                  return {
-                    ...prevSelected,
-                    messages: novasMensagens,
-                    lastMessage: novaMensagem.mensagem || '',
-                    status: novoStatus,
-                    unread: novaMensagemObj.sender === 'contact' ? (prevSelected.unread || 0) + 1 : 0,
-                  };
+                if (mensagemJaExiste) {
+                  console.log('⚠️ [REALTIME-MULTIUSER] Mensagem duplicada ignorada:', novaMensagem.id);
+                  return prevSelected;
                 }
+                
+                console.log('✅ [REALTIME-MULTIUSER] Atualizando conversa selecionada para TODOS os usuários');
+                
+                const novasMensagens = [...prevSelected.messages, novaMensagemObj].sort((a, b) => {
+                  const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+                  const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+                  return timeA - timeB;
+                });
+                
+                // ⚡ MULTI-USER: Status correto - QUALQUER colega que responde = Em Atendimento
+                let novoStatus: "waiting" | "answered" | "resolved" = prevSelected.status;
+                if (novaMensagemObj.sender === 'user') {
+                  novoStatus = 'answered'; // Qualquer colega respondeu = Em Atendimento
+                } else if (novaMensagemObj.sender === 'contact') {
+                  novoStatus = 'waiting'; // Contato enviou = Aguardando
+                }
+                
+                return {
+                  ...prevSelected,
+                  messages: novasMensagens,
+                  lastMessage: novaMensagem.mensagem || '',
+                  status: novoStatus,
+                  unread: novaMensagemObj.sender === 'contact' ? (prevSelected.unread || 0) + 1 : 0,
+                };
               }
               return prevSelected;
             });
             
-            // Atualizar lista de conversas
+            // ⚡ CRÍTICO MULTI-USER: Atualizar lista de conversas para TODOS os usuários da empresa
             setConversations(prev => {
               const telefoneKey = telefone;
               const conversaExistente = prev.find(c => {
@@ -1179,75 +1175,66 @@ function Conversas() {
               });
               
               if (conversaExistente) {
-                // Atualizar conversa existente
+                // ⚡ DEDUPLICAÇÃO: Verificar se mensagem já existe por ID
                 const mensagemJaExiste = conversaExistente.messages.some(m => m.id === novaMensagem.id);
                 
-                if (!mensagemJaExiste) {
-                  console.log('✅ [REALTIME] Adicionando mensagem à conversa existente:', conversaExistente.contactName);
-                  
-                  return prev.map(conv => {
-                    if (conv.id === conversaExistente.id) {
-                      const novasMensagens = [...conv.messages, novaMensagemObj].sort((a, b) => {
-                        const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-                        const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-                        return timeA - timeB;
-                      });
-                      
-                      // Atualizar status baseado na última mensagem
-                      // ⚡ CORREÇÃO CRÍTICA: Se contato envia mensagem, SEMPRE mudar status
-                      // Isso inclui conversas 'resolved' - contato respondeu = volta para 'waiting'
-                      let novoStatus: "waiting" | "answered" | "resolved" = conv.status;
-                      if (novaMensagemObj.sender === 'user') {
-                        novoStatus = 'answered';
-                      } else if (novaMensagemObj.sender === 'contact') {
-                        // ⚡ CRÍTICO: Contato enviou mensagem = conversa volta a precisar de atenção
-                        // Verificar se o usuário respondeu recentemente (conversa ao vivo)
-                        const TEMPO_CONVERSA_AO_VIVO = 10 * 60 * 1000; // 10 minutos
-                        const agora = Date.now();
-                        
-                        // Buscar última mensagem do usuário nas mensagens atualizadas
-                        const ultimaMsgUsuario = novasMensagens
-                          .filter(m => m.sender === 'user')
-                          .sort((a, b) => {
-                            const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-                            const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-                            return timeB - timeA;
-                          })[0];
-                        
-                        if (ultimaMsgUsuario) {
-                          const tempoUltimaResposta = ultimaMsgUsuario.timestamp instanceof Date 
-                            ? ultimaMsgUsuario.timestamp.getTime() 
-                            : new Date(ultimaMsgUsuario.timestamp).getTime();
-                          
-                          const usuarioRespondeuRecentemente = (agora - tempoUltimaResposta) < TEMPO_CONVERSA_AO_VIVO;
-                          
-                          if (usuarioRespondeuRecentemente) {
-                            novoStatus = 'answered'; // Manter em atendimento (conversa ao vivo)
-                          } else {
-                            novoStatus = 'waiting'; // Usuário não respondeu recentemente
-                          }
-                        } else {
-                          novoStatus = 'waiting'; // Sem resposta do usuário
-                        }
-                      }
-                      
-                      return {
-                        ...conv,
-                        messages: novasMensagens,
-                        lastMessage: novaMensagem.mensagem || '',
-                        status: novoStatus,
-                        unread: novaMensagemObj.sender === 'contact' ? (conv.unread || 0) + 1 : 0,
-                      };
-                    }
-                    return conv;
-                  });
-                } else {
-                  console.log('⚠️ [REALTIME] Mensagem duplicada ignorada:', novaMensagem.id);
+                if (mensagemJaExiste) {
+                  console.log('⚠️ [REALTIME-MULTIUSER] Mensagem duplicada na lista, ignorando:', novaMensagem.id);
                   return prev;
                 }
+                
+                console.log('✅ [REALTIME-MULTIUSER] Adicionando mensagem à conversa para TODOS:', conversaExistente.contactName);
+                
+                return prev.map(conv => {
+                  if (conv.id === conversaExistente.id) {
+                    const novasMensagens = [...conv.messages, novaMensagemObj].sort((a, b) => {
+                      const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+                      const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+                      return timeA - timeB;
+                    });
+                    
+                    // ⚡ MULTI-USER: Status correto - QUALQUER colega que responde = Em Atendimento
+                    let novoStatus: "waiting" | "answered" | "resolved" = conv.status;
+                    if (novaMensagemObj.sender === 'user') {
+                      novoStatus = 'answered'; // Qualquer colega respondeu = Em Atendimento
+                    } else if (novaMensagemObj.sender === 'contact') {
+                      // Verificar conversa ao vivo
+                      const TEMPO_CONVERSA_AO_VIVO = 10 * 60 * 1000;
+                      const agora = Date.now();
+                      
+                      const ultimaMsgUsuario = novasMensagens
+                        .filter(m => m.sender === 'user')
+                        .sort((a, b) => {
+                          const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+                          const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+                          return timeB - timeA;
+                        })[0];
+                      
+                      if (ultimaMsgUsuario) {
+                        const tempoUltimaResposta = ultimaMsgUsuario.timestamp instanceof Date 
+                          ? ultimaMsgUsuario.timestamp.getTime() 
+                          : new Date(ultimaMsgUsuario.timestamp).getTime();
+                        
+                        const usuarioRespondeuRecentemente = (agora - tempoUltimaResposta) < TEMPO_CONVERSA_AO_VIVO;
+                        novoStatus = usuarioRespondeuRecentemente ? 'answered' : 'waiting';
+                      } else {
+                        novoStatus = 'waiting';
+                      }
+                    }
+                    
+                    return {
+                      ...conv,
+                      messages: novasMensagens,
+                      lastMessage: novaMensagem.mensagem || '',
+                      status: novoStatus,
+                      unread: novaMensagemObj.sender === 'contact' ? (conv.unread || 0) + 1 : 0,
+                    };
+                  }
+                  return conv;
+                });
               } else {
-                // Criar nova conversa
-                console.log('✅ [REALTIME] Criando nova conversa para:', telefoneKey);
+                // Criar nova conversa para TODOS os usuários
+                console.log('✅ [REALTIME-MULTIUSER] Criando nova conversa para TODOS:', telefoneKey);
                 
                 const novaConversa: Conversation = {
                   id: novaMensagem.lead_id || `conv-${telefoneKey}`,
@@ -1302,21 +1289,20 @@ function Conversas() {
         }
       )
       .subscribe((status) => {
-        console.log('🔴 [REALTIME] Status da conexão:', status);
-        // ✅ FASE 4: Atualizar status de conexão
+        console.log('🔴 [REALTIME-MULTIUSER] Status da conexão:', status);
         if (status === 'SUBSCRIBED') {
           setRealtimeConnectionStatus('connected');
           setRealtimeReconnectAttempts(0);
+          console.log('✅ [REALTIME-MULTIUSER] Conectado - sincronização multi-user ativa');
         } else if (status === 'CHANNEL_ERROR') {
           setRealtimeConnectionStatus('error');
         } else if (status === 'CLOSED') {
           setRealtimeConnectionStatus('disconnected');
         } else if (status === 'TIMED_OUT') {
           setRealtimeConnectionStatus('disconnected');
-          // ✅ FASE 2: Reconexão automática com backoff exponencial
           if (realtimeReconnectAttempts < 5) {
             const delay = Math.min(1000 * Math.pow(2, realtimeReconnectAttempts), 30000);
-            console.log(`🔄 [REALTIME] Tentando reconectar em ${delay}ms (tentativa ${realtimeReconnectAttempts + 1})`);
+            console.log(`🔄 [REALTIME-MULTIUSER] Reconectando em ${delay}ms (tentativa ${realtimeReconnectAttempts + 1})`);
             setRealtimeReconnectAttempts(prev => prev + 1);
             setTimeout(() => {
               setRealtimeConnectionStatus('connecting');
@@ -1325,20 +1311,18 @@ function Conversas() {
         }
       });
     
-    // Status inicial já é 'connected' para UX instantânea
-    
     return () => {
-      console.log('🔴 [REALTIME] Desconectando canal de realtime...');
+      console.log('🔴 [REALTIME-MULTIUSER] Desconectando canal...');
       setRealtimeConnectionStatus('disconnected');
       supabase.removeChannel(channel);
     };
   }, [userCompanyId, realtimeReconnectAttempts]);
 
-  // ✅ SINCRONIZAÇÃO AUTOMÁTICA a cada 30 segundos (backup do realtime)
+  // ✅ SINCRONIZAÇÃO MULTI-USER: Backup a cada 30s para garantir consistência entre usuários
   useEffect(() => {
     if (userCompanyId && !loadingConversations) {
       const syncTimer = setInterval(() => {
-        console.log('🔄 [AUTO-SYNC] Sincronização backup (30s)...');
+        console.log('🔄 [MULTIUSER-SYNC] Sincronização backup (30s)...');
         loadInitialConversations();
       }, 30000);
       
