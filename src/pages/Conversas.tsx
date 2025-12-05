@@ -7160,7 +7160,7 @@ function Conversas() {
             </div> : filteredConversations.length === 0 ? <div className="flex flex-col items-center justify-center h-64 gap-3">
               <MessageSquare className="h-12 w-12 text-muted-foreground/50" />
               <p className="text-sm text-muted-foreground">Nenhuma conversa encontrada</p>
-            </div> : filteredConversations.map(conv => <ConversationListItem key={conv.id} contactName={conv.contactName} channel={conv.channel} lastMessage={conv.lastMessage} timestamp={new Date(conv.messages[conv.messages.length - 1]?.timestamp)} unread={conv.unread} isSelected={selectedConv?.id === conv.id} avatarUrl={conv.avatarUrl} tags={conv.tags} responsavel={conv.responsavel} funnelStage={conv.funnelStage} valor={conv.valor} conversationId={conv.id} leadId={leadsVinculados[conv.id] || leadsVinculados[safeFormatPhoneNumber(conv.id)]} isGroup={conv.isGroup} isBlocked={blockedGroups.has(conv.phoneNumber || conv.id)} assignedUser={conv.assignedUser} status={conv.status} lastRespondedBy={(() => {
+            </div> : filteredConversations.map(conv => <ConversationListItem key={conv.id} contactName={conv.contactName} channel={conv.channel} lastMessage={conv.lastMessage} timestamp={new Date(conv.messages[conv.messages.length - 1]?.timestamp)} unread={conv.unread} isSelected={selectedConv?.id === conv.id} avatarUrl={conv.avatarUrl} tags={conv.tags} responsavel={conv.assignedUser?.name} funnelStage={conv.funnelStage} valor={conv.valor} conversationId={conv.id} leadId={leadsVinculados[conv.id] || leadsVinculados[safeFormatPhoneNumber(conv.id)]} isGroup={conv.isGroup} isBlocked={blockedGroups.has(conv.phoneNumber || conv.id)} assignedUser={conv.assignedUser} status={conv.status} lastRespondedBy={(() => {
           // ⚡ Buscar última mensagem enviada pelo usuário para mostrar quem respondeu
           const userMessages = conv.messages.filter(m => m.sender === "user");
           if (userMessages.length > 0) {
@@ -7574,7 +7574,7 @@ function Conversas() {
                     </div>
 
                     {/* Responsáveis */}
-                    <ResponsaveisManager leadId={leadsVinculados[selectedConv.id] || leadsVinculados[safeFormatPhoneNumber(selectedConv.id)] || null} responsaveisAtuais={selectedConv.responsavel ? [selectedConv.responsavel] : []} onResponsaveisUpdated={responsaveis => {
+                    <ResponsaveisManager leadId={leadsVinculados[selectedConv.id] || leadsVinculados[safeFormatPhoneNumber(selectedConv.id)] || null} responsaveisAtuais={selectedConv.assignedUser?.name ? [selectedConv.assignedUser.name] : []} onResponsaveisUpdated={responsaveis => {
                 console.log('👥 Responsáveis atualizados:', responsaveis);
                 setConversations(prev => prev.map(conv => conv.id === selectedConv.id ? {
                   ...conv,

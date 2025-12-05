@@ -22,11 +22,56 @@ export function ResponsaveisManager({
   const [open, setOpen] = useState(false);
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [novoResponsavel, setNovoResponsavel] = useState("");
-  const [responsaveis, setResponsaveis] = useState<string[]>(responsaveisAtuais);
+  const [responsaveis, setResponsaveis] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Função para verificar se é UUID
+  const isUUID = (str: string) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  };
+
+  // Converter UUIDs para nomes quando responsaveisAtuais mudar
   useEffect(() => {
-    setResponsaveis(responsaveisAtuais);
+    const convertToNames = async () => {
+      if (!responsaveisAtuais || responsaveisAtuais.length === 0) {
+        setResponsaveis([]);
+        return;
+      }
+
+      // Verificar se são UUIDs
+      const uuids = responsaveisAtuais.filter(isUUID);
+      const names = responsaveisAtuais.filter(r => !isUUID(r));
+
+      if (uuids.length === 0) {
+        // Não há UUIDs, usar os nomes diretamente
+        setResponsaveis(responsaveisAtuais);
+        return;
+      }
+
+      // Buscar nomes dos UUIDs
+      try {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', uuids);
+
+        if (profiles) {
+          const convertedNames = uuids.map(uuid => {
+            const profile = profiles.find(p => p.id === uuid);
+            return profile?.full_name || profile?.email || uuid;
+          });
+          setResponsaveis([...names, ...convertedNames]);
+        } else {
+          setResponsaveis(responsaveisAtuais);
+        }
+      } catch (error) {
+        console.error('Erro ao converter UUIDs para nomes:', error);
+        setResponsaveis(responsaveisAtuais);
+      }
+    };
+
+    convertToNames();
   }, [responsaveisAtuais]);
 
   useEffect(() => {
