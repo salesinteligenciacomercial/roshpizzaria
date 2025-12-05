@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Auth from "./pages/Auth";
 import Analytics from "./pages/Analytics";
-import Dashboard from "./pages/Dashboard"; // Mantido para compatibilidade
+import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
 import Kanban from "./pages/Kanban";
 import Conversas from "./pages/Conversas";
@@ -15,6 +15,7 @@ import Tarefas from "./pages/Tarefas";
 import IA from "./pages/IA";
 import Configuracoes from "./pages/Configuracoes";
 import Relatorios from "./pages/Relatorios";
+import ChatInterno from "./pages/ChatInterno";
 import { MainLayout } from "./components/layout/MainLayout";
 import NotFound from "./pages/NotFound";
 import { Component, ErrorInfo, ReactNode } from 'react';
@@ -73,6 +74,7 @@ const App = () => (
               <Route path="ia" element={<IA />} />
               <Route path="relatorios" element={<Relatorios />} />
               <Route path="configuracoes" element={<Configuracoes />} />
+              <Route path="chat-equipe" element={<ChatInterno />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
