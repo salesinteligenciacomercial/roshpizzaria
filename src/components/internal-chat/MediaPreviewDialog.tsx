@@ -1,7 +1,8 @@
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Download, X, FileText, Music } from 'lucide-react';
+import { Download, X, Music } from 'lucide-react';
 import { PDFViewer } from './PDFViewer';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 interface MediaPreviewDialogProps {
   open: boolean;
@@ -82,6 +83,9 @@ export const MediaPreviewDialog = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] p-0 overflow-hidden">
+        <VisuallyHidden>
+          <DialogTitle>{fileName || 'Arquivo'}</DialogTitle>
+        </VisuallyHidden>
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b bg-background">

@@ -1,70 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import { Document, Page, pdfjs } from 'react-pdf';
 import { FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import * as pdfjsLib from 'pdfjs-dist';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
 
 // Configure worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface PDFViewerProps {
   url: string;
 }
 
 export const PDFViewer = ({ url }: PDFViewerProps) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [numPages, setNumPages] = useState(0);
-  const [scale, setScale] = useState(1.2);
+  const [scale, setScale] = useState(1.0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-
-  useEffect(() => {
-    const loadPDF = async () => {
-      try {
-        setLoading(true);
-        setError(false);
-        const loadingTask = pdfjsLib.getDocument(url);
-        const pdfDoc = await loadingTask.promise;
-        setPdf(pdfDoc);
-        setNumPages(pdfDoc.numPages);
-        setLoading(false);
-      } catch (err) {
-        console.error('Error loading PDF:', err);
-        setError(true);
-        setLoading(false);
-      }
-    };
-
-    loadPDF();
-  }, [url]);
-
-  useEffect(() => {
-    const renderPage = async () => {
-      if (!pdf || !canvasRef.current) return;
-
-      try {
-        const page = await pdf.getPage(currentPage);
-        const canvas = canvasRef.current;
-        const context = canvas.getContext('2d');
-        if (!context) return;
-
-        const viewport = page.getViewport({ scale });
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
-        await page.render({
-          canvasContext: context,
-          viewport,
-          canvas: canvas,
-        }).promise;
-      } catch (err) {
-        console.error('Error rendering page:', err);
-      }
-    };
-
-    renderPage();
-  }, [pdf, currentPage, scale]);
 
   const goToPrevPage = () => {
     if (currentPage > 1) setCurrentPage(currentPage - 1);
@@ -81,17 +34,6 @@ export const PDFViewer = ({ url }: PDFViewerProps) => {
   const zoomOut = () => {
     setScale(prev => Math.max(prev - 0.2, 0.5));
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="animate-pulse flex flex-col items-center gap-2">
-          <FileText className="w-16 h-16 text-muted-foreground" />
-          <p className="text-muted-foreground">Carregando PDF...</p>
-        </div>
-      </div>
-    );
-  }
 
   if (error) {
     return (
@@ -116,7 +58,7 @@ export const PDFViewer = ({ url }: PDFViewerProps) => {
             <ChevronLeft className="w-4 h-4" />
           </Button>
           <span className="text-sm min-w-[80px] text-center">
-            {currentPage} / {numPages}
+            {currentPage} / {numPages || '...'}
           </span>
           <Button
             variant="outline"
@@ -151,9 +93,35 @@ export const PDFViewer = ({ url }: PDFViewerProps) => {
         </div>
       </div>
 
-      {/* Canvas */}
+      {/* Document */}
       <div className="flex-1 overflow-auto flex items-start justify-center p-4">
-        <canvas ref={canvasRef} className="shadow-lg rounded" />
+        {loading && (
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-pulse flex flex-col items-center gap-2">
+              <FileText className="w-16 h-16 text-muted-foreground" />
+              <p className="text-muted-foreground">Carregando PDF...</p>
+            </div>
+          </div>
+        )}
+        <Document
+          file={url}
+          onLoadSuccess={({ numPages }) => {
+            setNumPages(numPages);
+            setLoading(false);
+          }}
+          onLoadError={() => {
+            setError(true);
+            setLoading(false);
+          }}
+          loading={null}
+          className={loading ? 'hidden' : ''}
+        >
+          <Page 
+            pageNumber={currentPage} 
+            scale={scale}
+            className="shadow-lg rounded"
+          />
+        </Document>
       </div>
     </div>
   );
