@@ -260,6 +260,70 @@ export const useInternalChat = () => {
     }
   };
 
+  const updateGroupName = async (conversationId: string, name: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase
+        .from('internal_conversations')
+        .update({ name, updated_at: new Date().toISOString() })
+        .eq('id', conversationId);
+
+      if (error) throw error;
+
+      setConversations(prev =>
+        prev.map(c =>
+          c.id === conversationId ? { ...c, name } : c
+        )
+      );
+      return true;
+    } catch (error) {
+      console.error('Error updating group name:', error);
+      return false;
+    }
+  };
+
+  const addParticipants = async (conversationId: string, userIds: string[]): Promise<boolean> => {
+    try {
+      const { error } = await supabase
+        .from('internal_conversation_participants')
+        .insert(
+          userIds.map(userId => ({
+            conversation_id: conversationId,
+            user_id: userId
+          }))
+        );
+
+      if (error) throw error;
+
+      if (currentUserId) {
+        await loadConversations(currentUserId);
+      }
+      return true;
+    } catch (error) {
+      console.error('Error adding participants:', error);
+      return false;
+    }
+  };
+
+  const removeParticipant = async (conversationId: string, userId: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase
+        .from('internal_conversation_participants')
+        .delete()
+        .eq('conversation_id', conversationId)
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      if (currentUserId) {
+        await loadConversations(currentUserId);
+      }
+      return true;
+    } catch (error) {
+      console.error('Error removing participant:', error);
+      return false;
+    }
+  };
+
   const getTotalUnread = useCallback(() => {
     return conversations.reduce((sum, c) => sum + c.unread_count, 0);
   }, [conversations]);
@@ -294,6 +358,9 @@ export const useInternalChat = () => {
     companyId,
     createConversation,
     markAsRead,
+    updateGroupName,
+    addParticipants,
+    removeParticipant,
     getTotalUnread,
     getConversationDisplayName,
     getConversationById,

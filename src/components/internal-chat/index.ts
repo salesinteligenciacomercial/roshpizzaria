@@ -5,3 +5,4 @@ export { ChatWindow } from './ChatWindow';
 export { MessageItem } from './MessageItem';
 export { NewConversationDialog } from './NewConversationDialog';
 export { ShareItemDialog } from './ShareItemDialog';
+export { EditGroupDialog } from './EditGroupDialog';
