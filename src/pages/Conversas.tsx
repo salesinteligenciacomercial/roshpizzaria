@@ -6922,8 +6922,8 @@ function Conversas() {
   return <div className="flex h-screen w-full bg-background overflow-hidden">
       {/* Sidebar esquerda - tema cinza claro */}
       <div className="w-[380px] flex-shrink-0 bg-muted/30 border-r border-border flex flex-col">
-        {/* Header */}
-        <div className="px-3 py-4 bg-background border-b border-border">
+        {/* Header - Fixo, não move com scroll */}
+        <div className="px-3 py-4 bg-background border-b border-border flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-semibold text-foreground">Conversas</h1>
             <div className="flex gap-2 items-center">
