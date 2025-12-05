@@ -32,13 +32,14 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
     if (!selectedFile) return;
 
     const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase();
-    const supportedFormats = ['csv', 'tsv', 'xlsx', 'xls', 'ods'];
+    const supportedFormats = ['csv', 'tsv', 'xlsx', 'xls', 'ods', 'txt'];
     
     if (!fileExtension || !supportedFormats.includes(fileExtension)) {
-      toast.error(`Formato não suportado. Use: ${supportedFormats.join(', ').toUpperCase()}`);
+      toast.error(`Formato não suportado. Use: CSV, TSV, XLSX, XLS, ODS ou TXT`);
       return;
     }
 
+    console.log(`📁 Arquivo selecionado: ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(2)} KB)`);
     setFile(selectedFile);
     setImportReport(null);
     processFile(selectedFile);
@@ -55,14 +56,14 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
       if (char === '"') {
         inQuotes = !inQuotes;
       } else if (char === delimiter && !inQuotes) {
-        result.push(current.trim());
+        result.push(current.trim().replace(/^["']|["']$/g, ''));
         current = '';
       } else {
         current += char;
       }
     }
-    result.push(current.trim());
-    return result;
+    result.push(current.trim().replace(/^["']|["']$/g, ''));
+    return result.filter((_, i) => i === 0 || result[i] !== '' || i < result.length - 1);
   };
 
   const parseTSVLine = (line: string): string[] => {
@@ -98,12 +99,24 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
     });
   };
 
+  const readFileWithEncoding = (file: File, encoding: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = () => reject(new Error(`Erro ao ler arquivo com encoding ${encoding}`));
+      reader.readAsText(file, encoding);
+    });
+  };
+
   const processFile = async (file: File) => {
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    console.log(`📂 Processando arquivo: ${file.name} (${fileExtension})`);
 
     try {
       if (fileExtension === 'xlsx' || fileExtension === 'xls' || fileExtension === 'ods') {
+        console.log("📊 Lendo arquivo Excel...");
         const { headers, rows } = await readExcelFile(file);
+        console.log(`✅ Excel processado: ${headers.length} colunas, ${rows.length} linhas`);
         const previewData = rows.slice(0, 5).map(row => {
           const obj: any = {};
           headers.forEach((header, index) => {
@@ -113,53 +126,96 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
         });
         setPreview(previewData);
       } else {
-        // CSV ou TSV
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const text = event.target?.result as string;
-          const delimiter = fileExtension === 'tsv' ? '\t' : ',';
-          const lines = text.split('\n').filter(line => line.trim());
-
-          if (lines.length < 1) {
-            toast.error("Arquivo vazio ou inválido");
-            return;
+        // CSV ou TSV - tenta múltiplas codificações
+        console.log("📄 Lendo arquivo CSV/TSV...");
+        
+        let text = '';
+        const encodings = ['UTF-8', 'ISO-8859-1', 'windows-1252'];
+        
+        for (const encoding of encodings) {
+          try {
+            text = await readFileWithEncoding(file, encoding);
+            // Verifica se tem caracteres estranhos (indica encoding errado)
+            if (!text.includes('�') && text.length > 0) {
+              console.log(`✅ Arquivo lido com encoding: ${encoding}`);
+              break;
+            }
+          } catch (e) {
+            console.warn(`⚠️ Falha com encoding ${encoding}, tentando próximo...`);
           }
+        }
 
-          // Se não tiver cabeçalho, assume que são apenas números
-          const firstLineValues = fileExtension === 'tsv' 
-            ? parseTSVLine(lines[0])
-            : parseCSVLine(lines[0]);
-          
-          const hasHeaders = firstLineValues.some(val => isNaN(Number(val.replace(/\D/g, ''))) && val.length > 0);
-          
-          let headers: string[];
-          let dataStartIndex: number;
+        if (!text || text.trim().length === 0) {
+          toast.error("Não foi possível ler o arquivo. Verifique se não está vazio ou corrompido.");
+          return;
+        }
 
-          if (hasHeaders) {
-            headers = firstLineValues.map(h => h.toLowerCase().trim());
-            dataStartIndex = 1;
-          } else {
-            // Sem cabeçalho, cria headers genéricos baseados no número de colunas
-            headers = firstLineValues.map((_, i) => `coluna${i + 1}`);
-            dataStartIndex = 0;
-          }
+        const delimiter = fileExtension === 'tsv' ? '\t' : detectDelimiter(text);
+        console.log(`🔍 Delimitador detectado: "${delimiter === '\t' ? 'TAB' : delimiter}"`);
+        
+        const lines = text.split(/\r?\n/).filter(line => line.trim());
+        console.log(`📝 Total de linhas encontradas: ${lines.length}`);
 
-          const previewData = lines.slice(dataStartIndex, dataStartIndex + 5).map(line => {
-            const values = fileExtension === 'tsv' ? parseTSVLine(line) : parseCSVLine(line);
-            const obj: any = {};
-            headers.forEach((header, index) => {
-              obj[header] = values[index] || '';
-            });
-            return obj;
+        if (lines.length < 1) {
+          toast.error("Arquivo vazio ou inválido");
+          return;
+        }
+
+        const firstLineValues = parseCSVLine(lines[0], delimiter);
+        console.log(`📋 Primeira linha (${firstLineValues.length} valores):`, firstLineValues);
+        
+        const hasHeaders = firstLineValues.some(val => {
+          const cleaned = val.replace(/\D/g, '');
+          return isNaN(Number(cleaned)) || cleaned.length < 8;
+        });
+        
+        let headers: string[];
+        let dataStartIndex: number;
+
+        if (hasHeaders) {
+          headers = firstLineValues.map(h => h.toLowerCase().trim());
+          dataStartIndex = 1;
+          console.log("📌 Cabeçalhos detectados:", headers);
+        } else {
+          headers = firstLineValues.map((_, i) => `coluna${i + 1}`);
+          dataStartIndex = 0;
+          console.log("📌 Sem cabeçalhos, usando genéricos:", headers);
+        }
+
+        const previewData = lines.slice(dataStartIndex, dataStartIndex + 5).map(line => {
+          const values = parseCSVLine(line, delimiter);
+          const obj: any = {};
+          headers.forEach((header, index) => {
+            obj[header] = values[index] || '';
           });
+          return obj;
+        });
 
-          setPreview(previewData);
-        };
-        reader.readAsText(file, 'UTF-8');
+        console.log(`✅ Preview gerado: ${previewData.length} linhas`);
+        setPreview(previewData);
       }
     } catch (error: any) {
+      console.error("❌ Erro ao processar arquivo:", error);
       toast.error(`Erro ao processar arquivo: ${error.message}`);
     }
+  };
+
+  // Detecta o delimitador mais provável do CSV
+  const detectDelimiter = (text: string): string => {
+    const firstLine = text.split(/\r?\n/)[0] || '';
+    const delimiters = [',', ';', '\t', '|'];
+    let bestDelimiter = ',';
+    let maxCount = 0;
+
+    for (const d of delimiters) {
+      const count = (firstLine.match(new RegExp(d === '|' ? '\\|' : d, 'g')) || []).length;
+      if (count > maxCount) {
+        maxCount = count;
+        bestDelimiter = d;
+      }
+    }
+
+    return bestDelimiter;
   };
 
   // Funções de validação
@@ -254,44 +310,55 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
     if (fileExtension === 'xlsx' || fileExtension === 'xls' || fileExtension === 'ods') {
       return await readExcelFile(file);
     } else {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const text = event.target?.result as string;
-          const delimiter = fileExtension === 'tsv' ? '\t' : ',';
-          const lines = text.split('\n').filter(line => line.trim());
-
-          if (lines.length < 1) {
-            reject(new Error("Arquivo vazio"));
-            return;
+      // Tenta múltiplas codificações
+      const encodings = ['UTF-8', 'ISO-8859-1', 'windows-1252'];
+      let text = '';
+      
+      for (const encoding of encodings) {
+        try {
+          text = await readFileWithEncoding(file, encoding);
+          if (!text.includes('�') && text.length > 0) {
+            console.log(`📄 processData: Arquivo lido com encoding ${encoding}`);
+            break;
           }
+        } catch (e) {
+          console.warn(`⚠️ processData: Falha com encoding ${encoding}`);
+        }
+      }
 
-          const firstLineValues = fileExtension === 'tsv' 
-            ? parseTSVLine(lines[0])
-            : parseCSVLine(lines[0]);
-          
-          const hasHeaders = firstLineValues.some(val => isNaN(Number(val.replace(/\D/g, ''))) && val.length > 0);
-          
-          let headers: string[];
-          let dataStartIndex: number;
+      if (!text || text.trim().length === 0) {
+        throw new Error("Não foi possível ler o arquivo");
+      }
 
-          if (hasHeaders) {
-            headers = firstLineValues.map(h => h.toLowerCase().trim());
-            dataStartIndex = 1;
-          } else {
-            headers = firstLineValues.map((_, i) => `coluna${i + 1}`);
-            dataStartIndex = 0;
-          }
+      const delimiter = fileExtension === 'tsv' ? '\t' : detectDelimiter(text);
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
 
-          const rows = lines.slice(dataStartIndex).map(line => 
-            fileExtension === 'tsv' ? parseTSVLine(line) : parseCSVLine(line)
-          );
+      if (lines.length < 1) {
+        throw new Error("Arquivo vazio");
+      }
 
-          resolve({ headers, rows });
-        };
-        reader.onerror = reject;
-        reader.readAsText(file, 'UTF-8');
+      const firstLineValues = parseCSVLine(lines[0], delimiter);
+      
+      const hasHeaders = firstLineValues.some(val => {
+        const cleaned = val.replace(/\D/g, '');
+        return isNaN(Number(cleaned)) || cleaned.length < 8;
       });
+      
+      let headers: string[];
+      let dataStartIndex: number;
+
+      if (hasHeaders) {
+        headers = firstLineValues.map(h => h.toLowerCase().trim());
+        dataStartIndex = 1;
+      } else {
+        headers = firstLineValues.map((_, i) => `coluna${i + 1}`);
+        dataStartIndex = 0;
+      }
+
+      const rows = lines.slice(dataStartIndex).map(line => parseCSVLine(line, delimiter));
+
+      console.log(`📊 processData: ${headers.length} colunas, ${rows.length} linhas de dados`);
+      return { headers, rows };
     }
   };
 
@@ -741,7 +808,9 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              <strong>Formatos suportados:</strong> CSV, TSV, XLSX, XLS, ODS
+              <strong>Formatos suportados:</strong> CSV, TSV, XLSX, XLS, ODS, TXT
+              <br />
+              <strong>Delimitadores:</strong> vírgula (,), ponto e vírgula (;), tab, pipe (|) - detectado automaticamente
               <br />
               <strong>Obrigatório:</strong> Telefone (pode ser apenas números em colunas)
               <br />
@@ -758,11 +827,11 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
           </Alert>
 
           <div className="space-y-2">
-            <Label htmlFor="file">Arquivo (CSV, TSV, XLSX, XLS, ODS)</Label>
+            <Label htmlFor="file">Arquivo (CSV, TSV, XLSX, XLS, ODS, TXT)</Label>
             <Input
               id="file"
               type="file"
-              accept=".csv,.tsv,.xlsx,.xls,.ods"
+              accept=".csv,.tsv,.xlsx,.xls,.ods,.txt"
               onChange={handleFileChange}
             />
           </div>
