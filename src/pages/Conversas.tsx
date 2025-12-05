@@ -4955,21 +4955,53 @@ function Conversas() {
         return;
       }
       
-      // Extrair base64 da data URL
-      const base64 = message.mediaUrl.includes(',') ? message.mediaUrl.split(',')[1] : message.mediaUrl;
-      
-      // Criar arquivo temporário a partir do base64
-      const byteCharacters = atob(base64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      try {
+        // Detectar mimeType da data URL (formato: data:image/jpeg;base64,...)
+        let mimeType = message.mimeType || 'image/jpeg';
+        let base64Data = message.mediaUrl;
+        
+        if (message.mediaUrl.includes('data:') && message.mediaUrl.includes(';base64,')) {
+          const mimeMatch = message.mediaUrl.match(/data:([^;]+);base64,/);
+          if (mimeMatch) {
+            mimeType = mimeMatch[1];
+          }
+          base64Data = message.mediaUrl.split(',')[1];
+        } else if (message.mediaUrl.includes(',')) {
+          base64Data = message.mediaUrl.split(',')[1];
+        }
+        
+        if (!base64Data) {
+          toast.error("Formato de mídia inválido");
+          return;
+        }
+        
+        // Criar arquivo temporário a partir do base64
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: mimeType });
+        
+        // Gerar nome de arquivo baseado no tipo
+        const extension = mimeType.split('/')[1] || (message.type === 'video' ? 'mp4' : 'jpg');
+        const fileName = message.fileName || `quick_media_${Date.now()}.${extension}`;
+        const file = new File([blob], fileName, { type: mimeType });
+        
+        console.log('📤 [QUICK-MESSAGE] Enviando mídia:', { 
+          type: message.type, 
+          mimeType, 
+          fileName, 
+          size: file.size 
+        });
+        
+        // Enviar mídia usando handleSendMedia
+        await handleSendMedia(file, message.content, message.type);
+      } catch (error) {
+        console.error('❌ Erro ao processar mídia da mensagem rápida:', error);
+        toast.error("Erro ao processar mídia. Verifique se o arquivo está correto.");
       }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: message.mimeType || 'image/jpeg' });
-      const file = new File([blob], message.fileName || 'media', { type: message.mimeType || 'image/jpeg' });
-      
-      // Enviar mídia usando handleSendMedia
-      await handleSendMedia(file, message.content, message.type);
     } else {
       // Enviar texto
       handleSendMessage(message.content);
