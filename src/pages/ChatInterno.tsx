@@ -24,10 +24,12 @@ import {
   Mic,
   Square,
   Loader2,
-  X
+  X,
+  Settings
 } from 'lucide-react';
 import { NewConversationDialog } from '@/components/internal-chat/NewConversationDialog';
 import { ShareItemDialog } from '@/components/internal-chat/ShareItemDialog';
+import { EditGroupDialog } from '@/components/internal-chat/EditGroupDialog';
 import { MessageItem } from '@/components/internal-chat/MessageItem';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -36,6 +38,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
@@ -44,6 +47,7 @@ export default function ChatInterno() {
   const [searchTerm, setSearchTerm] = useState('');
   const [newConversationOpen, setNewConversationOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [editGroupOpen, setEditGroupOpen] = useState(false);
   const [messageText, setMessageText] = useState('');
   const [showMobileList, setShowMobileList] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -66,6 +70,9 @@ export default function ChatInterno() {
     currentUserId,
     createConversation,
     markAsRead,
+    updateGroupName,
+    addParticipants,
+    removeParticipant,
     refresh
   } = useInternalChat();
   
@@ -264,7 +271,13 @@ export default function ChatInterno() {
   const getConversationName = (conv: InternalConversation) => {
     if (conv.name) return conv.name;
     const otherParticipants = conv.participants?.filter(p => p.user_id !== currentUserId);
-    return otherParticipants?.map(p => p.profile?.full_name).join(', ') || 'Conversa';
+    if (!otherParticipants || otherParticipants.length === 0) return 'Conversa';
+    
+    const names = otherParticipants
+      .map(p => p.profile?.full_name || p.profile?.email || '')
+      .filter(n => n);
+    
+    return names.length > 0 ? names.join(', ') : 'Conversa';
   };
 
   const getConversationAvatar = (conv: InternalConversation) => {
@@ -274,6 +287,7 @@ export default function ChatInterno() {
   };
 
   const getInitials = (name: string) => {
+    if (!name || name === 'Conversa') return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
@@ -406,6 +420,15 @@ export default function ChatInterno() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  {selectedConversation.is_group && (
+                    <>
+                      <DropdownMenuItem onClick={() => setEditGroupOpen(true)}>
+                        <Settings className="h-4 w-4 mr-2" />
+                        Editar grupo
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuItem onClick={() => setShareDialogOpen(true)}>
                     <Share2 className="h-4 w-4 mr-2" />
                     Compartilhar item do CRM
@@ -631,6 +654,25 @@ export default function ChatInterno() {
           }
         }}
       />
+
+      {selectedConversation && selectedConversation.is_group && (
+        <EditGroupDialog
+          open={editGroupOpen}
+          onOpenChange={setEditGroupOpen}
+          conversation={selectedConversation}
+          currentUserId={currentUserId}
+          onUpdateName={updateGroupName}
+          onAddParticipants={addParticipants}
+          onRemoveParticipant={removeParticipant}
+          onRefresh={async () => {
+            const updatedConvs = await refresh();
+            const updated = updatedConvs?.find(c => c.id === selectedConversation.id);
+            if (updated) {
+              setSelectedConversation(updated);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
