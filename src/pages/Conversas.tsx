@@ -7484,9 +7484,9 @@ function Conversas() {
                 </div>
               </div>
 
-              {/* Info Panel */}
-              {showInfoPanel && <div className="w-[340px] bg-background border-l border-border flex flex-col overflow-hidden">
-                  <div className="p-6 space-y-6 flex-1 overflow-y-auto">
+              {/* Info Panel - FIXO SEM SCROLL */}
+              {showInfoPanel && <div className="w-[340px] bg-background border-l border-border flex flex-col overflow-hidden flex-shrink-0">
+                  <div className="p-6 space-y-6 flex-1 overflow-hidden">
                     {/* Contact Info */}
                     <div className="text-center">
                       <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
