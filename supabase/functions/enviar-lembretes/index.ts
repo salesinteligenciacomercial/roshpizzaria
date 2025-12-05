@@ -281,23 +281,20 @@ serve(async (req) => {
             // Enviar mensagem via edge function enviar-whatsapp
             if (lembrete.canal === 'whatsapp') {
               const destinatario = lembrete.destinatario || 'lead';
-              const telefones: string[] = [];
+              let telefoneEnvio: string | null = null;
 
-              // Determinar quais telefones enviar baseado no destinatário
-              if (destinatario === 'lead' || destinatario === 'ambos') {
-                // PRIORIDADE 1: Telefone salvo diretamente no lembrete
-                let leadTelefone = lembrete.telefone_responsavel;
+              // CORREÇÃO: Usar apenas UM telefone por lembrete para evitar duplicatas
+              // O telefone correto já está em telefone_responsavel (definido no frontend)
+              if (lembrete.telefone_responsavel) {
+                telefoneEnvio = lembrete.telefone_responsavel;
+                console.log(`📱 Usando telefone do lembrete: ${telefoneEnvio} (destinatario: ${destinatario})`);
+              } else if (destinatario === 'lead') {
+                // Fallback: buscar telefone do lead
+                telefoneEnvio = lembrete.compromisso.lead.phone || lembrete.compromisso.lead.telefone || null;
+                console.log(`📱 Fallback - Telefone do lead: ${telefoneEnvio || 'não encontrado'}`);
                 
-                // PRIORIDADE 2: Se não encontrou, buscar no lead através do compromisso
-                if (!leadTelefone) {
-                  leadTelefone = lembrete.compromisso.lead.phone || lembrete.compromisso.lead.telefone;
-                  console.log(`📱 Telefone do lead obtido do compromisso: ${leadTelefone || 'não encontrado'}`);
-                }
-                
-                // PRIORIDADE 3: Se ainda não encontrou, buscar telefone nas conversas do lead
-                if (!leadTelefone && lembrete.compromisso.lead_id) {
-                  console.log(`🔍 Telefone não encontrado nas tabelas leads/lembretes, buscando nas conversas para lead ${lembrete.compromisso.lead_id}`);
-                  
+                // Última tentativa: buscar nas conversas
+                if (!telefoneEnvio && lembrete.compromisso.lead_id) {
                   const { data: conversa } = await supabase
                     .from('conversas')
                     .select('numero, telefone_formatado')
@@ -308,36 +305,13 @@ serve(async (req) => {
                     .single();
                   
                   if (conversa) {
-                    leadTelefone = conversa.telefone_formatado || conversa.numero;
-                    console.log(`✅ Telefone encontrado nas conversas: ${leadTelefone}`);
-                  } else {
-                    console.log(`❌ Nenhum telefone encontrado nas conversas para lead ${lembrete.compromisso.lead_id}`);
+                    telefoneEnvio = conversa.telefone_formatado || conversa.numero;
+                    console.log(`✅ Telefone encontrado nas conversas: ${telefoneEnvio}`);
                   }
                 }
-                
-                if (leadTelefone) {
-                  telefones.push(leadTelefone);
-                  console.log(`📱 Telefone do lead adicionado: ${leadTelefone}`);
-                } else {
-                  console.error(`❌ Nenhum telefone disponível para o lead do compromisso ${lembrete.compromisso_id}`);
-                }
               }
 
-            if (destinatario === 'responsavel' || destinatario === 'ambos') {
-              // Para responsável, o telefone deve estar em telefone_responsavel
-              // Mas apenas se destinatario não for 'lead'
-              if (destinatario === 'responsavel' && lembrete.telefone_responsavel) {
-                telefones.push(lembrete.telefone_responsavel);
-                console.log(`📱 Telefone do responsável adicionado: ${lembrete.telefone_responsavel}`);
-              } else if (destinatario === 'ambos' && lembrete.telefone_responsavel) {
-                // Para 'ambos', o telefone_responsavel só é usado para o responsável
-                // (o telefone do lead já foi adicionado acima)
-                telefones.push(lembrete.telefone_responsavel);
-                console.log(`📱 Telefone do responsável adicionado (ambos): ${lembrete.telefone_responsavel}`);
-              }
-            }
-
-            if (telefones.length === 0) {
+            if (!telefoneEnvio) {
               console.error(`❌ Nenhum telefone disponível para lembrete ${lembrete.id}`);
               await supabase
                 .from('lembretes')
@@ -350,84 +324,80 @@ serve(async (req) => {
               continue;
             }
 
-            // Enviar para todos os telefones usando edge function enviar-whatsapp
-            let todosEnviados = true;
+            // Enviar UMA mensagem para o telefone definido
+            const telefoneFormatado = telefoneEnvio.replace(/\D/g, '');
             const mensagemLembrete = lembrete.mensagem || `Olá! Lembramos do compromisso de ${lembrete.compromisso.tipo_servico} agendado para ${new Date(lembrete.compromisso.data_hora_inicio).toLocaleString('pt-BR')}.`;
             
-            for (const telefone of telefones) {
-              const telefoneFormatado = telefone.replace(/\D/g, '');
+            console.log(`📱 Enviando WhatsApp para: ${telefoneFormatado} via edge function`);
 
-              console.log(`📱 Enviando WhatsApp para: ${telefoneFormatado} via edge function`);
-
-              try {
-                // Chamar edge function enviar-whatsapp
-                const { data: sendResult, error: sendError } = await supabase.functions.invoke(
-                  'enviar-whatsapp',
-                  {
-                    body: {
-                      numero: telefoneFormatado,
-                      mensagem: mensagemLembrete,
-                      company_id: lembrete.compromisso.company_id || companyId,
-                    },
-                  }
-                );
-
-                if (sendError || !sendResult?.success) {
-                  console.error(`❌ Erro ao enviar WhatsApp via edge function:`, sendError || sendResult);
-                  todosEnviados = false;
-                } else {
-                  console.log(`✅ WhatsApp enviado com sucesso via edge function`);
-                  
-                  // Salvar mensagem de lembrete na tabela conversas para ficar visível no CRM
-                  try {
-                    const leadNome = lembrete.compromisso.lead?.name || 'Contato';
-                    
-                    // Buscar nome do usuário responsável pelo compromisso para assinatura
-                    let sentBy = 'Sistema';
-                    const responsavelId = lembrete.compromisso.usuario_responsavel_id;
-                    if (responsavelId) {
-                      const { data: profileData } = await supabase
-                        .from('profiles')
-                        .select('full_name, email')
-                        .eq('id', responsavelId)
-                        .single();
-                      
-                      if (profileData) {
-                        sentBy = profileData.full_name || profileData.email || 'Sistema';
-                      }
-                    }
-                    
-                    const { error: dbError } = await supabase.from('conversas').insert([{
-                      numero: telefoneFormatado,
-                      telefone_formatado: telefoneFormatado,
-                      mensagem: mensagemLembrete,
-                      origem: 'WhatsApp',
-                      status: 'Enviada',
-                      tipo_mensagem: 'text',
-                      nome_contato: leadNome,
-                      company_id: lembrete.compromisso.company_id || companyId,
-                      lead_id: lembrete.compromisso.lead_id,
-                      owner_id: responsavelId,
-                      sent_by: sentBy,
-                      fromme: true,
-                    }]);
-                    
-                    if (dbError) {
-                      console.error(`❌ Erro ao salvar mensagem de lembrete no banco:`, dbError);
-                    } else {
-                      console.log(`✅ Mensagem de lembrete salva no banco de dados`);
-                    }
-                  } catch (saveError) {
-                    console.error(`❌ Erro ao salvar mensagem de lembrete no banco:`, saveError);
-                  }
+            let enviado = false;
+            try {
+              // Chamar edge function enviar-whatsapp
+              const { data: sendResult, error: sendError } = await supabase.functions.invoke(
+                'enviar-whatsapp',
+                {
+                  body: {
+                    numero: telefoneFormatado,
+                    mensagem: mensagemLembrete,
+                    company_id: lembrete.compromisso.company_id || companyId,
+                  },
                 }
-              } catch (error) {
-                console.error(`❌ Erro ao chamar edge function enviar-whatsapp:`, error);
-                todosEnviados = false;
+              );
+
+              if (sendError || !sendResult?.success) {
+                console.error(`❌ Erro ao enviar WhatsApp via edge function:`, sendError || sendResult);
+              } else {
+                console.log(`✅ WhatsApp enviado com sucesso via edge function`);
+                enviado = true;
+                
+                // Salvar mensagem de lembrete na tabela conversas para ficar visível no CRM
+                try {
+                  const leadNome = lembrete.compromisso.lead?.name || 'Contato';
+                  
+                  // Buscar nome do usuário responsável pelo compromisso para assinatura
+                  let sentBy = 'Sistema';
+                  const responsavelId = lembrete.compromisso.usuario_responsavel_id;
+                  if (responsavelId) {
+                    const { data: profileData } = await supabase
+                      .from('profiles')
+                      .select('full_name, email')
+                      .eq('id', responsavelId)
+                      .single();
+                    
+                    if (profileData) {
+                      sentBy = profileData.full_name || profileData.email || 'Sistema';
+                    }
+                  }
+                  
+                  const { error: dbError } = await supabase.from('conversas').insert([{
+                    numero: telefoneFormatado,
+                    telefone_formatado: telefoneFormatado,
+                    mensagem: mensagemLembrete,
+                    origem: 'WhatsApp',
+                    status: 'Enviada',
+                    tipo_mensagem: 'text',
+                    nome_contato: leadNome,
+                    company_id: lembrete.compromisso.company_id || companyId,
+                    lead_id: lembrete.compromisso.lead_id,
+                    owner_id: responsavelId,
+                    sent_by: sentBy,
+                    fromme: true,
+                  }]);
+                  
+                  if (dbError) {
+                    console.error(`❌ Erro ao salvar mensagem de lembrete no banco:`, dbError);
+                  } else {
+                    console.log(`✅ Mensagem de lembrete salva no banco de dados`);
+                  }
+                } catch (saveError) {
+                  console.error(`❌ Erro ao salvar mensagem de lembrete no banco:`, saveError);
+                }
               }
+            } catch (error) {
+              console.error(`❌ Erro ao chamar edge function enviar-whatsapp:`, error);
             }
 
-            if (todosEnviados) {
+            if (enviado) {
               // Atualizar status do lembrete para enviado (sucesso)
               // Não incrementar tentativas em caso de sucesso
               await supabase

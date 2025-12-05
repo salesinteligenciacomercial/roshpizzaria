@@ -9277,10 +9277,13 @@ function Conversas() {
                                                   </p>
                                                   <p className="text-sm text-muted-foreground">
                                                     <strong>Destinatário:</strong> {
-                                                      lembrete.destinatario === 'lead' ? 'Lead' :
-                                                      lembrete.destinatario === 'responsavel' ? 'Responsável' :
-                                                      lembrete.destinatario === 'ambos' ? 'Lead e Responsável' :
-                                                      'Lead'
+                                                      lembrete.destinatario === 'lead' 
+                                                        ? `${leadVinculado?.name || 'Lead'} ${lembrete.telefone_responsavel ? `(${lembrete.telefone_responsavel})` : ''}`
+                                                        : lembrete.destinatario === 'responsavel' 
+                                                        ? `Responsável ${lembrete.telefone_responsavel ? `(${lembrete.telefone_responsavel})` : ''}`
+                                                        : lembrete.destinatario === 'ambos' 
+                                                        ? 'Lead e Responsável' 
+                                                        : 'Lead'
                                                     }
                                                   </p>
                                                   <p className="text-sm text-muted-foreground">
