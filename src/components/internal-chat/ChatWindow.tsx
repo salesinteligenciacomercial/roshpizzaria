@@ -1,3 +1,4 @@
+// Chat interno com suporte a gravação de áudio, paste de imagens e auto-expand
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { InternalConversation } from '@/hooks/useInternalChat';
 import { useInternalMessages } from '@/hooks/useInternalMessages';
