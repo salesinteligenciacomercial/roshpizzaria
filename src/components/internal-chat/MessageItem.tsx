@@ -1,10 +1,12 @@
 import { InternalMessage } from '@/hooks/useInternalMessages';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { format } from 'date-fns';
-import { FileText, Download, Play, ExternalLink } from 'lucide-react';
+import { FileText, Download, ExternalLink, Image, Video, Music } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { MediaPreviewDialog } from './MediaPreviewDialog';
 
 interface MessageItemProps {
   message: InternalMessage;
@@ -13,8 +15,10 @@ interface MessageItemProps {
 
 export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
   const navigate = useNavigate();
+  const [previewOpen, setPreviewOpen] = useState(false);
 
-  const handleDownload = () => {
+  const handleDownload = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (message.media_url) {
       const a = document.createElement('a');
       a.href = message.media_url;
@@ -24,6 +28,14 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
       a.click();
       document.body.removeChild(a);
     }
+  };
+
+  const getMediaType = (): 'image' | 'video' | 'audio' | 'pdf' | 'document' => {
+    if (message.message_type === 'image') return 'image';
+    if (message.message_type === 'video') return 'video';
+    if (message.message_type === 'audio') return 'audio';
+    if (message.message_type === 'pdf') return 'pdf';
+    return 'document';
   };
 
   const handleNavigateToItem = () => {
@@ -47,12 +59,34 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
       case 'image':
         return (
           <div className="space-y-2">
-            <img
-              src={message.media_url || ''}
-              alt="Imagem"
-              className="max-w-[240px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-              onClick={() => window.open(message.media_url || '', '_blank')}
-            />
+            <div 
+              className="relative group cursor-pointer"
+              onClick={() => setPreviewOpen(true)}
+            >
+              <img
+                src={message.media_url || ''}
+                alt="Imagem"
+                className="max-w-[240px] rounded-lg hover:opacity-90 transition-opacity"
+              />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
+                <Image className="w-6 h-6 text-white" />
+                <span className="text-white text-xs">Clique para expandir</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground truncate flex-1">
+                {message.file_name || 'Imagem'}
+              </p>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={handleDownload}
+                title="Baixar"
+              >
+                <Download className="h-3 w-3" />
+              </Button>
+            </div>
             {message.content && (
               <p className="text-sm">{message.content}</p>
             )}
@@ -62,11 +96,33 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
       case 'video':
         return (
           <div className="space-y-2">
-            <video
-              src={message.media_url || ''}
-              controls
-              className="max-w-[240px] rounded-lg"
-            />
+            <div 
+              className="relative group cursor-pointer"
+              onClick={() => setPreviewOpen(true)}
+            >
+              <video
+                src={message.media_url || ''}
+                className="max-w-[240px] rounded-lg"
+                muted
+              />
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg group-hover:bg-black/50 transition-colors">
+                <Video className="w-8 h-8 text-white" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground truncate flex-1">
+                {message.file_name || 'Vídeo'}
+              </p>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={handleDownload}
+                title="Baixar"
+              >
+                <Download className="h-3 w-3" />
+              </Button>
+            </div>
             {message.content && (
               <p className="text-sm">{message.content}</p>
             )}
@@ -75,28 +131,56 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
 
       case 'audio':
         return (
-          <audio
-            src={message.media_url || ''}
-            controls
-            className="max-w-[240px]"
-          />
+          <div className="space-y-2">
+            <div 
+              className="flex items-center gap-2 p-2 bg-background/50 rounded-lg cursor-pointer hover:bg-background/70 transition-colors"
+              onClick={() => setPreviewOpen(true)}
+            >
+              <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                <Music className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {message.file_name || 'Áudio'}
+                </p>
+                <p className="text-xs text-muted-foreground">Clique para ouvir</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleDownload}
+                title="Baixar"
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            </div>
+            <audio
+              src={message.media_url || ''}
+              controls
+              className="w-full max-w-[240px]"
+            />
+          </div>
         );
 
       case 'pdf':
       case 'document':
         return (
-          <div className="flex items-center gap-2 p-2 bg-background/50 rounded-lg">
-            <FileText className="h-8 w-8 text-primary" />
+          <div 
+            className="flex items-center gap-2 p-2 bg-background/50 rounded-lg cursor-pointer hover:bg-background/70 transition-colors"
+            onClick={() => setPreviewOpen(true)}
+          >
+            <FileText className="h-8 w-8 text-primary flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">
                 {message.file_name || 'Documento'}
               </p>
-              <p className="text-xs text-muted-foreground">Clique para baixar</p>
+              <p className="text-xs text-muted-foreground">Clique para visualizar</p>
             </div>
             <Button
               variant="ghost"
               size="icon"
               onClick={handleDownload}
+              title="Baixar"
             >
               <Download className="h-4 w-4" />
             </Button>
@@ -164,6 +248,17 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
           {format(new Date(message.created_at), 'HH:mm')}
         </p>
       </div>
+
+      {/* Media Preview Dialog */}
+      {message.media_url && (
+        <MediaPreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          mediaUrl={message.media_url}
+          mediaType={getMediaType()}
+          fileName={message.file_name || undefined}
+        />
+      )}
     </div>
   );
 };
