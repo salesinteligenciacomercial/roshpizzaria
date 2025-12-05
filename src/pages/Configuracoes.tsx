@@ -63,12 +63,24 @@ export default function Configuracoes() {
   const [manageUsersOpen, setManageUsersOpen] = useState(false);
   const [latestAnnouncement, setLatestAnnouncement] = useState<any | null>(null);
   
+  // Estados para Fila de Atendimento - MOVIDOS PARA CIMA DOS HOOKS
+  const [filas, setFilas] = useState<any[]>([]);
+  const [filasLoading, setFilasLoading] = useState<boolean>(false);
+  const [filaDialogOpen, setFilaDialogOpen] = useState<boolean>(false);
+  const [editingFila, setEditingFila] = useState<any | null>(null);
+  const [colaboradoresDialogOpen, setColaboradoresDialogOpen] = useState<boolean>(false);
+  const [filaSelecionada, setFilaSelecionada] = useState<any | null>(null);
+  
+  const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
+  const [novoColaborador, setNovoColaborador] = useState({
+    nome: "",
+    email: "",
+    setor: "",
+    funcao: "vendedor",
+    capacidadeMaxima: 10,
+  });
+  
   const hasRole = (role: string) => userRoles.includes(role);
-
-  // Verificar permissão de acesso às Configurações
-  if (!permissionsLoading && !canAccess('configuracoes') && !isAdmin) {
-    return <Navigate to="/leads" replace />;
-  }
 
   useEffect(() => {
     checkAccessAndRoles();
@@ -163,14 +175,6 @@ export default function Configuracoes() {
     };
     loadAnnouncement();
   }, [currentCompany?.id]);
-  
-  // Estados para Fila de Atendimento
-  const [filas, setFilas] = useState<any[]>([]);
-  const [filasLoading, setFilasLoading] = useState<boolean>(false);
-  const [filaDialogOpen, setFilaDialogOpen] = useState<boolean>(false);
-  const [editingFila, setEditingFila] = useState<any | null>(null);
-  const [colaboradoresDialogOpen, setColaboradoresDialogOpen] = useState<boolean>(false);
-  const [filaSelecionada, setFilaSelecionada] = useState<any | null>(null);
 
   const carregarFilas = async () => {
     try {
@@ -286,15 +290,6 @@ export default function Configuracoes() {
       toast({ variant: 'destructive', title: 'Erro ao remover fila' });
     }
   };
-
-  const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
-  const [novoColaborador, setNovoColaborador] = useState({
-    nome: "",
-    email: "",
-    setor: "",
-    funcao: "vendedor", // Valor padrão mudado para "vendedor" (valor válido do enum)
-    capacidadeMaxima: 10,
-  });
 
   const carregarColaboradores = async () => {
     try {
@@ -530,6 +525,11 @@ export default function Configuracoes() {
       </Badge>
     );
   };
+
+  // Verificar permissão de acesso às Configurações (APÓS todos os hooks)
+  if (!permissionsLoading && !canAccess('configuracoes') && !isAdmin) {
+    return <Navigate to="/leads" replace />;
+  }
 
   if (loading) {
     return (
