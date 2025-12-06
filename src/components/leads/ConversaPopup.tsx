@@ -1215,8 +1215,9 @@ export function ConversaPopup({
 
           {/* Info Panel */}
           {showInfoPanel && (
-            <div className="w-[340px] bg-background border-l border-border overflow-y-auto flex-shrink-0">
-              <div className="p-6 space-y-6">
+            <div className="w-[340px] bg-background border-l border-border flex-shrink-0 flex flex-col h-full">
+              <ScrollArea className="flex-1 h-full">
+                <div className="p-6 space-y-6">
                 {/* Contact Info */}
                 <div className="text-center">
                   <Avatar className="w-20 h-20 mx-auto mb-3">
@@ -1406,6 +1407,7 @@ export function ConversaPopup({
                   )}
                 </div>
               </div>
+              </ScrollArea>
             </div>
           )}
         </div>
