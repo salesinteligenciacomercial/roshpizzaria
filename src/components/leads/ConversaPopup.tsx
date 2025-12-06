@@ -1028,7 +1028,7 @@ export function ConversaPopup({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-7xl h-[90vh] flex flex-col p-0">
+      <DialogContent className="max-w-7xl h-[90vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1216,17 +1216,15 @@ export function ConversaPopup({
 
           {showInfoPanel && (
             <div 
-              className="w-[340px] bg-background border-l border-border flex-shrink-0 flex flex-col"
-              style={{ height: '100%' }}
+              className="w-[340px] bg-background border-l border-border flex-shrink-0"
+              style={{ 
+                height: 'calc(90vh - 85px)',
+                overflowY: 'scroll',
+                overflowX: 'hidden',
+                WebkitOverflowScrolling: 'touch'
+              }}
             >
-              <div 
-                className="flex-1 overflow-y-auto overflow-x-hidden"
-                style={{ 
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: 'hsl(var(--border)) transparent'
-                }}
-              >
-                <div className="p-6 space-y-6 pb-32">
+              <div className="p-6 space-y-6" style={{ paddingBottom: '150px' }}>
                   {/* Contact Info */}
                   <div className="text-center">
                     <Avatar className="w-20 h-20 mx-auto mb-3">
@@ -1486,7 +1484,6 @@ export function ConversaPopup({
                         <ArrowRightLeft className="h-4 w-4 text-indigo-500" />
                         Transferir Atendimento
                       </Button>
-                    </div>
                   </div>
                 </div>
               </div>
