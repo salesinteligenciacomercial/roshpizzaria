@@ -1216,14 +1216,13 @@ export function ConversaPopup({
 
           {showInfoPanel && (
             <div 
-              className="w-[340px] bg-background border-l border-border flex-shrink-0"
+              className="conversa-popup-info-panel w-[340px] bg-background border-l border-border flex-shrink-0"
               style={{ 
                 height: 'calc(90vh - 80px)',
-                overflowY: 'auto',
-                overflowX: 'hidden'
+                maxHeight: 'calc(90vh - 80px)'
               }}
             >
-              <div className="p-6 space-y-6" style={{ paddingBottom: '200px' }}>
+              <div className="p-6 space-y-6 pb-64">
                   {/* Contact Info */}
                   <div className="text-center">
                     <Avatar className="w-20 h-20 mx-auto mb-3">
