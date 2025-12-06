@@ -7484,9 +7484,9 @@ function Conversas() {
                 </div>
               </div>
 
-              {/* Info Panel - FIXO SEM SCROLL */}
-              {showInfoPanel && <div className="w-[340px] bg-background border-l border-border flex flex-col overflow-hidden flex-shrink-0">
-                  <div className="p-6 space-y-6 flex-1 overflow-hidden">
+              {/* Info Panel - COM SCROLL */}
+              {showInfoPanel && <div className="w-[340px] bg-background border-l border-border flex flex-col flex-shrink-0" style={{ height: 'calc(100vh - 64px)' }}>
+                  <div className="p-6 space-y-6 flex-1 overflow-y-auto pb-32">
                     {/* Contact Info */}
                     <div className="text-center">
                       <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
