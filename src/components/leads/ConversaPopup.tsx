@@ -1479,7 +1479,6 @@ export function ConversaPopup({
                     </div>
                   </div>
                 </div>
-              </div>
             </ScrollArea>
           )}
         </div>
