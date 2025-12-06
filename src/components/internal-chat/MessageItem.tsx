@@ -1,23 +1,52 @@
 import { InternalMessage } from '@/hooks/useInternalMessages';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { format } from 'date-fns';
-import { Download, ExternalLink, Image, Video, Music } from 'lucide-react';
+import { Download, ExternalLink, Image, Video, Music, MessageCircle, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MediaPreviewDialog } from './MediaPreviewDialog';
 import { PDFThumbnail } from './PDFThumbnail';
 import { downloadFile } from '@/utils/downloadFile';
+import { ConversaPopup } from '@/components/leads/ConversaPopup';
+import { supabase } from '@/integrations/supabase/client';
 
 interface MessageItemProps {
   message: InternalMessage;
   isOwn: boolean;
 }
 
+interface LeadInfo {
+  id: string;
+  name: string;
+  telefone?: string;
+  phone?: string;
+}
+
 export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
   const navigate = useNavigate();
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [conversaPopupOpen, setConversaPopupOpen] = useState(false);
+  const [leadInfo, setLeadInfo] = useState<LeadInfo | null>(null);
+
+  // Carregar info do lead quando for shared_item do tipo lead
+  useEffect(() => {
+    if (message.message_type === 'shared_item' && message.shared_item_type === 'lead' && message.shared_item_id) {
+      loadLeadInfo(message.shared_item_id);
+    }
+  }, [message]);
+
+  const loadLeadInfo = async (leadId: string) => {
+    const { data } = await supabase
+      .from('leads')
+      .select('id, name, telefone, phone')
+      .eq('id', leadId)
+      .maybeSingle();
+    if (data) {
+      setLeadInfo(data);
+    }
+  };
 
   const handleDownload = (e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -39,7 +68,10 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
 
     switch (message.shared_item_type) {
       case 'lead':
-        navigate('/leads');
+        // Abrir popup de conversa em vez de redirecionar
+        if (leadInfo) {
+          setConversaPopupOpen(true);
+        }
         break;
       case 'task':
         navigate('/tarefas');
@@ -47,6 +79,13 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
       case 'funnel':
         navigate('/kanban');
         break;
+    }
+  };
+
+  const handleOpenConversation = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (leadInfo) {
+      setConversaPopupOpen(true);
     }
   };
 
@@ -192,6 +231,30 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
         );
 
       case 'shared_item':
+        if (message.shared_item_type === 'lead') {
+          return (
+            <div className="flex items-center gap-2 p-2 bg-background/50 rounded-lg w-full">
+              <div className="h-8 w-8 rounded bg-primary/20 flex items-center justify-center">
+                <Users className="h-4 w-4 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{message.content}</p>
+                <p className="text-xs text-muted-foreground">Lead</p>
+              </div>
+              {leadInfo && (leadInfo.telefone || leadInfo.phone) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleOpenConversation}
+                  className="h-7 w-7 p-0 shrink-0"
+                  title="Abrir conversa"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          );
+        }
         return (
           <button
             onClick={handleNavigateToItem}
@@ -203,7 +266,6 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">{message.content}</p>
               <p className="text-xs text-muted-foreground capitalize">
-                {message.shared_item_type === 'lead' && 'Lead'}
                 {message.shared_item_type === 'task' && 'Tarefa'}
                 {message.shared_item_type === 'funnel' && 'Funil'}
               </p>
@@ -261,6 +323,17 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
           mediaUrl={message.media_url}
           mediaType={getMediaType()}
           fileName={message.file_name || undefined}
+        />
+      )}
+
+      {/* Conversa Popup para Leads */}
+      {leadInfo && (
+        <ConversaPopup
+          open={conversaPopupOpen}
+          onOpenChange={setConversaPopupOpen}
+          leadId={leadInfo.id}
+          leadName={leadInfo.name}
+          leadPhone={leadInfo.telefone || leadInfo.phone}
         />
       )}
     </div>
