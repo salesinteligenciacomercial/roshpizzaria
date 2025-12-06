@@ -1885,6 +1885,12 @@ export type Database = {
           role: Database["public"]["Enums"]["app_role"]
         }[]
       }
+      get_user_company_ids: {
+        Args: never
+        Returns: {
+          company_id: string
+        }[]
+      }
       has_role: { Args: { _role: string; _user_id: string }; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       reorder_etapas: {
