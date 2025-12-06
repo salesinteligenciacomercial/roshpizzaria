@@ -1102,9 +1102,9 @@ export function ConversaPopup({
           </div>
         </DialogHeader>
 
-        <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(90vh - 80px)' }}>
+        <div className="flex flex-1" style={{ height: 'calc(90vh - 80px)', minHeight: 0 }}>
           {/* Messages Area */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col overflow-hidden">
             {/* Messages */}
             <ScrollArea className="flex-1 p-6 bg-[#e5ddd5]" style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d9d9d9' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')" }}>
               <div className="space-y-2 min-h-[200px]">
@@ -1218,13 +1218,12 @@ export function ConversaPopup({
             <div 
               className="w-[340px] bg-background border-l border-border flex-shrink-0"
               style={{ 
-                height: 'calc(90vh - 85px)',
-                overflowY: 'scroll',
-                overflowX: 'hidden',
-                WebkitOverflowScrolling: 'touch'
+                height: 'calc(90vh - 80px)',
+                overflowY: 'auto',
+                overflowX: 'hidden'
               }}
             >
-              <div className="p-6 space-y-6" style={{ paddingBottom: '150px' }}>
+              <div className="p-6 space-y-6" style={{ paddingBottom: '200px' }}>
                   {/* Contact Info */}
                   <div className="text-center">
                     <Avatar className="w-20 h-20 mx-auto mb-3">
@@ -1484,10 +1483,10 @@ export function ConversaPopup({
                         <ArrowRightLeft className="h-4 w-4 text-indigo-500" />
                         Transferir Atendimento
                       </Button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
           )}
         </div>
       {/* Dialog: Mensagens Rápidas - CÓPIA EXATA do menu Conversas */}
