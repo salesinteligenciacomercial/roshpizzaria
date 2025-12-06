@@ -1213,11 +1213,16 @@ export function ConversaPopup({
             </div>
           </div>
 
-          {/* Info Panel */}
           {showInfoPanel && (
-            <div className="w-[340px] bg-background border-l border-border flex-shrink-0 h-full overflow-hidden">
-              <div className="h-full overflow-y-auto">
-                <div className="p-6 space-y-6 pb-12">
+            <aside 
+              className="w-[340px] bg-background border-l border-border flex-shrink-0"
+              style={{ 
+                height: 'calc(90vh - 80px)',
+                overflowY: 'auto',
+                overflowX: 'hidden'
+              }}
+            >
+              <div className="p-6 space-y-6 pb-24">
                 {/* Contact Info */}
                 <div className="text-center">
                   <Avatar className="w-20 h-20 mx-auto mb-3">
@@ -1406,9 +1411,8 @@ export function ConversaPopup({
                     </div>
                   )}
                 </div>
-                </div>
               </div>
-            </div>
+            </aside>
           )}
         </div>
       {/* Dialog: Mensagens Rápidas - CÓPIA EXATA do menu Conversas */}
