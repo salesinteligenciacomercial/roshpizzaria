@@ -12,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, CheckSquare, Layers, Search, Loader2, MessageCircle, ChevronRight, ArrowLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { ConversaPopup } from '@/components/leads/ConversaPopup';
 
 interface ShareItemDialogProps {
   open: boolean;
@@ -64,10 +64,13 @@ export const ShareItemDialog = ({
   onOpenChange,
   onShare
 }: ShareItemDialogProps) => {
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('lead');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Conversa Popup state
+  const [conversaPopupOpen, setConversaPopupOpen] = useState(false);
+  const [selectedLeadForChat, setSelectedLeadForChat] = useState<Lead | null>(null);
 
   // Leads
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -199,10 +202,8 @@ export const ShareItemDialog = ({
   const handleOpenConversation = (lead: Lead) => {
     const phone = lead.telefone || lead.phone;
     if (phone) {
-      // Normalize phone number
-      const normalizedPhone = phone.replace(/\D/g, '');
-      onOpenChange(false);
-      navigate(`/conversas?telefone=${normalizedPhone}`);
+      setSelectedLeadForChat(lead);
+      setConversaPopupOpen(true);
     }
   };
 
@@ -523,6 +524,17 @@ export const ShareItemDialog = ({
           </div>
         </div>
       </DialogContent>
+
+      {/* Conversa Popup */}
+      {selectedLeadForChat && (
+        <ConversaPopup
+          open={conversaPopupOpen}
+          onOpenChange={setConversaPopupOpen}
+          leadId={selectedLeadForChat.id}
+          leadName={selectedLeadForChat.name}
+          leadPhone={selectedLeadForChat.telefone || selectedLeadForChat.phone}
+        />
+      )}
     </Dialog>
   );
 };
