@@ -45,6 +45,16 @@ interface Tarefa {
   assignee_id?: string
   responsaveis?: string[]
   lead_id?: string
+  compromisso_id?: string
+  professional_id?: string
+}
+
+interface Lead {
+  id: string
+  name: string
+  phone?: string
+  telefone?: string
+  email?: string
 }
 
 Deno.serve(async (req) => {
@@ -157,14 +167,15 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Buscar tarefas atribuídas ao profissional (pelo user_id)
+      // Buscar tarefas atribuídas ao profissional (pelo user_id ou professional_id)
       const { data: tarefas, error: tarefError } = await supabaseAdmin
         .from('tasks')
         .select(`
           *,
-          lead:leads(id, name, phone, telefone)
+          lead:leads(id, name, phone, telefone),
+          compromisso:compromissos(id, titulo, tipo_servico, data_hora_inicio)
         `)
-        .or(`assignee_id.eq.${user.id},responsaveis.cs.{${user.id}}`)
+        .or(`assignee_id.eq.${user.id},responsaveis.cs.{${user.id}},professional_id.eq.${profissional.id}`)
         .neq('status', 'concluida')
         .order('due_date', { ascending: true })
         .limit(50)
@@ -204,6 +215,107 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    // ============================================
+    // LEADS - Buscar e criar contatos
+    // ============================================
+
+    // GET: Buscar leads
+    if (action === 'leads' && method === 'GET') {
+      const busca = url.searchParams.get('busca') || ''
+      const limit = parseInt(url.searchParams.get('limit') || '20')
+
+      let query = supabaseAdmin
+        .from('leads')
+        .select('id, name, phone, telefone, email')
+        .eq('company_id', profissional.company_id)
+        .order('name', { ascending: true })
+        .limit(limit)
+
+      if (busca) {
+        query = query.or(`name.ilike.%${busca}%,telefone.ilike.%${busca}%,phone.ilike.%${busca}%,email.ilike.%${busca}%`)
+      }
+
+      const { data: leads, error } = await query
+
+      if (error) {
+        console.error('[api-waze-agenda] Erro ao buscar leads:', error)
+        return new Response(
+          JSON.stringify({ error: 'Erro ao buscar leads' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Formatar resposta para compatibilidade com App
+      const leadsFormatados = leads?.map(l => ({
+        id: l.id,
+        nome: l.name,
+        telefone: l.telefone || l.phone,
+        email: l.email
+      })) || []
+
+      console.log('[api-waze-agenda] Leads encontrados:', leadsFormatados.length)
+
+      return new Response(
+        JSON.stringify({ success: true, leads: leadsFormatados }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // POST: Criar novo lead/contato
+    if (action === 'leads' && method === 'POST') {
+      const body = await req.json()
+      const { nome, telefone, email } = body
+
+      if (!nome) {
+        return new Response(
+          JSON.stringify({ error: 'Nome é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const { data: novoLead, error } = await supabaseAdmin
+        .from('leads')
+        .insert({
+          name: nome,
+          telefone,
+          phone: telefone,
+          email,
+          company_id: profissional.company_id,
+          owner_id: user.id,
+          source: 'waze-agenda',
+          status: 'novo'
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('[api-waze-agenda] Erro ao criar lead:', error)
+        return new Response(
+          JSON.stringify({ error: 'Erro ao criar lead' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log('[api-waze-agenda] Lead criado:', novoLead.id)
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          lead: {
+            id: novoLead.id,
+            nome: novoLead.name,
+            telefone: novoLead.telefone || novoLead.phone,
+            email: novoLead.email
+          }
+        }),
+        { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // ============================================
+    // COMPROMISSOS
+    // ============================================
 
     // GET: Compromissos
     if (action === 'compromissos' && method === 'GET') {
@@ -394,21 +506,31 @@ Deno.serve(async (req) => {
       )
     }
 
+    // ============================================
+    // TAREFAS - CRUD completo
+    // ============================================
+
     // GET: Tarefas
     if (action === 'tarefas' && method === 'GET') {
       const status = url.searchParams.get('status')
+      const compromisso_id = url.searchParams.get('compromisso_id')
 
       let query = supabaseAdmin
         .from('tasks')
         .select(`
           *,
-          lead:leads(id, name, phone, telefone)
+          lead:leads(id, name, phone, telefone),
+          compromisso:compromissos(id, titulo, tipo_servico, data_hora_inicio)
         `)
-        .or(`assignee_id.eq.${user.id},responsaveis.cs.{${user.id}}`)
+        .or(`assignee_id.eq.${user.id},responsaveis.cs.{${user.id}},professional_id.eq.${profissional.id}`)
         .order('due_date', { ascending: true })
 
       if (status) {
         query = query.eq('status', status)
+      }
+
+      if (compromisso_id) {
+        query = query.eq('compromisso_id', compromisso_id)
       }
 
       const { data: tarefas, error } = await query
@@ -421,16 +543,88 @@ Deno.serve(async (req) => {
         )
       }
 
+      // Formatar para compatibilidade com App
+      const tarefasFormatadas = tarefas?.map(t => ({
+        ...t,
+        titulo: t.title,
+        descricao: t.description,
+        prioridade: t.priority,
+        data_vencimento: t.due_date
+      })) || []
+
       return new Response(
-        JSON.stringify({ success: true, tarefas }),
+        JSON.stringify({ success: true, tarefas: tarefasFormatadas }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // PUT: Atualizar status da tarefa
+    // POST: Criar tarefa
+    if (action === 'tarefas' && method === 'POST') {
+      const body = await req.json()
+      const { titulo, descricao, prioridade, data_vencimento, compromisso_id, lead_id } = body
+
+      if (!titulo) {
+        return new Response(
+          JSON.stringify({ error: 'Título é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Mapear prioridade do App para o padrão do CRM
+      const priorityMap: Record<string, string> = {
+        'baixa': 'baixa',
+        'normal': 'media',
+        'alta': 'alta',
+        'urgente': 'urgente'
+      }
+
+      const { data: novaTarefa, error } = await supabaseAdmin
+        .from('tasks')
+        .insert({
+          title: titulo,
+          description: descricao,
+          priority: priorityMap[prioridade] || 'media',
+          due_date: data_vencimento,
+          compromisso_id,
+          lead_id,
+          professional_id: profissional.id,
+          company_id: profissional.company_id,
+          owner_id: user.id,
+          assignee_id: user.id,
+          status: 'pendente'
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('[api-waze-agenda] Erro ao criar tarefa:', error)
+        return new Response(
+          JSON.stringify({ error: 'Erro ao criar tarefa' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log('[api-waze-agenda] Tarefa criada:', novaTarefa.id)
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          tarefa: {
+            ...novaTarefa,
+            titulo: novaTarefa.title,
+            descricao: novaTarefa.description,
+            prioridade: novaTarefa.priority,
+            data_vencimento: novaTarefa.due_date
+          }
+        }),
+        { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // PUT: Atualizar tarefa
     if (action === 'tarefas' && method === 'PUT') {
       const body = await req.json()
-      const { id, status, ...updates } = body
+      const { id, status, titulo, descricao, prioridade, data_vencimento, ...updates } = body
 
       if (!id) {
         return new Response(
@@ -444,7 +638,7 @@ Deno.serve(async (req) => {
         .from('tasks')
         .select('id')
         .eq('id', id)
-        .or(`assignee_id.eq.${user.id},responsaveis.cs.{${user.id}}`)
+        .or(`assignee_id.eq.${user.id},responsaveis.cs.{${user.id}},professional_id.eq.${profissional.id}`)
         .single()
 
       if (!existente) {
@@ -454,9 +648,21 @@ Deno.serve(async (req) => {
         )
       }
 
+      // Preparar updates com campos traduzidos
+      const updateData: Record<string, any> = {
+        ...updates,
+        updated_at: new Date().toISOString()
+      }
+
+      if (status) updateData.status = status
+      if (titulo) updateData.title = titulo
+      if (descricao !== undefined) updateData.description = descricao
+      if (prioridade) updateData.priority = prioridade
+      if (data_vencimento !== undefined) updateData.due_date = data_vencimento
+
       const { data: tarefaAtualizada, error } = await supabaseAdmin
         .from('tasks')
-        .update({ status, ...updates, updated_at: new Date().toISOString() })
+        .update(updateData)
         .eq('id', id)
         .select()
         .single()
@@ -472,10 +678,70 @@ Deno.serve(async (req) => {
       console.log('[api-waze-agenda] Tarefa atualizada:', id)
 
       return new Response(
-        JSON.stringify({ success: true, tarefa: tarefaAtualizada }),
+        JSON.stringify({
+          success: true,
+          tarefa: {
+            ...tarefaAtualizada,
+            titulo: tarefaAtualizada.title,
+            descricao: tarefaAtualizada.description,
+            prioridade: tarefaAtualizada.priority,
+            data_vencimento: tarefaAtualizada.due_date
+          }
+        }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    // DELETE: Excluir tarefa
+    if (action === 'tarefas' && method === 'DELETE') {
+      const id = url.searchParams.get('id')
+
+      if (!id) {
+        return new Response(
+          JSON.stringify({ error: 'ID da tarefa é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Verificar permissão
+      const { data: existente } = await supabaseAdmin
+        .from('tasks')
+        .select('id')
+        .eq('id', id)
+        .or(`assignee_id.eq.${user.id},responsaveis.cs.{${user.id}},professional_id.eq.${profissional.id}`)
+        .single()
+
+      if (!existente) {
+        return new Response(
+          JSON.stringify({ error: 'Tarefa não encontrada ou sem permissão' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const { error } = await supabaseAdmin
+        .from('tasks')
+        .delete()
+        .eq('id', id)
+
+      if (error) {
+        console.error('[api-waze-agenda] Erro ao excluir tarefa:', error)
+        return new Response(
+          JSON.stringify({ error: 'Erro ao excluir tarefa' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log('[api-waze-agenda] Tarefa excluída:', id)
+
+      return new Response(
+        JSON.stringify({ success: true, message: 'Tarefa excluída' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // ============================================
+    // LEMBRETES
+    // ============================================
 
     // GET: Lembretes
     if (action === 'lembretes' && method === 'GET') {
@@ -516,6 +782,10 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    // ============================================
+    // PERFIL
+    // ============================================
 
     // GET: Perfil do profissional
     if (action === 'perfil' && method === 'GET') {
