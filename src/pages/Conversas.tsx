@@ -8270,12 +8270,12 @@ function Conversas() {
                                   </div>
                                   <div>
                                     <Label>Recorrência</Label>
-                                    <Select value={reminderRecorrencia} onValueChange={(value: "" | "semanal" | "quinzenal" | "mensal") => setReminderRecorrencia(value)}>
+                                    <Select value={reminderRecorrencia || "none"} onValueChange={(value: string) => setReminderRecorrencia(value === "none" ? "" : value as "semanal" | "quinzenal" | "mensal")}>
                                       <SelectTrigger>
                                         <SelectValue placeholder="Sem recorrência" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="">Sem recorrência</SelectItem>
+                                        <SelectItem value="none">Sem recorrência</SelectItem>
                                         <SelectItem value="semanal">Semanal (toda semana)</SelectItem>
                                         <SelectItem value="quinzenal">Quinzenal (a cada 15 dias)</SelectItem>
                                         <SelectItem value="mensal">Mensal (todo mês)</SelectItem>
