@@ -1762,6 +1762,95 @@ export type Database = {
           },
         ]
       }
+      tenant_integrations: {
+        Row: {
+          ad_account_id: string | null
+          company_id: string
+          created_at: string | null
+          granted_permissions: string[] | null
+          id: string
+          instagram_ig_id: string | null
+          instagram_status: string | null
+          instagram_username: string | null
+          lead_form_ids: string[] | null
+          marketing_status: string | null
+          messenger_page_access_token: string | null
+          messenger_page_id: string | null
+          messenger_page_name: string | null
+          messenger_status: string | null
+          meta_access_token: string | null
+          meta_app_scoped_user_id: string | null
+          meta_refresh_token: string | null
+          meta_token_expires_at: string | null
+          provider_priority: string | null
+          updated_at: string | null
+          waba_id: string | null
+          whatsapp_phone_number: string | null
+          whatsapp_phone_number_id: string | null
+          whatsapp_status: string | null
+        }
+        Insert: {
+          ad_account_id?: string | null
+          company_id: string
+          created_at?: string | null
+          granted_permissions?: string[] | null
+          id?: string
+          instagram_ig_id?: string | null
+          instagram_status?: string | null
+          instagram_username?: string | null
+          lead_form_ids?: string[] | null
+          marketing_status?: string | null
+          messenger_page_access_token?: string | null
+          messenger_page_id?: string | null
+          messenger_page_name?: string | null
+          messenger_status?: string | null
+          meta_access_token?: string | null
+          meta_app_scoped_user_id?: string | null
+          meta_refresh_token?: string | null
+          meta_token_expires_at?: string | null
+          provider_priority?: string | null
+          updated_at?: string | null
+          waba_id?: string | null
+          whatsapp_phone_number?: string | null
+          whatsapp_phone_number_id?: string | null
+          whatsapp_status?: string | null
+        }
+        Update: {
+          ad_account_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          granted_permissions?: string[] | null
+          id?: string
+          instagram_ig_id?: string | null
+          instagram_status?: string | null
+          instagram_username?: string | null
+          lead_form_ids?: string[] | null
+          marketing_status?: string | null
+          messenger_page_access_token?: string | null
+          messenger_page_id?: string | null
+          messenger_page_name?: string | null
+          messenger_status?: string | null
+          meta_access_token?: string | null
+          meta_app_scoped_user_id?: string | null
+          meta_refresh_token?: string | null
+          meta_token_expires_at?: string | null
+          provider_priority?: string | null
+          updated_at?: string | null
+          waba_id?: string | null
+          whatsapp_phone_number?: string | null
+          whatsapp_phone_number_id?: string | null
+          whatsapp_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_integrations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           company_id: string

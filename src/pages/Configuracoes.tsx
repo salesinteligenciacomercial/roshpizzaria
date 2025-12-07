@@ -25,6 +25,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { WhatsAppQRCode } from "@/components/configuracoes/WhatsAppQRCode";
 import { MetaApiConfig } from "@/components/configuracoes/MetaApiConfig";
+import { MetaIntegrationsConfig } from "@/components/configuracoes/MetaIntegrationsConfig";
 import { SubcontasManager } from "@/components/configuracoes/SubcontasManager";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { UsuariosSubcontaDialog } from "@/components/configuracoes/UsuariosSubcontaDialog";
@@ -1193,44 +1194,9 @@ export default function Configuracoes() {
         <TabsContent value="channels" className="space-y-4">
           <WhatsAppQRCode />
           {currentCompany?.id && <MetaApiConfig companyId={currentCompany.id} />}
+          {currentCompany?.id && <MetaIntegrationsConfig companyId={currentCompany.id} />}
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 text-purple-500" />
-                  Instagram
-                </CardTitle>
-                <CardDescription>Conecte sua conta comercial do Instagram</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Button variant="outline" className="w-full">
-                  Conectar com Facebook
-                </Button>
-                <p className="text-sm text-muted-foreground">
-                  Integração em desenvolvimento
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 text-blue-500" />
-                  Facebook Messenger
-                </CardTitle>
-                <CardDescription>Conecte sua página do Facebook</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Button variant="outline" className="w-full">
-                  Conectar com Facebook
-                </Button>
-                <p className="text-sm text-muted-foreground">
-                  Integração em desenvolvimento
-                </p>
-              </CardContent>
-            </Card>
-
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
