@@ -1630,6 +1630,7 @@ export type Database = {
           column_id: string | null
           comments: Json | null
           company_id: string | null
+          compromisso_id: string | null
           created_at: string
           description: string | null
           due_date: string | null
@@ -1637,6 +1638,7 @@ export type Database = {
           lead_id: string | null
           owner_id: string
           priority: string
+          professional_id: string | null
           responsaveis: string[] | null
           start_date: string | null
           status: string
@@ -1655,6 +1657,7 @@ export type Database = {
           column_id?: string | null
           comments?: Json | null
           company_id?: string | null
+          compromisso_id?: string | null
           created_at?: string
           description?: string | null
           due_date?: string | null
@@ -1662,6 +1665,7 @@ export type Database = {
           lead_id?: string | null
           owner_id: string
           priority?: string
+          professional_id?: string | null
           responsaveis?: string[] | null
           start_date?: string | null
           status?: string
@@ -1680,6 +1684,7 @@ export type Database = {
           column_id?: string | null
           comments?: Json | null
           company_id?: string | null
+          compromisso_id?: string | null
           created_at?: string
           description?: string | null
           due_date?: string | null
@@ -1687,6 +1692,7 @@ export type Database = {
           lead_id?: string | null
           owner_id?: string
           priority?: string
+          professional_id?: string | null
           responsaveis?: string[] | null
           start_date?: string | null
           status?: string
@@ -1727,6 +1733,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tasks_compromisso_id_fkey"
+            columns: ["compromisso_id"]
+            isOneToOne: false
+            referencedRelation: "compromissos"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "tasks_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
@@ -1738,6 +1751,13 @@ export type Database = {
             columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "profissionais"
             referencedColumns: ["id"]
           },
         ]
