@@ -16,6 +16,7 @@ import IA from "./pages/IA";
 import Configuracoes from "./pages/Configuracoes";
 import Relatorios from "./pages/Relatorios";
 import ChatInterno from "./pages/ChatInterno";
+import Reunioes from "./pages/Reunioes";
 import { MainLayout } from "./components/layout/MainLayout";
 import NotFound from "./pages/NotFound";
 import { Component, ErrorInfo, ReactNode } from 'react';
@@ -75,6 +76,7 @@ const App = () => (
               <Route path="relatorios" element={<Relatorios />} />
               <Route path="configuracoes" element={<Configuracoes />} />
               <Route path="chat-equipe" element={<ChatInterno />} />
+              <Route path="reunioes" element={<Reunioes />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
