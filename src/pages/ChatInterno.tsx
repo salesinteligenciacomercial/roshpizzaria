@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useInternalChat, InternalConversation } from '@/hooks/useInternalChat';
 import { useInternalMessages } from '@/hooks/useInternalMessages';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
+import { useMeetings } from '@/hooks/useMeetings';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,12 +26,16 @@ import {
   Square,
   Loader2,
   X,
-  Settings
+  Settings,
+  Phone,
+  VideoIcon
 } from 'lucide-react';
 import { NewConversationDialog } from '@/components/internal-chat/NewConversationDialog';
 import { ShareItemDialog } from '@/components/internal-chat/ShareItemDialog';
 import { EditGroupDialog } from '@/components/internal-chat/EditGroupDialog';
 import { MessageItem } from '@/components/internal-chat/MessageItem';
+import { VideoCallModal } from '@/components/meetings/VideoCallModal';
+import { IncomingCallModal } from '@/components/meetings/IncomingCallModal';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -41,6 +46,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export default function ChatInterno() {
   const [selectedConversation, setSelectedConversation] = useState<InternalConversation | null>(null);
@@ -54,6 +60,15 @@ export default function ChatInterno() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  
+  // Call states
+  const [activeCall, setActiveCall] = useState<{
+    meetingId: string;
+    remoteUserId: string;
+    remoteUserName: string;
+    callType: 'audio' | 'video';
+    isCaller: boolean;
+  } | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -84,6 +99,69 @@ export default function ChatInterno() {
   } = useInternalMessages(selectedConversation?.id || null);
   
   const { members } = useTeamMembers();
+  
+  const {
+    incomingCall,
+    createMeeting,
+    acceptCall,
+    rejectCall,
+    endMeeting,
+  } = useMeetings();
+
+  // Get the other participant for 1:1 calls
+  const getCallTarget = useCallback(() => {
+    if (!selectedConversation || selectedConversation.is_group) return null;
+    const otherParticipant = selectedConversation.participants?.find(
+      p => p.user_id !== currentUserId
+    );
+    return otherParticipant ? {
+      userId: otherParticipant.user_id,
+      userName: otherParticipant.profile?.full_name || otherParticipant.profile?.email || 'Usuário'
+    } : null;
+  }, [selectedConversation, currentUserId]);
+
+  // Start a call
+  const handleStartCall = async (callType: 'audio' | 'video') => {
+    const target = getCallTarget();
+    if (!target) {
+      toast.error('Não é possível iniciar chamada em grupos');
+      return;
+    }
+
+    const meeting = await createMeeting(callType, target.userId, target.userName);
+    if (meeting) {
+      setActiveCall({
+        meetingId: meeting.id,
+        remoteUserId: target.userId,
+        remoteUserName: target.userName,
+        callType,
+        isCaller: true,
+      });
+      toast.info(`Chamando ${target.userName}...`);
+    }
+  };
+
+  // Handle incoming call accept
+  const handleAcceptCall = async () => {
+    const callInfo = await acceptCall();
+    if (callInfo) {
+      setActiveCall({
+        meetingId: callInfo.meetingId,
+        remoteUserId: callInfo.callerId,
+        remoteUserName: callInfo.callerName,
+        callType: callInfo.callType,
+        isCaller: false,
+      });
+    }
+  };
+
+  // Handle call ended
+  const handleCallEnded = () => {
+    if (activeCall) {
+      endMeeting(activeCall.meetingId);
+    }
+    setActiveCall(null);
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -452,6 +530,45 @@ export default function ChatInterno() {
                 )}
               </div>
 
+              {/* Call buttons - only for 1:1 conversations */}
+              {!selectedConversation.is_group && (
+                <TooltipProvider>
+                  <div className="flex items-center gap-1">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => handleStartCall('audio')}
+                          className="text-muted-foreground hover:text-primary"
+                        >
+                          <Phone className="h-5 w-5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Chamada de áudio</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => handleStartCall('video')}
+                          className="text-muted-foreground hover:text-primary"
+                        >
+                          <VideoIcon className="h-5 w-5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Chamada de vídeo</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+              )}
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon">
@@ -710,6 +827,32 @@ export default function ChatInterno() {
               setSelectedConversation(updated);
             }
           }}
+        />
+      )}
+
+      {/* Video/Audio Call Modal */}
+      {activeCall && currentUserId && (
+        <VideoCallModal
+          open={true}
+          onClose={() => setActiveCall(null)}
+          meetingId={activeCall.meetingId}
+          localUserId={currentUserId}
+          remoteUserId={activeCall.remoteUserId}
+          remoteUserName={activeCall.remoteUserName}
+          callType={activeCall.callType}
+          isCaller={activeCall.isCaller}
+          onCallEnded={handleCallEnded}
+        />
+      )}
+
+      {/* Incoming Call Modal */}
+      {incomingCall && (
+        <IncomingCallModal
+          open={true}
+          callerName={incomingCall.callerName}
+          callType={incomingCall.callType}
+          onAccept={handleAcceptCall}
+          onReject={rejectCall}
         />
       )}
     </div>
