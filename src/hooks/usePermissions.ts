@@ -17,6 +17,7 @@ export function usePermissions() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     const fetchPermissions = async () => {
@@ -52,6 +53,7 @@ export function usePermissions() {
 
         const isSuper = rolesData?.some(r => r.role === 'super_admin') || false;
         const isCompanyAdmin = rolesData?.some(r => r.role === 'company_admin') || false;
+        setIsSuperAdmin(isSuper);
         setIsAdmin(isSuper || isCompanyAdmin);
 
         // Fetch all permissions
@@ -127,6 +129,7 @@ export function usePermissions() {
     permissions,
     loading,
     isAdmin,
+    isSuperAdmin,
     hasPermission,
     canAccess,
     canManageStructure,

@@ -18,7 +18,7 @@ import { Navigate } from "react-router-dom";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function IA() {
-  const { canAccess, isAdmin, loading: permissionsLoading } = usePermissions();
+  const { canAccess, isAdmin, isSuperAdmin, loading: permissionsLoading } = usePermissions();
   const [agentStates, setAgentStates] = useState({ atendimento: false, agendamento: false });
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const [loadingAiPermission, setLoadingAiPermission] = useState(true);
@@ -33,22 +33,29 @@ export default function IA() {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: userRole } = await supabase
-        .from('user_roles')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .single();
-      if (!userRole?.company_id) return;
       
-      // Verificar se a empresa tem permissão para usar IA
-      const { data: company } = await supabase
-        .from('companies')
-        .select('allow_ai_features')
-        .eq('id', userRole.company_id)
-        .single();
-      
-      setAiEnabled(company?.allow_ai_features ?? false);
-      setLoadingAiPermission(false);
+      // Super admin tem acesso total - não precisa verificar permissões
+      if (isSuperAdmin) {
+        setAiEnabled(true);
+        setLoadingAiPermission(false);
+      } else {
+        const { data: userRole } = await supabase
+          .from('user_roles')
+          .select('company_id')
+          .eq('user_id', user.id)
+          .single();
+        if (!userRole?.company_id) return;
+        
+        // Verificar se a empresa tem permissão para usar IA
+        const { data: company } = await supabase
+          .from('companies')
+          .select('allow_ai_features')
+          .eq('id', userRole.company_id)
+          .single();
+        
+        setAiEnabled(company?.allow_ai_features ?? false);
+        setLoadingAiPermission(false);
+      }
       
       // Carregar configs dos agentes (sempre desativados por padrão)
       const configs = await getAgentConfigs();
@@ -59,7 +66,7 @@ export default function IA() {
       setAgentStates(state);
     };
     load();
-  }, [getAgentConfigs]);
+  }, [getAgentConfigs, isSuperAdmin]);
 
   const handleAgentToggle = async (id: string, active: boolean) => {
     setAgentStates(prev => ({ ...prev, [id]: active }));
