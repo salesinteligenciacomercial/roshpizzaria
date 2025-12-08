@@ -184,7 +184,7 @@ const PublicMeeting = () => {
             from_user: 'host',
             to_user: 'guest',
             signal_type: 'ice-candidate',
-            signal_data: { candidate: event.candidate.toJSON() },
+            signal_data: JSON.parse(JSON.stringify({ candidate: event.candidate.toJSON() })),
           }]);
         }
       };
@@ -235,7 +235,7 @@ const PublicMeeting = () => {
                 from_user: 'host',
                 to_user: signal.from_user,
                 signal_type: 'answer',
-                signal_data: { sdp: answer },
+                signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
               }]);
             } else if (signal.signal_type === 'answer') {
               if (pc.signalingState === 'have-local-offer') {
@@ -317,7 +317,7 @@ const PublicMeeting = () => {
             from_user: guestIdRef.current,
             to_user: 'host',
             signal_type: 'ice-candidate',
-            signal_data: { candidate: event.candidate.toJSON() },
+            signal_data: JSON.parse(JSON.stringify({ candidate: event.candidate.toJSON() })),
           }]);
         }
       };
@@ -400,7 +400,7 @@ const PublicMeeting = () => {
         from_user: guestIdRef.current,
         to_user: 'host',
         signal_type: 'offer',
-        signal_data: { sdp: offer },
+        signal_data: JSON.parse(JSON.stringify({ sdp: offer })),
       }]);
 
       console.log('Guest offer sent');
