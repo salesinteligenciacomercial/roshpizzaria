@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { 
   Mic, MicOff, Video, VideoOff, PhoneOff, 
-  Monitor, MonitorOff, Circle, Square, Loader2, Users
+  Monitor, MonitorOff, Circle, Square, Loader2, Users, Copy, Check
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -17,6 +17,10 @@ const PublicMeeting = () => {
   const [meetingExists, setMeetingExists] = useState<boolean | null>(null);
   const [meetingEnded, setMeetingEnded] = useState(false);
   const [hostName, setHostName] = useState('');
+  const [isHost, setIsHost] = useState(false);
+  const [hostId, setHostId] = useState<string | null>(null);
+  const [publicLink, setPublicLink] = useState('');
+  const [copied, setCopied] = useState(false);
   
   // Call state
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -28,6 +32,7 @@ const PublicMeeting = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [callDuration, setCallDuration] = useState(0);
   const [isConnecting, setIsConnecting] = useState(true);
+  const [waitingForGuests, setWaitingForGuests] = useState(false);
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -39,14 +44,14 @@ const PublicMeeting = () => {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const guestIdRef = useRef<string>(`guest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
 
-  // Check if meeting exists
+  // Check if meeting exists and if current user is host
   useEffect(() => {
     const checkMeeting = async () => {
       if (!meetingId) return;
       
       const { data, error } = await supabase
         .from('meetings')
-        .select('id, status, created_by, participant_names')
+        .select('id, status, created_by, participant_names, public_link')
         .eq('id', meetingId)
         .eq('meeting_type', 'external')
         .maybeSingle();
@@ -64,12 +69,140 @@ const PublicMeeting = () => {
 
       setMeetingExists(true);
       setHostName(data.participant_names?.[0] || 'Anfitrião');
+      setHostId(data.created_by);
+      setPublicLink(data.public_link || `${window.location.origin}/meeting/${meetingId}`);
+      
+      // Check if current user is the host
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && user.id === data.created_by) {
+        setIsHost(true);
+        setGuestName(data.participant_names?.[0] || 'Anfitrião');
+      }
     };
 
     checkMeeting();
   }, [meetingId]);
 
-  const initializeWebRTC = async () => {
+  const initializeWebRTCAsHost = async () => {
+    try {
+      // Get local media
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+      setLocalStream(stream);
+      
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+
+      // Create peer connection
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+        ],
+      });
+
+      peerConnectionRef.current = pc;
+
+      // Add local tracks
+      stream.getTracks().forEach(track => {
+        pc.addTrack(track, stream);
+      });
+
+      // Handle remote stream
+      pc.ontrack = (event) => {
+        setRemoteStream(event.streams[0]);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+        }
+        setIsConnecting(false);
+        setWaitingForGuests(false);
+      };
+
+      // Handle ICE candidates
+      pc.onicecandidate = async (event) => {
+        if (event.candidate) {
+          await supabase.from('meeting_signals').insert([{
+            meeting_id: meetingId!,
+            from_user: 'host',
+            to_user: 'guest',
+            signal_type: 'ice-candidate',
+            signal_data: JSON.parse(JSON.stringify({ candidate: event.candidate.toJSON() })),
+          }]);
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+          setIsConnecting(false);
+          setWaitingForGuests(false);
+          callIntervalRef.current = setInterval(() => {
+            setCallDuration(prev => prev + 1);
+          }, 1000);
+        }
+      };
+
+      // Subscribe to signals from guests
+      const channel = supabase
+        .channel(`public-meeting-host-${meetingId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'meeting_signals',
+            filter: `meeting_id=eq.${meetingId}`,
+          },
+          async (payload) => {
+            const signal = payload.new as any;
+            
+            if (signal.from_user === 'host') return; // Ignore our own signals
+            
+            console.log('Host received signal:', signal.signal_type);
+
+            if (signal.signal_type === 'offer') {
+              // Guest sent an offer, respond with answer
+              await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              
+              await supabase.from('meeting_signals').insert([{
+                meeting_id: meetingId!,
+                from_user: 'host',
+                to_user: signal.from_user,
+                signal_type: 'answer',
+                signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
+              }]);
+            } else if (signal.signal_type === 'answer') {
+              await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
+            } else if (signal.signal_type === 'ice-candidate') {
+              try {
+                await pc.addIceCandidate(new RTCIceCandidate(signal.signal_data.candidate));
+              } catch (e) {
+                console.error('Error adding ICE candidate:', e);
+              }
+            } else if (signal.signal_type === 'guest-joined') {
+              toast.success(`${signal.signal_data.guestName} entrou na reunião`);
+              setWaitingForGuests(false);
+            }
+          }
+        )
+        .subscribe();
+
+      channelRef.current = channel;
+      setWaitingForGuests(true);
+      setIsConnecting(false);
+      toast.success('Sala iniciada! Aguardando participantes...');
+
+    } catch (error) {
+      console.error('Error initializing WebRTC as host:', error);
+      toast.error('Erro ao acessar câmera/microfone');
+    }
+  };
+
+  const initializeWebRTCAsGuest = async () => {
     try {
       // Get local media
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -144,18 +277,8 @@ const PublicMeeting = () => {
             
             if (signal.to_user !== guestIdRef.current && signal.to_user !== 'guest') return;
 
-            if (signal.signal_type === 'offer') {
+            if (signal.signal_type === 'answer') {
               await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
-              
-              await supabase.from('meeting_signals').insert([{
-                meeting_id: meetingId!,
-                from_user: guestIdRef.current,
-                to_user: 'host',
-                signal_type: 'answer',
-                signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
-              }]);
             } else if (signal.signal_type === 'ice-candidate' && signal.from_user !== guestIdRef.current) {
               try {
                 await pc.addIceCandidate(new RTCIceCandidate(signal.signal_data.candidate));
@@ -193,13 +316,13 @@ const PublicMeeting = () => {
       }]);
 
     } catch (error) {
-      console.error('Error initializing WebRTC:', error);
+      console.error('Error initializing WebRTC as guest:', error);
       toast.error('Erro ao acessar câmera/microfone');
     }
   };
 
   const handleJoinMeeting = async () => {
-    if (!guestName.trim()) {
+    if (!guestName.trim() && !isHost) {
       toast.error('Digite seu nome para entrar');
       return;
     }
@@ -214,7 +337,19 @@ const PublicMeeting = () => {
       .eq('id', meetingId);
 
     setHasJoined(true);
-    initializeWebRTC();
+    
+    if (isHost) {
+      initializeWebRTCAsHost();
+    } else {
+      initializeWebRTCAsGuest();
+    }
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(publicLink);
+    setCopied(true);
+    toast.success('Link copiado!');
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const toggleAudio = () => {
@@ -417,23 +552,47 @@ const PublicMeeting = () => {
         <Card className="max-w-md w-full">
           <CardHeader className="text-center">
             <div className="h-16 w-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-              <Users className="h-8 w-8 text-primary" />
+              {isHost ? <Video className="h-8 w-8 text-primary" /> : <Users className="h-8 w-8 text-primary" />}
             </div>
-            <CardTitle>Entrar na Reunião</CardTitle>
+            <CardTitle>
+              {isHost ? 'Iniciar Reunião' : 'Entrar na Reunião'}
+            </CardTitle>
             <CardDescription>
-              {hostName} está te aguardando
+              {isHost 
+                ? 'Você é o anfitrião desta reunião' 
+                : `${hostName} está te aguardando`
+              }
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Input
-              placeholder="Digite seu nome"
-              value={guestName}
-              onChange={(e) => setGuestName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleJoinMeeting()}
-            />
+            {!isHost && (
+              <Input
+                placeholder="Digite seu nome"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleJoinMeeting()}
+              />
+            )}
+            
+            {isHost && (
+              <div className="p-3 rounded-lg bg-muted/50 border">
+                <p className="text-sm text-muted-foreground mb-2">Link para convidados:</p>
+                <div className="flex gap-2">
+                  <Input value={publicLink} readOnly className="font-mono text-xs" />
+                  <Button variant="outline" size="icon" onClick={copyLink}>
+                    {copied ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+            
             <Button className="w-full" onClick={handleJoinMeeting}>
               <Video className="h-4 w-4 mr-2" />
-              Entrar na Reunião
+              {isHost ? 'Iniciar Sala ao Vivo' : 'Entrar na Reunião'}
             </Button>
           </CardContent>
         </Card>
@@ -453,9 +612,14 @@ const PublicMeeting = () => {
             </span>
           </div>
           <div>
-            <h3 className="font-semibold">{hostName}</h3>
+            <h3 className="font-semibold">{isHost ? 'Você (Anfitrião)' : hostName}</h3>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {isConnecting ? (
+              {waitingForGuests ? (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+                  <span>Aguardando participantes...</span>
+                </>
+              ) : isConnecting ? (
                 <>
                   <Loader2 className="h-3 w-3 animate-spin" />
                   <span>Conectando...</span>
@@ -469,6 +633,18 @@ const PublicMeeting = () => {
             </div>
           </div>
         </div>
+
+        {/* Copy link button for host */}
+        {isHost && waitingForGuests && (
+          <Button variant="outline" size="sm" onClick={copyLink} className="mr-2">
+            {copied ? (
+              <Check className="h-4 w-4 mr-2 text-green-500" />
+            ) : (
+              <Copy className="h-4 w-4 mr-2" />
+            )}
+            Copiar Link
+          </Button>
+        )}
 
         {isRecording && (
           <div className="flex items-center gap-2 text-destructive">
@@ -490,16 +666,33 @@ const PublicMeeting = () => {
         {!remoteStream && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
-              <div className="h-24 w-24 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-                <span className="text-4xl font-semibold text-primary">
-                  {hostName.charAt(0).toUpperCase()}
-                </span>
-              </div>
-              {isConnecting && (
-                <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span>Aguardando conexão...</span>
-                </div>
+              {waitingForGuests ? (
+                <>
+                  <div className="h-24 w-24 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
+                    <Users className="h-12 w-12 text-primary" />
+                  </div>
+                  <h3 className="text-xl font-semibold mb-2">Sala ao Vivo</h3>
+                  <p className="text-muted-foreground mb-4">Aguardando participantes entrarem...</p>
+                  <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="h-24 w-24 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
+                    <span className="text-4xl font-semibold text-primary">
+                      {hostName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  {isConnecting && (
+                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <span>Aguardando conexão...</span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

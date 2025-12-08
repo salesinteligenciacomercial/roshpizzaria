@@ -9,7 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Link2, Copy, Check, Video, Loader2 } from 'lucide-react';
+import { Link2, Copy, Check, Video, Loader2, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -17,15 +17,18 @@ interface CreatePublicMeetingDialogProps {
   open: boolean;
   onClose: () => void;
   onMeetingCreated: (meetingId: string) => void;
+  onJoinMeeting?: (meetingId: string) => void;
 }
 
 export const CreatePublicMeetingDialog = ({
   open,
   onClose,
   onMeetingCreated,
+  onJoinMeeting,
 }: CreatePublicMeetingDialogProps) => {
   const [isCreating, setIsCreating] = useState(false);
   const [meetingLink, setMeetingLink] = useState('');
+  const [meetingId, setMeetingId] = useState('');
   const [copied, setCopied] = useState(false);
 
   const createPublicMeeting = async () => {
@@ -84,6 +87,7 @@ export const CreatePublicMeetingDialog = ({
         .eq('id', meeting.id);
 
       setMeetingLink(publicLink);
+      setMeetingId(meeting.id);
       onMeetingCreated(meeting.id);
       toast.success('Sala criada com sucesso!');
     } catch (error) {
@@ -101,8 +105,16 @@ export const CreatePublicMeetingDialog = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleJoinMeeting = () => {
+    if (meetingId) {
+      // Open in new tab for host
+      window.open(meetingLink, '_blank');
+    }
+  };
+
   const handleClose = () => {
     setMeetingLink('');
+    setMeetingId('');
     setCopied(false);
     onClose();
   };
@@ -170,14 +182,21 @@ export const CreatePublicMeetingDialog = ({
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" className="flex-1" onClick={handleClose}>
-                  Fechar
+              <div className="flex flex-col gap-2 pt-2">
+                <Button className="w-full" onClick={handleJoinMeeting}>
+                  <Video className="h-4 w-4 mr-2" />
+                  Entrar na Sala Agora
+                  <ExternalLink className="h-4 w-4 ml-2" />
                 </Button>
-                <Button className="flex-1" onClick={copyLink}>
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copiar Link
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={handleClose}>
+                    Fechar
+                  </Button>
+                  <Button variant="secondary" className="flex-1" onClick={copyLink}>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copiar Link
+                  </Button>
+                </div>
               </div>
             </div>
           )}
