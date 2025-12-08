@@ -1186,6 +1186,95 @@ export type Database = {
           },
         ]
       }
+      meeting_signals: {
+        Row: {
+          created_at: string
+          from_user: string
+          id: string
+          meeting_id: string
+          signal_data: Json | null
+          signal_type: string
+          to_user: string
+        }
+        Insert: {
+          created_at?: string
+          from_user: string
+          id?: string
+          meeting_id: string
+          signal_data?: Json | null
+          signal_type: string
+          to_user: string
+        }
+        Update: {
+          created_at?: string
+          from_user?: string
+          id?: string
+          meeting_id?: string
+          signal_data?: Json | null
+          signal_type?: string
+          to_user?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_signals_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meetings: {
+        Row: {
+          call_type: string
+          company_id: string
+          created_at: string
+          created_by: string
+          ended_at: string | null
+          id: string
+          meeting_type: string
+          notes: string | null
+          participant_names: string[] | null
+          participants: string[] | null
+          public_link: string | null
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          call_type?: string
+          company_id: string
+          created_at?: string
+          created_by: string
+          ended_at?: string | null
+          id?: string
+          meeting_type?: string
+          notes?: string | null
+          participant_names?: string[] | null
+          participants?: string[] | null
+          public_link?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          call_type?: string
+          company_id?: string
+          created_at?: string
+          created_by?: string
+          ended_at?: string | null
+          id?: string
+          meeting_type?: string
+          notes?: string | null
+          participant_names?: string[] | null
+          participants?: string[] | null
+          public_link?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       permissions: {
         Row: {
           action: string
