@@ -335,9 +335,18 @@ export const useWebRTC = (config: WebRTCConfig) => {
 
   // Subscribe to signals
   const subscribeToSignals = useCallback(() => {
-    const channelName = `meeting-signals-${config.meetingId}-${config.localUserId}-${Date.now()}`;
+    // Remove any existing channel first
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
     
-    console.log('Subscribing to signals for meeting:', config.meetingId, 'user:', config.localUserId);
+    const channelName = `webrtc-${config.meetingId}-${config.localUserId}-${Date.now()}`;
+    
+    console.log('=== Subscribing to signals ===');
+    console.log('Meeting ID:', config.meetingId);
+    console.log('Local User ID:', config.localUserId);
+    console.log('Remote User ID:', config.remoteUserId);
     
     const channel = supabase
       .channel(channelName)
@@ -351,20 +360,28 @@ export const useWebRTC = (config: WebRTCConfig) => {
         },
         (payload) => {
           const signal = payload.new as any;
-          console.log('Received signal via realtime:', signal?.signal_type, 'meeting:', signal?.meeting_id);
+          console.log('=== Received signal via realtime ===');
+          console.log('Signal type:', signal?.signal_type);
+          console.log('From user:', signal?.from_user);
+          console.log('To user:', signal?.to_user);
+          console.log('Meeting ID:', signal?.meeting_id);
+          console.log('Expected meeting:', config.meetingId);
           
           if (signal && signal.meeting_id === config.meetingId) {
+            console.log('Signal matches meeting, processing...');
             handleSignal(signal);
+          } else {
+            console.log('Signal does not match meeting, ignoring');
           }
         }
       )
       .subscribe((status) => {
-        console.log('Realtime subscription status:', status);
+        console.log('Realtime subscription status:', status, 'for channel:', channelName);
       });
 
     channelRef.current = channel;
     return channel;
-  }, [config.meetingId, config.localUserId, handleSignal]);
+  }, [config.meetingId, config.localUserId, config.remoteUserId, handleSignal]);
 
   // Start call (caller - waits for call-accept before sending offer)
   const startCall = useCallback(async (video: boolean = true) => {
@@ -384,14 +401,46 @@ export const useWebRTC = (config: WebRTCConfig) => {
       
       // Caller waits for call-accept signal before sending offer
       // The offer will be created in handleSignal when call-accept is received
-      console.log('Waiting for callee to accept call...');
+      console.log('Caller ready, waiting for callee to accept...');
     } catch (error) {
       console.error('Error starting call:', error);
       throw error;
     }
   }, [initializeMedia, createPeerConnection, subscribeToSignals]);
 
+  // Check for pending signals in the database (in case we missed realtime events)
+  const checkPendingSignals = useCallback(async () => {
+    console.log('Checking for pending signals...');
+    try {
+      const { data: pendingSignals, error } = await supabase
+        .from('meeting_signals')
+        .select('*')
+        .eq('meeting_id', config.meetingId)
+        .eq('to_user', config.localUserId)
+        .in('signal_type', ['offer', 'answer', 'ice-candidate'])
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching pending signals:', error);
+        return;
+      }
+
+      if (pendingSignals && pendingSignals.length > 0) {
+        console.log('Found pending signals:', pendingSignals.length);
+        for (const signal of pendingSignals) {
+          console.log('Processing pending signal:', signal.signal_type);
+          await handleSignal(signal);
+        }
+      } else {
+        console.log('No pending signals found');
+      }
+    } catch (error) {
+      console.error('Error checking pending signals:', error);
+    }
+  }, [config.meetingId, config.localUserId, handleSignal]);
+
   // Answer call (callee - receives offer, sends answer)
+  // Important: callee subscribes first, then signals ready
   const answerCall = useCallback(async (video: boolean = true) => {
     try {
       console.log('=== Answering call as CALLEE ===');
@@ -403,14 +452,22 @@ export const useWebRTC = (config: WebRTCConfig) => {
       
       const stream = await initializeMedia(video);
       createPeerConnection(stream);
+      
+      // Subscribe to signals FIRST before anything else
       subscribeToSignals();
       
-      console.log('Ready to receive offer from caller');
+      // Give time for subscription to be active, then check for pending signals
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Check if there are any pending signals we might have missed
+      await checkPendingSignals();
+      
+      console.log('Callee ready to receive offer from caller');
     } catch (error) {
       console.error('Error answering call:', error);
       throw error;
     }
-  }, [initializeMedia, createPeerConnection, subscribeToSignals]);
+  }, [initializeMedia, createPeerConnection, subscribeToSignals, checkPendingSignals]);
 
   // Toggle audio
   const toggleAudio = useCallback(() => {
