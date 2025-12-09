@@ -46,6 +46,7 @@ export const useWebRTC = (config: WebRTCConfig) => {
   const [connectionState, setConnectionState] = useState<RTCPeerConnectionState>('new');
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const originalVideoTrackRef = useRef<MediaStreamTrack | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -54,9 +55,32 @@ export const useWebRTC = (config: WebRTCConfig) => {
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 3;
 
+  // Send signaling data - defined first as it's used by other functions
+  const sendSignal = useCallback(async (signalType: string, signalData: any) => {
+    try {
+      console.log('Sending signal:', signalType);
+      const { error } = await supabase.from('meeting_signals').insert({
+        meeting_id: config.meetingId,
+        from_user: config.localUserId,
+        to_user: config.remoteUserId,
+        signal_type: signalType,
+        signal_data: signalData,
+      });
+      
+      if (error) {
+        console.error('Error sending signal:', error);
+      } else {
+        console.log('Signal sent successfully:', signalType);
+      }
+    } catch (error) {
+      console.error('Error sending signal:', error);
+    }
+  }, [config.meetingId, config.localUserId, config.remoteUserId]);
+
   // Initialize media
   const initializeMedia = useCallback(async (video: boolean = true) => {
     try {
+      console.log('Initializing media, video:', video);
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -69,6 +93,11 @@ export const useWebRTC = (config: WebRTCConfig) => {
           facingMode: 'user',
         } : false,
       });
+      console.log('Media initialized:', {
+        audioTracks: stream.getAudioTracks().length,
+        videoTracks: stream.getVideoTracks().length
+      });
+      localStreamRef.current = stream;
       setLocalStream(stream);
       return stream;
     } catch (error) {
@@ -82,6 +111,7 @@ export const useWebRTC = (config: WebRTCConfig) => {
     const pc = peerConnectionRef.current;
     if (!pc || !hasRemoteDescriptionRef.current) return;
 
+    console.log('Processing ICE candidate queue:', iceCandidateQueueRef.current.length);
     while (iceCandidateQueueRef.current.length > 0) {
       const candidate = iceCandidateQueueRef.current.shift();
       if (candidate) {
@@ -95,8 +125,47 @@ export const useWebRTC = (config: WebRTCConfig) => {
     }
   }, []);
 
+  // End call - defined before createPeerConnection to avoid circular dependency
+  const endCall = useCallback(() => {
+    console.log('Ending call...');
+    
+    // Stop all tracks
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
+    }
+
+    // Close peer connection
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+
+    // Unsubscribe from channel
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    // Reset state
+    hasRemoteDescriptionRef.current = false;
+    iceCandidateQueueRef.current = [];
+    reconnectAttemptsRef.current = 0;
+
+    setLocalStream(null);
+    setIsAudioEnabled(true);
+    setIsVideoEnabled(true);
+    setIsScreenSharing(false);
+  }, []);
+
   // Create peer connection
   const createPeerConnection = useCallback((stream: MediaStream) => {
+    console.log('Creating peer connection...');
+    
     // Close existing connection if any
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
@@ -106,6 +175,7 @@ export const useWebRTC = (config: WebRTCConfig) => {
 
     // Add local tracks
     stream.getTracks().forEach(track => {
+      console.log('Adding track to peer connection:', track.kind);
       pc.addTrack(track, stream);
     });
 
@@ -113,6 +183,7 @@ export const useWebRTC = (config: WebRTCConfig) => {
     pc.ontrack = (event) => {
       console.log('Remote track received:', event.track.kind);
       if (event.streams[0]) {
+        console.log('Setting remote stream with tracks:', event.streams[0].getTracks().map(t => t.kind));
         config.onRemoteStream(event.streams[0]);
       }
     };
@@ -130,7 +201,6 @@ export const useWebRTC = (config: WebRTCConfig) => {
       console.log('ICE connection state:', pc.iceConnectionState);
       
       if (pc.iceConnectionState === 'failed') {
-        // Attempt ICE restart
         if (reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current++;
           console.log(`ICE restart attempt ${reconnectAttemptsRef.current}`);
@@ -146,10 +216,6 @@ export const useWebRTC = (config: WebRTCConfig) => {
       console.log('Connection state:', pc.connectionState);
       setConnectionState(pc.connectionState);
       config.onConnectionStateChange(pc.connectionState);
-      
-      if (pc.connectionState === 'failed') {
-        console.log('Connection failed, attempting reconnect...');
-      }
     };
 
     // Handle negotiation needed
@@ -159,44 +225,14 @@ export const useWebRTC = (config: WebRTCConfig) => {
 
     peerConnectionRef.current = pc;
     return pc;
-  }, [config]);
-
-  // Send signaling data
-  const sendSignal = useCallback(async (signalType: string, signalData: any) => {
-    try {
-      const { error } = await supabase.from('meeting_signals').insert({
-        meeting_id: config.meetingId,
-        from_user: config.localUserId,
-        to_user: config.remoteUserId,
-        signal_type: signalType,
-        signal_data: signalData,
-      });
-      
-      if (error) {
-        console.error('Error sending signal:', error);
-      } else {
-        console.log('Signal sent:', signalType);
-      }
-    } catch (error) {
-      console.error('Error sending signal:', error);
-    }
-  }, [config]);
+  }, [config, sendSignal]);
 
   // Handle incoming signals
-  const handleSignal = useCallback(async (signal: any, onCallAccepted?: () => void) => {
+  const handleSignal = useCallback(async (signal: any) => {
     const pc = peerConnectionRef.current;
     
     try {
       console.log('Handling signal:', signal.signal_type);
-      
-      // Handle call-accept signal separately (doesn't need pc)
-      if (signal.signal_type === 'call-accept') {
-        console.log('Call accepted by remote user!');
-        if (onCallAccepted) {
-          onCallAccepted();
-        }
-        return;
-      }
       
       if (!pc) {
         console.warn('No peer connection when handling signal:', signal.signal_type);
@@ -218,24 +254,25 @@ export const useWebRTC = (config: WebRTCConfig) => {
           break;
 
         case 'answer':
-          console.log('Received answer, setting remote description...');
+          console.log('Received answer, current state:', pc.signalingState);
           if (pc.signalingState === 'have-local-offer') {
             await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data));
             hasRemoteDescriptionRef.current = true;
             await processIceCandidateQueue();
             console.log('Remote description set from answer!');
+          } else {
+            console.warn('Ignoring answer, wrong state:', pc.signalingState);
           }
           break;
 
         case 'ice-candidate':
-          if (signal.signal_data.candidate) {
+          if (signal.signal_data?.candidate) {
             const candidate = new RTCIceCandidate(signal.signal_data.candidate);
             
             if (hasRemoteDescriptionRef.current) {
               await pc.addIceCandidate(candidate);
               console.log('ICE candidate added immediately');
             } else {
-              // Queue the candidate for later
               iceCandidateQueueRef.current.push(candidate);
               console.log('ICE candidate queued');
             }
@@ -243,6 +280,7 @@ export const useWebRTC = (config: WebRTCConfig) => {
           break;
 
         case 'call-end':
+          console.log('Received call-end signal');
           endCall();
           config.onCallEnded();
           break;
@@ -250,13 +288,13 @@ export const useWebRTC = (config: WebRTCConfig) => {
     } catch (error) {
       console.error('Error handling signal:', error);
     }
-  }, [config, sendSignal, processIceCandidateQueue]);
+  }, [sendSignal, processIceCandidateQueue, endCall, config]);
 
-  // Subscribe to signals with optional callback for call-accept
-  const subscribeToSignals = useCallback((onCallAccepted?: () => void) => {
+  // Subscribe to signals
+  const subscribeToSignals = useCallback(() => {
     const channelName = `meeting-signals-${config.meetingId}-${config.localUserId}-${Date.now()}`;
     
-    console.log('Subscribing to signals for meeting:', config.meetingId);
+    console.log('Subscribing to signals for meeting:', config.meetingId, 'user:', config.localUserId);
     
     const channel = supabase
       .channel(channelName)
@@ -270,25 +308,26 @@ export const useWebRTC = (config: WebRTCConfig) => {
         },
         (payload) => {
           const signal = payload.new as any;
-          console.log('Received signal:', signal?.signal_type, 'for meeting:', signal?.meeting_id);
+          console.log('Received signal via realtime:', signal?.signal_type, 'meeting:', signal?.meeting_id);
           
           if (signal && signal.meeting_id === config.meetingId) {
-            handleSignal(signal, onCallAccepted);
+            handleSignal(signal);
           }
         }
       )
       .subscribe((status) => {
-        console.log('Subscription status:', status);
+        console.log('Realtime subscription status:', status);
       });
 
     channelRef.current = channel;
     return channel;
-  }, [config, handleSignal]);
+  }, [config.meetingId, config.localUserId, handleSignal]);
 
   // Start call (caller - sends offer immediately)
   const startCall = useCallback(async (video: boolean = true) => {
     try {
-      console.log('Starting call as caller - sending offer immediately...');
+      console.log('=== Starting call as CALLER ===');
+      console.log('Video enabled:', video);
       hasRemoteDescriptionRef.current = false;
       iceCandidateQueueRef.current = [];
       
@@ -305,6 +344,7 @@ export const useWebRTC = (config: WebRTCConfig) => {
         offerToReceiveVideo: video,
       });
       await pc.setLocalDescription(offer);
+      console.log('Local description set, sending offer...');
       await sendSignal('offer', { type: offer.type, sdp: offer.sdp });
       console.log('Offer sent successfully!');
     } catch (error) {
@@ -316,13 +356,14 @@ export const useWebRTC = (config: WebRTCConfig) => {
   // Answer call (callee - waits for offer, sends answer)
   const answerCall = useCallback(async (video: boolean = true) => {
     try {
-      console.log('Answering call - initializing media and waiting for offer...');
+      console.log('=== Answering call as CALLEE ===');
+      console.log('Video enabled:', video);
       hasRemoteDescriptionRef.current = false;
       iceCandidateQueueRef.current = [];
       
       const stream = await initializeMedia(video);
       createPeerConnection(stream);
-      subscribeToSignals(); // No callback needed - just wait for offer
+      subscribeToSignals();
       
       console.log('Ready to receive offer from caller');
     } catch (error) {
@@ -333,30 +374,35 @@ export const useWebRTC = (config: WebRTCConfig) => {
 
   // Toggle audio
   const toggleAudio = useCallback(() => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
+    const stream = localStreamRef.current;
+    if (stream) {
+      const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsAudioEnabled(audioTrack.enabled);
+        console.log('Audio toggled:', audioTrack.enabled);
       }
     }
-  }, [localStream]);
+  }, []);
 
   // Toggle video
   const toggleVideo = useCallback(() => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
+    const stream = localStreamRef.current;
+    if (stream) {
+      const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled;
         setIsVideoEnabled(videoTrack.enabled);
+        console.log('Video toggled:', videoTrack.enabled);
       }
     }
-  }, [localStream]);
+  }, []);
 
   // Toggle screen sharing
   const toggleScreenShare = useCallback(async () => {
     const pc = peerConnectionRef.current;
-    if (!pc || !localStream) return;
+    const stream = localStreamRef.current;
+    if (!pc || !stream) return;
 
     if (isScreenSharing) {
       // Stop screen sharing, restore camera
@@ -398,42 +444,7 @@ export const useWebRTC = (config: WebRTCConfig) => {
         console.error('Error sharing screen:', error);
       }
     }
-  }, [isScreenSharing, localStream]);
-
-  // End call
-  const endCall = useCallback(() => {
-    console.log('Ending call...');
-    
-    // Stop all tracks
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-    }
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-    }
-
-    // Close peer connection
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-    }
-
-    // Unsubscribe from channel
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
-
-    // Reset state
-    hasRemoteDescriptionRef.current = false;
-    iceCandidateQueueRef.current = [];
-    reconnectAttemptsRef.current = 0;
-
-    setLocalStream(null);
-    setIsAudioEnabled(true);
-    setIsVideoEnabled(true);
-    setIsScreenSharing(false);
-  }, [localStream]);
+  }, [isScreenSharing]);
 
   // Send end call signal
   const sendEndCall = useCallback(async () => {
