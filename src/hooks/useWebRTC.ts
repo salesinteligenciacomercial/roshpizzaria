@@ -238,8 +238,10 @@ export const useWebRTC = (config: WebRTCConfig) => {
   }, [config, sendSignal, processIceCandidateQueue]);
 
   // Subscribe to signals
-  const subscribeToSignals = useCallback(() => {
+  const subscribeToSignals = useCallback((onCallAccepted?: () => void) => {
     const channelName = `meeting-signals-${config.meetingId}-${config.localUserId}-${Date.now()}`;
+    
+    console.log('Subscribing to signals for meeting:', config.meetingId);
     
     const channel = supabase
       .channel(channelName)
@@ -252,8 +254,17 @@ export const useWebRTC = (config: WebRTCConfig) => {
           filter: `to_user=eq.${config.localUserId}`,
         },
         (payload) => {
-          if (payload.new && (payload.new as any).meeting_id === config.meetingId) {
-            handleSignal(payload.new);
+          const signal = payload.new as any;
+          console.log('Received signal:', signal?.signal_type, 'for meeting:', signal?.meeting_id);
+          
+          if (signal && signal.meeting_id === config.meetingId) {
+            // Handle call-accept signal - caller should now send offer
+            if (signal.signal_type === 'call-accept' && onCallAccepted) {
+              console.log('Call accepted! Sending offer...');
+              onCallAccepted();
+            } else {
+              handleSignal(signal);
+            }
           }
         }
       )
@@ -265,26 +276,34 @@ export const useWebRTC = (config: WebRTCConfig) => {
     return channel;
   }, [config, handleSignal]);
 
-  // Start call (caller - creates offer)
+  // Start call (caller - waits for call-accept, then sends offer)
   const startCall = useCallback(async (video: boolean = true) => {
     try {
-      console.log('Starting call as caller...');
+      console.log('Starting call as caller - waiting for accept...');
       hasRemoteDescriptionRef.current = false;
       iceCandidateQueueRef.current = [];
       
       const stream = await initializeMedia(video);
       const pc = createPeerConnection(stream);
-      subscribeToSignals();
-
-      // Create and send offer
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: video,
-      });
-      await pc.setLocalDescription(offer);
-      await sendSignal('offer', { type: offer.type, sdp: offer.sdp });
       
-      console.log('Offer sent');
+      // Subscribe to signals with callback for when call is accepted
+      subscribeToSignals(async () => {
+        try {
+          console.log('Call accepted - creating and sending offer...');
+          // Create and send offer AFTER call is accepted
+          const offer = await pc.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: video,
+          });
+          await pc.setLocalDescription(offer);
+          await sendSignal('offer', { type: offer.type, sdp: offer.sdp });
+          console.log('Offer sent successfully');
+        } catch (err) {
+          console.error('Error sending offer:', err);
+        }
+      });
+
+      console.log('Caller ready - waiting for remote user to accept...');
     } catch (error) {
       console.error('Error starting call:', error);
       throw error;
@@ -294,15 +313,15 @@ export const useWebRTC = (config: WebRTCConfig) => {
   // Answer call (callee - waits for offer, sends answer)
   const answerCall = useCallback(async (video: boolean = true) => {
     try {
-      console.log('Answering call...');
+      console.log('Answering call - initializing media and waiting for offer...');
       hasRemoteDescriptionRef.current = false;
       iceCandidateQueueRef.current = [];
       
       const stream = await initializeMedia(video);
       createPeerConnection(stream);
-      subscribeToSignals();
+      subscribeToSignals(); // No callback needed - just wait for offer
       
-      console.log('Ready to receive offer');
+      console.log('Ready to receive offer from caller');
     } catch (error) {
       console.error('Error answering call:', error);
       throw error;
