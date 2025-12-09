@@ -34,23 +34,28 @@ export default function IA() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
+      // Verificar diretamente no banco se é super_admin
+      const { data: userRoleData } = await supabase
+        .from('user_roles')
+        .select('role, company_id')
+        .eq('user_id', user.id)
+        .single();
+      
+      const isUserSuperAdmin = userRoleData?.role === 'super_admin';
+      
       // Super admin tem acesso total - não precisa verificar permissões
-      if (isSuperAdmin) {
+      if (isUserSuperAdmin) {
+        console.log('✅ Super Admin detectado - liberando IA');
         setAiEnabled(true);
         setLoadingAiPermission(false);
       } else {
-        const { data: userRole } = await supabase
-          .from('user_roles')
-          .select('company_id')
-          .eq('user_id', user.id)
-          .single();
-        if (!userRole?.company_id) return;
+        if (!userRoleData?.company_id) return;
         
         // Verificar se a empresa tem permissão para usar IA
         const { data: company } = await supabase
           .from('companies')
           .select('allow_ai_features')
-          .eq('id', userRole.company_id)
+          .eq('id', userRoleData.company_id)
           .single();
         
         setAiEnabled(company?.allow_ai_features ?? false);
@@ -66,7 +71,7 @@ export default function IA() {
       setAgentStates(state);
     };
     load();
-  }, [getAgentConfigs, isSuperAdmin]);
+  }, [getAgentConfigs]);
 
   const handleAgentToggle = async (id: string, active: boolean) => {
     setAgentStates(prev => ({ ...prev, [id]: active }));
