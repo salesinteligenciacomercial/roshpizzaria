@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Button } from '@/components/ui/button';
 import { 
   Mic, MicOff, Video, VideoOff, PhoneOff, 
@@ -266,7 +267,10 @@ export const VideoCallModal = ({
 
   return (
     <Dialog open={open} onOpenChange={() => handleClose()}>
-      <DialogContent className="max-w-4xl w-full h-[80vh] p-0 gap-0 bg-background/95 backdrop-blur-sm">
+      <DialogContent className="max-w-4xl w-full h-[80vh] p-0 gap-0 bg-background/95 backdrop-blur-sm" aria-describedby={undefined}>
+        <VisuallyHidden>
+          <DialogTitle>Chamada com {remoteUserName}</DialogTitle>
+        </VisuallyHidden>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center gap-3">

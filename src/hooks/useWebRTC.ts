@@ -53,9 +53,11 @@ export const useWebRTC = (config: WebRTCConfig) => {
   const iceCandidateQueueRef = useRef<RTCIceCandidate[]>([]);
   const hasRemoteDescriptionRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
+  const isCallerRef = useRef(false);
+  const videoEnabledRef = useRef(true);
   const maxReconnectAttempts = 3;
 
-  // Send signaling data - defined first as it's used by other functions
+  // Send signaling data
   const sendSignal = useCallback(async (signalType: string, signalData: any) => {
     try {
       console.log('Sending signal:', signalType);
@@ -81,6 +83,8 @@ export const useWebRTC = (config: WebRTCConfig) => {
   const initializeMedia = useCallback(async (video: boolean = true) => {
     try {
       console.log('Initializing media, video:', video);
+      videoEnabledRef.current = video;
+      
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -93,12 +97,15 @@ export const useWebRTC = (config: WebRTCConfig) => {
           facingMode: 'user',
         } : false,
       });
+      
       console.log('Media initialized:', {
         audioTracks: stream.getAudioTracks().length,
         videoTracks: stream.getVideoTracks().length
       });
+      
       localStreamRef.current = stream;
       setLocalStream(stream);
+      setIsVideoEnabled(video);
       return stream;
     } catch (error) {
       console.error('Error accessing media devices:', error);
@@ -125,7 +132,7 @@ export const useWebRTC = (config: WebRTCConfig) => {
     }
   }, []);
 
-  // End call - defined before createPeerConnection to avoid circular dependency
+  // End call
   const endCall = useCallback(() => {
     console.log('Ending call...');
     
@@ -218,29 +225,61 @@ export const useWebRTC = (config: WebRTCConfig) => {
       config.onConnectionStateChange(pc.connectionState);
     };
 
-    // Handle negotiation needed
+    // Handle negotiation needed - only caller sends offer
     pc.onnegotiationneeded = async () => {
-      console.log('Negotiation needed');
+      console.log('Negotiation needed, isCaller:', isCallerRef.current);
     };
 
     peerConnectionRef.current = pc;
     return pc;
   }, [config, sendSignal]);
 
+  // Create and send offer (called by caller after callee accepts)
+  const createAndSendOffer = useCallback(async () => {
+    const pc = peerConnectionRef.current;
+    if (!pc) {
+      console.error('No peer connection when trying to create offer');
+      return;
+    }
+
+    try {
+      console.log('Creating offer...');
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: videoEnabledRef.current,
+      });
+      
+      await pc.setLocalDescription(offer);
+      console.log('Local description set, sending offer...');
+      
+      await sendSignal('offer', { type: offer.type, sdp: offer.sdp });
+      console.log('Offer sent successfully!');
+    } catch (error) {
+      console.error('Error creating/sending offer:', error);
+    }
+  }, [sendSignal]);
+
   // Handle incoming signals
   const handleSignal = useCallback(async (signal: any) => {
     const pc = peerConnectionRef.current;
     
     try {
-      console.log('Handling signal:', signal.signal_type);
-      
-      if (!pc) {
-        console.warn('No peer connection when handling signal:', signal.signal_type);
-        return;
-      }
+      console.log('Handling signal:', signal.signal_type, 'hasPc:', !!pc);
       
       switch (signal.signal_type) {
+        case 'call-accept':
+          // Callee accepted the call, now caller creates and sends offer
+          console.log('Call accepted, creating offer as caller...');
+          if (isCallerRef.current && pc) {
+            await createAndSendOffer();
+          }
+          break;
+          
         case 'offer':
+          if (!pc) {
+            console.warn('No peer connection when receiving offer');
+            return;
+          }
           console.log('Received offer, setting remote description...');
           await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data));
           hasRemoteDescriptionRef.current = true;
@@ -254,6 +293,10 @@ export const useWebRTC = (config: WebRTCConfig) => {
           break;
 
         case 'answer':
+          if (!pc) {
+            console.warn('No peer connection when receiving answer');
+            return;
+          }
           console.log('Received answer, current state:', pc.signalingState);
           if (pc.signalingState === 'have-local-offer') {
             await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data));
@@ -269,12 +312,12 @@ export const useWebRTC = (config: WebRTCConfig) => {
           if (signal.signal_data?.candidate) {
             const candidate = new RTCIceCandidate(signal.signal_data.candidate);
             
-            if (hasRemoteDescriptionRef.current) {
+            if (pc && hasRemoteDescriptionRef.current) {
               await pc.addIceCandidate(candidate);
               console.log('ICE candidate added immediately');
             } else {
               iceCandidateQueueRef.current.push(candidate);
-              console.log('ICE candidate queued');
+              console.log('ICE candidate queued (no pc or no remote desc)');
             }
           }
           break;
@@ -288,7 +331,7 @@ export const useWebRTC = (config: WebRTCConfig) => {
     } catch (error) {
       console.error('Error handling signal:', error);
     }
-  }, [sendSignal, processIceCandidateQueue, endCall, config]);
+  }, [sendSignal, processIceCandidateQueue, endCall, config, createAndSendOffer]);
 
   // Subscribe to signals
   const subscribeToSignals = useCallback(() => {
@@ -323,41 +366,38 @@ export const useWebRTC = (config: WebRTCConfig) => {
     return channel;
   }, [config.meetingId, config.localUserId, handleSignal]);
 
-  // Start call (caller - sends offer immediately)
+  // Start call (caller - waits for call-accept before sending offer)
   const startCall = useCallback(async (video: boolean = true) => {
     try {
       console.log('=== Starting call as CALLER ===');
       console.log('Video enabled:', video);
+      
+      isCallerRef.current = true;
       hasRemoteDescriptionRef.current = false;
       iceCandidateQueueRef.current = [];
       
       const stream = await initializeMedia(video);
-      const pc = createPeerConnection(stream);
+      createPeerConnection(stream);
       
-      // Subscribe to signals to receive answer
+      // Subscribe to signals to receive call-accept and then answer
       subscribeToSignals();
       
-      // Create and send offer immediately
-      console.log('Creating offer...');
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: video,
-      });
-      await pc.setLocalDescription(offer);
-      console.log('Local description set, sending offer...');
-      await sendSignal('offer', { type: offer.type, sdp: offer.sdp });
-      console.log('Offer sent successfully!');
+      // Caller waits for call-accept signal before sending offer
+      // The offer will be created in handleSignal when call-accept is received
+      console.log('Waiting for callee to accept call...');
     } catch (error) {
       console.error('Error starting call:', error);
       throw error;
     }
-  }, [initializeMedia, createPeerConnection, subscribeToSignals, sendSignal]);
+  }, [initializeMedia, createPeerConnection, subscribeToSignals]);
 
-  // Answer call (callee - waits for offer, sends answer)
+  // Answer call (callee - receives offer, sends answer)
   const answerCall = useCallback(async (video: boolean = true) => {
     try {
       console.log('=== Answering call as CALLEE ===');
       console.log('Video enabled:', video);
+      
+      isCallerRef.current = false;
       hasRemoteDescriptionRef.current = false;
       iceCandidateQueueRef.current = [];
       
