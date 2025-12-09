@@ -121,6 +121,11 @@ export const VideoCallModal = ({
   // Set local video with explicit play
   useEffect(() => {
     if (localVideoRef.current && localStream) {
+      console.log('Setting local video stream:', {
+        videoTracks: localStream.getVideoTracks().length,
+        audioTracks: localStream.getAudioTracks().length,
+        videoEnabled: localStream.getVideoTracks()[0]?.enabled
+      });
       localVideoRef.current.srcObject = localStream;
       localVideoRef.current.play().catch(err => {
         console.log('Local video play error:', err);
@@ -131,6 +136,11 @@ export const VideoCallModal = ({
   // Set remote video with explicit play
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
+      console.log('Setting remote video stream:', {
+        videoTracks: remoteStream.getVideoTracks().length,
+        audioTracks: remoteStream.getAudioTracks().length,
+        videoEnabled: remoteStream.getVideoTracks()[0]?.enabled
+      });
       remoteVideoRef.current.srcObject = remoteStream;
       remoteVideoRef.current.play().catch(err => {
         console.log('Remote video play error:', err);
@@ -298,7 +308,8 @@ export const VideoCallModal = ({
             ref={remoteVideoRef}
             autoPlay
             playsInline
-            className={`absolute inset-0 w-full h-full object-cover ${!remoteStream ? 'hidden' : ''}`}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ display: remoteStream && remoteStream.getVideoTracks().length > 0 ? 'block' : 'none' }}
           />
 
           {/* Placeholder when no remote video */}
@@ -327,9 +338,10 @@ export const VideoCallModal = ({
               autoPlay
               playsInline
               muted
-              className={`w-full h-full object-cover ${(!localStream || !isVideoEnabled) ? 'hidden' : ''}`}
+              className="w-full h-full object-cover"
+              style={{ display: localStream && localStream.getVideoTracks().length > 0 && isVideoEnabled ? 'block' : 'none' }}
             />
-            {(!localStream || !isVideoEnabled) && (
+            {(!localStream || !localStream.getVideoTracks().length || !isVideoEnabled) && (
               <div className="absolute inset-0 flex items-center justify-center bg-muted">
                 <VideoOff className="h-8 w-8 text-muted-foreground" />
               </div>
