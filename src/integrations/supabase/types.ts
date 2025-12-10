@@ -1186,6 +1186,7 @@ export type Database = {
           horas_antecedencia: number
           id: string
           mensagem: string | null
+          midia_url: string | null
           proxima_data_envio: string | null
           proxima_tentativa: string | null
           recorrencia: string | null
@@ -1205,6 +1206,7 @@ export type Database = {
           horas_antecedencia?: number
           id?: string
           mensagem?: string | null
+          midia_url?: string | null
           proxima_data_envio?: string | null
           proxima_tentativa?: string | null
           recorrencia?: string | null
@@ -1224,6 +1226,7 @@ export type Database = {
           horas_antecedencia?: number
           id?: string
           mensagem?: string | null
+          midia_url?: string | null
           proxima_data_envio?: string | null
           proxima_tentativa?: string | null
           recorrencia?: string | null
