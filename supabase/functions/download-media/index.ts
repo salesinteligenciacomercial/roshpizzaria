@@ -95,6 +95,21 @@ Deno.serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ [DOWNLOAD-MEDIA] Erro Evolution API:', response.status, errorText);
+      
+      // Retornar erro específico para mídia expirada/indisponível
+      if (response.status === 400 || response.status === 404) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'media_expired', 
+            message: 'Mídia expirada ou indisponível. Mídias do WhatsApp expiram após alguns dias.' 
+          }),
+          { 
+            status: 410, // Gone - indica que o recurso não está mais disponível
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      
       throw new Error(`Erro ao baixar mídia da Evolution API: ${response.status}`);
     }
 

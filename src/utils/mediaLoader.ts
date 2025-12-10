@@ -57,6 +57,12 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
             }
           });
 
+          // Verificar se a mídia expirou
+          if (response.data?.error === 'media_expired') {
+            console.warn('⚠️ [MEDIA-LOADER] Mídia expirada:', response.data.message);
+            throw new Error('MEDIA_EXPIRED');
+          }
+
           if (response.error) {
             console.error('❌ [MEDIA-LOADER] Erro na edge function:', response.error);
             throw new Error(`Erro ao baixar mídia: ${response.error.message}`);
@@ -87,8 +93,12 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
             mediaType: type || message.tipo_mensagem
           });
           return url;
-        } catch (downloadError) {
+        } catch (downloadError: any) {
           console.error('❌ [MEDIA-LOADER] Erro ao baixar mídia:', downloadError);
+          // Propagar erro específico de mídia expirada
+          if (downloadError.message === 'MEDIA_EXPIRED') {
+            throw downloadError;
+          }
           throw downloadError;
         }
       }
