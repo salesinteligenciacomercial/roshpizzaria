@@ -11,6 +11,7 @@ interface Lembrete {
   compromisso_id: string;
   canal: string;
   mensagem: string;
+  midia_url?: string | null;
   horas_antecedencia: number;
   data_envio: string;
   status_envio: string;
@@ -351,21 +352,30 @@ serve(async (req) => {
             // Enviar UMA mensagem para o telefone definido
             const telefoneFormatado = telefoneEnvio.replace(/\D/g, '');
             const mensagemLembrete = lembrete.mensagem || `Olá! Lembramos do compromisso de ${lembrete.compromisso.tipo_servico} agendado para ${new Date(lembrete.compromisso.data_hora_inicio).toLocaleString('pt-BR')}.`;
+            const midiaUrl = lembrete.midia_url || null;
             
-            console.log(`📱 Enviando WhatsApp para: ${telefoneFormatado} via edge function`);
+            console.log(`📱 Enviando WhatsApp para: ${telefoneFormatado} via edge function ${midiaUrl ? '(com mídia)' : ''}`);
 
             let enviado = false;
             try {
+              // Preparar body da requisição
+              const requestBody: any = {
+                numero: telefoneFormatado,
+                mensagem: mensagemLembrete,
+                company_id: lembrete.compromisso.company_id || companyId,
+              };
+              
+              // Se tiver mídia, adicionar ao body
+              if (midiaUrl) {
+                requestBody.mediaUrl = midiaUrl;
+                requestBody.mediaType = 'image';
+                console.log(`📷 Mídia anexada: ${midiaUrl}`);
+              }
+              
               // Chamar edge function enviar-whatsapp
               const { data: sendResult, error: sendError } = await supabase.functions.invoke(
                 'enviar-whatsapp',
-                {
-                  body: {
-                    numero: telefoneFormatado,
-                    mensagem: mensagemLembrete,
-                    company_id: lembrete.compromisso.company_id || companyId,
-                  },
-                }
+                { body: requestBody }
               );
 
               if (sendError || !sendResult?.success) {
@@ -399,7 +409,8 @@ serve(async (req) => {
                     mensagem: mensagemLembrete,
                     origem: 'WhatsApp',
                     status: 'Enviada',
-                    tipo_mensagem: 'text',
+                    tipo_mensagem: midiaUrl ? 'image' : 'text',
+                    midia_url: midiaUrl,
                     nome_contato: leadNome,
                     company_id: lembrete.compromisso.company_id || companyId,
                     lead_id: lembrete.compromisso.lead_id,

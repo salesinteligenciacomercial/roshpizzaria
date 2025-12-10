@@ -1372,6 +1372,8 @@ function Conversas() {
   const [reminderDestinatario, setReminderDestinatario] = useState<"lead" | "responsavel" | "ambos">("lead"); // Destinatário
   const [reminderEnviar, setReminderEnviar] = useState(true); // Se deve enviar mensagem
   const [reminderRecorrencia, setReminderRecorrencia] = useState<"" | "semanal" | "quinzenal" | "mensal">(""); // Recorrência
+  const [reminderMediaFile, setReminderMediaFile] = useState<File | null>(null);
+  const [reminderMediaPreview, setReminderMediaPreview] = useState<string | null>(null);
   const [scheduledContent, setScheduledContent] = useState("");
   const [scheduledDatetime, setScheduledDatetime] = useState("");
   const [meetingTitle, setMeetingTitle] = useState("");
@@ -5040,6 +5042,33 @@ function Conversas() {
         const dataEnvio = new Date(reminderDatetime);
         const telefoneDestino = leadVinculado.phone || leadVinculado.telefone || null;
 
+        // Upload de mídia se existir
+        let midiaUrl: string | null = null;
+        if (reminderMediaFile) {
+          try {
+            const fileExt = reminderMediaFile.name.split('.').pop();
+            const fileName = `reminder_${Date.now()}.${fileExt}`;
+            const filePath = `${companyId}/${fileName}`;
+            
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('conversation-media')
+              .upload(filePath, reminderMediaFile);
+            
+            if (uploadError) {
+              console.error('Erro ao fazer upload da mídia:', uploadError);
+              toast.warning("Lembrete será criado sem mídia - erro no upload");
+            } else {
+              const { data: urlData } = supabase.storage
+                .from('conversation-media')
+                .getPublicUrl(filePath);
+              midiaUrl = urlData.publicUrl;
+              console.log('✅ Mídia do lembrete uploaded:', midiaUrl);
+            }
+          } catch (uploadErr) {
+            console.error('Erro ao fazer upload:', uploadErr);
+          }
+        }
+
         // Criar lembretes baseado no destinatário escolhido
         const lembretesCriar = [];
 
@@ -5054,6 +5083,7 @@ function Conversas() {
               data_hora_envio: dataEnvio.toISOString(),
               proxima_data_envio: dataEnvio.toISOString(),
               mensagem: reminderMessage,
+              midia_url: midiaUrl,
               status_envio: 'pendente',
               destinatario: 'lead',
               telefone_responsavel: telefoneDestino,
@@ -5084,6 +5114,7 @@ function Conversas() {
               data_hora_envio: dataEnvio.toISOString(),
               proxima_data_envio: dataEnvio.toISOString(),
               mensagem: mensagemResponsavel,
+              midia_url: midiaUrl,
               status_envio: 'pendente',
               destinatario: 'responsavel',
               telefone_responsavel: telefoneResponsavel,
@@ -5116,6 +5147,8 @@ function Conversas() {
       setReminderDestinatario("lead");
       setReminderEnviar(true);
       setReminderRecorrencia("");
+      setReminderMediaFile(null);
+      setReminderMediaPreview(null);
       const mensagemSucesso = reminderEnviar ? "Lembrete criado! Mensagem será enviada na data/hora programada." : "Lembrete criado! (sem envio de mensagem)";
       toast.success(mensagemSucesso);
       loadReminders();
@@ -8374,6 +8407,71 @@ function Conversas() {
                                           {reminderDestinatario === 'lead' && "Esta mensagem será enviada para o cliente"}
                                           {reminderDestinatario === 'responsavel' && "Esta mensagem será enviada para você"}
                                           {reminderDestinatario === 'ambos' && "Esta mensagem será enviada para o cliente e para você"}
+                                        </p>
+                                      </div>
+                                      
+                                      {/* Upload de Mídia para Lembrete */}
+                                      <div>
+                                        <Label>Anexar Imagem (opcional)</Label>
+                                        <div className="mt-2">
+                                          {reminderMediaPreview ? (
+                                            <div className="relative inline-block">
+                                              <img 
+                                                src={reminderMediaPreview} 
+                                                alt="Preview" 
+                                                className="max-w-[200px] max-h-[150px] rounded-lg border object-cover"
+                                              />
+                                              <Button
+                                                type="button"
+                                                variant="destructive"
+                                                size="icon"
+                                                className="absolute -top-2 -right-2 h-6 w-6"
+                                                onClick={() => {
+                                                  setReminderMediaFile(null);
+                                                  setReminderMediaPreview(null);
+                                                }}
+                                              >
+                                                <X className="h-3 w-3" />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-center gap-2">
+                                              <input
+                                                type="file"
+                                                id="reminder-media-upload"
+                                                className="hidden"
+                                                accept="image/*"
+                                                onChange={(e) => {
+                                                  const file = e.target.files?.[0];
+                                                  if (file) {
+                                                    if (file.size > 16 * 1024 * 1024) {
+                                                      toast.error("Arquivo muito grande. Máximo 16MB");
+                                                      return;
+                                                    }
+                                                    setReminderMediaFile(file);
+                                                    const reader = new FileReader();
+                                                    reader.onloadend = () => {
+                                                      setReminderMediaPreview(reader.result as string);
+                                                    };
+                                                    reader.readAsDataURL(file);
+                                                  }
+                                                  e.target.value = '';
+                                                }}
+                                              />
+                                              <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => document.getElementById('reminder-media-upload')?.click()}
+                                              >
+                                                <ImageIcon className="h-4 w-4 mr-2" />
+                                                Selecionar Imagem
+                                              </Button>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          A imagem será enviada junto com a mensagem do lembrete
                                         </p>
                                       </div>
                                     </>}
