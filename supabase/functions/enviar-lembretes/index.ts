@@ -358,78 +358,99 @@ serve(async (req) => {
 
             let enviado = false;
             try {
-              // Preparar body da requisição
-              const requestBody: any = {
-                numero: telefoneFormatado,
-                mensagem: mensagemLembrete,
-                company_id: lembrete.compromisso.company_id || companyId,
-              };
-              
-              // Se tiver mídia, adicionar ao body
+              // Se tiver mídia, enviar primeiro a mídia e depois o texto separadamente
               if (midiaUrl) {
-                requestBody.mediaUrl = midiaUrl;
-                requestBody.mediaType = 'image';
-                console.log(`📷 Mídia anexada: ${midiaUrl}`);
-              }
-              
-              // Chamar edge function enviar-whatsapp
-              const { data: sendResult, error: sendError } = await supabase.functions.invoke(
-                'enviar-whatsapp',
-                { body: requestBody }
-              );
-
-              if (sendError || !sendResult?.success) {
-                console.error(`❌ Erro ao enviar WhatsApp via edge function:`, sendError || sendResult);
-              } else {
-                console.log(`✅ WhatsApp enviado com sucesso via edge function`);
-                enviado = true;
+                console.log(`📷 Enviando mídia do lembrete: ${midiaUrl}`);
                 
-                // Salvar mensagem de lembrete na tabela conversas para ficar visível no CRM
-                try {
-                  const leadNome = lembrete.compromisso.lead?.name || 'Contato';
-                  
-                  // Buscar nome do usuário responsável pelo compromisso para assinatura
-                  let sentBy = 'Sistema';
-                  const responsavelId = lembrete.compromisso.usuario_responsavel_id;
-                  if (responsavelId) {
-                    const { data: profileData } = await supabase
-                      .from('profiles')
-                      .select('full_name, email')
-                      .eq('id', responsavelId)
-                      .single();
-                    
-                    if (profileData) {
-                      sentBy = profileData.full_name || profileData.email || 'Sistema';
-                    }
-                  }
-                  
-                  const { error: dbError } = await supabase.from('conversas').insert([{
-                    numero: telefoneFormatado,
-                    telefone_formatado: telefoneFormatado,
-                    mensagem: mensagemLembrete,
-                    origem: 'WhatsApp',
-                    status: 'Enviada',
-                    tipo_mensagem: midiaUrl ? 'image' : 'text',
-                    midia_url: midiaUrl,
-                    nome_contato: leadNome,
-                    company_id: lembrete.compromisso.company_id || companyId,
-                    lead_id: lembrete.compromisso.lead_id,
-                    owner_id: responsavelId,
-                    sent_by: sentBy,
-                    fromme: true,
-                  }]);
-                  
-                  if (dbError) {
-                    console.error(`❌ Erro ao salvar mensagem de lembrete no banco:`, dbError);
-                  } else {
-                    console.log(`✅ Mensagem de lembrete salva no banco de dados`);
-                  }
-                } catch (saveError) {
-                  console.error(`❌ Erro ao salvar mensagem de lembrete no banco:`, saveError);
+                // Enviar mídia com caption
+                const mediaBody = {
+                  numero: telefoneFormatado,
+                  mensagem: mensagemLembrete, // Usar como caption
+                  mediaUrl: midiaUrl,
+                  tipo_mensagem: 'image',
+                  company_id: lembrete.compromisso.company_id || companyId,
+                };
+                
+                const { data: mediaResult, error: mediaError } = await supabase.functions.invoke(
+                  'enviar-whatsapp',
+                  { body: mediaBody }
+                );
+                
+                if (mediaError || !mediaResult?.success) {
+                  console.error(`❌ Erro ao enviar mídia do lembrete:`, mediaError || mediaResult);
+                } else {
+                  console.log(`✅ Mídia do lembrete enviada com sucesso`);
+                  enviado = true;
+                }
+              } else {
+                // Sem mídia, enviar apenas texto
+                const requestBody = {
+                  numero: telefoneFormatado,
+                  mensagem: mensagemLembrete,
+                  company_id: lembrete.compromisso.company_id || companyId,
+                };
+              
+                // Chamar edge function enviar-whatsapp
+                const { data: sendResult, error: sendError } = await supabase.functions.invoke(
+                  'enviar-whatsapp',
+                  { body: requestBody }
+                );
+
+                if (sendError || !sendResult?.success) {
+                  console.error(`❌ Erro ao enviar WhatsApp via edge function:`, sendError || sendResult);
+                } else {
+                  console.log(`✅ WhatsApp enviado com sucesso via edge function`);
+                  enviado = true;
                 }
               }
             } catch (error) {
               console.error(`❌ Erro ao chamar edge function enviar-whatsapp:`, error);
+            }
+
+            // Salvar mensagem de lembrete na tabela conversas para ficar visível no CRM
+            if (enviado) {
+              try {
+                const leadNome = lembrete.compromisso.lead?.name || 'Contato';
+                
+                // Buscar nome do usuário responsável pelo compromisso para assinatura
+                let sentBy = 'Sistema';
+                const responsavelId = lembrete.compromisso.usuario_responsavel_id;
+                if (responsavelId) {
+                  const { data: profileData } = await supabase
+                    .from('profiles')
+                    .select('full_name, email')
+                    .eq('id', responsavelId)
+                    .single();
+                  
+                  if (profileData) {
+                    sentBy = profileData.full_name || profileData.email || 'Sistema';
+                  }
+                }
+                
+                const { error: dbError } = await supabase.from('conversas').insert([{
+                  numero: telefoneFormatado,
+                  telefone_formatado: telefoneFormatado,
+                  mensagem: mensagemLembrete,
+                  origem: 'WhatsApp',
+                  status: 'Enviada',
+                  tipo_mensagem: midiaUrl ? 'image' : 'text',
+                  midia_url: midiaUrl,
+                  nome_contato: leadNome,
+                  company_id: lembrete.compromisso.company_id || companyId,
+                  lead_id: lembrete.compromisso.lead_id,
+                  owner_id: responsavelId,
+                  sent_by: sentBy,
+                  fromme: true,
+                }]);
+                
+                if (dbError) {
+                  console.error(`❌ Erro ao salvar mensagem de lembrete no banco:`, dbError);
+                } else {
+                  console.log(`✅ Mensagem de lembrete salva no banco de dados`);
+                }
+              } catch (saveError) {
+                console.error(`❌ Erro ao salvar mensagem de lembrete no banco:`, saveError);
+              }
             }
 
             if (enviado) {

@@ -265,12 +265,19 @@ serve(async (req) => {
     } else if (validatedData.mediaUrl) {
       // Enviar mídia via URL - Formato Evolution API
       evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE}`;
+      
+      // Determinar mediatype baseado no tipo_mensagem
+      let mediaType = validatedData.tipo_mensagem || 'image';
+      if (mediaType === 'texto') mediaType = 'text';
+      if (mediaType === 'pdf') mediaType = 'document';
+      
       bodyPayload = {
         number: isGroup ? (target as any).groupId : (target as any).number,
-        mediaUrl: validatedData.mediaUrl,
+        mediatype: mediaType,
+        media: validatedData.mediaUrl,
         caption: validatedData.mensagem || validatedData.caption || ""
       };
-      console.log("📸 Enviando mídia via URL");
+      console.log(`📸 Enviando mídia via URL (${mediaType}):`, validatedData.mediaUrl);
     } else {
       // Enviar texto - Formato Evolution API
       evolutionUrl = `${INSTANCE_API_URL || EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`;
