@@ -50,6 +50,9 @@ interface Lembrete {
   telefone_responsavel?: string;
   tentativas?: number;
   proxima_tentativa?: string;
+  recorrencia?: string | null;
+  proxima_data_envio?: string | null;
+  ativo?: boolean;
   compromisso?: {
     id?: string;
     lead_id?: string;
@@ -134,6 +137,7 @@ export default function Agenda() {
   const [activeTab, setActiveTab] = useState<string>("agenda");
   const [filtroStatusLembrete, setFiltroStatusLembrete] = useState<string>("all");
   const [filtroCanalLembrete, setFiltroCanalLembrete] = useState<string>("all");
+  const [filtroRecorrencia, setFiltroRecorrencia] = useState<string>("all");
   const [buscaCompromissos, setBuscaCompromissos] = useState<string>("");
   const [filtroAgenda, setFiltroAgenda] = useState<string>("all");
   const [filtroTipoServico, setFiltroTipoServico] = useState<string>("all");
@@ -2130,6 +2134,8 @@ export default function Agenda() {
   const lembretesFiltrados = lembretes.filter((lembrete) => {
     if (filtroStatusLembrete !== "all" && lembrete.status_envio !== filtroStatusLembrete) return false;
     if (filtroCanalLembrete !== "all" && lembrete.canal !== filtroCanalLembrete) return false;
+    if (filtroRecorrencia === "recorrente" && !lembrete.recorrencia) return false;
+    if (filtroRecorrencia === "unico" && lembrete.recorrencia) return false;
     return true;
   });
 
@@ -3222,6 +3228,19 @@ export default function Agenda() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>Tipo</Label>
+                  <Select value={filtroRecorrencia} onValueChange={setFiltroRecorrencia}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="unico">Único</SelectItem>
+                      <SelectItem value="recorrente">Recorrente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -3258,6 +3277,14 @@ export default function Agenda() {
                                      lembrete.status_envio === 'retry' ? '🔄 Retry' :
                                      '✗ Erro'}
                                   </Badge>
+                                  {lembrete.recorrencia && (
+                                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                                      🔄 {lembrete.recorrencia === 'semanal' ? 'Semanal' :
+                                          lembrete.recorrencia === 'quinzenal' ? 'Quinzenal' :
+                                          lembrete.recorrencia === 'mensal' ? 'Mensal' :
+                                          'Recorrente'}
+                                    </Badge>
+                                  )}
                                   {(lembrete.status_envio === 'erro' || lembrete.status_envio === 'retry') && (
                                     <Button
                                       size="sm"
@@ -3326,6 +3353,21 @@ export default function Agenda() {
                                 <p className="text-sm text-muted-foreground">
                                   <strong>Antecedência:</strong> {lembrete.horas_antecedencia}h
                                 </p>
+                                {lembrete.recorrencia && (
+                                  <p className="text-sm text-blue-600">
+                                    <strong>🔄 Recorrência:</strong> {
+                                      lembrete.recorrencia === 'semanal' ? 'Semanal (toda semana)' :
+                                      lembrete.recorrencia === 'quinzenal' ? 'Quinzenal (a cada 15 dias)' :
+                                      lembrete.recorrencia === 'mensal' ? 'Mensal (todo mês)' :
+                                      lembrete.recorrencia
+                                    }
+                                  </p>
+                                )}
+                                {lembrete.recorrencia && lembrete.proxima_data_envio && lembrete.status_envio === 'pendente' && (
+                                  <p className="text-sm text-green-600">
+                                    <strong>Próximo envio:</strong> {format(parseISO(lembrete.proxima_data_envio), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                                  </p>
+                                )}
                                 {lembrete.tentativas && lembrete.tentativas > 0 && (
                                   <p className="text-sm text-muted-foreground">
                                     <strong>Tentativas:</strong> {lembrete.tentativas}/3
