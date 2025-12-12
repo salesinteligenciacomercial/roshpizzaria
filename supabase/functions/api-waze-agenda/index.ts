@@ -436,24 +436,51 @@ Deno.serve(async (req) => {
           const telefoneNormalizado = telefoneContato.replace(/\D/g, '')
           
           if (telefoneNormalizado.length >= 10) {
-            // Formatar data/hora
+            // Formatar data/hora com fuso horário de Brasília
             const dataHora = new Date(data_hora_inicio)
-            const dataFormatada = dataHora.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-            const horaFormatada = dataHora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+            const dataFormatada = dataHora.toLocaleDateString('pt-BR', { 
+              day: '2-digit', 
+              month: '2-digit', 
+              year: 'numeric',
+              timeZone: 'America/Sao_Paulo'
+            })
+            const horaFormatada = dataHora.toLocaleTimeString('pt-BR', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              timeZone: 'America/Sao_Paulo'
+            })
             
             const tipoServicoFormatado = tipo_servico?.trim()
               ? tipo_servico.charAt(0).toUpperCase() + tipo_servico.slice(1)
               : 'Compromisso'
 
-            const nomeContato = paciente || 'Cliente'
+            // Buscar nome do lead se disponível
+            let nomeContato = paciente || 'Cliente'
+            if (lead_id) {
+              const { data: leadData } = await supabaseAdmin
+                .from('leads')
+                .select('name, telefone, phone')
+                .eq('id', lead_id)
+                .single()
+              if (leadData?.name) {
+                nomeContato = leadData.name
+              }
+            }
 
-            const mensagemConfirmacao = `✅ *Agendamento Confirmado*\n\n` +
+            // Montar mensagem com informações completas
+            let mensagemConfirmacao = `✅ *Agendamento Confirmado*\n\n` +
               `Olá ${nomeContato}! Seu agendamento foi confirmado com sucesso.\n\n` +
               `📅 *Data:* ${dataFormatada}\n` +
               `⏰ *Horário:* ${horaFormatada}\n` +
               `📋 *Serviço:* ${tipoServicoFormatado}\n` +
-              `✅ *Status:* Agendado\n\n` +
-              `Aguardamos você no dia e horário agendados!\n\n` +
+              `✅ *Status:* Agendado\n`
+            
+            // Adicionar observações se existir
+            if (observacoes?.trim()) {
+              mensagemConfirmacao += `📝 *Observações:* ${observacoes}\n`
+            }
+            
+            mensagemConfirmacao += `\nAguardamos você no dia e horário agendados!\n\n` +
               `_Esta é uma confirmação automática do seu agendamento._`
 
             console.log('[api-waze-agenda] Enviando confirmação para:', telefoneNormalizado)
@@ -565,20 +592,35 @@ Deno.serve(async (req) => {
             // Usar nova data/hora se foi alterada, senão usar a existente
             const novaDataHora = updates.data_hora_inicio || existente.data_hora_inicio
             const dataHora = new Date(novaDataHora)
-            const dataFormatada = dataHora.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-            const horaFormatada = dataHora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+            const dataFormatada = dataHora.toLocaleDateString('pt-BR', { 
+              day: '2-digit', 
+              month: '2-digit', 
+              year: 'numeric',
+              timeZone: 'America/Sao_Paulo'
+            })
+            const horaFormatada = dataHora.toLocaleTimeString('pt-BR', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              timeZone: 'America/Sao_Paulo'
+            })
 
             const tipoServico = (updates.tipo_servico || existente.tipo_servico || 'Compromisso')
             const tipoServicoFormatado = tipoServico.charAt(0).toUpperCase() + tipoServico.slice(1)
             const nomeContato = existente.paciente || existente.lead?.name || 'Cliente'
 
-            const mensagemAlteracao = `📝 *Compromisso Alterado*\n\n` +
+            let mensagemAlteracao = `📝 *Compromisso Alterado*\n\n` +
               `Olá ${nomeContato}! Seu agendamento foi alterado.\n\n` +
               `📅 *Nova Data:* ${dataFormatada}\n` +
               `⏰ *Novo Horário:* ${horaFormatada}\n` +
               `📋 *Serviço:* ${tipoServicoFormatado}\n` +
-              `✅ *Status:* ${updates.status || existente.status}\n\n` +
-              `Aguardamos você no novo dia e horário!\n\n` +
+              `✅ *Status:* ${updates.status || existente.status}\n`
+            
+            // Adicionar observações se existir
+            if (updates.observacoes?.trim() || existente.observacoes?.trim()) {
+              mensagemAlteracao += `📝 *Observações:* ${updates.observacoes || existente.observacoes}\n`
+            }
+            
+            mensagemAlteracao += `\nAguardamos você no novo dia e horário!\n\n` +
               `_Esta é uma notificação automática de alteração._`
 
             console.log('[api-waze-agenda] Enviando notificação de alteração para:', telefoneNormalizado)
@@ -684,20 +726,35 @@ Deno.serve(async (req) => {
 
           if (telefoneNormalizado.length >= 10) {
             const dataHora = new Date(existente.data_hora_inicio)
-            const dataFormatada = dataHora.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-            const horaFormatada = dataHora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+            const dataFormatada = dataHora.toLocaleDateString('pt-BR', { 
+              day: '2-digit', 
+              month: '2-digit', 
+              year: 'numeric',
+              timeZone: 'America/Sao_Paulo'
+            })
+            const horaFormatada = dataHora.toLocaleTimeString('pt-BR', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              timeZone: 'America/Sao_Paulo'
+            })
 
             const tipoServico = existente.tipo_servico || 'Compromisso'
             const tipoServicoFormatado = tipoServico.charAt(0).toUpperCase() + tipoServico.slice(1)
             const nomeContato = existente.paciente || existente.lead?.name || 'Cliente'
 
-            const mensagemCancelamento = `❌ *Compromisso Cancelado*\n\n` +
+            let mensagemCancelamento = `❌ *Compromisso Cancelado*\n\n` +
               `Olá ${nomeContato}! Infelizmente seu compromisso foi cancelado.\n\n` +
               `📅 *Data:* ${dataFormatada}\n` +
               `⏰ *Horário:* ${horaFormatada}\n` +
               `📋 *Serviço:* ${tipoServicoFormatado}\n` +
-              `❌ *Status:* Cancelado\n\n` +
-              `Entre em contato conosco se tiver dúvidas ou desejar reagendar.\n\n` +
+              `❌ *Status:* Cancelado\n`
+            
+            // Adicionar observações se existir
+            if (existente.observacoes?.trim()) {
+              mensagemCancelamento += `📝 *Observações:* ${existente.observacoes}\n`
+            }
+            
+            mensagemCancelamento += `\nEntre em contato conosco se tiver dúvidas ou desejar reagendar.\n\n` +
               `_Esta é uma notificação automática de cancelamento._`
 
             console.log('[api-waze-agenda] Enviando notificação de cancelamento para:', telefoneNormalizado)
