@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { IncomingCallModal } from './IncomingCallModal';
 import { VideoCallModal } from './VideoCallModal';
@@ -21,6 +21,8 @@ export const GlobalCallListener = () => {
   } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const processedCallsRef = useRef<Set<string>>(new Set()); // Track processed calls to prevent duplicates
+  const isProcessingRef = useRef(false); // Prevent race conditions
 
   // Initialize user
   useEffect(() => {
@@ -47,6 +49,45 @@ export const GlobalCallListener = () => {
     };
   }, []);
 
+  // Handle incoming call signal
+  const handleIncomingCallSignal = useCallback(async (signal: any) => {
+    // Prevent duplicate processing
+    if (isProcessingRef.current) {
+      console.log('🔔 GlobalCallListener: Já processando uma chamada, ignorando');
+      return;
+    }
+
+    // Check if we already processed this call
+    if (processedCallsRef.current.has(signal.meeting_id)) {
+      console.log('🔔 GlobalCallListener: Chamada já processada, ignorando:', signal.meeting_id);
+      return;
+    }
+
+    // Mark as processing
+    isProcessingRef.current = true;
+    processedCallsRef.current.add(signal.meeting_id);
+
+    try {
+      // Get caller info
+      const { data: callerProfile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', signal.from_user)
+        .maybeSingle();
+
+      console.log('📞 GlobalCallListener: Chamada recebida de:', callerProfile?.full_name);
+
+      setIncomingCall({
+        meetingId: signal.meeting_id,
+        callerId: signal.from_user,
+        callerName: callerProfile?.full_name || 'Usuário',
+        callType: signal.signal_data?.callType || 'audio',
+      });
+    } finally {
+      isProcessingRef.current = false;
+    }
+  }, []);
+
   // Subscribe to incoming calls globally
   useEffect(() => {
     if (!currentUserId) return;
@@ -57,6 +98,9 @@ export const GlobalCallListener = () => {
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
     }
+
+    // Clear processed calls when user changes
+    processedCallsRef.current.clear();
 
     const channel = supabase
       .channel(`global-incoming-calls-${currentUserId}-${Date.now()}`)
@@ -73,21 +117,7 @@ export const GlobalCallListener = () => {
           console.log('🔔 GlobalCallListener: Sinal recebido:', signal.signal_type);
 
           if (signal.signal_type === 'call-request') {
-            // Get caller info
-            const { data: callerProfile } = await supabase
-              .from('profiles')
-              .select('full_name')
-              .eq('id', signal.from_user)
-              .maybeSingle();
-
-            console.log('📞 GlobalCallListener: Chamada recebida de:', callerProfile?.full_name);
-
-            setIncomingCall({
-              meetingId: signal.meeting_id,
-              callerId: signal.from_user,
-              callerName: callerProfile?.full_name || 'Usuário',
-              callType: signal.signal_data?.callType || 'audio',
-            });
+            await handleIncomingCallSignal(signal);
           }
         }
       )
@@ -104,14 +134,25 @@ export const GlobalCallListener = () => {
         channelRef.current = null;
       }
     };
-  }, [currentUserId]);
+  }, [currentUserId, handleIncomingCallSignal]);
 
   // Handle accept call
   const handleAcceptCall = async () => {
     if (!incomingCall || !currentUserId) return;
 
+    // Capture values before clearing state
+    const callData = {
+      meetingId: incomingCall.meetingId,
+      callerId: incomingCall.callerId,
+      callerName: incomingCall.callerName,
+      callType: incomingCall.callType,
+    };
+
+    // Clear incoming call state immediately to prevent duplicate
+    setIncomingCall(null);
+
     try {
-      console.log('✅ GlobalCallListener: Aceitando chamada:', incomingCall.meetingId);
+      console.log('✅ GlobalCallListener: Aceitando chamada:', callData.meetingId);
 
       // Update meeting status
       await supabase
@@ -120,29 +161,29 @@ export const GlobalCallListener = () => {
           status: 'active',
           started_at: new Date().toISOString(),
         })
-        .eq('id', incomingCall.meetingId);
+        .eq('id', callData.meetingId);
 
       // Send accept signal
       await supabase.from('meeting_signals').insert({
-        meeting_id: incomingCall.meetingId,
+        meeting_id: callData.meetingId,
         from_user: currentUserId,
-        to_user: incomingCall.callerId,
+        to_user: callData.callerId,
         signal_type: 'call-accept',
         signal_data: {},
       });
 
       // Open call modal
       setActiveCall({
-        meetingId: incomingCall.meetingId,
-        remoteUserId: incomingCall.callerId,
-        remoteUserName: incomingCall.callerName,
-        callType: incomingCall.callType,
+        meetingId: callData.meetingId,
+        remoteUserId: callData.callerId,
+        remoteUserName: callData.callerName,
+        callType: callData.callType,
         isCaller: false,
       });
-
-      setIncomingCall(null);
     } catch (error) {
       console.error('❌ GlobalCallListener: Erro ao aceitar chamada:', error);
+      // Remove from processed calls on error so user can try again
+      processedCallsRef.current.delete(callData.meetingId);
     }
   };
 
@@ -150,25 +191,29 @@ export const GlobalCallListener = () => {
   const handleRejectCall = async () => {
     if (!incomingCall || !currentUserId) return;
 
+    const callMeetingId = incomingCall.meetingId;
+    const callerId = incomingCall.callerId;
+
+    // Clear state immediately to prevent UI issues
+    setIncomingCall(null);
+
     try {
-      console.log('❌ GlobalCallListener: Rejeitando chamada:', incomingCall.meetingId);
+      console.log('❌ GlobalCallListener: Rejeitando chamada:', callMeetingId);
 
       // Update meeting status
       await supabase
         .from('meetings')
         .update({ status: 'missed' })
-        .eq('id', incomingCall.meetingId);
+        .eq('id', callMeetingId);
 
       // Send reject signal
       await supabase.from('meeting_signals').insert({
-        meeting_id: incomingCall.meetingId,
+        meeting_id: callMeetingId,
         from_user: currentUserId,
-        to_user: incomingCall.callerId,
+        to_user: callerId,
         signal_type: 'call-reject',
         signal_data: {},
       });
-
-      setIncomingCall(null);
     } catch (error) {
       console.error('❌ GlobalCallListener: Erro ao rejeitar chamada:', error);
     }
@@ -177,6 +222,14 @@ export const GlobalCallListener = () => {
   // Handle end call
   const handleEndCall = async () => {
     if (activeCall) {
+      const meetingId = activeCall.meetingId;
+      
+      // Clear state immediately
+      setActiveCall(null);
+      
+      // Remove from processed calls so user can receive new calls for same meeting
+      processedCallsRef.current.delete(meetingId);
+      
       try {
         await supabase
           .from('meetings')
@@ -184,12 +237,13 @@ export const GlobalCallListener = () => {
             status: 'ended',
             ended_at: new Date().toISOString(),
           })
-          .eq('id', activeCall.meetingId);
+          .eq('id', meetingId);
       } catch (error) {
         console.error('Erro ao encerrar reunião:', error);
       }
+    } else {
+      setActiveCall(null);
     }
-    setActiveCall(null);
   };
 
   return (
