@@ -3328,10 +3328,15 @@ export default function Agenda() {
                                 </p>
                                 <p className="text-sm text-muted-foreground">
                                   <strong>Destinatário:</strong> {
+                                    // Se o destinatario contém nome e telefone (formato "Nome (telefone)")
+                                    lembrete.destinatario && lembrete.destinatario !== 'lead' && lembrete.destinatario !== 'responsavel' && lembrete.destinatario !== 'ambos' ? (
+                                      lembrete.destinatario
+                                    ) :
                                     lembrete.destinatario === 'lead' ? (
+                                      // Tentar pegar do lead vinculado ou do telefone_responsavel
                                       lembrete.compromisso?.lead ? 
-                                        `${lembrete.compromisso.lead.name}${lembrete.compromisso.lead.phone ? ` (${lembrete.compromisso.lead.phone})` : ''}` : 
-                                        'Lead'
+                                        `${lembrete.compromisso.lead.name}${lembrete.compromisso.lead.phone ? ` (${lembrete.compromisso.lead.phone})` : lembrete.telefone_responsavel ? ` (${lembrete.telefone_responsavel})` : ''}` : 
+                                        lembrete.telefone_responsavel ? `Lead (${lembrete.telefone_responsavel})` : 'Lead'
                                     ) :
                                     lembrete.destinatario === 'responsavel' ? (
                                       lembrete.telefone_responsavel ? 
@@ -3344,7 +3349,7 @@ export default function Agenda() {
                                         {lembrete.telefone_responsavel && ` e Responsável (${lembrete.telefone_responsavel})`}
                                       </>
                                     ) :
-                                    'Lead'
+                                    lembrete.telefone_responsavel ? `(${lembrete.telefone_responsavel})` : 'Lead'
                                   }
                                 </p>
                                 <p className="text-sm text-muted-foreground">
