@@ -56,6 +56,7 @@ export const useWebRTC = (config: WebRTCConfig) => {
   const reconnectAttemptsRef = useRef(0);
   const isCallerRef = useRef(false);
   const videoEnabledRef = useRef(true);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 3;
 
   // Send signaling data
@@ -135,15 +136,27 @@ export const useWebRTC = (config: WebRTCConfig) => {
 
   // End call
   const endCall = useCallback(() => {
-    console.log('Ending call...');
+    console.log('=== Ending call and cleaning up ===');
+    
+    // Clear polling interval
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
     
     // Stop all tracks
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current.getTracks().forEach(track => {
+        track.stop();
+        console.log('Stopped track:', track.kind);
+      });
       localStreamRef.current = null;
     }
     if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current.getTracks().forEach(track => {
+        track.stop();
+        console.log('Stopped screen track:', track.kind);
+      });
       screenStreamRef.current = null;
     }
 
@@ -151,23 +164,30 @@ export const useWebRTC = (config: WebRTCConfig) => {
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
+      console.log('Peer connection closed');
     }
 
     // Unsubscribe from channel
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
+      console.log('Channel removed');
     }
 
     // Reset state
     hasRemoteDescriptionRef.current = false;
     iceCandidateQueueRef.current = [];
     reconnectAttemptsRef.current = 0;
+    isCallerRef.current = false;
 
     setLocalStream(null);
+    setScreenStream(null);
     setIsAudioEnabled(true);
     setIsVideoEnabled(true);
     setIsScreenSharing(false);
+    setConnectionState('new');
+    
+    console.log('Call cleanup complete');
   }, []);
 
   // Create peer connection
@@ -384,6 +404,36 @@ export const useWebRTC = (config: WebRTCConfig) => {
     return channel;
   }, [config.meetingId, config.localUserId, config.remoteUserId, handleSignal]);
 
+  // Check for pending call-accept signal (for caller)
+  const checkForCallAccept = useCallback(async () => {
+    console.log('Caller checking for pending call-accept...');
+    try {
+      const { data: pendingSignals, error } = await supabase
+        .from('meeting_signals')
+        .select('*')
+        .eq('meeting_id', config.meetingId)
+        .eq('to_user', config.localUserId)
+        .eq('signal_type', 'call-accept')
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching call-accept:', error);
+        return;
+      }
+
+      if (pendingSignals && pendingSignals.length > 0) {
+        console.log('Found pending call-accept, processing...');
+        for (const signal of pendingSignals) {
+          await handleSignal(signal);
+        }
+      } else {
+        console.log('No pending call-accept found yet');
+      }
+    } catch (error) {
+      console.error('Error checking call-accept:', error);
+    }
+  }, [config.meetingId, config.localUserId, handleSignal]);
+
   // Start call (caller - waits for call-accept before sending offer)
   const startCall = useCallback(async (video: boolean = true) => {
     try {
@@ -400,14 +450,42 @@ export const useWebRTC = (config: WebRTCConfig) => {
       // Subscribe to signals to receive call-accept and then answer
       subscribeToSignals();
       
-      // Caller waits for call-accept signal before sending offer
-      // The offer will be created in handleSignal when call-accept is received
+      // Wait for subscription to be active
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Check for pending call-accept in case callee accepted very fast
+      await checkForCallAccept();
+      
+      // Clear any existing poll interval
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+      
+      // Set up polling to check for call-accept periodically
+      pollIntervalRef.current = setInterval(async () => {
+        if (hasRemoteDescriptionRef.current) {
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+          return;
+        }
+        console.log('Polling for call-accept...');
+        await checkForCallAccept();
+      }, 2000);
+      
+      // Clear polling after 30 seconds
+      setTimeout(() => {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      }, 30000);
+      
       console.log('Caller ready, waiting for callee to accept...');
     } catch (error) {
       console.error('Error starting call:', error);
       throw error;
     }
-  }, [initializeMedia, createPeerConnection, subscribeToSignals]);
+  }, [initializeMedia, createPeerConnection, subscribeToSignals, checkForCallAccept]);
 
   // Check for pending signals in the database (in case we missed realtime events)
   const checkPendingSignals = useCallback(async () => {
@@ -457,11 +535,24 @@ export const useWebRTC = (config: WebRTCConfig) => {
       // Subscribe to signals FIRST before anything else
       subscribeToSignals();
       
-      // Give time for subscription to be active, then check for pending signals
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Give time for subscription to be active
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Check if there are any pending signals we might have missed
       await checkPendingSignals();
+      
+      // Set up polling for offer in case we missed it
+      const pollInterval = setInterval(async () => {
+        if (hasRemoteDescriptionRef.current) {
+          clearInterval(pollInterval);
+          return;
+        }
+        console.log('Callee polling for offer...');
+        await checkPendingSignals();
+      }, 2000);
+      
+      // Clear polling after 30 seconds
+      setTimeout(() => clearInterval(pollInterval), 30000);
       
       console.log('Callee ready to receive offer from caller');
     } catch (error) {

@@ -101,9 +101,14 @@ export const GlobalCallListener = () => {
 
     // Clear processed calls when user changes
     processedCallsRef.current.clear();
+    
+    // Reset processing flag
+    isProcessingRef.current = false;
 
+    const channelName = `global-incoming-calls-${currentUserId}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    
     const channel = supabase
-      .channel(`global-incoming-calls-${currentUserId}-${Date.now()}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -114,27 +119,33 @@ export const GlobalCallListener = () => {
         },
         async (payload) => {
           const signal = payload.new as any;
-          console.log('🔔 GlobalCallListener: Sinal recebido:', signal.signal_type);
+          console.log('🔔 GlobalCallListener: Sinal recebido:', signal.signal_type, 'meeting:', signal.meeting_id);
 
+          // Only process call-request signals here
           if (signal.signal_type === 'call-request') {
+            // Check if we're already in a call or have an incoming call
+            if (activeCall || incomingCall) {
+              console.log('🔔 GlobalCallListener: Já em chamada, ignorando nova chamada');
+              return;
+            }
             await handleIncomingCallSignal(signal);
           }
         }
       )
       .subscribe((status) => {
-        console.log('🔔 GlobalCallListener: Status da inscrição:', status);
+        console.log('🔔 GlobalCallListener: Status da inscrição:', status, 'canal:', channelName);
       });
 
     channelRef.current = channel;
 
     return () => {
-      console.log('🔔 GlobalCallListener: Limpando canal');
+      console.log('🔔 GlobalCallListener: Limpando canal:', channelName);
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
     };
-  }, [currentUserId, handleIncomingCallSignal]);
+  }, [currentUserId, handleIncomingCallSignal, activeCall, incomingCall]);
 
   // Handle accept call
   const handleAcceptCall = async () => {

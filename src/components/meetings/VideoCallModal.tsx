@@ -99,18 +99,42 @@ export const VideoCallModal = ({
     },
   });
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (callIntervalRef.current) {
+        clearInterval(callIntervalRef.current);
+        callIntervalRef.current = null;
+      }
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+    };
+  }, []);
+
   // Initialize call once when modal opens
   useEffect(() => {
     if (open && !hasInitialized) {
       setHasInitialized(true);
+      setIsConnecting(true);
+      setRemoteStream(null);
+      setCallDuration(0);
       
       const initCall = async () => {
         try {
+          console.log('=== VideoCallModal: Initializing call ===');
+          console.log('isCaller:', isCaller);
+          console.log('callType:', callType);
+          console.log('meetingId:', meetingId);
+          console.log('localUserId:', localUserId);
+          console.log('remoteUserId:', remoteUserId);
+          
           if (isCaller) {
             console.log('Starting call as caller...');
             await startCall(callType === 'video');
           } else {
-            console.log('Answering call...');
+            console.log('Answering call as callee...');
             await answerCall(callType === 'video');
           }
         } catch (error) {
@@ -121,7 +145,7 @@ export const VideoCallModal = ({
       
       initCall();
     }
-  }, [open, hasInitialized, isCaller, callType, startCall, answerCall]);
+  }, [open, hasInitialized, isCaller, callType, startCall, answerCall, meetingId, localUserId, remoteUserId]);
 
   // Set local video with explicit play - also handles screen share
   useEffect(() => {
@@ -290,6 +314,8 @@ export const VideoCallModal = ({
   };
 
   const handleClose = () => {
+    console.log('=== VideoCallModal: Closing call ===');
+    
     if (isRecording) {
       stopRecording();
     }
@@ -298,12 +324,24 @@ export const VideoCallModal = ({
       clearInterval(callIntervalRef.current);
       callIntervalRef.current = null;
     }
+    
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
 
+    // Send end signal and cleanup WebRTC
     sendEndCall();
+    
+    // Reset all state
     setHasInitialized(false);
     setRemoteStream(null);
     setIsConnecting(true);
     setCallDuration(0);
+    setLocalVideoKey(0);
+    setRemoteVideoKey(0);
+    
+    // Notify parent
     onCallEnded();
     onClose();
   };
