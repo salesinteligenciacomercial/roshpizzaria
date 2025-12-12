@@ -526,11 +526,100 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Criar lembrete automaticamente
+      let lembreteData = null
+      const telefoneParaLembrete = telefone || paciente
+      
+      if (telefoneParaLembrete) {
+        try {
+          const telefoneNormalizado = telefoneParaLembrete.replace(/\D/g, '')
+          
+          if (telefoneNormalizado.length >= 10) {
+            // Calcular data de envio do lembrete (24 horas antes por padrão)
+            const horasAntecedencia = 24
+            const dataCompromisso = new Date(data_hora_inicio)
+            const dataEnvioLembrete = new Date(dataCompromisso.getTime() - (horasAntecedencia * 60 * 60 * 1000))
+            
+            // Buscar nome do lead para mensagem personalizada
+            let nomeContato = paciente || 'Cliente'
+            if (lead_id) {
+              const { data: leadData } = await supabaseAdmin
+                .from('leads')
+                .select('name')
+                .eq('id', lead_id)
+                .single()
+              if (leadData?.name) {
+                nomeContato = leadData.name
+              }
+            }
+            
+            // Formatar data/hora para mensagem
+            const dataFormatada = dataCompromisso.toLocaleDateString('pt-BR', { 
+              day: '2-digit', 
+              month: '2-digit', 
+              year: 'numeric',
+              timeZone: 'America/Sao_Paulo'
+            })
+            const horaFormatada = dataCompromisso.toLocaleTimeString('pt-BR', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              timeZone: 'America/Sao_Paulo'
+            })
+            
+            const tipoServicoFormatado = tipo_servico?.trim()
+              ? tipo_servico.charAt(0).toUpperCase() + tipo_servico.slice(1)
+              : 'Compromisso'
+            
+            let mensagemLembrete = `⏰ *Lembrete de Agendamento*\n\n` +
+              `Olá ${nomeContato}! Este é um lembrete do seu compromisso.\n\n` +
+              `📅 *Data:* ${dataFormatada}\n` +
+              `⏰ *Horário:* ${horaFormatada}\n` +
+              `📋 *Serviço:* ${tipoServicoFormatado}\n`
+            
+            if (observacoes?.trim()) {
+              mensagemLembrete += `📝 *Observações:* ${observacoes}\n`
+            }
+            
+            mensagemLembrete += `\nAguardamos você!\n\n` +
+              `_Este é um lembrete automático do seu agendamento._`
+            
+            // Inserir lembrete na tabela
+            const { data: novoLembrete, error: lembreteError } = await supabaseAdmin
+              .from('lembretes')
+              .insert({
+                compromisso_id: novoCompromisso.id,
+                canal: 'whatsapp',
+                destinatario: 'lead',
+                horas_antecedencia: horasAntecedencia,
+                mensagem: mensagemLembrete,
+                status_envio: 'pendente',
+                data_hora_envio: dataEnvioLembrete.toISOString(),
+                proxima_data_envio: dataEnvioLembrete.toISOString(),
+                ativo: true,
+                company_id: profissional.company_id,
+                telefone_responsavel: telefoneNormalizado
+              })
+              .select()
+              .single()
+            
+            if (lembreteError) {
+              console.error('[api-waze-agenda] Erro ao criar lembrete:', lembreteError)
+            } else {
+              console.log('[api-waze-agenda] ✅ Lembrete criado automaticamente:', novoLembrete.id)
+              lembreteData = novoLembrete
+            }
+          }
+        } catch (lembreteErr) {
+          console.error('[api-waze-agenda] Erro ao criar lembrete:', lembreteErr)
+        }
+      }
+
       return new Response(
         JSON.stringify({ 
           success: true, 
           compromisso: novoCompromisso,
-          confirmacao_enviada: confirmacaoEnviada
+          confirmacao_enviada: confirmacaoEnviada,
+          lembrete: lembreteData
         }),
         { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
