@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Button } from '@/components/ui/button';
@@ -50,6 +50,8 @@ export const VideoCallModal = ({
   const [callDuration, setCallDuration] = useState(0);
   const [isConnecting, setIsConnecting] = useState(true);
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [localVideoKey, setLocalVideoKey] = useState(0);
+  const [remoteVideoKey, setRemoteVideoKey] = useState(0);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -60,6 +62,7 @@ export const VideoCallModal = ({
 
   const {
     localStream,
+    screenStream,
     isAudioEnabled,
     isVideoEnabled,
     isScreenSharing,
@@ -75,8 +78,9 @@ export const VideoCallModal = ({
     localUserId,
     remoteUserId,
     onRemoteStream: (stream) => {
-      console.log('Remote stream received');
+      console.log('Remote stream received with tracks:', stream.getTracks().map(t => `${t.kind}:${t.enabled}`));
       setRemoteStream(stream);
+      setRemoteVideoKey(prev => prev + 1);
       setIsConnecting(false);
     },
     onConnectionStateChange: (state) => {
@@ -119,20 +123,27 @@ export const VideoCallModal = ({
     }
   }, [open, hasInitialized, isCaller, callType, startCall, answerCall]);
 
-  // Set local video with explicit play
+  // Set local video with explicit play - also handles screen share
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      console.log('Setting local video stream:', {
-        videoTracks: localStream.getVideoTracks().length,
-        audioTracks: localStream.getAudioTracks().length,
-        videoEnabled: localStream.getVideoTracks()[0]?.enabled
-      });
-      localVideoRef.current.srcObject = localStream;
-      localVideoRef.current.play().catch(err => {
-        console.log('Local video play error:', err);
-      });
+    if (localVideoRef.current) {
+      // Use screen stream if sharing, otherwise camera
+      const streamToUse = isScreenSharing && screenStream ? screenStream : localStream;
+      
+      if (streamToUse) {
+        console.log('Setting local video stream:', {
+          isScreenSharing,
+          videoTracks: streamToUse.getVideoTracks().length,
+          audioTracks: streamToUse.getAudioTracks().length,
+          videoEnabled: streamToUse.getVideoTracks()[0]?.enabled
+        });
+        localVideoRef.current.srcObject = streamToUse;
+        localVideoRef.current.play().catch(err => {
+          console.log('Local video play error:', err);
+        });
+        setLocalVideoKey(prev => prev + 1);
+      }
     }
-  }, [localStream]);
+  }, [localStream, screenStream, isScreenSharing]);
 
   // Set remote video with explicit play
   useEffect(() => {
@@ -146,8 +157,14 @@ export const VideoCallModal = ({
       remoteVideoRef.current.play().catch(err => {
         console.log('Remote video play error:', err);
       });
+      
+      // Listen for track changes
+      remoteStream.onaddtrack = () => {
+        console.log('Remote stream track added');
+        setRemoteVideoKey(prev => prev + 1);
+      };
     }
-  }, [remoteStream]);
+  }, [remoteStream, remoteVideoKey]);
 
   const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -161,7 +178,10 @@ export const VideoCallModal = ({
 
   const startRecording = () => {
     const streams: MediaStream[] = [];
-    if (localStream) streams.push(localStream);
+    
+    // Prioritize screen stream if sharing, otherwise use camera
+    const primaryVideoStream = isScreenSharing && screenStream ? screenStream : localStream;
+    if (primaryVideoStream) streams.push(primaryVideoStream);
     if (remoteStream) streams.push(remoteStream);
 
     if (streams.length === 0) {
@@ -173,18 +193,41 @@ export const VideoCallModal = ({
       const audioContext = new AudioContext();
       const destination = audioContext.createMediaStreamDestination();
 
-      streams.forEach(stream => {
-        if (stream.getAudioTracks().length > 0) {
-          const source = audioContext.createMediaStreamSource(stream);
-          source.connect(destination);
-        }
-      });
+      // Combine audio from all streams
+      if (localStream && localStream.getAudioTracks().length > 0) {
+        const localSource = audioContext.createMediaStreamSource(localStream);
+        localSource.connect(destination);
+      }
+      if (remoteStream && remoteStream.getAudioTracks().length > 0) {
+        const remoteSource = audioContext.createMediaStreamSource(remoteStream);
+        remoteSource.connect(destination);
+      }
 
-      const videoTrack = localStream?.getVideoTracks()[0] || remoteStream?.getVideoTracks()[0];
+      // Use screen video if sharing, otherwise camera
+      let videoTrack: MediaStreamTrack | undefined;
+      if (isScreenSharing && screenStream) {
+        videoTrack = screenStream.getVideoTracks()[0];
+        console.log('Recording with screen share track');
+      } else if (localStream) {
+        videoTrack = localStream.getVideoTracks()[0];
+        console.log('Recording with camera track');
+      }
+      
+      if (!videoTrack && remoteStream) {
+        videoTrack = remoteStream.getVideoTracks()[0];
+        console.log('Recording with remote video track');
+      }
+
       const combinedStream = new MediaStream([
         ...destination.stream.getAudioTracks(),
         ...(videoTrack ? [videoTrack] : []),
       ]);
+
+      console.log('Combined stream for recording:', {
+        audioTracks: combinedStream.getAudioTracks().length,
+        videoTracks: combinedStream.getVideoTracks().length,
+        isScreenSharing
+      });
 
       const mimeType = getSupportedMimeType();
       const mediaRecorder = new MediaRecorder(combinedStream, { mimeType });
@@ -309,16 +352,16 @@ export const VideoCallModal = ({
         <div className="flex-1 relative bg-muted/50 overflow-hidden">
           {/* Remote video (large) */}
           <video
+            key={`remote-${remoteVideoKey}`}
             ref={remoteVideoRef}
             autoPlay
             playsInline
             className="absolute inset-0 w-full h-full object-cover"
-            style={{ display: remoteStream && remoteStream.getVideoTracks().length > 0 ? 'block' : 'none' }}
           />
 
-          {/* Placeholder when no remote video */}
-          {!remoteStream && (
-            <div className="absolute inset-0 flex items-center justify-center">
+          {/* Placeholder when no remote video or connecting */}
+          {(!remoteStream || remoteStream.getVideoTracks().length === 0 || isConnecting) && (
+            <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
               <div className="text-center">
                 <div className="h-24 w-24 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
                   <span className="text-4xl font-semibold text-primary">
@@ -335,19 +378,26 @@ export const VideoCallModal = ({
             </div>
           )}
 
-          {/* Local video (small, bottom-right) */}
+          {/* Local video (small, bottom-right) - shows screen when sharing */}
           <div className="absolute bottom-4 right-4 w-48 h-36 rounded-lg overflow-hidden shadow-lg border border-border bg-background">
             <video
+              key={`local-${localVideoKey}`}
               ref={localVideoRef}
               autoPlay
               playsInline
               muted
               className="w-full h-full object-cover"
-              style={{ display: localStream && localStream.getVideoTracks().length > 0 && isVideoEnabled ? 'block' : 'none' }}
             />
-            {(!localStream || !localStream.getVideoTracks().length || !isVideoEnabled) && (
+            {/* Overlay when video is off (but not when screen sharing) */}
+            {!isScreenSharing && (!localStream || !localStream.getVideoTracks().length || !isVideoEnabled) && (
               <div className="absolute inset-0 flex items-center justify-center bg-muted">
                 <VideoOff className="h-8 w-8 text-muted-foreground" />
+              </div>
+            )}
+            {/* Label to show screen sharing active */}
+            {isScreenSharing && (
+              <div className="absolute bottom-1 left-1 bg-primary/80 text-primary-foreground text-xs px-2 py-0.5 rounded">
+                Compartilhando tela
               </div>
             )}
           </div>
