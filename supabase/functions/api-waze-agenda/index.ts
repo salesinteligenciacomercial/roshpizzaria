@@ -386,7 +386,13 @@ Deno.serve(async (req) => {
     // POST: Criar compromisso
     if (action === 'compromissos' && method === 'POST') {
       const body = await req.json()
-      const { titulo, tipo_servico, data_hora_inicio, data_hora_fim, status, observacoes, paciente, telefone, lead_id, agenda_id, enviar_confirmacao } = body
+      const { 
+        titulo, tipo_servico, data_hora_inicio, data_hora_fim, status, observacoes, 
+        paciente, telefone, lead_id, agenda_id, enviar_confirmacao,
+        // Novos campos para configuração do lembrete
+        lembrete_horas_antecedencia,
+        lembrete_minutos_antecedencia
+      } = body
 
       if (!tipo_servico || !data_hora_inicio || !data_hora_fim) {
         return new Response(
@@ -535,21 +541,39 @@ Deno.serve(async (req) => {
           const telefoneNormalizado = telefoneParaLembrete.replace(/\D/g, '')
           
           if (telefoneNormalizado.length >= 10) {
-            // Calcular data de envio do lembrete (24 horas antes por padrão)
-            const horasAntecedencia = 24
+            // Calcular data de envio do lembrete com horas e minutos personalizados
+            const horasConfig = typeof lembrete_horas_antecedencia === 'number' ? lembrete_horas_antecedencia : 24
+            const minutosConfig = typeof lembrete_minutos_antecedencia === 'number' ? lembrete_minutos_antecedencia : 0
+            const totalMinutosAntecedencia = (horasConfig * 60) + minutosConfig
+            const horasAntecedenciaDecimal = totalMinutosAntecedencia / 60 // Para salvar no banco
+            
             const dataCompromisso = new Date(data_hora_inicio)
-            const dataEnvioLembrete = new Date(dataCompromisso.getTime() - (horasAntecedencia * 60 * 60 * 1000))
+            const dataEnvioLembrete = new Date(dataCompromisso.getTime() - (totalMinutosAntecedencia * 60 * 1000))
+            
+            console.log('[api-waze-agenda] Configurando lembrete:', {
+              horasConfig,
+              minutosConfig,
+              totalMinutosAntecedencia,
+              horasAntecedenciaDecimal,
+              dataEnvioLembrete: dataEnvioLembrete.toISOString()
+            })
             
             // Buscar nome do lead para mensagem personalizada
             let nomeContato = paciente || 'Cliente'
+            let telefoneContato = telefoneNormalizado
             if (lead_id) {
               const { data: leadData } = await supabaseAdmin
                 .from('leads')
-                .select('name')
+                .select('name, phone, telefone')
                 .eq('id', lead_id)
                 .single()
               if (leadData?.name) {
                 nomeContato = leadData.name
+              }
+              // Pegar telefone do lead se disponível
+              const leadPhone = leadData?.phone || leadData?.telefone
+              if (leadPhone) {
+                telefoneContato = leadPhone.replace(/\D/g, '')
               }
             }
             
@@ -583,21 +607,21 @@ Deno.serve(async (req) => {
             mensagemLembrete += `\nAguardamos você!\n\n` +
               `_Este é um lembrete automático do seu agendamento._`
             
-            // Inserir lembrete na tabela
+            // Inserir lembrete na tabela com nome e telefone do contato
             const { data: novoLembrete, error: lembreteError } = await supabaseAdmin
               .from('lembretes')
               .insert({
                 compromisso_id: novoCompromisso.id,
                 canal: 'whatsapp',
-                destinatario: 'lead',
-                horas_antecedencia: horasAntecedencia,
+                destinatario: nomeContato !== 'Cliente' ? `${nomeContato} (${telefoneContato})` : 'lead',
+                horas_antecedencia: horasAntecedenciaDecimal,
                 mensagem: mensagemLembrete,
                 status_envio: 'pendente',
                 data_hora_envio: dataEnvioLembrete.toISOString(),
                 proxima_data_envio: dataEnvioLembrete.toISOString(),
                 ativo: true,
                 company_id: profissional.company_id,
-                telefone_responsavel: telefoneNormalizado
+                telefone_responsavel: telefoneContato
               })
               .select()
               .single()
