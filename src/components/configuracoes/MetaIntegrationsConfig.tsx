@@ -63,11 +63,17 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
   // Form states for manual configuration
   const [instagramToken, setInstagramToken] = useState('');
   const [instagramIgId, setInstagramIgId] = useState('');
+  const [instagramVerifyToken, setInstagramVerifyToken] = useState('');
   const [messengerPageId, setMessengerPageId] = useState('');
   const [messengerPageToken, setMessengerPageToken] = useState('');
   const [adAccountId, setAdAccountId] = useState('');
   const [marketingToken, setMarketingToken] = useState('');
   const [providerPriority, setProviderPriority] = useState<string>('both');
+  
+  // Generate a default verify token for the company
+  const generateVerifyToken = () => {
+    return `wazecrm_${companyId.slice(0, 8)}_${Date.now().toString(36)}`;
+  };
 
   useEffect(() => {
     loadIntegration();
@@ -90,6 +96,20 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
         setInstagramIgId(data.instagram_ig_id || '');
         setMessengerPageId(data.messenger_page_id || '');
         setAdAccountId(data.ad_account_id || '');
+      }
+      
+      // Load verify token from whatsapp_connections
+      const { data: whatsappConn } = await supabase
+        .from('whatsapp_connections')
+        .select('meta_webhook_verify_token')
+        .eq('company_id', companyId)
+        .maybeSingle();
+      
+      if (whatsappConn?.meta_webhook_verify_token) {
+        setInstagramVerifyToken(whatsappConn.meta_webhook_verify_token);
+      } else {
+        // Generate a default token if none exists
+        setInstagramVerifyToken(generateVerifyToken());
       }
     } catch (error: any) {
       console.error('Error loading integration:', error);
@@ -172,6 +192,32 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
           .from('tenant_integrations')
           .insert({ company_id: companyId, ...updateData });
         if (error) throw error;
+      }
+      
+      // Save verify token to whatsapp_connections
+      if (instagramVerifyToken) {
+        const { data: existingConn } = await supabase
+          .from('whatsapp_connections')
+          .select('id')
+          .eq('company_id', companyId)
+          .maybeSingle();
+        
+        if (existingConn) {
+          await supabase
+            .from('whatsapp_connections')
+            .update({ meta_webhook_verify_token: instagramVerifyToken })
+            .eq('id', existingConn.id);
+        } else {
+          await supabase
+            .from('whatsapp_connections')
+            .insert({ 
+              company_id: companyId, 
+              instance_name: `META_${companyId.slice(0, 8).toUpperCase()}`,
+              meta_webhook_verify_token: instagramVerifyToken,
+              api_provider: 'meta',
+              status: 'disconnected'
+            });
+        }
       }
 
       toast({ title: 'Instagram configurado com sucesso!' });
@@ -429,6 +475,27 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Token de Verificação (cole no campo "Token de verificação" do Meta)</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    readOnly 
+                    value={instagramVerifyToken} 
+                    className="font-mono text-xs bg-yellow-50 border-yellow-300"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => copyToClipboard(instagramVerifyToken)}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Use este token no campo "Token de verificação" ao configurar o webhook no painel Meta Developers.
+                </p>
               </div>
             </div>
           </TabsContent>
