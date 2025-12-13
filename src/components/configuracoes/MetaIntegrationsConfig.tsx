@@ -51,8 +51,11 @@ interface TenantIntegration {
   provider_priority: string;
 }
 
-const META_APP_ID = import.meta.env.VITE_META_APP_ID || '';
-const META_REDIRECT_URI = `${window.location.origin}/auth/callback/meta`;
+const META_APP_ID = import.meta.env.VITE_META_APP_ID || '1353481286527361';
+const META_REDIRECT_URI = 'https://wazecrm.lovable.app/';
+
+// Instagram OAuth URL com todas as permissões necessárias
+const INSTAGRAM_OAUTH_URL = `https://www.instagram.com/oauth/authorize?force_reauth=true&client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(META_REDIRECT_URI)}&response_type=code&scope=instagram_business_basic%2Cinstagram_business_manage_messages%2Cinstagram_business_manage_comments%2Cinstagram_business_content_publish%2Cinstagram_business_manage_insights`;
 
 export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProps) {
   const { toast } = useToast();
@@ -124,6 +127,12 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
   };
 
   const handleOAuthLogin = (scope: string) => {
+    if (scope === 'instagram') {
+      // Usar URL específica do Instagram OAuth
+      window.open(INSTAGRAM_OAUTH_URL, '_blank', 'width=600,height=700');
+      return;
+    }
+    
     if (!META_APP_ID) {
       toast({
         variant: 'destructive',
