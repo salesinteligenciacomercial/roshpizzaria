@@ -294,25 +294,17 @@ serve(async (req) => {
     
     console.log('🔐 Meta Webhook Verification:', { mode, token, challenge });
     
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    // Usar token master global para validação (SaaS multi-tenant)
+    const MASTER_VERIFY_TOKEN = Deno.env.get('META_WEBHOOK_VERIFY_TOKEN') || 'wazecrm_master_2024';
     
-    // Buscar conexão com token de verificação
-    const { data: connections } = await supabase
-      .from('whatsapp_connections')
-      .select('meta_webhook_verify_token, company_id')
-      .not('meta_webhook_verify_token', 'is', null);
-    
-    const validToken = connections?.find(c => c.meta_webhook_verify_token === token);
-    
-    if (mode === 'subscribe' && validToken) {
-      console.log('✅ Webhook verificado com sucesso para company:', validToken.company_id);
+    if (mode === 'subscribe' && token === MASTER_VERIFY_TOKEN) {
+      console.log('✅ Webhook verificado com sucesso usando token master global');
       return new Response(challenge, { status: 200 });
     }
     
-    console.warn('❌ Falha na verificação do webhook - token não encontrado');
+    console.warn('❌ Falha na verificação do webhook - token inválido');
+    console.warn('Token recebido:', token);
+    console.warn('Token esperado: [MASTER_TOKEN]');
     return new Response('Forbidden', { status: 403 });
   }
 

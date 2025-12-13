@@ -54,6 +54,11 @@ interface TenantIntegration {
 const META_APP_ID = import.meta.env.VITE_META_APP_ID || '1353481286527361';
 const META_REDIRECT_URI = 'https://wazecrm.lovable.app/';
 
+// Token de verificação MASTER GLOBAL para multi-tenant SaaS
+// IMPORTANTE: Este é o ÚNICO token usado para TODAS as subcontas
+// Configure este mesmo token no painel Meta Developers
+const MASTER_VERIFY_TOKEN = 'wazecrm_master_2024';
+
 // Instagram OAuth URL com todas as permissões necessárias
 const INSTAGRAM_OAUTH_URL = `https://www.instagram.com/oauth/authorize?force_reauth=true&client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(META_REDIRECT_URI)}&response_type=code&scope=instagram_business_basic%2Cinstagram_business_manage_messages%2Cinstagram_business_manage_comments%2Cinstagram_business_content_publish%2Cinstagram_business_manage_insights`;
 
@@ -66,17 +71,11 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
   // Form states for manual configuration
   const [instagramToken, setInstagramToken] = useState('');
   const [instagramIgId, setInstagramIgId] = useState('');
-  const [instagramVerifyToken, setInstagramVerifyToken] = useState('');
   const [messengerPageId, setMessengerPageId] = useState('');
   const [messengerPageToken, setMessengerPageToken] = useState('');
   const [adAccountId, setAdAccountId] = useState('');
   const [marketingToken, setMarketingToken] = useState('');
   const [providerPriority, setProviderPriority] = useState<string>('both');
-  
-  // Generate a default verify token for the company
-  const generateVerifyToken = () => {
-    return `wazecrm_${companyId.slice(0, 8)}_${Date.now().toString(36)}`;
-  };
 
   useEffect(() => {
     loadIntegration();
@@ -99,20 +98,6 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
         setInstagramIgId(data.instagram_ig_id || '');
         setMessengerPageId(data.messenger_page_id || '');
         setAdAccountId(data.ad_account_id || '');
-      }
-      
-      // Load verify token from whatsapp_connections
-      const { data: whatsappConn } = await supabase
-        .from('whatsapp_connections')
-        .select('meta_webhook_verify_token')
-        .eq('company_id', companyId)
-        .maybeSingle();
-      
-      if (whatsappConn?.meta_webhook_verify_token) {
-        setInstagramVerifyToken(whatsappConn.meta_webhook_verify_token);
-      } else {
-        // Generate a default token if none exists
-        setInstagramVerifyToken(generateVerifyToken());
       }
     } catch (error: any) {
       console.error('Error loading integration:', error);
@@ -203,7 +188,7 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
         if (error) throw error;
       }
       
-      // Save verify token AND instagram_account_id to whatsapp_connections
+      // Save instagram_account_id to whatsapp_connections (sem token de verificação por subconta)
       const { data: existingConn } = await supabase
         .from('whatsapp_connections')
         .select('id')
@@ -211,7 +196,6 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
         .maybeSingle();
       
       const connectionData = {
-        meta_webhook_verify_token: instagramVerifyToken || null,
         instagram_account_id: instagramIgId || null,
         instagram_access_token: instagramToken || null,
       };
@@ -491,23 +475,24 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
               </div>
               
               <div className="space-y-2">
-                <Label className="text-sm text-muted-foreground">Token de Verificação (cole no campo "Token de verificação" do Meta)</Label>
+                <Label className="text-sm text-muted-foreground">Token de Verificação Master (ÚNICO para todas subcontas)</Label>
                 <div className="flex gap-2">
                   <Input 
                     readOnly 
-                    value={instagramVerifyToken} 
-                    className="font-mono text-xs bg-yellow-50 border-yellow-300"
+                    value={MASTER_VERIFY_TOKEN} 
+                    className="font-mono text-xs bg-green-50 border-green-300 dark:bg-green-950 dark:border-green-700"
                   />
                   <Button 
                     variant="outline" 
                     size="icon"
-                    onClick={() => copyToClipboard(instagramVerifyToken)}
+                    onClick={() => copyToClipboard(MASTER_VERIFY_TOKEN)}
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Use este token no campo "Token de verificação" ao configurar o webhook no painel Meta Developers.
+                  ⚠️ <strong>IMPORTANTE:</strong> Use este ÚNICO token no Meta Developers para TODAS as subcontas. 
+                  Configure uma vez e todos os números/contas usarão o mesmo webhook.
                 </p>
               </div>
             </div>
