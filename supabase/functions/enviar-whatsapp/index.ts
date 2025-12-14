@@ -320,8 +320,25 @@ serve(async (req) => {
     // Meta API
     else if (apiProvider === 'meta' || apiProvider === 'both') {
       const hasMetaCredentials = connection.meta_phone_number_id && connection.meta_access_token;
+      const hasEvolutionConfig = (connection.evolution_api_url || EVOLUTION_API_URL) && 
+                                  (connection.evolution_api_key || EVOLUTION_API_KEY);
       
-      if (hasMetaCredentials) {
+      // ⚠️ Meta API não suporta base64 - forçar fallback para Evolution quando tem mediaBase64
+      if (validatedData.mediaBase64 && hasEvolutionConfig) {
+        console.log("📤 Base64 detectado - Meta API não suporta, usando Evolution API...");
+        const baseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
+        const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+        
+        result = await sendEvolutionMessage(
+          baseUrl.replace(/\/$/, ''),
+          connection.instance_name,
+          apiKey,
+          validatedData.numero,
+          false,
+          validatedData
+        );
+      }
+      else if (hasMetaCredentials) {
         console.log("📘 Tentando Meta API...");
         
         if (validatedData.mediaUrl) {
@@ -345,29 +362,27 @@ serve(async (req) => {
             validatedData.mensagem
           );
         } else {
-          // Base64 não é suportado diretamente pela Meta API - usar Evolution
-          console.log("⚠️ Base64 não suportado por Meta API - usando Evolution");
-          result = { success: false, provider: 'meta', error: 'Base64 requer Evolution API' };
+          // Sem mensagem nem mídia válida
+          console.log("⚠️ Sem mensagem nem mídia URL");
+          result = { success: false, provider: 'meta', error: 'Mensagem ou mídia URL é obrigatória' };
         }
 
         // Fallback para Evolution se Meta falhar e provider for "both"
-        if (!result.success && apiProvider === 'both') {
+        if (!result.success && apiProvider === 'both' && hasEvolutionConfig) {
           console.log("🔄 Meta falhou, tentando Evolution como fallback...");
           const baseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
           const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
           
-          if (baseUrl && apiKey) {
-            result = await sendEvolutionMessage(
-              baseUrl.replace(/\/$/, ''),
-              connection.instance_name,
-              apiKey,
-              validatedData.numero,
-              false,
-              validatedData
-            );
-          }
+          result = await sendEvolutionMessage(
+            baseUrl.replace(/\/$/, ''),
+            connection.instance_name,
+            apiKey,
+            validatedData.numero,
+            false,
+            validatedData
+          );
         }
-      } else if (apiProvider === 'both') {
+      } else if (apiProvider === 'both' && hasEvolutionConfig) {
         // Sem credenciais Meta mas provider é "both" - usar Evolution
         console.log("⚠️ Sem credenciais Meta - usando Evolution");
         const baseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
@@ -383,7 +398,7 @@ serve(async (req) => {
         );
       } else {
         return new Response(
-          JSON.stringify({ error: "Credenciais Meta não configuradas", code: "NO_META_CREDENTIALS" }),
+          JSON.stringify({ error: "Credenciais Meta não configuradas e Evolution indisponível", code: "NO_API_CREDENTIALS" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
