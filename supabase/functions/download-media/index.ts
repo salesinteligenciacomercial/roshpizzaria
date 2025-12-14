@@ -5,24 +5,154 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-function createMediaResponse(base64Data: string, mimetype: string) {
-  // Converter base64 para ArrayBuffer
-  const base64Clean = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
-  const binaryString = atob(base64Clean);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-
-  const blob = new Blob([bytes], { type: mimetype });
+// Baixar mídia da Meta API
+async function downloadMetaMedia(mediaId: string, accessToken: string, mimetype?: string) {
+  console.log('🔓 [DOWNLOAD-MEDIA] Baixando mídia via Meta API');
+  console.log('📡 [DOWNLOAD-MEDIA] Media ID:', mediaId);
   
-  return new Response(blob, {
+  // Passo 1: Obter URL temporária da mídia
+  const metaApiUrl = `https://graph.facebook.com/v21.0/${mediaId}`;
+  console.log('📞 [DOWNLOAD-MEDIA] Obtendo URL temporária:', metaApiUrl);
+  
+  const urlResponse = await fetch(metaApiUrl, {
     headers: {
-      ...corsHeaders,
-      'Content-Type': mimetype,
-      'Cache-Control': 'public, max-age=3600',
+      'Authorization': `Bearer ${accessToken}`,
     },
   });
+  
+  if (!urlResponse.ok) {
+    const errorText = await urlResponse.text();
+    console.error('❌ [DOWNLOAD-MEDIA] Erro ao obter URL Meta:', urlResponse.status, errorText);
+    
+    // Verificar se mídia expirou
+    if (urlResponse.status === 400 || urlResponse.status === 404) {
+      return {
+        error: 'media_expired',
+        message: 'Mídia expirada ou indisponível. Mídias do WhatsApp expiram após alguns dias.'
+      };
+    }
+    throw new Error(`Erro ao obter URL da Meta API: ${urlResponse.status}`);
+  }
+  
+  const urlData = await urlResponse.json();
+  const mediaUrl = urlData.url;
+  const mediaMimetype = urlData.mime_type || mimetype || 'application/octet-stream';
+  
+  console.log('✅ [DOWNLOAD-MEDIA] URL temporária obtida:', mediaUrl?.substring(0, 50) + '...');
+  console.log('📋 [DOWNLOAD-MEDIA] MIME type:', mediaMimetype);
+  
+  if (!mediaUrl) {
+    throw new Error('URL da mídia não retornada pela Meta API');
+  }
+  
+  // Passo 2: Baixar o arquivo binário da URL temporária
+  console.log('📥 [DOWNLOAD-MEDIA] Baixando arquivo binário...');
+  
+  const mediaResponse = await fetch(mediaUrl, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+    },
+  });
+  
+  if (!mediaResponse.ok) {
+    const errorText = await mediaResponse.text();
+    console.error('❌ [DOWNLOAD-MEDIA] Erro ao baixar mídia:', mediaResponse.status, errorText);
+    throw new Error(`Erro ao baixar mídia da Meta: ${mediaResponse.status}`);
+  }
+  
+  const arrayBuffer = await mediaResponse.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  
+  // Converter para base64
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64 = btoa(binary);
+  
+  console.log('✅ [DOWNLOAD-MEDIA] Mídia Meta baixada com sucesso, tamanho:', bytes.byteLength);
+  
+  return {
+    base64: base64,
+    mimetype: mediaMimetype,
+  };
+}
+
+// Baixar mídia da Evolution API
+async function downloadEvolutionMedia(
+  messageId: string, 
+  instanceName: string, 
+  evolutionUrl: string, 
+  evolutionApiKey: string,
+  mediaType?: string,
+  mimetype?: string
+) {
+  console.log('🔓 [DOWNLOAD-MEDIA] Baixando mídia via Evolution API');
+  console.log('📡 [DOWNLOAD-MEDIA] MessageID:', messageId);
+  console.log('🏢 [DOWNLOAD-MEDIA] Instance:', instanceName);
+  
+  const endpoint = `${evolutionUrl}/chat/getBase64FromMediaMessage/${instanceName}`;
+  
+  console.log('📞 [DOWNLOAD-MEDIA] Chamando Evolution API:', endpoint);
+  
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': evolutionApiKey,
+    },
+    body: JSON.stringify({
+      message: {
+        key: {
+          id: messageId
+        }
+      },
+      convertToMp4: mediaType === 'video'
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ [DOWNLOAD-MEDIA] Erro Evolution API:', response.status, errorText);
+    
+    if (response.status === 400 || response.status === 404) {
+      return {
+        error: 'media_expired',
+        message: 'Mídia expirada ou indisponível. Mídias do WhatsApp expiram após alguns dias.'
+      };
+    }
+    throw new Error(`Erro ao baixar mídia da Evolution API: ${response.status}`);
+  }
+
+  const mediaData = await response.json();
+  console.log('✅ [DOWNLOAD-MEDIA] Resposta Evolution API recebida');
+
+  if (mediaData.base64) {
+    let detectedMimetype = 'application/octet-stream';
+    if (mediaData.base64.startsWith('data:')) {
+      const match = mediaData.base64.match(/data:([^;]+);/);
+      if (match) detectedMimetype = match[1];
+    } else {
+      if (mimetype) {
+        detectedMimetype = mimetype;
+      } else if (mediaType === 'image') {
+        detectedMimetype = 'image/jpeg';
+      } else if (mediaType === 'video') {
+        detectedMimetype = 'video/mp4';
+      } else if (mediaType === 'audio') {
+        detectedMimetype = 'audio/ogg; codecs=opus';
+      } else if (mediaType === 'document') {
+        detectedMimetype = 'application/pdf';
+      }
+    }
+    
+    return {
+      base64: mediaData.base64.includes(',') ? mediaData.base64.split(',')[1] : mediaData.base64,
+      mimetype: detectedMimetype,
+    };
+  }
+  
+  throw new Error('Mídia não retornada pela Evolution API');
 }
 
 Deno.serve(async (req) => {
@@ -35,124 +165,102 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     
-    // Criar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // Validar dados recebidos
-    if (!body.company_id || !body.messageId) {
-      throw new Error('company_id e messageId são obrigatórios');
+    if (!body.company_id) {
+      throw new Error('company_id é obrigatório');
     }
 
-    console.log('🔓 [DOWNLOAD-MEDIA] Baixando mídia via Evolution API');
-    console.log('📡 [DOWNLOAD-MEDIA] MessageID:', body.messageId);
     console.log('🏢 [DOWNLOAD-MEDIA] CompanyID:', body.company_id);
     
-    // Buscar configuração da instância WhatsApp
-    const { data: whatsappConfig, error: configError } = await supabase
-      .from('whatsapp_connections')
-      .select('instance_name, evolution_api_url, evolution_api_key')
-      .eq('company_id', body.company_id)
-      .eq('status', 'connected')
-      .single();
-
-    if (configError || !whatsappConfig) {
-      console.error('❌ [DOWNLOAD-MEDIA] Instância não encontrada:', configError);
-      throw new Error('Instância WhatsApp não configurada');
-    }
-
-    console.log('✅ [DOWNLOAD-MEDIA] Instância encontrada:', whatsappConfig.instance_name);
+    // Detectar se é mídia Meta ou Evolution
+    const isMetaMedia = body.source === 'meta' || body.media_id;
     
-    // Endpoint correto da Evolution API v2 para baixar mídia em base64
-    const evolutionUrl = `${whatsappConfig.evolution_api_url}/chat/getBase64FromMediaMessage/${whatsappConfig.instance_name}`;
-    
-    console.log('📞 [DOWNLOAD-MEDIA] Chamando Evolution API:', evolutionUrl);
-    console.log('📦 [DOWNLOAD-MEDIA] Payload:', JSON.stringify({
-      message: {
-        key: {
-          id: body.messageId
-        }
-      }
-    }));
-    
-    const response = await fetch(evolutionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': whatsappConfig.evolution_api_key,
-      },
-      body: JSON.stringify({
-        message: {
-          key: {
-            id: body.messageId
-          }
-        },
-        convertToMp4: body.type === 'video'
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ [DOWNLOAD-MEDIA] Erro Evolution API:', response.status, errorText);
+    if (isMetaMedia && body.media_id) {
+      // Mídia da Meta API
+      console.log('📱 [DOWNLOAD-MEDIA] Fonte: Meta API');
       
-      // Retornar erro específico para mídia expirada/indisponível
-      if (response.status === 400 || response.status === 404) {
+      // Buscar access_token da Meta
+      const { data: whatsappConfig, error: configError } = await supabase
+        .from('whatsapp_connections')
+        .select('meta_access_token')
+        .eq('company_id', body.company_id)
+        .not('meta_access_token', 'is', null)
+        .single();
+
+      if (configError || !whatsappConfig?.meta_access_token) {
+        console.error('❌ [DOWNLOAD-MEDIA] Access token Meta não encontrado:', configError);
+        throw new Error('Configuração Meta API não encontrada');
+      }
+
+      const result = await downloadMetaMedia(
+        body.media_id,
+        whatsappConfig.meta_access_token,
+        body.mimetype
+      );
+      
+      if (result.error) {
         return new Response(
-          JSON.stringify({ 
-            error: 'media_expired', 
-            message: 'Mídia expirada ou indisponível. Mídias do WhatsApp expiram após alguns dias.' 
-          }),
+          JSON.stringify(result),
           { 
-            status: 410, // Gone - indica que o recurso não está mais disponível
+            status: 410,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           }
         );
       }
       
-      throw new Error(`Erro ao baixar mídia da Evolution API: ${response.status}`);
-    }
+      return new Response(
+        JSON.stringify(result),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+      
+    } else if (body.messageId) {
+      // Mídia da Evolution API
+      console.log('📱 [DOWNLOAD-MEDIA] Fonte: Evolution API');
+      
+      const { data: whatsappConfig, error: configError } = await supabase
+        .from('whatsapp_connections')
+        .select('instance_name, evolution_api_url, evolution_api_key')
+        .eq('company_id', body.company_id)
+        .eq('status', 'connected')
+        .single();
 
-    const mediaData = await response.json();
-    console.log('✅ [DOWNLOAD-MEDIA] Resposta Evolution API recebida');
+      if (configError || !whatsappConfig) {
+        console.error('❌ [DOWNLOAD-MEDIA] Instância Evolution não encontrada:', configError);
+        throw new Error('Instância WhatsApp não configurada');
+      }
 
-    if (mediaData.base64) {
-      console.log('✅ [DOWNLOAD-MEDIA] Mídia em base64 recebida');
-      // Detectar mimetype do base64
-      let mimetype = 'application/octet-stream';
-      if (mediaData.base64.startsWith('data:')) {
-        const match = mediaData.base64.match(/data:([^;]+);/);
-        if (match) mimetype = match[1];
-      } else {
-        // Usar tipo baseado no tipo da mensagem ou mimetype enviado
-        if (body.mimetype) {
-          mimetype = body.mimetype;
-        } else if (body.type === 'image') {
-          mimetype = 'image/jpeg';
-        } else if (body.type === 'video') {
-          mimetype = 'video/mp4';
-        } else if (body.type === 'audio') {
-          mimetype = 'audio/ogg; codecs=opus';
-        } else if (body.type === 'document') {
-          mimetype = 'application/pdf';
-        }
+      console.log('✅ [DOWNLOAD-MEDIA] Instância encontrada:', whatsappConfig.instance_name);
+      
+      const result = await downloadEvolutionMedia(
+        body.messageId,
+        whatsappConfig.instance_name,
+        whatsappConfig.evolution_api_url,
+        whatsappConfig.evolution_api_key,
+        body.type,
+        body.mimetype
+      );
+      
+      if (result.error) {
+        return new Response(
+          JSON.stringify(result),
+          { 
+            status: 410,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
       }
       
-      console.log('📤 [DOWNLOAD-MEDIA] Retornando base64 com mimetype:', mimetype);
-      
-      // Retornar JSON com base64 para o frontend processar
       return new Response(
-        JSON.stringify({ 
-          base64: mediaData.base64.includes(',') ? mediaData.base64.split(',')[1] : mediaData.base64,
-          mimetype: mimetype 
-        }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
+        JSON.stringify(result),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+      
+    } else {
+      throw new Error('Parâmetros insuficientes: forneça media_id (Meta) ou messageId (Evolution)');
     }
-    
-    throw new Error('Mídia não retornada pela Evolution API');
 
   } catch (error) {
     console.error('❌ [DOWNLOAD-MEDIA] Erro:', error);

@@ -35,98 +35,227 @@ async function verifyWebhookSignature(payload: string, signature: string, appSec
   return computedSignature === signature;
 }
 
+// Construir JSON estruturado para mídia Meta API
+function buildMetaMediaJson(mediaId: string, mimeType?: string, sha256?: string, fileName?: string) {
+  return JSON.stringify({
+    media_id: mediaId,
+    source: 'meta',
+    mimetype: mimeType || null,
+    sha256: sha256 || null,
+    file_name: fileName || null,
+  });
+}
+
 // Transformar payload do WhatsApp Meta para formato interno
 function transformWhatsAppPayload(entry: any) {
   const messages: any[] = [];
   
   for (const change of entry.changes || []) {
-    if (change.field !== 'messages') continue;
-    
     const value = change.value;
     const metadata = value.metadata;
     const phoneNumberId = metadata?.phone_number_id;
     const displayPhoneNumber = metadata?.display_phone_number;
     
-    for (const message of value.messages || []) {
-      const contact = value.contacts?.find((c: any) => c.wa_id === message.from);
-      
-      let messageType = 'text';
-      let messageContent = '';
-      let mediaUrl = '';
-      
-      switch (message.type) {
-        case 'text':
-          messageType = 'text';
-          messageContent = message.text?.body || '';
-          break;
-        case 'image':
-          messageType = 'image';
-          messageContent = message.image?.caption || '[Imagem]';
-          mediaUrl = message.image?.id;
-          break;
-        case 'video':
-          messageType = 'video';
-          messageContent = message.video?.caption || '[Vídeo]';
-          mediaUrl = message.video?.id;
-          break;
-        case 'audio':
-          messageType = 'audio';
-          messageContent = '[Áudio]';
-          mediaUrl = message.audio?.id;
-          break;
-        case 'document':
-          messageType = 'document';
-          messageContent = message.document?.caption || message.document?.filename || '[Documento]';
-          mediaUrl = message.document?.id;
-          break;
-        case 'sticker':
-          messageType = 'image';
-          messageContent = '[Sticker]';
-          mediaUrl = message.sticker?.id;
-          break;
-        case 'location':
-          messageType = 'text';
-          messageContent = `📍 Localização: ${message.location?.latitude}, ${message.location?.longitude}`;
-          break;
-        case 'contacts':
-          messageType = 'text';
-          const contactNames = message.contacts?.map((c: any) => c.name?.formatted_name).join(', ');
-          messageContent = `📇 Contato(s): ${contactNames}`;
-          break;
-        case 'button':
-          messageType = 'text';
-          messageContent = message.button?.text || '[Botão]';
-          break;
-        case 'interactive':
-          messageType = 'text';
-          messageContent = message.interactive?.button_reply?.title || 
-                          message.interactive?.list_reply?.title || 
-                          '[Resposta interativa]';
-          break;
-        default:
-          messageType = 'text';
-          messageContent = `[${message.type}]`;
-      }
+    // Processar mensagens recebidas (field = messages)
+    if (change.field === 'messages') {
+      for (const message of value.messages || []) {
+        const contact = value.contacts?.find((c: any) => c.wa_id === message.from);
+        
+        let messageType = 'text';
+        let messageContent = '';
+        let mediaUrl = '';
+        let fileName = '';
+        
+        switch (message.type) {
+          case 'text':
+            messageType = 'text';
+            messageContent = message.text?.body || '';
+            break;
+          case 'image':
+            messageType = 'image';
+            messageContent = message.image?.caption || '[Imagem]';
+            mediaUrl = buildMetaMediaJson(
+              message.image?.id,
+              message.image?.mime_type,
+              message.image?.sha256
+            );
+            break;
+          case 'video':
+            messageType = 'video';
+            messageContent = message.video?.caption || '[Vídeo]';
+            mediaUrl = buildMetaMediaJson(
+              message.video?.id,
+              message.video?.mime_type,
+              message.video?.sha256
+            );
+            break;
+          case 'audio':
+            messageType = 'audio';
+            messageContent = '[Áudio]';
+            mediaUrl = buildMetaMediaJson(
+              message.audio?.id,
+              message.audio?.mime_type || 'audio/ogg; codecs=opus',
+              message.audio?.sha256
+            );
+            break;
+          case 'document':
+            messageType = 'document';
+            fileName = message.document?.filename || 'documento';
+            messageContent = message.document?.caption || fileName || '[Documento]';
+            mediaUrl = buildMetaMediaJson(
+              message.document?.id,
+              message.document?.mime_type,
+              message.document?.sha256,
+              fileName
+            );
+            break;
+          case 'sticker':
+            messageType = 'image';
+            messageContent = '[Sticker]';
+            mediaUrl = buildMetaMediaJson(
+              message.sticker?.id,
+              message.sticker?.mime_type || 'image/webp',
+              message.sticker?.sha256
+            );
+            break;
+          case 'location':
+            messageType = 'text';
+            messageContent = `📍 Localização: ${message.location?.latitude}, ${message.location?.longitude}`;
+            break;
+          case 'contacts':
+            messageType = 'text';
+            const contactNames = message.contacts?.map((c: any) => c.name?.formatted_name).join(', ');
+            messageContent = `📇 Contato(s): ${contactNames}`;
+            break;
+          case 'button':
+            messageType = 'text';
+            messageContent = message.button?.text || '[Botão]';
+            break;
+          case 'interactive':
+            messageType = 'text';
+            messageContent = message.interactive?.button_reply?.title || 
+                            message.interactive?.list_reply?.title || 
+                            '[Resposta interativa]';
+            break;
+          case 'template':
+            messageType = 'text';
+            messageContent = '[Template]';
+            break;
+          default:
+            messageType = 'text';
+            messageContent = `[${message.type}]`;
+        }
 
-      messages.push({
-        message_id: message.id,
-        from: message.from,
-        timestamp: message.timestamp,
-        type: messageType,
-        content: messageContent,
-        media_id: mediaUrl,
-        contact_name: contact?.profile?.name || contact?.wa_id || message.from,
-        phone_number_id: phoneNumberId,
-        display_phone_number: displayPhoneNumber,
-        context: message.context,
-        is_from_me: false,
-        source: 'whatsapp',
-      });
+        messages.push({
+          message_id: message.id,
+          from: message.from,
+          timestamp: message.timestamp,
+          type: messageType,
+          content: messageContent,
+          media_url: mediaUrl,
+          file_name: fileName,
+          contact_name: contact?.profile?.name || contact?.wa_id || message.from,
+          phone_number_id: phoneNumberId,
+          display_phone_number: displayPhoneNumber,
+          context: message.context,
+          is_from_me: false,
+          source: 'whatsapp',
+        });
+      }
+      
+      // Processar status de mensagens
+      for (const status of value.statuses || []) {
+        console.log('📊 Status de mensagem WhatsApp:', JSON.stringify(status, null, 2));
+      }
     }
     
-    // Processar status de mensagens
-    for (const status of value.statuses || []) {
-      console.log('Status de mensagem WhatsApp:', JSON.stringify(status, null, 2));
+    // Processar message_echoes (mensagens enviadas pelo CRM/Templates)
+    if (change.field === 'message_echoes') {
+      console.log('📤 [MESSAGE_ECHOES] Processando mensagens enviadas:', JSON.stringify(value, null, 2));
+      
+      for (const message of value.messages || []) {
+        let messageType = 'text';
+        let messageContent = '';
+        let mediaUrl = '';
+        let fileName = '';
+        
+        // Destino da mensagem (para quem foi enviada)
+        const recipientWaId = message.to;
+        
+        switch (message.type) {
+          case 'text':
+            messageType = 'text';
+            messageContent = message.text?.body || '';
+            break;
+          case 'template':
+            messageType = 'text';
+            // Extrair conteúdo do template
+            const templateName = message.template?.name || 'template';
+            const templateComponents = message.template?.components || [];
+            let templateBody = '';
+            for (const component of templateComponents) {
+              if (component.type === 'body' && component.parameters) {
+                templateBody = component.parameters.map((p: any) => p.text || '').join(' ');
+              }
+            }
+            messageContent = templateBody || `[Template: ${templateName}]`;
+            break;
+          case 'image':
+            messageType = 'image';
+            messageContent = message.image?.caption || '[Imagem enviada]';
+            if (message.image?.id) {
+              mediaUrl = buildMetaMediaJson(message.image.id, message.image.mime_type);
+            }
+            break;
+          case 'video':
+            messageType = 'video';
+            messageContent = message.video?.caption || '[Vídeo enviado]';
+            if (message.video?.id) {
+              mediaUrl = buildMetaMediaJson(message.video.id, message.video.mime_type);
+            }
+            break;
+          case 'audio':
+            messageType = 'audio';
+            messageContent = '[Áudio enviado]';
+            if (message.audio?.id) {
+              mediaUrl = buildMetaMediaJson(message.audio.id, message.audio.mime_type);
+            }
+            break;
+          case 'document':
+            messageType = 'document';
+            fileName = message.document?.filename || 'documento';
+            messageContent = message.document?.caption || fileName;
+            if (message.document?.id) {
+              mediaUrl = buildMetaMediaJson(message.document.id, message.document.mime_type, undefined, fileName);
+            }
+            break;
+          default:
+            messageType = 'text';
+            messageContent = `[${message.type} enviado]`;
+        }
+
+        messages.push({
+          message_id: message.id,
+          from: recipientWaId,
+          timestamp: message.timestamp,
+          type: messageType,
+          content: messageContent,
+          media_url: mediaUrl,
+          file_name: fileName,
+          contact_name: recipientWaId,
+          phone_number_id: phoneNumberId,
+          display_phone_number: displayPhoneNumber,
+          context: message.context,
+          is_from_me: true,
+          source: 'whatsapp',
+        });
+      }
+    }
+    
+    // Processar message_template_status_update
+    if (change.field === 'message_template_status_update') {
+      console.log('📋 [TEMPLATE_STATUS] Status de template:', JSON.stringify(value, null, 2));
+      // Apenas log por enquanto - não cria mensagem
     }
   }
   
@@ -370,12 +499,13 @@ serve(async (req) => {
               mensagem: msg.content,
               tipo_mensagem: msg.type,
               origem: 'WhatsApp Meta',
-              status: 'Recebida',
-              fromme: false,
+              status: msg.is_from_me ? 'Enviada' : 'Recebida',
+              fromme: msg.is_from_me || false,
               company_id: company_id,
               lead_id: existingLead?.id || null,
               nome_contato: existingLead?.name || msg.contact_name || formattedNumber,
-              midia_url: msg.media_id || null,
+              midia_url: msg.media_url || null,
+              arquivo_nome: msg.file_name || null,
               is_group: false,
             };
 
