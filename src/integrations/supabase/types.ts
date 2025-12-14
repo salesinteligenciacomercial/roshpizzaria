@@ -1133,6 +1133,7 @@ export type Database = {
           notes: string | null
           owner_id: string | null
           phone: string | null
+          profile_picture_url: string | null
           responsaveis: string[] | null
           responsavel_id: string | null
           segmentacao: string | null
@@ -1158,6 +1159,7 @@ export type Database = {
           notes?: string | null
           owner_id?: string | null
           phone?: string | null
+          profile_picture_url?: string | null
           responsaveis?: string[] | null
           responsavel_id?: string | null
           segmentacao?: string | null
@@ -1183,6 +1185,7 @@ export type Database = {
           notes?: string | null
           owner_id?: string | null
           phone?: string | null
+          profile_picture_url?: string | null
           responsaveis?: string[] | null
           responsavel_id?: string | null
           segmentacao?: string | null

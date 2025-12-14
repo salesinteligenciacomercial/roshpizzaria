@@ -95,8 +95,30 @@ serve(async (req) => {
 
     let profilePictureUrl: string | null = null;
 
-    // Buscar conexão por company_id
-    if (company_id && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+    // Primeiro, tentar buscar foto de perfil salva no lead (capturada via webhook Meta)
+    if (company_id && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY && !isGroup) {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      
+      const formattedNumber = String(number).replace(/\D/g, '');
+      console.log('🔍 [PROFILE-PICTURE] Buscando foto de perfil no lead para:', formattedNumber);
+      
+      const { data: lead } = await supabase
+        .from('leads')
+        .select('profile_picture_url')
+        .eq('company_id', company_id)
+        .or(`telefone.ilike.%${formattedNumber}%,phone.ilike.%${formattedNumber}%`)
+        .not('profile_picture_url', 'is', null)
+        .limit(1)
+        .single();
+      
+      if (lead?.profile_picture_url) {
+        console.log('✅ [PROFILE-PICTURE] Foto encontrada no lead (Meta webhook)');
+        profilePictureUrl = lead.profile_picture_url;
+      }
+    }
+
+    // Se não encontrou no lead, buscar via APIs
+    if (!profilePictureUrl && company_id && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       
       const { data: conn } = await supabase

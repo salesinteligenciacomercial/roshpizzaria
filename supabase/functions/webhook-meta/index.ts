@@ -61,6 +61,9 @@ function transformWhatsAppPayload(entry: any) {
       for (const message of value.messages || []) {
         const contact = value.contacts?.find((c: any) => c.wa_id === message.from);
         
+        // Capturar foto de perfil do contato (Meta API envia no webhook)
+        const profilePictureUrl = contact?.profile?.picture || null;
+        
         let messageType = 'text';
         let messageContent = '';
         let mediaUrl = '';
@@ -155,6 +158,7 @@ function transformWhatsAppPayload(entry: any) {
           media_url: mediaUrl,
           file_name: fileName,
           contact_name: contact?.profile?.name || contact?.wa_id || message.from,
+          profile_picture_url: profilePictureUrl,
           phone_number_id: phoneNumberId,
           display_phone_number: displayPhoneNumber,
           context: message.context,
@@ -487,11 +491,20 @@ serve(async (req) => {
 
             const { data: existingLead } = await supabase
               .from('leads')
-              .select('id, name')
+              .select('id, name, profile_picture_url')
               .eq('company_id', company_id)
               .or(`telefone.ilike.%${formattedNumber}%,phone.ilike.%${formattedNumber}%`)
               .limit(1)
               .single();
+
+            // Se temos foto de perfil do webhook e o lead não tem, atualizar
+            if (msg.profile_picture_url && existingLead?.id && !existingLead.profile_picture_url) {
+              console.log('📷 Atualizando foto de perfil do lead:', existingLead.id);
+              await supabase
+                .from('leads')
+                .update({ profile_picture_url: msg.profile_picture_url })
+                .eq('id', existingLead.id);
+            }
 
             const conversaData = {
               numero: formattedNumber,
