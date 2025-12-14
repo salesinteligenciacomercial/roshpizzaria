@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, Instagram, Facebook, MoreVertical, Edit, UserPlus, Trash2, Lock, Unlock, User } from "lucide-react";
+import { MessageSquare, Instagram, Facebook, MoreVertical, Edit, UserPlus, Trash2, Lock, Unlock, User, CheckCircle2, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -9,6 +9,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface ConversationListItemProps {
   contactName: string;
@@ -38,6 +44,7 @@ interface ConversationListItemProps {
   };
   lastRespondedBy?: string; // ⚡ Nome do último usuário que respondeu
   status?: "waiting" | "answered" | "resolved"; // Status da conversa
+  origemApi?: "evolution" | "meta"; // 🔥 NOVO: Identificação da API de origem
 }
 
 function ConversationListItemComponent({
@@ -64,6 +71,7 @@ function ConversationListItemComponent({
   assignedUser,
   lastRespondedBy,
   status,
+  origemApi, // 🔥 NOVO
 }: ConversationListItemProps) {
   const getChannelIcon = () => {
     switch (channel) {
@@ -122,8 +130,31 @@ function ConversationListItemComponent({
         
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between mb-1 gap-3">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
               {getChannelIcon()}
+              
+              {/* 🔥 NOVO: Badge de identificação da API (Oficial vs Não Oficial) */}
+              {origemApi && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="flex-shrink-0">
+                        {origemApi === 'meta' ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" />
+                        ) : (
+                          <Circle className="h-3.5 w-3.5 text-green-500 fill-green-500" />
+                        )}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      {origemApi === 'meta' 
+                        ? 'WhatsApp Oficial (Meta API)' 
+                        : 'WhatsApp Não Oficial (Evolution API)'}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              
               <span className="font-medium text-sm text-foreground truncate">
                 {contactName}
               </span>

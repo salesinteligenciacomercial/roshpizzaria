@@ -502,6 +502,7 @@ export type Database = {
           nome_contato: string | null
           numero: string
           origem: string
+          origem_api: string | null
           owner_id: string | null
           read: boolean | null
           replied_to_id: string | null
@@ -530,6 +531,7 @@ export type Database = {
           nome_contato?: string | null
           numero: string
           origem?: string
+          origem_api?: string | null
           owner_id?: string | null
           read?: boolean | null
           replied_to_id?: string | null
@@ -558,6 +560,7 @@ export type Database = {
           nome_contato?: string | null
           numero?: string
           origem?: string
+          origem_api?: string | null
           owner_id?: string | null
           read?: boolean | null
           replied_to_id?: string | null

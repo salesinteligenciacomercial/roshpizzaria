@@ -37,6 +37,7 @@ export interface Conversation {
   phoneNumber?: string;
   isGroup?: boolean;
   avatarUrl?: string; // ⚡ Foto de perfil
+  origemApi?: "evolution" | "meta"; // 🔥 NOVO: Identificação da API de origem
 }
 
 interface CacheData {

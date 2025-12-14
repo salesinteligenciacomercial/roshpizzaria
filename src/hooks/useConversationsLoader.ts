@@ -51,10 +51,10 @@ export const useConversationsLoader = () => {
       
       console.log(`📊 [LOAD] Carregando ${MESSAGES_TO_FETCH} mensagens recentes...`);
       
-      // ⚡ OTIMIZAÇÃO: Query com campos essenciais
+      // ⚡ OTIMIZAÇÃO: Query com campos essenciais + origem_api para identificação visual
       let query = supabase
         .from('conversas')
-        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme, company_id, sent_by, assigned_user_id, owner_id, midia_url')
+        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme, company_id, sent_by, assigned_user_id, owner_id, midia_url, origem_api')
         .eq('company_id', userCompanyId)
         .order('created_at', { ascending: false });
       
@@ -377,6 +377,16 @@ export const useConversationsLoader = () => {
           const assignedUserId = mensagens.find(m => m.assigned_user_id)?.assigned_user_id;
           const assignedUser = assignedUserId ? usersMap.get(assignedUserId) : undefined;
 
+          // 🔥 NOVO: Detectar origem da API (Meta ou Evolution)
+          // Usar a origem da última mensagem recebida (não enviada)
+          const ultimaMensagemRecebida = mensagens.find(m => {
+            const isFromMe = m.fromme === true || String(m.fromme) === 'true';
+            return !isFromMe && m.origem_api;
+          });
+          const origemApi = ultimaMensagemRecebida?.origem_api || 
+                           mensagens.find(m => m.origem_api)?.origem_api || 
+                           'evolution';
+
           return {
             id: leadInfo?.leadId || `conv-${telefone}`,
             contactName,
@@ -389,6 +399,7 @@ export const useConversationsLoader = () => {
             phoneNumber: telefone,
             isGroup,
             assignedUser,
+            origemApi: origemApi as "evolution" | "meta", // 🔥 NOVO
           };
         });
 

@@ -1236,6 +1236,7 @@ serve(async (req) => {
       replied_to_message: validatedData.replied_to_message || null,
       is_group: isGroup,
       fromme: validatedData.fromMe === true, // CORREÇÃO: fromme minúsculo (PostgreSQL converte para lowercase)
+      origem_api: 'evolution', // 🔥 IDENTIFICAÇÃO: Marcar como Evolution API (não oficial)
     };
     
     // ⚡ CORREÇÃO DEFINITIVA: Se mensagem foi enviada (fromMe = true), verificar se já existe no banco

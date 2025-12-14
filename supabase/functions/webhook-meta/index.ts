@@ -520,6 +520,7 @@ serve(async (req) => {
               midia_url: msg.media_url || null,
               arquivo_nome: msg.file_name || null,
               is_group: false,
+              origem_api: 'meta', // 🔥 IDENTIFICAÇÃO: Marcar como Meta API (oficial)
             };
 
             console.log('💾 Inserindo conversa WhatsApp Meta:', JSON.stringify(conversaData, null, 2));
@@ -604,6 +605,7 @@ serve(async (req) => {
               nome_contato: existingLead?.name || msg.contact_name || `Instagram ${instagramUserId}`,
               midia_url: msg.media_id || null,
               is_group: false,
+              origem_api: 'meta', // 🔥 IDENTIFICAÇÃO: Marcar como Meta API (oficial)
             };
 
             console.log('💾 Inserindo conversa Instagram:', JSON.stringify(conversaData, null, 2));
