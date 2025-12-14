@@ -77,20 +77,80 @@ async function sendMetaTextMessage(
   }
 }
 
+// Upload media to Meta API and get media_id
+async function uploadMetaMedia(
+  phoneNumberId: string,
+  accessToken: string,
+  base64Data: string,
+  mimeType: string,
+  fileName: string
+): Promise<{ success: boolean; media_id?: string; error?: string }> {
+  try {
+    // Remove data URL prefix if present
+    const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '');
+    
+    // Convert base64 to binary
+    const binaryString = atob(cleanBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Create form data for upload
+    const formData = new FormData();
+    const blob = new Blob([bytes], { type: mimeType });
+    formData.append('file', blob, fileName);
+    formData.append('messaging_product', 'whatsapp');
+    formData.append('type', mimeType);
+    
+    const url = `${META_API_BASE_URL}/${META_API_VERSION}/${phoneNumberId}/media`;
+    
+    console.log("📤 Meta API - Uploading media:", fileName, mimeType);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: formData,
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('Meta API Upload Error:', data);
+      return { success: false, error: data.error?.message || 'Erro upload mídia Meta API' };
+    }
+
+    console.log("✅ Meta API - Media uploaded:", data.id);
+    return { success: true, media_id: data.id };
+  } catch (error) {
+    console.error('Meta API Upload Exception:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// Send media using media_id (uploaded) or URL
 async function sendMetaMediaMessage(
   phoneNumberId: string,
   accessToken: string,
   to: string,
-  mediaUrl: string,
+  mediaUrlOrId: string,
   mediaType: 'image' | 'video' | 'audio' | 'document',
-  caption?: string
+  caption?: string,
+  isMediaId: boolean = false
 ): Promise<{ success: boolean; provider: string; data?: any; error?: string }> {
   try {
     const url = `${META_API_BASE_URL}/${META_API_VERSION}/${phoneNumberId}/messages`;
     
-    const mediaPayload: any = { link: mediaUrl };
+    // Use 'id' for uploaded media or 'link' for URL
+    const mediaPayload: any = isMediaId ? { id: mediaUrlOrId } : { link: mediaUrlOrId };
     if (caption && ['image', 'video', 'document'].includes(mediaType)) {
       mediaPayload.caption = caption;
+    }
+    // For audio, add filename if document
+    if (mediaType === 'document' && !mediaPayload.filename) {
+      mediaPayload.filename = 'documento';
     }
 
     const response = await fetch(url, {
@@ -323,9 +383,61 @@ serve(async (req) => {
       const hasEvolutionConfig = (connection.evolution_api_url || EVOLUTION_API_URL) && 
                                   (connection.evolution_api_key || EVOLUTION_API_KEY);
       
-      // ⚠️ Meta API não suporta base64 - forçar fallback para Evolution quando tem mediaBase64
-      if (validatedData.mediaBase64 && hasEvolutionConfig) {
-        console.log("📤 Base64 detectado - Meta API não suporta, usando Evolution API...");
+      // ⚠️ Meta API com base64 - tentar upload para Meta, fallback para Evolution
+      if (validatedData.mediaBase64 && hasMetaCredentials) {
+        console.log("📤 Base64 detectado - Tentando upload para Meta API...");
+        
+        let mediaType = validatedData.tipo_mensagem || 'document';
+        if (mediaType === 'texto') mediaType = 'text';
+        if (mediaType === 'pdf') mediaType = 'document';
+        
+        const mimeType = validatedData.mimeType || 'application/octet-stream';
+        const fileName = validatedData.fileName || 'arquivo';
+        
+        // Upload media to Meta
+        const uploadResult = await uploadMetaMedia(
+          connection.meta_phone_number_id,
+          connection.meta_access_token,
+          validatedData.mediaBase64,
+          mimeType,
+          fileName
+        );
+        
+        if (uploadResult.success && uploadResult.media_id) {
+          // Send message with uploaded media_id
+          result = await sendMetaMediaMessage(
+            connection.meta_phone_number_id,
+            connection.meta_access_token,
+            formattedNumber,
+            uploadResult.media_id,
+            mediaType as 'image' | 'video' | 'audio' | 'document',
+            validatedData.mensagem || validatedData.caption,
+            true // isMediaId = true
+          );
+        } else {
+          console.log("⚠️ Upload Meta falhou:", uploadResult.error);
+          // Fallback para Evolution se disponível
+          if (hasEvolutionConfig) {
+            console.log("🔄 Tentando Evolution como fallback...");
+            const baseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
+            const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+            
+            result = await sendEvolutionMessage(
+              baseUrl.replace(/\/$/, ''),
+              connection.instance_name,
+              apiKey,
+              validatedData.numero,
+              false,
+              validatedData
+            );
+          } else {
+            result = { success: false, provider: 'meta', error: uploadResult.error || 'Falha no upload de mídia' };
+          }
+        }
+      }
+      // Base64 sem credenciais Meta - usar Evolution direto
+      else if (validatedData.mediaBase64 && hasEvolutionConfig) {
+        console.log("📤 Base64 sem Meta - usando Evolution API...");
         const baseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
         const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
         
@@ -338,34 +450,30 @@ serve(async (req) => {
           validatedData
         );
       }
-      else if (hasMetaCredentials) {
-        console.log("📘 Tentando Meta API...");
+      else if (hasMetaCredentials && validatedData.mediaUrl) {
+        console.log("📘 Tentando Meta API com URL de mídia...");
         
-        if (validatedData.mediaUrl) {
-          let mediaType = validatedData.tipo_mensagem || 'image';
-          if (mediaType === 'texto') mediaType = 'text';
-          if (mediaType === 'pdf') mediaType = 'document';
-          
-          result = await sendMetaMediaMessage(
-            connection.meta_phone_number_id,
-            connection.meta_access_token,
-            formattedNumber,
-            validatedData.mediaUrl,
-            mediaType as 'image' | 'video' | 'audio' | 'document',
-            validatedData.mensagem || validatedData.caption
-          );
-        } else if (validatedData.mensagem) {
-          result = await sendMetaTextMessage(
-            connection.meta_phone_number_id,
-            connection.meta_access_token,
-            formattedNumber,
-            validatedData.mensagem
-          );
-        } else {
-          // Sem mensagem nem mídia válida
-          console.log("⚠️ Sem mensagem nem mídia URL");
-          result = { success: false, provider: 'meta', error: 'Mensagem ou mídia URL é obrigatória' };
-        }
+        let mediaType = validatedData.tipo_mensagem || 'image';
+        if (mediaType === 'texto') mediaType = 'text';
+        if (mediaType === 'pdf') mediaType = 'document';
+        
+        result = await sendMetaMediaMessage(
+          connection.meta_phone_number_id,
+          connection.meta_access_token,
+          formattedNumber,
+          validatedData.mediaUrl,
+          mediaType as 'image' | 'video' | 'audio' | 'document',
+          validatedData.mensagem || validatedData.caption,
+          false // isMediaId = false (using URL)
+        );
+      } else if (hasMetaCredentials && validatedData.mensagem) {
+        console.log("📘 Tentando Meta API com texto...");
+        result = await sendMetaTextMessage(
+          connection.meta_phone_number_id,
+          connection.meta_access_token,
+          formattedNumber,
+          validatedData.mensagem
+        );
 
         // Fallback para Evolution se Meta falhar e provider for "both"
         if (!result.success && apiProvider === 'both' && hasEvolutionConfig) {
@@ -382,8 +490,8 @@ serve(async (req) => {
             validatedData
           );
         }
-      } else if (apiProvider === 'both' && hasEvolutionConfig) {
-        // Sem credenciais Meta mas provider é "both" - usar Evolution
+      } else if (hasEvolutionConfig) {
+        // Sem credenciais Meta mas Evolution disponível - usar Evolution
         console.log("⚠️ Sem credenciais Meta - usando Evolution");
         const baseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
         const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
@@ -397,10 +505,9 @@ serve(async (req) => {
           validatedData
         );
       } else {
-        return new Response(
-          JSON.stringify({ error: "Credenciais Meta não configuradas e Evolution indisponível", code: "NO_API_CREDENTIALS" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        // Sem mensagem nem mídia válida e sem Evolution
+        console.log("⚠️ Sem mensagem/mídia válida e sem Evolution");
+        result = { success: false, provider: 'meta', error: 'Mensagem, mídia ou Evolution API é obrigatória' };
       }
     }
     // Evolution API
