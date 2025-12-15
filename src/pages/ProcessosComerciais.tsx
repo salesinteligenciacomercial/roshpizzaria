@@ -11,7 +11,9 @@ import {
   Target,
   TrendingUp,
   Brain,
-  FileText
+  FileText,
+  LayoutGrid,
+  CalendarDays
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { NovoPlaybookDialog } from "@/components/processos/NovoPlaybookDialog";
@@ -23,6 +25,8 @@ import { EtapasList } from "@/components/processos/EtapasList";
 import { KPIsDashboard } from "@/components/processos/KPIsDashboard";
 import { SugestoesIAList } from "@/components/processos/SugestoesIAList";
 import { NotionWorkspace } from "@/components/processos/notion/NotionWorkspace";
+import { ProcessKanban } from "@/components/processos/notion/ProcessKanban";
+import { ProcessCalendar } from "@/components/processos/notion/ProcessCalendar";
 
 interface Stats {
   playbooks: number;
@@ -125,8 +129,10 @@ export default function ProcessosComerciais() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid grid-cols-8 gap-2 h-auto p-1 bg-muted/50">
+        <TabsList className="flex flex-wrap gap-2 h-auto p-1 bg-muted/50">
           <TabsTrigger value="workspace" className="flex items-center gap-2 py-2"><FileText className="h-4 w-4" /><span className="hidden md:inline">Workspace</span></TabsTrigger>
+          <TabsTrigger value="kanban" className="flex items-center gap-2 py-2"><LayoutGrid className="h-4 w-4" /><span className="hidden md:inline">Tarefas</span></TabsTrigger>
+          <TabsTrigger value="calendario" className="flex items-center gap-2 py-2"><CalendarDays className="h-4 w-4" /><span className="hidden md:inline">Calendário</span></TabsTrigger>
           <TabsTrigger value="home" className="flex items-center gap-2 py-2"><Target className="h-4 w-4" /><span className="hidden md:inline">Visão Geral</span></TabsTrigger>
           <TabsTrigger value="playbooks" className="flex items-center gap-2 py-2"><BookOpen className="h-4 w-4" /><span className="hidden md:inline">Playbooks</span></TabsTrigger>
           <TabsTrigger value="rotinas" className="flex items-center gap-2 py-2"><Workflow className="h-4 w-4" /><span className="hidden md:inline">Cadências</span></TabsTrigger>
@@ -138,6 +144,14 @@ export default function ProcessosComerciais() {
 
         <TabsContent value="workspace">
           <NotionWorkspace companyId={companyId} />
+        </TabsContent>
+
+        <TabsContent value="kanban">
+          <ProcessKanban companyId={companyId} />
+        </TabsContent>
+
+        <TabsContent value="calendario">
+          <ProcessCalendar companyId={companyId} />
         </TabsContent>
 
         <TabsContent value="home" className="space-y-6">
