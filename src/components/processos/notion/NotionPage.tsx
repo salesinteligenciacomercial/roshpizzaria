@@ -4,15 +4,14 @@ import {
   StarOff, 
   MoreHorizontal,
   Clock,
-  MessageSquare,
-  History,
   Share2,
   Trash2,
   Image as ImageIcon,
-  Smile
+  Copy,
+  Download,
+  ExternalLink
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,9 +25,15 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { BlockEditor } from "./BlockEditor";
+import { PageAssignees } from "./PageAssignees";
+import { PageTags } from "./PageTags";
+import { PageStatus } from "./PageStatus";
+import { PageComments } from "./PageComments";
+import { PageHistory } from "./PageHistory";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -40,6 +45,7 @@ interface ProcessPage {
   cover_url: string | null;
   page_type: string;
   is_favorite: boolean;
+  properties: any;
   created_at: string;
   updated_at: string;
 }
@@ -64,10 +70,12 @@ export function NotionPage({ page, onPageUpdate }: NotionPageProps) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [properties, setProperties] = useState<any>(page.properties || {});
 
   useEffect(() => {
     setTitle(page.title);
     setIcon(page.icon);
+    setProperties(page.properties || {});
     loadBlocks();
   }, [page.id]);
 
@@ -128,8 +136,7 @@ export function NotionPage({ page, onPageUpdate }: NotionPageProps) {
   };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTitle = e.target.value;
-    setTitle(newTitle);
+    setTitle(e.target.value);
   };
 
   const handleTitleBlur = () => {
@@ -140,6 +147,45 @@ export function NotionPage({ page, onPageUpdate }: NotionPageProps) {
 
   const handleBlocksChange = (newBlocks: Block[]) => {
     setBlocks(newBlocks);
+  };
+
+  const handlePropertyUpdate = (key: string, value: any) => {
+    const newProperties = { ...properties, [key]: value };
+    setProperties(newProperties);
+  };
+
+  const copyPublicLink = () => {
+    const link = `${window.location.origin}/processos/page/${page.id}`;
+    navigator.clipboard.writeText(link);
+    toast.success('Link copiado!');
+  };
+
+  const exportAsMarkdown = () => {
+    let markdown = `# ${title}\n\n`;
+    blocks.forEach(block => {
+      const text = block.content.text || '';
+      switch (block.block_type) {
+        case 'heading1': markdown += `# ${text}\n\n`; break;
+        case 'heading2': markdown += `## ${text}\n\n`; break;
+        case 'heading3': markdown += `### ${text}\n\n`; break;
+        case 'bullet_list': markdown += `- ${text}\n`; break;
+        case 'numbered_list': markdown += `1. ${text}\n`; break;
+        case 'checklist': markdown += `- [${block.content.checked ? 'x' : ' '}] ${text}\n`; break;
+        case 'quote': markdown += `> ${text}\n\n`; break;
+        case 'code': markdown += `\`\`\`\n${text}\n\`\`\`\n\n`; break;
+        case 'divider': markdown += `---\n\n`; break;
+        default: markdown += `${text}\n\n`;
+      }
+    });
+
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Arquivo exportado!');
   };
 
   return (
@@ -158,53 +204,74 @@ export function NotionPage({ page, onPageUpdate }: NotionPageProps) {
         </div>
       )}
 
-      {/* Page Header */}
-      <div className="border-b border-border px-6 py-3 flex items-center justify-between bg-background/95 backdrop-blur sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{icon}</span>
-          <span className="text-sm font-medium truncate max-w-[200px]">{title || 'Sem título'}</span>
+      {/* Page Header with all controls */}
+      <div className="border-b border-border px-6 py-3 bg-background/95 backdrop-blur sticky top-0 z-10">
+        <div className="flex items-center justify-between gap-4">
+          {/* Left side - Icon, Title, Status */}
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <span className="text-lg">{icon}</span>
+            <span className="text-sm font-medium truncate max-w-[200px]">{title || 'Sem título'}</span>
+            <PageStatus 
+              pageId={page.id}
+              status={properties.status || 'draft'}
+              onUpdate={(status) => handlePropertyUpdate('status', status)}
+            />
+          </div>
+          
+          {/* Right side - Actions */}
+          <div className="flex items-center gap-1">
+            <PageAssignees
+              pageId={page.id}
+              assignees={properties.assignees || []}
+              onUpdate={(assignees) => handlePropertyUpdate('assignees', assignees)}
+            />
+            
+            <Separator orientation="vertical" className="h-6 mx-1" />
+            
+            <Button variant="ghost" size="sm" onClick={toggleFavorite}>
+              {page.is_favorite ? (
+                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+              ) : (
+                <StarOff className="h-4 w-4" />
+              )}
+            </Button>
+            
+            <PageComments pageId={page.id} />
+            
+            <PageHistory pageId={page.id} onRestore={loadBlocks} />
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={copyPublicLink}>
+                  <Share2 className="h-4 w-4 mr-2" /> Copiar Link
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportAsMarkdown}>
+                  <Download className="h-4 w-4 mr-2" /> Exportar Markdown
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Copy className="h-4 w-4 mr-2" /> Duplicar
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-destructive">
+                  <Trash2 className="h-4 w-4 mr-2" /> Excluir
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
-        
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleFavorite}
-          >
-            {page.is_favorite ? (
-              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-            ) : (
-              <StarOff className="h-4 w-4" />
-            )}
-          </Button>
-          
-          <Button variant="ghost" size="sm">
-            <MessageSquare className="h-4 w-4" />
-          </Button>
-          
-          <Button variant="ghost" size="sm">
-            <History className="h-4 w-4" />
-          </Button>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem>
-                <Share2 className="h-4 w-4 mr-2" /> Compartilhar
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <History className="h-4 w-4 mr-2" /> Histórico
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive">
-                <Trash2 className="h-4 w-4 mr-2" /> Excluir
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+
+        {/* Tags row */}
+        <div className="flex items-center gap-2 mt-2">
+          <PageTags
+            pageId={page.id}
+            tags={properties.tags || []}
+            onUpdate={(tags) => handlePropertyUpdate('tags', tags)}
+          />
         </div>
       </div>
 

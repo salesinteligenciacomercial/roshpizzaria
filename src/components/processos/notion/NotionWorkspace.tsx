@@ -17,6 +17,7 @@ interface ProcessPage {
   is_favorite: boolean;
   is_template: boolean;
   position: number;
+  properties: any;
   created_at: string;
   updated_at: string;
 }

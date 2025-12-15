@@ -15,7 +15,11 @@ import {
   Minus,
   AlertCircle,
   ToggleRight,
-  Trash2
+  Trash2,
+  Link as LinkIcon,
+  File,
+  Video,
+  Upload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +31,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { FileAttachment, AttachmentDisplay, LinkDisplay } from "./FileAttachment";
 
 interface Block {
   id: string;
@@ -42,36 +47,39 @@ interface BlockEditorProps {
 }
 
 const BLOCK_TYPES = [
-  { type: 'paragraph', icon: Type, label: 'Texto', shortcut: '' },
-  { type: 'heading1', icon: Heading1, label: 'Título 1', shortcut: '#' },
-  { type: 'heading2', icon: Heading2, label: 'Título 2', shortcut: '##' },
-  { type: 'heading3', icon: Heading3, label: 'Título 3', shortcut: '###' },
-  { type: 'bullet_list', icon: List, label: 'Lista com marcadores', shortcut: '-' },
-  { type: 'numbered_list', icon: ListOrdered, label: 'Lista numerada', shortcut: '1.' },
-  { type: 'checklist', icon: CheckSquare, label: 'Lista de tarefas', shortcut: '[]' },
-  { type: 'quote', icon: Quote, label: 'Citação', shortcut: '>' },
-  { type: 'code', icon: Code, label: 'Código', shortcut: '```' },
-  { type: 'callout', icon: AlertCircle, label: 'Destaque', shortcut: '!' },
-  { type: 'divider', icon: Minus, label: 'Divisor', shortcut: '---' },
-  { type: 'toggle', icon: ToggleRight, label: 'Toggle', shortcut: '>' },
+  { type: 'paragraph', icon: Type, label: 'Texto', shortcut: '', category: 'Básico' },
+  { type: 'heading1', icon: Heading1, label: 'Título 1', shortcut: '#', category: 'Básico' },
+  { type: 'heading2', icon: Heading2, label: 'Título 2', shortcut: '##', category: 'Básico' },
+  { type: 'heading3', icon: Heading3, label: 'Título 3', shortcut: '###', category: 'Básico' },
+  { type: 'bullet_list', icon: List, label: 'Lista com marcadores', shortcut: '-', category: 'Listas' },
+  { type: 'numbered_list', icon: ListOrdered, label: 'Lista numerada', shortcut: '1.', category: 'Listas' },
+  { type: 'checklist', icon: CheckSquare, label: 'Lista de tarefas', shortcut: '[]', category: 'Listas' },
+  { type: 'quote', icon: Quote, label: 'Citação', shortcut: '>', category: 'Formatação' },
+  { type: 'code', icon: Code, label: 'Código', shortcut: '```', category: 'Formatação' },
+  { type: 'callout', icon: AlertCircle, label: 'Destaque', shortcut: '!', category: 'Formatação' },
+  { type: 'divider', icon: Minus, label: 'Divisor', shortcut: '---', category: 'Formatação' },
+  { type: 'toggle', icon: ToggleRight, label: 'Toggle', shortcut: '>', category: 'Formatação' },
+  { type: 'image', icon: Image, label: 'Imagem', shortcut: '', category: 'Mídia' },
+  { type: 'file', icon: File, label: 'Arquivo', shortcut: '', category: 'Mídia' },
+  { type: 'link', icon: LinkIcon, label: 'Link', shortcut: '', category: 'Mídia' },
+  { type: 'embed', icon: Video, label: 'Embed (YouTube, etc)', shortcut: '', category: 'Mídia' },
 ];
 
 export function BlockEditor({ pageId, blocks, onBlocksChange }: BlockEditorProps) {
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
   const [showBlockMenu, setShowBlockMenu] = useState<string | null>(null);
-  const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
+  const [showAddMenu, setShowAddMenu] = useState(false);
   const blockRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
 
-  const createBlock = async (type: string, position: number, parentBlockId?: string) => {
+  const createBlock = async (type: string, position: number, content?: any) => {
     try {
       const { data, error } = await supabase
         .from('process_blocks')
         .insert({
           page_id: pageId,
           block_type: type,
-          content: { text: '' },
+          content: content || { text: '' },
           position,
-          parent_block_id: parentBlockId || null
         })
         .select()
         .single();
@@ -80,13 +88,11 @@ export function BlockEditor({ pageId, blocks, onBlocksChange }: BlockEditorProps
 
       const newBlocks = [...blocks];
       newBlocks.splice(position, 0, data);
-      // Update positions
       newBlocks.forEach((block, idx) => {
         block.position = idx;
       });
       onBlocksChange(newBlocks);
       
-      // Focus the new block
       setTimeout(() => {
         const ref = blockRefs.current.get(data.id);
         if (ref) ref.focus();
@@ -155,7 +161,6 @@ export function BlockEditor({ pageId, blocks, onBlocksChange }: BlockEditorProps
     if (e.key === 'Backspace' && block.content.text === '' && blocks.length > 1) {
       e.preventDefault();
       await deleteBlock(block.id);
-      // Focus previous block
       if (index > 0) {
         const prevBlock = blocks[index - 1];
         const ref = blockRefs.current.get(prevBlock.id);
@@ -163,7 +168,6 @@ export function BlockEditor({ pageId, blocks, onBlocksChange }: BlockEditorProps
       }
     }
 
-    // Shortcut detection
     if (e.key === ' ') {
       const text = block.content.text || '';
       const shortcuts: Record<string, string> = {
@@ -189,7 +193,6 @@ export function BlockEditor({ pageId, blocks, onBlocksChange }: BlockEditorProps
       }
     }
 
-    // Arrow navigation
     if (e.key === 'ArrowUp' && index > 0) {
       const ref = blockRefs.current.get(blocks[index - 1].id);
       if (ref) {
@@ -206,6 +209,17 @@ export function BlockEditor({ pageId, blocks, onBlocksChange }: BlockEditorProps
     }
   };
 
+  const handleFileUploaded = async (url: string, fileName: string, fileType: string, index: number) => {
+    const blockType = fileType.startsWith('image/') ? 'image' : 'file';
+    await createBlock(blockType, index + 1, { url, fileName, fileType });
+    setShowAddMenu(false);
+  };
+
+  const handleLinkAdded = async (url: string, title: string, index: number) => {
+    await createBlock('link', index + 1, { url, title });
+    setShowAddMenu(false);
+  };
+
   const renderBlockContent = (block: Block, index: number) => {
     const commonProps = {
       ref: (el: HTMLTextAreaElement) => el && blockRefs.current.set(block.id, el),
@@ -218,35 +232,17 @@ export function BlockEditor({ pageId, blocks, onBlocksChange }: BlockEditorProps
         "w-full resize-none border-0 bg-transparent focus:ring-0 focus-visible:ring-0 p-0",
         "placeholder:text-muted-foreground/50 overflow-hidden"
       ),
-      placeholder: block.block_type === 'paragraph' ? "Digite '/' para comandos..." : '',
+      placeholder: block.block_type === 'paragraph' ? "Digite '/' para comandos ou clique + para adicionar..." : '',
       rows: 1,
     };
 
     switch (block.block_type) {
       case 'heading1':
-        return (
-          <textarea
-            {...commonProps}
-            className={cn(commonProps.className, "text-3xl font-bold")}
-            placeholder="Título 1"
-          />
-        );
+        return <textarea {...commonProps} className={cn(commonProps.className, "text-3xl font-bold")} placeholder="Título 1" />;
       case 'heading2':
-        return (
-          <textarea
-            {...commonProps}
-            className={cn(commonProps.className, "text-2xl font-semibold")}
-            placeholder="Título 2"
-          />
-        );
+        return <textarea {...commonProps} className={cn(commonProps.className, "text-2xl font-semibold")} placeholder="Título 2" />;
       case 'heading3':
-        return (
-          <textarea
-            {...commonProps}
-            className={cn(commonProps.className, "text-xl font-medium")}
-            placeholder="Título 3"
-          />
-        );
+        return <textarea {...commonProps} className={cn(commonProps.className, "text-xl font-medium")} placeholder="Título 3" />;
       case 'bullet_list':
         return (
           <div className="flex items-start gap-2">
@@ -305,15 +301,63 @@ export function BlockEditor({ pageId, blocks, onBlocksChange }: BlockEditorProps
               <ToggleRight className="h-4 w-4 group-open:rotate-90 transition-transform" />
               <textarea {...commonProps} className={cn(commonProps.className, "font-medium")} placeholder="Toggle..." />
             </summary>
-            <div className="ml-6 mt-2 text-muted-foreground">
-              Conteúdo colapsável...
-            </div>
+            <div className="ml-6 mt-2 text-muted-foreground">Conteúdo colapsável...</div>
           </details>
+        );
+      case 'image':
+        return (
+          <AttachmentDisplay
+            url={block.content.url}
+            fileName={block.content.fileName || 'Imagem'}
+            fileType={block.content.fileType || 'image/png'}
+            onRemove={() => deleteBlock(block.id)}
+          />
+        );
+      case 'file':
+        return (
+          <AttachmentDisplay
+            url={block.content.url}
+            fileName={block.content.fileName || 'Arquivo'}
+            fileType={block.content.fileType || 'application/octet-stream'}
+            onRemove={() => deleteBlock(block.id)}
+          />
+        );
+      case 'link':
+        return (
+          <LinkDisplay
+            url={block.content.url}
+            title={block.content.title || block.content.url}
+            onRemove={() => deleteBlock(block.id)}
+          />
+        );
+      case 'embed':
+        const embedUrl = block.content.url || '';
+        const isYoutube = embedUrl.includes('youtube.com') || embedUrl.includes('youtu.be');
+        if (isYoutube) {
+          const videoId = embedUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)?.[1];
+          if (videoId) {
+            return (
+              <div className="relative aspect-video rounded-lg overflow-hidden border">
+                <iframe
+                  src={`https://www.youtube.com/embed/${videoId}`}
+                  className="absolute inset-0 w-full h-full"
+                  allowFullScreen
+                />
+              </div>
+            );
+          }
+        }
+        return (
+          <div className="p-4 rounded-lg border bg-muted/50">
+            <p className="text-sm text-muted-foreground">Embed: {embedUrl}</p>
+          </div>
         );
       default:
         return <textarea {...commonProps} />;
     }
   };
+
+  const categories = [...new Set(BLOCK_TYPES.map(b => b.category))];
 
   return (
     <div className="space-y-1 py-4">
@@ -336,25 +380,51 @@ export function BlockEditor({ pageId, blocks, onBlocksChange }: BlockEditorProps
           )}
         >
           {/* Block Controls */}
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity absolute -left-14 top-1">
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity absolute -left-16 top-1">
             <Popover open={showBlockMenu === block.id} onOpenChange={(open) => setShowBlockMenu(open ? block.id : null)}>
               <PopoverTrigger asChild>
                 <button className="p-1 hover:bg-muted rounded">
                   <Plus className="h-4 w-4 text-muted-foreground" />
                 </button>
               </PopoverTrigger>
-              <PopoverContent className="w-64 p-2" align="start">
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground px-2 py-1">BLOCOS BÁSICOS</p>
-                  {BLOCK_TYPES.map(({ type, icon: Icon, label }) => (
-                    <button
-                      key={type}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors"
-                      onClick={() => changeBlockType(block.id, type)}
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span>{label}</span>
-                    </button>
+              <PopoverContent className="w-72 p-2" align="start">
+                <div className="space-y-2">
+                  {categories.map((category) => (
+                    <div key={category}>
+                      <p className="text-xs font-medium text-muted-foreground px-2 py-1">{category.toUpperCase()}</p>
+                      <div className="space-y-0.5">
+                        {BLOCK_TYPES.filter(b => b.category === category).map(({ type, icon: Icon, label }) => {
+                          if (type === 'image' || type === 'file') {
+                            return (
+                              <FileAttachment
+                                key={type}
+                                onFileUploaded={(url, fileName, fileType) => handleFileUploaded(url, fileName, fileType, index)}
+                                onLinkAdded={(url, title) => handleLinkAdded(url, title, index)}
+                                trigger={
+                                  <button className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors">
+                                    <Icon className="h-4 w-4" />
+                                    <span>{label}</span>
+                                  </button>
+                                }
+                              />
+                            );
+                          }
+                          return (
+                            <button
+                              key={type}
+                              className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors"
+                              onClick={() => {
+                                changeBlockType(block.id, type);
+                                setShowBlockMenu(null);
+                              }}
+                            >
+                              <Icon className="h-4 w-4" />
+                              <span>{label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </PopoverContent>
@@ -379,6 +449,58 @@ export function BlockEditor({ pageId, blocks, onBlocksChange }: BlockEditorProps
           </button>
         </div>
       ))}
+
+      {/* Add new block at end */}
+      {blocks.length > 0 && (
+        <div className="flex items-center gap-2 py-2 px-2 text-muted-foreground opacity-0 hover:opacity-100 transition-opacity">
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="flex items-center gap-2 hover:bg-muted/50 rounded p-1">
+                <Plus className="h-4 w-4" />
+                <span className="text-sm">Adicionar bloco</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-2" align="start">
+              <div className="space-y-2">
+                {categories.map((category) => (
+                  <div key={category}>
+                    <p className="text-xs font-medium text-muted-foreground px-2 py-1">{category.toUpperCase()}</p>
+                    <div className="space-y-0.5">
+                      {BLOCK_TYPES.filter(b => b.category === category).map(({ type, icon: Icon, label }) => {
+                        if (type === 'image' || type === 'file') {
+                          return (
+                            <FileAttachment
+                              key={type}
+                              onFileUploaded={(url, fileName, fileType) => handleFileUploaded(url, fileName, fileType, blocks.length)}
+                              onLinkAdded={(url, title) => handleLinkAdded(url, title, blocks.length)}
+                              trigger={
+                                <button className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors">
+                                  <Icon className="h-4 w-4" />
+                                  <span>{label}</span>
+                                </button>
+                              }
+                            />
+                          );
+                        }
+                        return (
+                          <button
+                            key={type}
+                            className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors"
+                            onClick={() => createBlock(type, blocks.length)}
+                          >
+                            <Icon className="h-4 w-4" />
+                            <span>{label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
     </div>
   );
 }
