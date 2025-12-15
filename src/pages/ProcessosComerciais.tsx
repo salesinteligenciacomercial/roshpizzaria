@@ -10,7 +10,8 @@ import {
   Workflow,
   Target,
   TrendingUp,
-  Brain
+  Brain,
+  FileText
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { NovoPlaybookDialog } from "@/components/processos/NovoPlaybookDialog";
@@ -21,6 +22,7 @@ import { RotinasList } from "@/components/processos/RotinasList";
 import { EtapasList } from "@/components/processos/EtapasList";
 import { KPIsDashboard } from "@/components/processos/KPIsDashboard";
 import { SugestoesIAList } from "@/components/processos/SugestoesIAList";
+import { NotionWorkspace } from "@/components/processos/notion/NotionWorkspace";
 
 interface Stats {
   playbooks: number;
@@ -30,7 +32,7 @@ interface Stats {
 }
 
 export default function ProcessosComerciais() {
-  const [activeTab, setActiveTab] = useState("home");
+  const [activeTab, setActiveTab] = useState("workspace");
   const [stats, setStats] = useState<Stats>({ playbooks: 0, routines: 0, stages: 0, suggestions: 0 });
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [playbooks, setPlaybooks] = useState<any[]>([]);
@@ -123,15 +125,20 @@ export default function ProcessosComerciais() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid grid-cols-7 gap-2 h-auto p-1 bg-muted/50">
-          <TabsTrigger value="home" className="flex items-center gap-2 py-2"><Target className="h-4 w-4" /><span className="hidden md:inline">Home</span></TabsTrigger>
+        <TabsList className="grid grid-cols-8 gap-2 h-auto p-1 bg-muted/50">
+          <TabsTrigger value="workspace" className="flex items-center gap-2 py-2"><FileText className="h-4 w-4" /><span className="hidden md:inline">Workspace</span></TabsTrigger>
+          <TabsTrigger value="home" className="flex items-center gap-2 py-2"><Target className="h-4 w-4" /><span className="hidden md:inline">Visão Geral</span></TabsTrigger>
           <TabsTrigger value="playbooks" className="flex items-center gap-2 py-2"><BookOpen className="h-4 w-4" /><span className="hidden md:inline">Playbooks</span></TabsTrigger>
           <TabsTrigger value="rotinas" className="flex items-center gap-2 py-2"><Workflow className="h-4 w-4" /><span className="hidden md:inline">Cadências</span></TabsTrigger>
           <TabsTrigger value="etapas" className="flex items-center gap-2 py-2"><GitBranch className="h-4 w-4" /><span className="hidden md:inline">Etapas</span></TabsTrigger>
           <TabsTrigger value="kpis" className="flex items-center gap-2 py-2"><TrendingUp className="h-4 w-4" /><span className="hidden md:inline">KPIs</span></TabsTrigger>
           <TabsTrigger value="relatorios" className="flex items-center gap-2 py-2"><FileBarChart className="h-4 w-4" /><span className="hidden md:inline">Relatórios</span></TabsTrigger>
-          <TabsTrigger value="sugestoes" className="flex items-center gap-2 py-2 relative"><Brain className="h-4 w-4" /><span className="hidden md:inline">Sugestões IA</span>{stats.suggestions > 0 && <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">{stats.suggestions}</Badge>}</TabsTrigger>
+          <TabsTrigger value="sugestoes" className="flex items-center gap-2 py-2 relative"><Brain className="h-4 w-4" /><span className="hidden md:inline">IA</span>{stats.suggestions > 0 && <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">{stats.suggestions}</Badge>}</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="workspace">
+          <NotionWorkspace companyId={companyId} />
+        </TabsContent>
 
         <TabsContent value="home" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -1426,6 +1426,216 @@ export type Database = {
         }
         Relationships: []
       }
+      process_blocks: {
+        Row: {
+          block_type: string
+          content: Json
+          created_at: string | null
+          id: string
+          page_id: string
+          parent_block_id: string | null
+          position: number | null
+          properties: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          block_type?: string
+          content?: Json
+          created_at?: string | null
+          id?: string
+          page_id: string
+          parent_block_id?: string | null
+          position?: number | null
+          properties?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          block_type?: string
+          content?: Json
+          created_at?: string | null
+          id?: string
+          page_id?: string
+          parent_block_id?: string | null
+          position?: number | null
+          properties?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_blocks_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "process_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "process_blocks_parent_block_id_fkey"
+            columns: ["parent_block_id"]
+            isOneToOne: false
+            referencedRelation: "process_blocks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      process_comments: {
+        Row: {
+          block_id: string
+          content: string
+          created_at: string | null
+          id: string
+          is_resolved: boolean | null
+          page_id: string
+          parent_comment_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          block_id: string
+          content: string
+          created_at?: string | null
+          id?: string
+          is_resolved?: boolean | null
+          page_id: string
+          parent_comment_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          block_id?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          is_resolved?: boolean | null
+          page_id?: string
+          parent_comment_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_comments_block_id_fkey"
+            columns: ["block_id"]
+            isOneToOne: false
+            referencedRelation: "process_blocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "process_comments_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "process_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "process_comments_parent_comment_id_fkey"
+            columns: ["parent_comment_id"]
+            isOneToOne: false
+            referencedRelation: "process_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      process_page_versions: {
+        Row: {
+          blocks_snapshot: Json
+          created_at: string | null
+          id: string
+          page_id: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          blocks_snapshot?: Json
+          created_at?: string | null
+          id?: string
+          page_id: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          blocks_snapshot?: Json
+          created_at?: string | null
+          id?: string
+          page_id?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_page_versions_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "process_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      process_pages: {
+        Row: {
+          company_id: string
+          cover_url: string | null
+          created_at: string | null
+          created_by: string | null
+          icon: string | null
+          id: string
+          is_favorite: boolean | null
+          is_template: boolean | null
+          page_type: string
+          parent_id: string | null
+          position: number | null
+          properties: Json | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          company_id: string
+          cover_url?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          icon?: string | null
+          id?: string
+          is_favorite?: boolean | null
+          is_template?: boolean | null
+          page_type?: string
+          parent_id?: string | null
+          position?: number | null
+          properties?: Json | null
+          title?: string
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          cover_url?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          icon?: string | null
+          id?: string
+          is_favorite?: boolean | null
+          is_template?: boolean | null
+          page_type?: string
+          parent_id?: string | null
+          position?: number | null
+          properties?: Json | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_pages_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "process_pages_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "process_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       processes_feedback: {
         Row: {
           company_id: string
