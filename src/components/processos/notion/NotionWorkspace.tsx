@@ -6,9 +6,23 @@ import { NotionPage } from "./NotionPage";
 import { TemplateLibrary } from "./TemplateLibrary";
 import { ProcessKanban } from "./ProcessKanban";
 import { ProcessCalendar } from "./ProcessCalendar";
+import { WorkspacePlaybooks } from "./WorkspacePlaybooks";
+import { WorkspaceCadences } from "./WorkspaceCadences";
+import { WorkspaceStages } from "./WorkspaceStages";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, PanelLeftClose, PanelLeft, LayoutGrid, CalendarDays, Plus } from "lucide-react";
+import { 
+  FileText, 
+  PanelLeftClose, 
+  PanelLeft, 
+  LayoutGrid, 
+  CalendarDays, 
+  Plus,
+  BookOpen,
+  Workflow,
+  GitBranch
+} from "lucide-react";
 
 interface ProcessPage {
   id: string;
@@ -29,13 +43,40 @@ interface NotionWorkspaceProps {
   companyId: string | null;
 }
 
-type ViewMode = 'pages' | 'kanban' | 'calendar';
+type ViewMode = 'pages' | 'kanban' | 'calendar' | 'playbooks' | 'cadences' | 'stages';
+
+interface Stats {
+  playbooks: number;
+  cadences: number;
+  stages: number;
+}
 
 export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
   const [selectedPage, setSelectedPage] = useState<ProcessPage | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>('pages');
+  const [stats, setStats] = useState<Stats>({ playbooks: 0, cadences: 0, stages: 0 });
+
+  useEffect(() => {
+    if (companyId) loadStats();
+  }, [companyId, refreshTrigger]);
+
+  const loadStats = async () => {
+    if (!companyId) return;
+    
+    const [playbooksRes, cadencesRes, stagesRes] = await Promise.all([
+      supabase.from('processes_playbooks').select('id', { count: 'exact', head: true }).eq('company_id', companyId),
+      supabase.from('processes_routines').select('id', { count: 'exact', head: true }).eq('company_id', companyId),
+      supabase.from('processes_stages').select('id', { count: 'exact', head: true }).eq('company_id', companyId)
+    ]);
+
+    setStats({
+      playbooks: playbooksRes.count || 0,
+      cadences: cadencesRes.count || 0,
+      stages: stagesRes.count || 0
+    });
+  };
 
   const handleSelectPage = async (page: any) => {
     if (!page) {
@@ -119,6 +160,20 @@ export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
     }
   };
 
+  const handleSync = () => {
+    loadStats();
+    setRefreshTrigger(prev => prev + 1);
+  };
+
+  const viewModes = [
+    { id: 'pages', label: 'Páginas', icon: FileText },
+    { id: 'kanban', label: 'Tarefas', icon: LayoutGrid },
+    { id: 'calendar', label: 'Calendário', icon: CalendarDays },
+    { id: 'playbooks', label: 'Playbooks', icon: BookOpen, count: stats.playbooks },
+    { id: 'cadences', label: 'Cadências', icon: Workflow, count: stats.cadences },
+    { id: 'stages', label: 'Etapas', icon: GitBranch, count: stats.stages },
+  ];
+
   return (
     <div className="flex h-[calc(100vh-220px)] bg-background rounded-xl border border-border overflow-hidden">
       {/* Sidebar */}
@@ -147,19 +202,22 @@ export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
             
             {/* View Mode Tabs */}
             <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
-              <TabsList className="h-8">
-                <TabsTrigger value="pages" className="h-7 px-3 text-xs gap-1.5">
-                  <FileText className="h-3.5 w-3.5" />
-                  Páginas
-                </TabsTrigger>
-                <TabsTrigger value="kanban" className="h-7 px-3 text-xs gap-1.5">
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  Tarefas
-                </TabsTrigger>
-                <TabsTrigger value="calendar" className="h-7 px-3 text-xs gap-1.5">
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  Calendário
-                </TabsTrigger>
+              <TabsList className="h-8 flex-wrap">
+                {viewModes.map((mode) => (
+                  <TabsTrigger 
+                    key={mode.id} 
+                    value={mode.id} 
+                    className="h-7 px-2 text-xs gap-1 relative"
+                  >
+                    <mode.icon className="h-3.5 w-3.5" />
+                    <span className="hidden lg:inline">{mode.label}</span>
+                    {mode.count !== undefined && mode.count > 0 && (
+                      <Badge variant="secondary" className="h-4 px-1 text-[10px] ml-1">
+                        {mode.count}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                ))}
               </TabsList>
             </Tabs>
           </div>
@@ -194,9 +252,9 @@ export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
                   <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-primary/10 flex items-center justify-center">
                     <FileText className="h-12 w-12 text-primary" />
                   </div>
-                  <h2 className="text-2xl font-bold mb-2">Bem-vindo aos Processos</h2>
+                  <h2 className="text-2xl font-bold mb-2">Bem-vindo ao Workspace</h2>
                   <p className="text-muted-foreground mb-6">
-                    Crie documentos, scripts, checklists e muito mais para padronizar seus processos comerciais.
+                    Gerencie documentos, tarefas, calendário, playbooks, cadências e etapas do seu processo comercial.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center">
                     <Button onClick={() => handleCreatePage()}>
@@ -223,6 +281,18 @@ export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
             <div className="p-4 h-full overflow-auto">
               <ProcessCalendar companyId={companyId} />
             </div>
+          )}
+
+          {viewMode === 'playbooks' && (
+            <WorkspacePlaybooks companyId={companyId} onSync={handleSync} />
+          )}
+
+          {viewMode === 'cadences' && (
+            <WorkspaceCadences companyId={companyId} onSync={handleSync} />
+          )}
+
+          {viewMode === 'stages' && (
+            <WorkspaceStages companyId={companyId} onSync={handleSync} />
           )}
         </div>
       </div>
