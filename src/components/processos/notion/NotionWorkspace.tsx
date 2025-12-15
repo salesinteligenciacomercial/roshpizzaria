@@ -4,8 +4,11 @@ import { toast } from "sonner";
 import { NotionSidebar } from "./NotionSidebar";
 import { NotionPage } from "./NotionPage";
 import { TemplateLibrary } from "./TemplateLibrary";
+import { ProcessKanban } from "./ProcessKanban";
+import { ProcessCalendar } from "./ProcessCalendar";
 import { Button } from "@/components/ui/button";
-import { FileText, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FileText, PanelLeftClose, PanelLeft, LayoutGrid, CalendarDays, Plus } from "lucide-react";
 
 interface ProcessPage {
   id: string;
@@ -26,10 +29,13 @@ interface NotionWorkspaceProps {
   companyId: string | null;
 }
 
+type ViewMode = 'pages' | 'kanban' | 'calendar';
+
 export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
   const [selectedPage, setSelectedPage] = useState<ProcessPage | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [viewMode, setViewMode] = useState<ViewMode>('pages');
 
   const handleSelectPage = async (page: any) => {
     if (!page) {
@@ -46,6 +52,7 @@ export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
     
     if (!error && data) {
       setSelectedPage(data);
+      setViewMode('pages');
     }
   };
 
@@ -81,6 +88,7 @@ export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
         });
 
       setSelectedPage(data);
+      setViewMode('pages');
       setRefreshTrigger(prev => prev + 1);
       toast.success('Nova página criada');
     } catch (error) {
@@ -106,6 +114,7 @@ export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
     
     if (data) {
       setSelectedPage(data);
+      setViewMode('pages');
       setRefreshTrigger(prev => prev + 1);
     }
   };
@@ -127,7 +136,7 @@ export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Toolbar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
             <Button
               variant="ghost"
               size="sm"
@@ -135,49 +144,87 @@ export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
             >
               {sidebarCollapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             </Button>
+            
+            {/* View Mode Tabs */}
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
+              <TabsList className="h-8">
+                <TabsTrigger value="pages" className="h-7 px-3 text-xs gap-1.5">
+                  <FileText className="h-3.5 w-3.5" />
+                  Páginas
+                </TabsTrigger>
+                <TabsTrigger value="kanban" className="h-7 px-3 text-xs gap-1.5">
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  Tarefas
+                </TabsTrigger>
+                <TabsTrigger value="calendar" className="h-7 px-3 text-xs gap-1.5">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  Calendário
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
           
           <div className="flex items-center gap-2">
-            <TemplateLibrary 
-              companyId={companyId} 
-              onCreateFromTemplate={handleCreateFromTemplate} 
-            />
-            <Button size="sm" onClick={() => handleCreatePage()}>
-              <FileText className="h-4 w-4 mr-2" />
-              Nova Página
-            </Button>
+            {viewMode === 'pages' && (
+              <>
+                <TemplateLibrary 
+                  companyId={companyId} 
+                  onCreateFromTemplate={handleCreateFromTemplate} 
+                />
+                <Button size="sm" onClick={() => handleCreatePage()}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nova Página
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Page Content or Empty State */}
-        {selectedPage ? (
-          <NotionPage 
-            page={selectedPage} 
-            onPageUpdate={handlePageUpdate}
-          />
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center max-w-md">
-              <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-primary/10 flex items-center justify-center">
-                <FileText className="h-12 w-12 text-primary" />
+        {/* Content based on view mode */}
+        <div className="flex-1 overflow-hidden">
+          {viewMode === 'pages' && (
+            selectedPage ? (
+              <NotionPage 
+                page={selectedPage} 
+                onPageUpdate={handlePageUpdate}
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center h-full">
+                <div className="text-center max-w-md">
+                  <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-primary/10 flex items-center justify-center">
+                    <FileText className="h-12 w-12 text-primary" />
+                  </div>
+                  <h2 className="text-2xl font-bold mb-2">Bem-vindo aos Processos</h2>
+                  <p className="text-muted-foreground mb-6">
+                    Crie documentos, scripts, checklists e muito mais para padronizar seus processos comerciais.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <Button onClick={() => handleCreatePage()}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Criar Página em Branco
+                    </Button>
+                    <TemplateLibrary 
+                      companyId={companyId}
+                      onCreateFromTemplate={handleCreateFromTemplate}
+                    />
+                  </div>
+                </div>
               </div>
-              <h2 className="text-2xl font-bold mb-2">Bem-vindo aos Processos</h2>
-              <p className="text-muted-foreground mb-6">
-                Crie documentos, scripts, checklists e muito mais para padronizar seus processos comerciais.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Button onClick={() => handleCreatePage()}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Criar Página em Branco
-                </Button>
-                <TemplateLibrary 
-                  companyId={companyId}
-                  onCreateFromTemplate={handleCreateFromTemplate}
-                />
-              </div>
+            )
+          )}
+
+          {viewMode === 'kanban' && (
+            <div className="p-4 h-full overflow-auto">
+              <ProcessKanban companyId={companyId} />
             </div>
-          </div>
-        )}
+          )}
+
+          {viewMode === 'calendar' && (
+            <div className="p-4 h-full overflow-auto">
+              <ProcessCalendar companyId={companyId} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
