@@ -37,35 +37,26 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
-interface ProcessPage {
+interface SidebarItem {
   id: string;
   title: string;
-  icon: string;
-  parent_id: string | null;
-  page_type: string;
-  is_favorite: boolean;
-  is_template: boolean;
-  position: number;
-  children?: ProcessPage[];
+  icon: string | React.ReactNode;
+  type: 'page' | 'task' | 'playbook' | 'cadence' | 'stage';
+  is_favorite?: boolean;
+  parent_id?: string | null;
+  children?: SidebarItem[];
+  original?: any;
 }
 
 interface NotionSidebarProps {
   companyId: string | null;
   selectedPageId: string | null;
-  onSelectPage: (page: ProcessPage | null) => void;
+  onSelectPage: (page: any) => void;
   onCreatePage: (parentId?: string | null, type?: string) => void;
   onViewKanban: () => void;
   onViewCalendar: () => void;
   showKanban: boolean;
   showCalendar: boolean;
-}
-
-interface Stats {
-  pages: number;
-  tasks: number;
-  playbooks: number;
-  cadences: number;
-  stages: number;
 }
 
 export function NotionSidebar({ 
@@ -78,22 +69,38 @@ export function NotionSidebar({
   showKanban,
   showCalendar
 }: NotionSidebarProps) {
-  const [pages, setPages] = useState<ProcessPage[]>([]);
-  const [tasks, setTasks] = useState<ProcessPage[]>([]);
-  const [favorites, setFavorites] = useState<ProcessPage[]>([]);
-  const [playbooks, setPlaybooks] = useState<any[]>([]);
-  const [cadences, setCadences] = useState<any[]>([]);
-  const [stages, setStages] = useState<any[]>([]);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['pages', 'tasks', 'playbooks', 'cadences', 'stages']));
+  const [allItems, setAllItems] = useState<SidebarItem[]>([]);
+  const [tasks, setTasks] = useState<SidebarItem[]>([]);
+  const [favorites, setFavorites] = useState<SidebarItem[]>([]);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['pages', 'tasks']));
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<Stats>({ pages: 0, tasks: 0, playbooks: 0, cadences: 0, stages: 0 });
+  const [totalItems, setTotalItems] = useState(0);
 
   useEffect(() => {
     if (companyId) {
       loadAllData();
     }
   }, [companyId]);
+
+  const getIconForType = (type: string, customIcon?: string) => {
+    if (customIcon && typeof customIcon === 'string' && customIcon.length <= 4) {
+      return <span className="text-base">{customIcon}</span>;
+    }
+    
+    switch (type) {
+      case 'playbook':
+        return <BookOpen className="h-4 w-4 text-blue-500" />;
+      case 'cadence':
+        return <Workflow className="h-4 w-4 text-purple-500" />;
+      case 'stage':
+        return <GitBranch className="h-4 w-4 text-green-500" />;
+      case 'task':
+        return <CheckSquare className="h-4 w-4 text-orange-500" />;
+      default:
+        return <FileText className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
 
   const loadAllData = async () => {
     if (!companyId) return;
@@ -123,46 +130,71 @@ export function NotionSidebar({
           .order('stage_order', { ascending: true })
       ]);
 
+      const items: SidebarItem[] = [];
+      const taskItems: SidebarItem[] = [];
+      const favoriteItems: SidebarItem[] = [];
+
       // Process pages
       const pagesData = pagesRes.data || [];
-      const pagesMap = new Map<string, ProcessPage>();
-      const rootPages: ProcessPage[] = [];
-      const taskPages: ProcessPage[] = [];
-      const favoritePages: ProcessPage[] = [];
-
       pagesData.forEach(page => {
-        pagesMap.set(page.id, { ...page, children: [] });
-      });
-
-      pagesData.forEach(page => {
-        const currentPage = pagesMap.get(page.id)!;
-        if (page.is_favorite) {
-          favoritePages.push(currentPage);
-        }
+        const item: SidebarItem = {
+          id: page.id,
+          title: page.title,
+          icon: page.icon || '📄',
+          type: page.page_type === 'task' ? 'task' : 'page',
+          is_favorite: page.is_favorite,
+          parent_id: page.parent_id,
+          original: page
+        };
         
         if (page.page_type === 'task') {
-          taskPages.push(currentPage);
-        } else if (page.parent_id && pagesMap.has(page.parent_id)) {
-          pagesMap.get(page.parent_id)!.children!.push(currentPage);
-        } else if (!page.parent_id && page.page_type !== 'task') {
-          rootPages.push(currentPage);
+          taskItems.push(item);
+        } else if (!page.parent_id) {
+          items.push(item);
+        }
+        
+        if (page.is_favorite) {
+          favoriteItems.push(item);
         }
       });
 
-      setPages(rootPages);
-      setTasks(taskPages);
-      setFavorites(favoritePages);
-      setPlaybooks(playbooksRes.data || []);
-      setCadences(cadencesRes.data || []);
-      setStages(stagesRes.data || []);
-      
-      setStats({
-        pages: rootPages.length,
-        tasks: taskPages.length,
-        playbooks: playbooksRes.data?.length || 0,
-        cadences: cadencesRes.data?.length || 0,
-        stages: stagesRes.data?.length || 0
+      // Process playbooks
+      (playbooksRes.data || []).forEach(pb => {
+        items.push({
+          id: pb.id,
+          title: pb.title,
+          icon: '📘',
+          type: 'playbook',
+          original: pb
+        });
       });
+
+      // Process cadences
+      (cadencesRes.data || []).forEach(c => {
+        items.push({
+          id: c.id,
+          title: c.name,
+          icon: '🔄',
+          type: 'cadence',
+          original: c
+        });
+      });
+
+      // Process stages
+      (stagesRes.data || []).forEach(s => {
+        items.push({
+          id: s.id,
+          title: s.stage_name,
+          icon: '📊',
+          type: 'stage',
+          original: s
+        });
+      });
+
+      setAllItems(items);
+      setTasks(taskItems);
+      setFavorites(favoriteItems);
+      setTotalItems(items.length + taskItems.length);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -182,33 +214,49 @@ export function NotionSidebar({
     });
   };
 
-  const toggleFavorite = async (page: ProcessPage, e: React.MouseEvent) => {
+  const toggleFavorite = async (item: SidebarItem, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (item.type !== 'page' && item.type !== 'task') return;
+    
     try {
       const { error } = await supabase
         .from('process_pages')
-        .update({ is_favorite: !page.is_favorite })
-        .eq('id', page.id);
+        .update({ is_favorite: !item.is_favorite })
+        .eq('id', item.id);
 
       if (error) throw error;
       await loadAllData();
-      toast.success(page.is_favorite ? 'Removido dos favoritos' : 'Adicionado aos favoritos');
+      toast.success(item.is_favorite ? 'Removido dos favoritos' : 'Adicionado aos favoritos');
     } catch (error) {
       toast.error('Erro ao atualizar favorito');
     }
   };
 
-  const deletePage = async (page: ProcessPage, e: React.MouseEvent) => {
+  const deleteItem = async (item: SidebarItem, e: React.MouseEvent) => {
     e.stopPropagation();
+    
     try {
-      const { error } = await supabase
-        .from('process_pages')
-        .delete()
-        .eq('id', page.id);
+      let error;
+      
+      switch (item.type) {
+        case 'page':
+        case 'task':
+          ({ error } = await supabase.from('process_pages').delete().eq('id', item.id));
+          break;
+        case 'playbook':
+          ({ error } = await supabase.from('processes_playbooks').delete().eq('id', item.id));
+          break;
+        case 'cadence':
+          ({ error } = await supabase.from('processes_routines').delete().eq('id', item.id));
+          break;
+        case 'stage':
+          ({ error } = await supabase.from('processes_stages').delete().eq('id', item.id));
+          break;
+      }
 
       if (error) throw error;
       await loadAllData();
-      if (selectedPageId === page.id) {
+      if (selectedPageId === item.id) {
         onSelectPage(null);
       }
       toast.success('Item excluído');
@@ -217,44 +265,10 @@ export function NotionSidebar({
     }
   };
 
-  const deletePlaybook = async (id: string, e: React.MouseEvent) => {
+  const duplicateItem = async (item: SidebarItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      const { error } = await supabase.from('processes_playbooks').delete().eq('id', id);
-      if (error) throw error;
-      await loadAllData();
-      toast.success('Playbook excluído');
-    } catch (error) {
-      toast.error('Erro ao excluir playbook');
-    }
-  };
-
-  const deleteCadence = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      const { error } = await supabase.from('processes_routines').delete().eq('id', id);
-      if (error) throw error;
-      await loadAllData();
-      toast.success('Cadência excluída');
-    } catch (error) {
-      toast.error('Erro ao excluir cadência');
-    }
-  };
-
-  const deleteStage = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      const { error } = await supabase.from('processes_stages').delete().eq('id', id);
-      if (error) throw error;
-      await loadAllData();
-      toast.success('Etapa excluída');
-    } catch (error) {
-      toast.error('Erro ao excluir etapa');
-    }
-  };
-
-  const duplicatePage = async (page: ProcessPage, e: React.MouseEvent) => {
-    e.stopPropagation();
+    if (item.type !== 'page' && item.type !== 'task') return;
+    
     try {
       const { data: user } = await supabase.auth.getUser();
       
@@ -262,10 +276,10 @@ export function NotionSidebar({
         .from('process_pages')
         .insert({
           company_id: companyId,
-          parent_id: page.parent_id,
-          title: `${page.title} (cópia)`,
-          icon: page.icon,
-          page_type: page.page_type,
+          parent_id: item.parent_id || null,
+          title: `${item.title} (cópia)`,
+          icon: typeof item.icon === 'string' ? item.icon : '📄',
+          page_type: item.type,
           created_by: user.user?.id
         });
 
@@ -277,49 +291,65 @@ export function NotionSidebar({
     }
   };
 
-  const renderPageItem = (page: ProcessPage, depth: number = 0) => {
-    const hasChildren = page.children && page.children.length > 0;
-    const isExpanded = expandedIds.has(page.id);
-    const isSelected = selectedPageId === page.id;
+  const handleItemClick = (item: SidebarItem) => {
+    if (item.type === 'page' || item.type === 'task') {
+      onSelectPage(item.original);
+    } else {
+      // For playbooks, cadences, stages - just show a toast for now
+      // In the future, we could open an edit dialog or create a page view for these
+      toast.info(`Selecionado: ${item.title}`);
+    }
+  };
+
+  const renderItem = (item: SidebarItem, depth: number = 0) => {
+    const isSelected = selectedPageId === item.id;
+    const canFavorite = item.type === 'page' || item.type === 'task';
+    const canDuplicate = item.type === 'page' || item.type === 'task';
+
+    const typeLabels: Record<string, string> = {
+      page: 'Página',
+      task: 'Tarefa',
+      playbook: 'Playbook',
+      cadence: 'Cadência',
+      stage: 'Etapa'
+    };
 
     return (
-      <div key={page.id}>
+      <div key={item.id}>
         <div
           className={cn(
-            "group flex items-center gap-1 py-1 px-2 rounded-md cursor-pointer transition-colors",
+            "group flex items-center gap-1 py-1.5 px-2 rounded-md cursor-pointer transition-colors",
             isSelected ? "bg-primary/10 text-primary" : "hover:bg-muted/50",
             depth > 0 && "ml-4"
           )}
-          onClick={() => onSelectPage(page)}
+          onClick={() => handleItemClick(item)}
         >
-          <button
-            className="p-0.5 hover:bg-muted rounded opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (hasChildren) toggleExpand(page.id);
-            }}
-          >
-            {hasChildren ? (
-              isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
+          <div className="w-5 flex items-center justify-center">
+            {typeof item.icon === 'string' ? (
+              <span className="text-sm">{item.icon}</span>
             ) : (
-              <div className="w-3.5" />
+              item.icon
             )}
-          </button>
+          </div>
           
-          <span className="text-base">{page.icon}</span>
+          <span className="flex-1 text-sm truncate">{item.title}</span>
           
-          <span className="flex-1 text-sm truncate">{page.title}</span>
+          <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+            {typeLabels[item.type]}
+          </span>
           
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              className="p-1 hover:bg-muted rounded"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCreatePage(page.id, 'page');
-              }}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
+            {(item.type === 'page') && (
+              <button
+                className="p-1 hover:bg-muted rounded"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreatePage(item.id, 'page');
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -328,20 +358,24 @@ export function NotionSidebar({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48">
-                <DropdownMenuItem onClick={(e) => toggleFavorite(page, e as any)}>
-                  {page.is_favorite ? (
-                    <><StarOff className="h-4 w-4 mr-2" /> Remover favorito</>
-                  ) : (
-                    <><Star className="h-4 w-4 mr-2" /> Adicionar favorito</>
-                  )}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={(e) => duplicatePage(page, e as any)}>
-                  <Copy className="h-4 w-4 mr-2" /> Duplicar
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                {canFavorite && (
+                  <DropdownMenuItem onClick={(e) => toggleFavorite(item, e as any)}>
+                    {item.is_favorite ? (
+                      <><StarOff className="h-4 w-4 mr-2" /> Remover favorito</>
+                    ) : (
+                      <><Star className="h-4 w-4 mr-2" /> Adicionar favorito</>
+                    )}
+                  </DropdownMenuItem>
+                )}
+                {canDuplicate && (
+                  <DropdownMenuItem onClick={(e) => duplicateItem(item, e as any)}>
+                    <Copy className="h-4 w-4 mr-2" /> Duplicar
+                  </DropdownMenuItem>
+                )}
+                {(canFavorite || canDuplicate) && <DropdownMenuSeparator />}
                 <DropdownMenuItem 
                   className="text-destructive"
-                  onClick={(e) => deletePage(page, e as any)}
+                  onClick={(e) => deleteItem(item, e as any)}
                 >
                   <Trash2 className="h-4 w-4 mr-2" /> Excluir
                 </DropdownMenuItem>
@@ -349,52 +383,13 @@ export function NotionSidebar({
             </DropdownMenu>
           </div>
         </div>
-        
-        {hasChildren && isExpanded && (
-          <div className="ml-2">
-            {page.children!.map(child => renderPageItem(child, depth + 1))}
-          </div>
-        )}
       </div>
     );
   };
 
-  const renderSimpleItem = (
-    id: string, 
-    title: string, 
-    icon: React.ReactNode, 
-    onDelete: (id: string, e: React.MouseEvent) => void
-  ) => (
-    <div
-      key={id}
-      className="group flex items-center gap-1 py-1 px-2 rounded-md cursor-pointer transition-colors hover:bg-muted/50"
-    >
-      <div className="w-3.5" />
-      {icon}
-      <span className="flex-1 text-sm truncate">{title}</span>
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="p-1 hover:bg-muted rounded" onClick={(e) => e.stopPropagation()}>
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuItem 
-              className="text-destructive"
-              onClick={(e) => onDelete(id, e as any)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" /> Excluir
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
-  );
-
-  const filteredPages = searchQuery
-    ? pages.filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()))
-    : pages;
+  const filteredItems = searchQuery
+    ? allItems.filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    : allItems;
 
   const filteredTasks = searchQuery
     ? tasks.filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -448,27 +443,27 @@ export function NotionSidebar({
                 <span>FAVORITOS</span>
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-1">
-                {favorites.map(page => renderPageItem(page))}
+                {favorites.map(item => renderItem(item))}
               </CollapsibleContent>
             </Collapsible>
           )}
 
-          {/* Pages */}
+          {/* All Items (Pages, Playbooks, Cadences, Stages) */}
           <Collapsible open={expandedIds.has('pages')} onOpenChange={() => toggleExpand('pages')}>
             <CollapsibleTrigger className="flex items-center justify-between px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground w-full">
               <div className="flex items-center gap-2">
                 <Folder className="h-3 w-3" />
                 <span>PÁGINAS</span>
               </div>
-              {stats.pages > 0 && <Badge variant="secondary" className="h-4 px-1 text-[10px]">{stats.pages}</Badge>}
+              {allItems.length > 0 && <Badge variant="secondary" className="h-4 px-1 text-[10px]">{allItems.length}</Badge>}
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-1">
               {loading ? (
                 <div className="text-center py-2 text-muted-foreground text-xs">Carregando...</div>
-              ) : filteredPages.length === 0 ? (
-                <div className="text-center py-2 text-muted-foreground text-xs">Nenhuma página</div>
+              ) : filteredItems.length === 0 ? (
+                <div className="text-center py-2 text-muted-foreground text-xs">Nenhum item</div>
               ) : (
-                filteredPages.map(page => renderPageItem(page))
+                filteredItems.map(item => renderItem(item))
               )}
             </CollapsibleContent>
           </Collapsible>
@@ -480,67 +475,13 @@ export function NotionSidebar({
                 <CheckSquare className="h-3 w-3" />
                 <span>TAREFAS</span>
               </div>
-              {stats.tasks > 0 && <Badge variant="secondary" className="h-4 px-1 text-[10px]">{stats.tasks}</Badge>}
+              {tasks.length > 0 && <Badge variant="secondary" className="h-4 px-1 text-[10px]">{tasks.length}</Badge>}
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-1">
               {filteredTasks.length === 0 ? (
                 <div className="text-center py-2 text-muted-foreground text-xs">Nenhuma tarefa</div>
               ) : (
-                filteredTasks.map(task => renderPageItem(task))
-              )}
-            </CollapsibleContent>
-          </Collapsible>
-
-          {/* Playbooks */}
-          <Collapsible open={expandedIds.has('playbooks')} onOpenChange={() => toggleExpand('playbooks')}>
-            <CollapsibleTrigger className="flex items-center justify-between px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground w-full">
-              <div className="flex items-center gap-2">
-                <BookOpen className="h-3 w-3" />
-                <span>PLAYBOOKS</span>
-              </div>
-              {stats.playbooks > 0 && <Badge variant="secondary" className="h-4 px-1 text-[10px]">{stats.playbooks}</Badge>}
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-1">
-              {playbooks.length === 0 ? (
-                <div className="text-center py-2 text-muted-foreground text-xs">Nenhum playbook</div>
-              ) : (
-                playbooks.map(pb => renderSimpleItem(pb.id, pb.title, <BookOpen className="h-4 w-4 text-blue-500" />, deletePlaybook))
-              )}
-            </CollapsibleContent>
-          </Collapsible>
-
-          {/* Cadences */}
-          <Collapsible open={expandedIds.has('cadences')} onOpenChange={() => toggleExpand('cadences')}>
-            <CollapsibleTrigger className="flex items-center justify-between px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground w-full">
-              <div className="flex items-center gap-2">
-                <Workflow className="h-3 w-3" />
-                <span>CADÊNCIAS</span>
-              </div>
-              {stats.cadences > 0 && <Badge variant="secondary" className="h-4 px-1 text-[10px]">{stats.cadences}</Badge>}
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-1">
-              {cadences.length === 0 ? (
-                <div className="text-center py-2 text-muted-foreground text-xs">Nenhuma cadência</div>
-              ) : (
-                cadences.map(c => renderSimpleItem(c.id, c.name, <Workflow className="h-4 w-4 text-purple-500" />, deleteCadence))
-              )}
-            </CollapsibleContent>
-          </Collapsible>
-
-          {/* Stages */}
-          <Collapsible open={expandedIds.has('stages')} onOpenChange={() => toggleExpand('stages')}>
-            <CollapsibleTrigger className="flex items-center justify-between px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground w-full">
-              <div className="flex items-center gap-2">
-                <GitBranch className="h-3 w-3" />
-                <span>ETAPAS</span>
-              </div>
-              {stats.stages > 0 && <Badge variant="secondary" className="h-4 px-1 text-[10px]">{stats.stages}</Badge>}
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-1">
-              {stages.length === 0 ? (
-                <div className="text-center py-2 text-muted-foreground text-xs">Nenhuma etapa</div>
-              ) : (
-                stages.map(s => renderSimpleItem(s.id, s.stage_name, <GitBranch className="h-4 w-4 text-green-500" />, deleteStage))
+                filteredTasks.map(task => renderItem(task))
               )}
             </CollapsibleContent>
           </Collapsible>
