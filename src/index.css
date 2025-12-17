@@ -394,3 +394,25 @@ div[class*="overflow"]::-webkit-scrollbar {
 [role="dialog"] .absolute.inset-0.overflow-y-auto::-webkit-scrollbar-thumb:hover {
   background-color: hsl(var(--muted-foreground)) !important;
 }
+
+/* 📄 PDF Thumbnail - Garantir visibilidade do canvas react-pdf */
+.pdf-thumbnail-container .react-pdf__Document,
+.pdf-thumbnail-container .react-pdf__Page,
+.pdf-thumbnail-container .react-pdf__Page__canvas {
+  visibility: visible !important;
+  display: block !important;
+  opacity: 1 !important;
+}
+
+.pdf-thumbnail-container canvas {
+  visibility: visible !important;
+  display: block !important;
+  opacity: 1 !important;
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+.pdf-page-thumbnail {
+  visibility: visible !important;
+  display: block !important;
+}
