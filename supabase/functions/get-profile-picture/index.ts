@@ -1,32 +1,9 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-// Meta API Configuration
-const META_API_VERSION = 'v21.0';
-const META_API_BASE_URL = 'https://graph.facebook.com';
-
-// Buscar foto de perfil via Meta API
-async function getMetaProfilePicture(
-  accessToken: string,
-  phoneNumber: string
-): Promise<string | null> {
-  try {
-    // Meta API endpoint para buscar contato/perfil
-    // Nota: Meta WhatsApp Business API não tem endpoint direto para foto de perfil de contatos
-    // A foto de perfil só está disponível via webhook quando o contato envia mensagem
-    // Retornamos null para usar o fallback
-    console.log('📘 [META] Foto de perfil não disponível via Meta API para contatos externos');
-    return null;
-  } catch (error) {
-    console.error('❌ [META] Erro ao buscar foto de perfil:', error);
-    return null;
-  }
-}
 
 // Buscar foto de perfil via Evolution API
 async function getEvolutionProfilePicture(
@@ -64,7 +41,7 @@ async function getEvolutionProfilePicture(
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -109,7 +86,7 @@ serve(async (req) => {
         .or(`telefone.ilike.%${formattedNumber}%,phone.ilike.%${formattedNumber}%`)
         .not('profile_picture_url', 'is', null)
         .limit(1)
-        .single();
+        .maybeSingle();
       
       if (lead?.profile_picture_url) {
         console.log('✅ [PROFILE-PICTURE] Foto encontrada no lead (Meta webhook)');
@@ -137,16 +114,8 @@ serve(async (req) => {
       });
 
       if (conn) {
-        const apiProvider = conn.api_provider || 'evolution';
-
-        // Tentar Meta API primeiro se for o provider principal
-        if ((apiProvider === 'meta' || apiProvider === 'both') && conn.meta_access_token) {
-          console.log('📘 Tentando Meta API para foto de perfil...');
-          profilePictureUrl = await getMetaProfilePicture(conn.meta_access_token, String(number));
-        }
-
-        // Se não conseguiu via Meta ou provider é Evolution, tentar Evolution
-        if (!profilePictureUrl && conn.instance_name && conn.evolution_api_key) {
+        // Tentar Evolution API se disponível
+        if (conn.instance_name && conn.evolution_api_key) {
           const apiUrl = conn.evolution_api_url || evolutionUrl;
           if (apiUrl) {
             console.log('📗 Tentando Evolution API para foto de perfil...');
