@@ -912,7 +912,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
               </div>
 
               {/* Lista de anexos */}
-              <div className="space-y-2 pt-2">
+              <div className="space-y-3 pt-2">
                 <Label className="text-xs text-muted-foreground">Anexos ({attachments.length})</Label>
                 {attachments.length === 0 && (
                   <div className="text-center py-6">
@@ -920,54 +920,145 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
                     <p className="text-sm text-muted-foreground">Nenhum anexo adicionado</p>
                   </div>
                 )}
-                {attachments.map((att, index) => (
-                  <div key={index} className="flex items-center gap-2 p-3 border rounded bg-muted/20 group">
-                    {getAttachmentIcon(att)}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{att.name}</p>
-                      {att.type && att.type !== 'link' && (
-                        <p className="text-xs text-muted-foreground">{att.type}</p>
+                {attachments.map((att, index) => {
+                  const isImage = att.type?.startsWith('image/');
+                  const isPdf = att.type === 'application/pdf';
+                  
+                  return (
+                    <div key={index} className="border rounded-lg overflow-hidden bg-muted/20 group">
+                      {/* Preview de imagem */}
+                      {isImage && (
+                        <div className="relative">
+                          <img 
+                            src={att.url} 
+                            alt={att.name}
+                            className="w-full max-h-48 object-contain bg-black/5 cursor-pointer"
+                            onClick={() => window.open(att.url, '_blank')}
+                          />
+                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              className="h-7 w-7 p-0 bg-white/90 hover:bg-white shadow-sm"
+                              onClick={() => window.open(att.url, '_blank')}
+                              title="Abrir em nova aba"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              className="h-7 w-7 p-0 shadow-sm"
+                              onClick={() => removeAttachment(att.url)}
+                              title="Remover"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Preview de PDF */}
+                      {isPdf && (
+                        <div 
+                          className="flex items-center gap-3 p-4 bg-red-50 cursor-pointer hover:bg-red-100 transition-colors"
+                          onClick={() => window.open(att.url, '_blank')}
+                        >
+                          <div className="p-2 rounded bg-red-500/10">
+                            <FileText className="h-8 w-8 text-red-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{att.name}</p>
+                            <p className="text-xs text-muted-foreground">Clique para abrir o PDF</p>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const a = document.createElement('a');
+                                a.href = att.url;
+                                a.download = att.name;
+                                a.click();
+                              }}
+                              title="Baixar"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeAttachment(att.url);
+                              }}
+                              title="Remover"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Outros tipos de arquivo ou links */}
+                      {!isImage && !isPdf && (
+                        <div className="flex items-center gap-2 p-3">
+                          {getAttachmentIcon(att)}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{att.name}</p>
+                            {att.type && att.type !== 'link' && (
+                              <p className="text-xs text-muted-foreground">{att.type}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => window.open(att.url, '_blank')}
+                              title="Abrir"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => {
+                                const a = document.createElement('a');
+                                a.href = att.url;
+                                a.download = att.name;
+                                a.click();
+                              }}
+                              title="Baixar"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                              onClick={() => removeAttachment(att.url)}
+                              title="Remover"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0"
-                        onClick={() => window.open(att.url, '_blank')}
-                        title="Abrir arquivo"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0"
-                        onClick={() => {
-                          const a = document.createElement('a');
-                          a.href = att.url;
-                          a.download = att.name;
-                          a.click();
-                        }}
-                        title="Baixar arquivo"
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                        onClick={() => removeAttachment(att.url)}
-                        title="Remover anexo"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </TabsContent>
           </ScrollArea>

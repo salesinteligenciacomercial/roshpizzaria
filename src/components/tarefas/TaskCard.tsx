@@ -1151,41 +1151,90 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
 
         {/* Attachments Section */}
         {attachments.length > 0 && (
-          <div className="space-y-1" onPointerDown={(e) => e.stopPropagation()}>
+          <div className="space-y-2" onPointerDown={(e) => e.stopPropagation()}>
             <div className="text-xs text-muted-foreground flex items-center gap-1">
               <Paperclip className="h-3 w-3" />
               Anexos ({attachments.length})
             </div>
-            <div className="space-y-1 max-h-40 overflow-y-auto">
-              {attachments.map((attachment, index) => (
-                <div key={index} className="flex items-center gap-2 text-xs bg-muted/30 p-1.5 rounded">
-                  {attachment.type === 'link' ? (
-                    <Link className="h-3 w-3 text-blue-500" />
-                  ) : attachment.type?.startsWith('image/') ? (
-                    <Image className="h-3 w-3 text-green-500" />
-                  ) : (
-                    <FileText className="h-3 w-3 text-gray-500" />
-                  )}
-                  <a
-                    href={attachment.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 truncate text-primary hover:underline"
-                    title={attachment.name}
-                  >
-                    {attachment.name}
-                  </a>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-4 w-4 p-0 text-muted-foreground hover:text-destructive"
-                    onClick={(e) => { e.stopPropagation(); removeAttachment(index); }}
-                    title="Remover anexo"
-                  >
-                    ×
-                  </Button>
-                </div>
-              ))}
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {attachments.map((attachment, index) => {
+                const isImage = attachment.type?.startsWith('image/');
+                const isPdf = attachment.type === 'application/pdf';
+                
+                return (
+                  <div key={index} className="group">
+                    {/* Preview de imagem */}
+                    {isImage && (
+                      <div className="relative rounded overflow-hidden border">
+                        <img 
+                          src={attachment.url} 
+                          alt={attachment.name}
+                          className="w-full max-h-32 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => window.open(attachment.url, '_blank')}
+                        />
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="absolute top-1 right-1 h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => { e.stopPropagation(); removeAttachment(index); }}
+                          title="Remover"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {/* Preview de PDF */}
+                    {isPdf && (
+                      <div 
+                        className="flex items-center gap-2 p-2 rounded bg-red-50 border border-red-200 cursor-pointer hover:bg-red-100 transition-colors"
+                        onClick={() => window.open(attachment.url, '_blank')}
+                      >
+                        <FileText className="h-5 w-5 text-red-600 flex-shrink-0" />
+                        <span className="flex-1 text-xs truncate font-medium">{attachment.name}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => { e.stopPropagation(); removeAttachment(index); }}
+                          title="Remover"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {/* Outros arquivos */}
+                    {!isImage && !isPdf && (
+                      <div className="flex items-center gap-2 text-xs bg-muted/30 p-1.5 rounded">
+                        {attachment.type === 'link' ? (
+                          <Link className="h-3 w-3 text-blue-500" />
+                        ) : (
+                          <FileText className="h-3 w-3 text-gray-500" />
+                        )}
+                        <a
+                          href={attachment.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 truncate text-primary hover:underline"
+                          title={attachment.name}
+                        >
+                          {attachment.name}
+                        </a>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-4 w-4 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); removeAttachment(index); }}
+                          title="Remover anexo"
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
