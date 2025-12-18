@@ -523,6 +523,46 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     }
   }, [attachments, task.id, onUpdate]);
 
+  // Função para abrir PDF via blob URL (evita bloqueio do navegador)
+  const openPdfSafely = useCallback(async (url: string, fileName: string) => {
+    try {
+      toast.loading('Carregando PDF...', { id: 'pdf-loading' });
+      
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Erro ao baixar PDF');
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Abrir em nova aba usando blob URL
+      const newWindow = window.open(blobUrl, '_blank');
+      
+      if (!newWindow) {
+        // Fallback: criar link de download
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        link.click();
+        toast.success('PDF baixado!', { id: 'pdf-loading' });
+      } else {
+        toast.success('PDF aberto!', { id: 'pdf-loading' });
+      }
+      
+      // Limpar blob URL após um tempo
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch (error) {
+      console.error('Erro ao abrir PDF:', error);
+      toast.error('Erro ao abrir PDF. Tente fazer o download.', { id: 'pdf-loading' });
+      
+      // Fallback: download direto
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.target = '_blank';
+      link.click();
+    }
+  }, []);
+
   const {
     attributes,
     listeners,
@@ -1188,7 +1228,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
                     {isPdf && (
                       <div 
                         className="flex items-center gap-2 p-2 rounded bg-red-50 border border-red-200 cursor-pointer hover:bg-red-100 transition-colors"
-                        onClick={() => window.open(attachment.url, '_blank')}
+                        onClick={() => openPdfSafely(attachment.url, attachment.name)}
                       >
                         <FileText className="h-5 w-5 text-red-600 flex-shrink-0" />
                         <span className="flex-1 text-xs truncate font-medium">{attachment.name}</span>

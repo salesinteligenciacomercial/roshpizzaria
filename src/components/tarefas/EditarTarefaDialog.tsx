@@ -449,6 +449,46 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
     return <FileText className="h-4 w-4 text-muted-foreground" />;
   };
 
+  // Função para abrir PDF via blob URL (evita bloqueio do navegador)
+  const openPdfSafely = async (url: string, fileName: string) => {
+    try {
+      toast.loading('Carregando PDF...', { id: 'pdf-loading' });
+      
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Erro ao baixar PDF');
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Abrir em nova aba usando blob URL
+      const newWindow = window.open(blobUrl, '_blank');
+      
+      if (!newWindow) {
+        // Fallback: criar link de download
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        link.click();
+        toast.success('PDF baixado!', { id: 'pdf-loading' });
+      } else {
+        toast.success('PDF aberto!', { id: 'pdf-loading' });
+      }
+      
+      // Limpar blob URL após um tempo
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch (error) {
+      console.error('Erro ao abrir PDF:', error);
+      toast.error('Erro ao abrir PDF. Tente fazer o download.', { id: 'pdf-loading' });
+      
+      // Fallback: download direto
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.target = '_blank';
+      link.click();
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -964,7 +1004,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
                       {isPdf && (
                         <div 
                           className="flex items-center gap-3 p-4 bg-red-50 cursor-pointer hover:bg-red-100 transition-colors"
-                          onClick={() => window.open(att.url, '_blank')}
+                          onClick={() => openPdfSafely(att.url, att.name)}
                         >
                           <div className="p-2 rounded bg-red-500/10">
                             <FileText className="h-8 w-8 text-red-600" />
@@ -981,10 +1021,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
                               className="h-7 w-7 p-0"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const a = document.createElement('a');
-                                a.href = att.url;
-                                a.download = att.name;
-                                a.click();
+                                openPdfSafely(att.url, att.name);
                               }}
                               title="Baixar"
                             >
