@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Pencil, Paperclip, Download, X, ExternalLink, Check } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Pencil, Paperclip, Download, X, ExternalLink, Check, Upload, Image as ImageIcon, FileText, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,7 +44,7 @@ interface Task {
   checklist?: { id?: string; text: string; done: boolean }[];
   tags?: string[];
   comments?: { id?: string; text: string; author_id?: string; created_at?: string }[];
-  attachments?: { name: string; url: string }[];
+  attachments?: { name: string; url: string; type?: string }[];
 }
 
 interface EditarTarefaDialogProps {
@@ -94,9 +94,11 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
   const { allTags: tagsExistentes } = useTagsManager();
   const [comments, setComments] = useState<{ id?: string; text: string; author_id?: string; created_at?: string }[]>(task.comments || []);
   const [newComment, setNewComment] = useState("");
-  const [attachments, setAttachments] = useState<{ name: string; url: string }[]>(task.attachments || []);
+  const [attachments, setAttachments] = useState<{ name: string; url: string; type?: string }[]>(task.attachments || []);
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [attachmentName, setAttachmentName] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -374,19 +376,64 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
     setNewComment("");
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      toast.error('Arquivo muito grande. Máximo: 10MB');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `task-files/${task.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('internal-chat-media')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('internal-chat-media')
+        .getPublicUrl(fileName);
+
+      setAttachments((prev) => [...prev, { name: file.name, url: publicUrl, type: file.type }]);
+      toast.success("Arquivo anexado!");
+      
+      // Reset input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error) {
+      console.error("Erro ao fazer upload:", error);
+      toast.error("Erro ao fazer upload do arquivo");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const addAttachment = () => {
-    const url = attachmentUrl.trim();
+    let url = attachmentUrl.trim();
     const name = attachmentName.trim() || url;
     if (!url) {
       toast.error("Digite uma URL válida");
       return;
     }
+    
+    // Adicionar https se não tiver protocolo
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    
     try {
       new URL(url);
-      setAttachments((prev) => [...prev, { name, url }]);
+      setAttachments((prev) => [...prev, { name, url, type: 'link' }]);
       setAttachmentUrl("");
       setAttachmentName("");
-      toast.success("Anexo adicionado");
+      toast.success("Link adicionado");
     } catch {
       toast.error("URL inválida");
     }
@@ -394,6 +441,12 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
 
   const removeAttachment = (url: string) => {
     setAttachments((prev) => prev.filter((a) => a.url !== url));
+  };
+  
+  const getAttachmentIcon = (att: { type?: string }) => {
+    if (att.type === 'link') return <LinkIcon className="h-4 w-4 text-blue-500" />;
+    if (att.type?.startsWith('image/')) return <ImageIcon className="h-4 w-4 text-green-500" />;
+    return <FileText className="h-4 w-4 text-muted-foreground" />;
   };
 
   return (
@@ -792,74 +845,127 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
             </TabsContent>
 
             <TabsContent value="anexos" className="space-y-4 mt-4">
+              {/* Upload de arquivo */}
               <div className="space-y-2">
-                <Label>Nome do Arquivo</Label>
-                <Input 
-                  value={attachmentName} 
-                  onChange={(e) => setAttachmentName(e.target.value)} 
-                  placeholder="Ex: Documento.pdf"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>URL do Arquivo</Label>
-                <div className="flex gap-2">
-                  <Input 
-                    value={attachmentUrl} 
-                    onChange={(e) => setAttachmentUrl(e.target.value)} 
-                    placeholder="https://exemplo.com/arquivo.pdf"
+                <Label>Upload de Arquivo</Label>
+                <div 
+                  className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                    accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                    disabled={uploading}
                   />
-                  <Button type="button" variant="outline" size="icon" onClick={addAttachment}>
-                    <Plus className="h-4 w-4" />
-                  </Button>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="p-2 rounded-full bg-primary/10">
+                      <Upload className="h-5 w-5 text-primary" />
+                    </div>
+                    <p className="text-sm font-medium">
+                      {uploading ? 'Enviando...' : 'Clique para fazer upload'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Imagens, PDFs, documentos (máx. 10MB)
+                    </p>
+                  </div>
                 </div>
               </div>
-              <div className="space-y-2">
+
+              {/* Ou adicionar link */}
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">ou adicionar link</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Nome (opcional)</Label>
+                  <Input 
+                    value={attachmentName} 
+                    onChange={(e) => setAttachmentName(e.target.value)} 
+                    placeholder="Ex: Documento.pdf"
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">URL do Link</Label>
+                  <div className="flex gap-1">
+                    <Input 
+                      value={attachmentUrl} 
+                      onChange={(e) => setAttachmentUrl(e.target.value)} 
+                      placeholder="https://exemplo.com"
+                      className="h-9"
+                      onKeyDown={(e) => e.key === 'Enter' && addAttachment()}
+                    />
+                    <Button type="button" variant="outline" size="icon" className="h-9 w-9" onClick={addAttachment}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lista de anexos */}
+              <div className="space-y-2 pt-2">
+                <Label className="text-xs text-muted-foreground">Anexos ({attachments.length})</Label>
                 {attachments.length === 0 && (
-                  <div className="text-center py-8">
-                    <Paperclip className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
+                  <div className="text-center py-6">
+                    <Paperclip className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
                     <p className="text-sm text-muted-foreground">Nenhum anexo adicionado</p>
                   </div>
                 )}
                 {attachments.map((att, index) => (
-                  <div key={index} className="flex items-center gap-2 p-3 border rounded bg-muted/20">
-                    <Paperclip className="h-4 w-4 text-muted-foreground" />
+                  <div key={index} className="flex items-center gap-2 p-3 border rounded bg-muted/20 group">
+                    {getAttachmentIcon(att)}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{att.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{att.url}</p>
+                      {att.type && att.type !== 'link' && (
+                        <p className="text-xs text-muted-foreground">{att.type}</p>
+                      )}
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => window.open(att.url, '_blank')}
-                      title="Abrir arquivo"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        const a = document.createElement('a');
-                        a.href = att.url;
-                        a.download = att.name;
-                        a.click();
-                      }}
-                      title="Baixar arquivo"
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive"
-                      onClick={() => removeAttachment(att.url)}
-                      title="Remover anexo"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        onClick={() => window.open(att.url, '_blank')}
+                        title="Abrir arquivo"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        onClick={() => {
+                          const a = document.createElement('a');
+                          a.href = att.url;
+                          a.download = att.name;
+                          a.click();
+                        }}
+                        title="Baixar arquivo"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                        onClick={() => removeAttachment(att.url)}
+                        title="Remover anexo"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
