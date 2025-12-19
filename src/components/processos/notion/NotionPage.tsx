@@ -40,6 +40,7 @@ import { PageTags } from "./PageTags";
 import { PageStatus } from "./PageStatus";
 import { PageComments } from "./PageComments";
 import { PageHistory } from "./PageHistory";
+import { TaskKanbanBoard } from "./TaskKanbanBoard";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -117,6 +118,15 @@ export function NotionPage({ page, onPageUpdate }: NotionPageProps) {
 
   const saveChecklist = async (newChecklist: ChecklistItem[]) => {
     const newProperties = { ...properties, checklist: newChecklist };
+    await supabase
+      .from('process_pages')
+      .update({ properties: newProperties })
+      .eq('id', page.id);
+    setProperties(newProperties);
+  };
+
+  const saveKanbanBoard = async (kanbanData: any) => {
+    const newProperties = { ...properties, kanbanBoard: kanbanData };
     await supabase
       .from('process_pages')
       .update({ properties: newProperties })
@@ -465,6 +475,15 @@ export function NotionPage({ page, onPageUpdate }: NotionPageProps) {
               
               <Separator className="my-6" />
             </div>
+          )}
+
+          {/* Task Kanban Board */}
+          {page.page_type === 'task' && (
+            <TaskKanbanBoard
+              pageId={page.id}
+              kanbanData={properties.kanbanBoard || null}
+              onUpdate={saveKanbanBoard}
+            />
           )}
 
           {/* Block Editor */}
