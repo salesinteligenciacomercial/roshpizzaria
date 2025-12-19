@@ -25,6 +25,7 @@ interface KanbanColumn {
 }
 
 interface KanbanData {
+  name?: string;
   columns: KanbanColumn[];
   tasks: KanbanTask[];
 }
@@ -48,13 +49,22 @@ const DEFAULT_COLORS = [
 
 export function InlineKanban({ content, onUpdate, onRemove }: InlineKanbanProps) {
   const [board, setBoard] = useState<KanbanData>(
-    content || { columns: [], tasks: [] }
+    content || { name: 'Quadro de Tarefas', columns: [], tasks: [] }
   );
   const [newColumnTitle, setNewColumnTitle] = useState('');
   const [addingColumn, setAddingColumn] = useState(false);
   const [newTaskTexts, setNewTaskTexts] = useState<Record<string, string>>({});
   const [editingColumn, setEditingColumn] = useState<string | null>(null);
   const [editColumnTitle, setEditColumnTitle] = useState('');
+  const [editingBoardName, setEditingBoardName] = useState(false);
+  const [boardName, setBoardName] = useState(content?.name || 'Quadro de Tarefas');
+
+  const updateBoardName = () => {
+    if (!boardName.trim()) return;
+    const newBoard = { ...board, name: boardName.trim() };
+    saveBoard(newBoard);
+    setEditingBoardName(false);
+  };
 
   const saveBoard = (newBoard: KanbanData) => {
     setBoard(newBoard);
@@ -177,7 +187,40 @@ export function InlineKanban({ content, onUpdate, onRemove }: InlineKanbanProps)
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <LayoutGrid className="h-4 w-4 text-primary" />
-          <span className="font-medium text-sm">Quadro Kanban</span>
+          {editingBoardName ? (
+            <div className="flex items-center gap-1">
+              <Input
+                value={boardName}
+                onChange={(e) => setBoardName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') updateBoardName();
+                  if (e.key === 'Escape') {
+                    setEditingBoardName(false);
+                    setBoardName(board.name || 'Quadro de Tarefas');
+                  }
+                }}
+                className="h-6 text-sm w-40"
+                autoFocus
+              />
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={updateBoardName}>
+                <Check className="h-3 w-3" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
+                setEditingBoardName(false);
+                setBoardName(board.name || 'Quadro de Tarefas');
+              }}>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          ) : (
+            <span 
+              className="font-medium text-sm cursor-pointer hover:underline" 
+              onClick={() => setEditingBoardName(true)}
+              title="Clique para editar o nome"
+            >
+              {board.name || 'Quadro de Tarefas'}
+            </span>
+          )}
           <Badge variant="secondary" className="text-xs">{board.tasks.length} itens</Badge>
         </div>
         <div className="flex items-center gap-1">
