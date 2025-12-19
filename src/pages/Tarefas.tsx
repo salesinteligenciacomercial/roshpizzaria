@@ -16,7 +16,7 @@ import React, { useState, useEffect, type ReactNode, useMemo, useCallback, useRe
 import { DndContext, DragEndEvent, closestCorners, useDroppable, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, horizontalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Settings, Trash2, Pencil, MoreVertical, GripVertical } from "lucide-react";
+import { Plus, Settings, Trash2, Pencil, MoreVertical, GripVertical, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -110,6 +110,8 @@ const DroppableColumnContainer = React.memo(function DroppableColumnContainer({ 
 // ✅ NOVO: SortableColumn - Coluna que pode ser arrastada e reordenada
 const SortableColumn = React.memo(function SortableColumn({ 
   column, 
+  columnIndex,
+  totalColumns,
   tasksByColumn, 
   tasksPerColumn, 
   taskCountsByColumn,
@@ -119,9 +121,12 @@ const SortableColumn = React.memo(function SortableColumn({
   carregarDados,
   loadMoreTasks,
   selectedBoard,
-  emitGlobalEvent
+  emitGlobalEvent,
+  onMoveColumn
 }: { 
   column: Column;
+  columnIndex: number;
+  totalColumns: number;
   tasksByColumn: Record<string, Task[]>;
   tasksPerColumn: Record<string, number>;
   taskCountsByColumn: Record<string, number>;
@@ -132,6 +137,7 @@ const SortableColumn = React.memo(function SortableColumn({
   loadMoreTasks: (columnId: string) => void;
   selectedBoard: string;
   emitGlobalEvent: (event: any) => void;
+  onMoveColumn: (columnId: string, direction: 'left' | 'right') => void;
 }) {
   const {
     attributes,
@@ -189,6 +195,27 @@ const SortableColumn = React.memo(function SortableColumn({
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold">{column.nome}</h3>
           <div className="flex gap-1">
+            {/* Botões de mover para esquerda/direita */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20 disabled:opacity-40"
+              onClick={() => onMoveColumn(column.id, 'left')}
+              disabled={columnIndex === 0}
+              title="Mover para esquerda"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20 disabled:opacity-40"
+              onClick={() => onMoveColumn(column.id, 'right')}
+              disabled={columnIndex === totalColumns - 1}
+              title="Mover para direita"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
             <EditarColunaDialog
               columnId={column.id}
               nomeAtual={column.nome}
@@ -1144,6 +1171,68 @@ export default function Tarefas() {
 
   const handleDragCancel = useCallback(() => setActiveTaskId(null), []);
 
+  // ✅ NOVO: Função para mover coluna via botões de seta
+  const handleMoveColumn = useCallback(async (columnId: string, direction: 'left' | 'right') => {
+    const currentIndex = columnsFiltradas.findIndex(c => c.id === columnId);
+    if (currentIndex === -1) return;
+
+    const newIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
+    
+    // Validar limites
+    if (newIndex < 0 || newIndex >= columnsFiltradas.length) return;
+
+    try {
+      // Bloquear operações concorrentes
+      if (isMovingRef.current) {
+        toast.warning("Aguarde a operação anterior finalizar");
+        return;
+      }
+      isMovingRef.current = true;
+
+      // Reordenar colunas localmente
+      const reorderedColumns = arrayMove(columnsFiltradas, currentIndex, newIndex);
+      
+      // Atualizar posições
+      const updatedColumnsWithPosition = reorderedColumns.map((col, index) => ({
+        ...col,
+        posicao: index
+      }));
+
+      // Atualizar estado local imediatamente
+      setColumns(prev => {
+        const boardColumns = prev.filter(col => col.board_id === selectedBoard);
+        const otherColumns = prev.filter(col => col.board_id !== selectedBoard);
+        const newPositions = new Map(updatedColumnsWithPosition.map(c => [c.id, c.posicao]));
+        const updatedBoardColumns = boardColumns.map(col => ({
+          ...col,
+          posicao: newPositions.has(col.id) ? newPositions.get(col.id)! : col.posicao
+        }));
+        return [...updatedBoardColumns, ...otherColumns].sort((a, b) => a.posicao - b.posicao);
+      });
+
+      // Persistir no banco de dados
+      const updates = updatedColumnsWithPosition.map(col => ({
+        id: col.id,
+        posicao: col.posicao
+      }));
+
+      for (const update of updates) {
+        await supabase
+          .from('task_columns')
+          .update({ posicao: update.posicao })
+          .eq('id', update.id);
+      }
+
+      toast.success(`Coluna movida para ${direction === 'left' ? 'esquerda' : 'direita'}`);
+    } catch (error) {
+      console.error('Erro ao mover coluna:', error);
+      toast.error("Erro ao mover coluna");
+      carregarDados();
+    } finally {
+      isMovingRef.current = false;
+    }
+  }, [columnsFiltradas, selectedBoard, carregarDados]);
+
   const criarNovoBoard = useCallback(async () => {
     if (!novoBoardNome.trim()) return;
 
@@ -1665,10 +1754,12 @@ export default function Tarefas() {
             strategy={horizontalListSortingStrategy}
           >
             <div className="flex overflow-x-auto gap-4 pb-4">
-              {columnsFiltradas.map((column) => (
+              {columnsFiltradas.map((column, index) => (
                 <SortableColumn
                   key={column.id}
                   column={column}
+                  columnIndex={index}
+                  totalColumns={columnsFiltradas.length}
                   tasksByColumn={tasksByColumn}
                   tasksPerColumn={tasksPerColumn}
                   taskCountsByColumn={taskCountsByColumn}
@@ -1679,6 +1770,7 @@ export default function Tarefas() {
                   loadMoreTasks={loadMoreTasks}
                   selectedBoard={selectedBoard}
                   emitGlobalEvent={emitGlobalEvent}
+                  onMoveColumn={handleMoveColumn}
                 />
               ))}
             {/* Botão para adicionar nova coluna - apenas admin pode criar colunas */}
