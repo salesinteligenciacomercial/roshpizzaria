@@ -1150,8 +1150,8 @@ function Conversas() {
         }
         console.log('🔍 [REALTIME-MULTIUSER] Mensagem de:', sentBy || (isFromMe ? 'Usuário' : 'Contato'), '| owner_id:', novaMensagem.owner_id);
 
-        // Mapear tipos de mensagem corretamente
-        const tipoMensagem = novaMensagem.tipo_mensagem === 'texto' ? 'text' : novaMensagem.tipo_mensagem === 'image' ? 'image' : novaMensagem.tipo_mensagem === 'audio' ? 'audio' : novaMensagem.tipo_mensagem === 'video' ? 'video' : novaMensagem.tipo_mensagem === 'document' ? 'pdf' : novaMensagem.tipo_mensagem || 'text';
+        // Mapear tipos de mensagem corretamente (inclui 'pdf' e 'document')
+        const tipoMensagem = novaMensagem.tipo_mensagem === 'texto' ? 'text' : novaMensagem.tipo_mensagem === 'image' ? 'image' : novaMensagem.tipo_mensagem === 'audio' ? 'audio' : novaMensagem.tipo_mensagem === 'video' ? 'video' : (novaMensagem.tipo_mensagem === 'document' || novaMensagem.tipo_mensagem === 'pdf') ? 'pdf' : novaMensagem.tipo_mensagem || 'text';
 
         // Criar objeto de mensagem
         const novaMensagemObj: Message = {
@@ -1164,7 +1164,7 @@ function Conversas() {
           read: novaMensagem.status !== 'Recebida',
           mediaUrl: novaMensagem.midia_url,
           fileName: novaMensagem.arquivo_nome,
-          mimeType: novaMensagem.tipo_mensagem === 'video' ? 'video/mp4' : novaMensagem.tipo_mensagem === 'audio' ? 'audio/mpeg' : novaMensagem.tipo_mensagem === 'image' ? 'image/jpeg' : novaMensagem.tipo_mensagem === 'document' ? 'application/pdf' : undefined,
+          mimeType: novaMensagem.tipo_mensagem === 'video' ? 'video/mp4' : novaMensagem.tipo_mensagem === 'audio' ? 'audio/mpeg' : novaMensagem.tipo_mensagem === 'image' ? 'image/jpeg' : (novaMensagem.tipo_mensagem === 'document' || novaMensagem.tipo_mensagem === 'pdf') ? 'application/pdf' : undefined,
           sentBy: sentBy
         };
 
@@ -1966,14 +1966,14 @@ function Conversas() {
           const message: Message = {
             id: msg.id,
             content: msg.mensagem || '',
-            type: msg.tipo_mensagem === 'image' ? 'image' : msg.tipo_mensagem === 'audio' ? 'audio' : msg.tipo_mensagem === 'video' ? 'video' : msg.tipo_mensagem === 'document' ? 'pdf' : 'text',
+            type: msg.tipo_mensagem === 'image' ? 'image' : msg.tipo_mensagem === 'audio' ? 'audio' : msg.tipo_mensagem === 'video' ? 'video' : (msg.tipo_mensagem === 'document' || msg.tipo_mensagem === 'pdf') ? 'pdf' : 'text',
             sender: isFromMe ? 'user' : 'contact',
             timestamp: new Date(msg.created_at),
             delivered: msg.status === 'Enviada',
             read: msg.status === 'Lida',
             mediaUrl: msg.midia_url,
             fileName: msg.arquivo_nome,
-            mimeType: msg.tipo_mensagem === 'video' ? 'video/mp4' : msg.tipo_mensagem === 'audio' ? 'audio/mpeg' : msg.tipo_mensagem === 'image' ? 'image/jpeg' : msg.tipo_mensagem === 'document' ? 'application/pdf' : undefined,
+            mimeType: msg.tipo_mensagem === 'video' ? 'video/mp4' : msg.tipo_mensagem === 'audio' ? 'audio/mpeg' : msg.tipo_mensagem === 'image' ? 'image/jpeg' : (msg.tipo_mensagem === 'document' || msg.tipo_mensagem === 'pdf') ? 'application/pdf' : undefined,
             sentBy: sentBy
           };
           conv.messages.push(message);
@@ -2887,14 +2887,14 @@ function Conversas() {
           return {
             id: m.id || `msg-${Date.now()}-${Math.random()}`,
             content: m.mensagem || '',
-            type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem === 'image' ? 'image' : m.tipo_mensagem === 'audio' ? 'audio' : m.tipo_mensagem === 'video' ? 'video' : m.tipo_mensagem === 'document' ? 'pdf' : m.tipo_mensagem || 'text') as any,
+            type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem === 'image' ? 'image' : m.tipo_mensagem === 'audio' ? 'audio' : m.tipo_mensagem === 'video' ? 'video' : (m.tipo_mensagem === 'document' || m.tipo_mensagem === 'pdf') ? 'pdf' : m.tipo_mensagem || 'text') as any,
             sender: sender,
             timestamp: new Date(m.created_at || Date.now()),
             delivered: true,
             read: m.status !== 'Recebida',
             mediaUrl: m.midia_url,
             fileName: m.arquivo_nome,
-            mimeType: m.tipo_mensagem === 'video' ? 'video/mp4' : m.tipo_mensagem === 'audio' ? 'audio/mpeg' : m.tipo_mensagem === 'image' ? 'image/jpeg' : m.tipo_mensagem === 'document' ? 'application/pdf' : undefined,
+            mimeType: m.tipo_mensagem === 'video' ? 'video/mp4' : m.tipo_mensagem === 'audio' ? 'audio/mpeg' : m.tipo_mensagem === 'image' ? 'image/jpeg' : (m.tipo_mensagem === 'document' || m.tipo_mensagem === 'pdf') ? 'application/pdf' : undefined,
             sentBy: sentBy // Nome do usuário que enviou
           };
         });
