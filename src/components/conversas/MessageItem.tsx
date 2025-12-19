@@ -486,11 +486,11 @@ function MessageItemComponent({
                     </Button>
                   </div>
                   
-                  {/* PDF Viewer Dialog */}
+                  {/* PDF Viewer Dialog - Sempre usar URL original para evitar problemas com blob URL expirada */}
                   <PdfViewerDialog
                     open={pdfViewerOpen}
                     onOpenChange={setPdfViewerOpen}
-                    url={mediaUrl || message.mediaUrl || ''}
+                    url={message.mediaUrl || mediaUrl || ''}
                     fileName={message.fileName}
                   />
                 </div>

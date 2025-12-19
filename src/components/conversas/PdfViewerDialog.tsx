@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -17,16 +17,32 @@ interface PdfViewerDialogProps {
   fileName?: string;
 }
 
+// Função para extrair URL original de blob ou obter URL base
+const getOriginalUrl = (url: string): string | null => {
+  if (!url) return null;
+  
+  // Se é blob ou data URL, não podemos usar diretamente para re-fetch
+  if (url.startsWith('blob:') || url.startsWith('data:')) {
+    console.log('⚠️ [PDF-VIEWER] URL é blob/data, não é possível re-fetch');
+    return null;
+  }
+  
+  return url;
+};
+
 export function PdfViewerDialog({ open, onOpenChange, url, fileName }: PdfViewerDialogProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [pdfFile, setPdfFile] = useState<string | null>(null);
+  const [pdfFile, setPdfFile] = useState<{ data: ArrayBuffer } | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const lastUrlRef = useRef<string>('');
 
   useEffect(() => {
     if (open && url) {
+      // Sempre recarregar quando abrir para garantir que temos dados frescos
       setLoading(true);
       setError(false);
       setCurrentPage(1);
@@ -34,31 +50,72 @@ export function PdfViewerDialog({ open, onOpenChange, url, fileName }: PdfViewer
     }
 
     return () => {
-      if (pdfFile && pdfFile.startsWith('blob:')) {
-        URL.revokeObjectURL(pdfFile);
+      // Cancelar fetch pendente
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
     };
   }, [open, url]);
 
+  // Cleanup quando fechar
+  useEffect(() => {
+    if (!open) {
+      setPdfFile(null);
+      setNumPages(0);
+      setLoading(true);
+    }
+  }, [open]);
+
   const loadPdf = async () => {
     try {
-      // Se já é uma blob URL, usar diretamente
-      if (url.startsWith('blob:') || url.startsWith('data:')) {
-        setPdfFile(url);
-        return;
+      // Cancelar qualquer fetch anterior
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+
+      let fetchUrl = url;
+      
+      // Se é blob URL, tentar usar mas pode falhar
+      if (url.startsWith('blob:')) {
+        console.log('⚠️ [PDF-VIEWER] Tentando usar blob URL (pode falhar se expirada):', url.substring(0, 60));
       }
 
-      // Fazer fetch do PDF e criar blob URL
-      const response = await fetch(url);
+      console.log('📥 [PDF-VIEWER] Carregando PDF:', {
+        urlType: url.startsWith('blob:') ? 'blob' : url.startsWith('data:') ? 'data' : 'http',
+        urlPreview: url.substring(0, 80)
+      });
+
+      const response = await fetch(fetchUrl, {
+        signal: abortControllerRef.current.signal
+      });
+      
       if (!response.ok) {
-        throw new Error('Falha ao carregar PDF');
+        throw new Error(`Falha ao carregar PDF: ${response.status}`);
       }
       
-      const blob = await response.blob();
-      const newBlobUrl = URL.createObjectURL(blob);
-      setPdfFile(newBlobUrl);
-    } catch (err) {
-      console.error('Erro ao carregar PDF:', err);
+      const arrayBuffer = await response.arrayBuffer();
+      
+      if (arrayBuffer.byteLength === 0) {
+        throw new Error('PDF vazio');
+      }
+
+      console.log('✅ [PDF-VIEWER] PDF carregado com sucesso:', {
+        size: arrayBuffer.byteLength,
+        fileName
+      });
+
+      // Usar ArrayBuffer diretamente em vez de blob URL
+      setPdfFile({ data: arrayBuffer });
+      lastUrlRef.current = url;
+      
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('ℹ️ [PDF-VIEWER] Fetch cancelado');
+        return;
+      }
+      
+      console.error('❌ [PDF-VIEWER] Erro ao carregar PDF:', err);
       setError(true);
       setLoading(false);
     }
@@ -68,29 +125,31 @@ export function PdfViewerDialog({ open, onOpenChange, url, fileName }: PdfViewer
     try {
       toast.info('Iniciando download...');
       
-      let downloadUrl = pdfFile || url;
-      let createdUrl = false;
+      let downloadData: ArrayBuffer;
       
-      // Se não temos blob URL, fazer fetch
-      if (!pdfFile?.startsWith('blob:') && !url.startsWith('blob:')) {
+      // Se já temos os dados, usar diretamente
+      if (pdfFile?.data) {
+        downloadData = pdfFile.data;
+      } else {
+        // Fazer novo fetch
         const response = await fetch(url);
         if (!response.ok) throw new Error('Falha ao baixar');
-        const blob = await response.blob();
-        downloadUrl = URL.createObjectURL(blob);
-        createdUrl = true;
+        downloadData = await response.arrayBuffer();
       }
 
+      const blob = new Blob([downloadData], { type: 'application/pdf' });
+      const downloadUrl = URL.createObjectURL(blob);
+      
       const a = document.createElement('a');
-      a.href = downloadUrl!;
+      a.href = downloadUrl;
       a.download = fileName || 'documento.pdf';
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       
-      if (createdUrl) {
-        URL.revokeObjectURL(downloadUrl);
-      }
+      // Limpar blob URL após download
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
       
       toast.success('Download concluído!');
     } catch (err) {
@@ -201,7 +260,7 @@ export function PdfViewerDialog({ open, onOpenChange, url, fileName }: PdfViewer
         )}
         
         <div className="flex-1 overflow-auto flex items-start justify-center p-4 bg-muted/30">
-          {loading && (
+          {loading && !pdfFile && (
             <div className="flex flex-col items-center justify-center h-full gap-3">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-sm text-muted-foreground">Carregando PDF...</p>
