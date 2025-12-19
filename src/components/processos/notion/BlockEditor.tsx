@@ -21,7 +21,8 @@ import {
   Video,
   Upload,
   Maximize2,
-  Minimize2
+  Minimize2,
+  LayoutGrid
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +41,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { FileAttachment, AttachmentDisplay, LinkDisplay } from "./FileAttachment";
+import { InlineKanban } from "./InlineKanban";
 
 interface Block {
   id: string;
@@ -62,6 +64,7 @@ const BLOCK_TYPES = [
   { type: 'bullet_list', icon: List, label: 'Lista com marcadores', shortcut: '-', category: 'Listas' },
   { type: 'numbered_list', icon: ListOrdered, label: 'Lista numerada', shortcut: '1.', category: 'Listas' },
   { type: 'checklist', icon: CheckSquare, label: 'Lista de tarefas', shortcut: '[]', category: 'Listas' },
+  { type: 'kanban', icon: LayoutGrid, label: 'Quadro Kanban', shortcut: '', category: 'Listas' },
   { type: 'quote', icon: Quote, label: 'Citação', shortcut: '>', category: 'Formatação' },
   { type: 'code', icon: Code, label: 'Código', shortcut: '```', category: 'Formatação' },
   { type: 'callout', icon: AlertCircle, label: 'Destaque', shortcut: '!', category: 'Formatação' },
@@ -398,6 +401,14 @@ export function BlockEditor({ pageId, blocks, onBlocksChange }: BlockEditorProps
           <div className="p-4 rounded-lg border bg-muted/50">
             <p className="text-sm text-muted-foreground">Embed: {embedUrl}</p>
           </div>
+        );
+      case 'kanban':
+        return (
+          <InlineKanban
+            content={block.content.kanbanData || { columns: [], tasks: [] }}
+            onUpdate={(kanbanData) => updateBlock(block.id, { ...block.content, kanbanData })}
+            onRemove={() => deleteBlock(block.id)}
+          />
         );
       default:
         return wrapWithExpand(<textarea {...commonProps} />);
