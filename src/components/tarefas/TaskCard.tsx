@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { User, Calendar as CalendarIcon, Trash2, ExternalLink, MessageSquare, Plus, GripVertical, Bell, Play, Pause, Clock, Paperclip, Link, FileText, Image, ChevronDown, ChevronUp, Pencil, X, Check, CheckCircle2 } from "lucide-react";
+import { User, Calendar as CalendarIcon, Trash2, ExternalLink, MessageSquare, Plus, GripVertical, Bell, Play, Pause, Clock, Paperclip, Link, FileText, Image, ChevronDown, ChevronUp, Pencil, X, Check, CheckCircle2, Copy } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EditarTarefaDialog } from "./EditarTarefaDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -566,6 +566,63 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       link.click();
     }
   }, []);
+
+  // Função para duplicar a tarefa
+  const duplicateTask = useCallback(async () => {
+    try {
+      toast.loading('Duplicando tarefa...', { id: 'duplicate-task' });
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Você precisa estar logado para duplicar tarefas', { id: 'duplicate-task' });
+        return;
+      }
+
+      // Buscar company_id do usuário
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      // Criar novo checklist com novos IDs
+      const newChecklist = (task.checklist || []).map(item => ({
+        ...item,
+        id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        done: false // Resetar status dos itens
+      }));
+
+      // Criar nova tarefa com os mesmos dados
+      const { error } = await supabase
+        .from('tasks')
+        .insert({
+          title: `${task.title} (cópia)`,
+          description: task.description,
+          priority: task.priority,
+          assignee_id: task.assignee_id,
+          responsaveis: task.responsaveis || [],
+          start_date: task.start_date,
+          due_date: task.due_date,
+          lead_id: task.lead_id,
+          checklist: newChecklist,
+          comments: [], // Não copiar comentários
+          attachments: task.attachments || [],
+          owner_id: user.id,
+          company_id: userRole?.company_id || null,
+          tempo_gasto: 0,
+          time_tracking_iniciado: null,
+          time_tracking_pausado: true
+        });
+
+      if (error) throw error;
+
+      toast.success('Tarefa duplicada com sucesso!', { id: 'duplicate-task' });
+      onUpdate();
+    } catch (error) {
+      console.error('Erro ao duplicar tarefa:', error);
+      toast.error('Erro ao duplicar tarefa', { id: 'duplicate-task' });
+    }
+  }, [task, onUpdate]);
 
   const {
     attributes,
@@ -1504,6 +1561,16 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            variant="ghost"
+            size="sm"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); duplicateTask(); }}
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+            title="Duplicar tarefa"
+          >
+            <Copy className="h-3 w-3" />
+          </Button>
           <EditarTarefaDialog task={task} onTaskUpdated={onUpdate} />
           <AlertDialog>
             <AlertDialogTrigger asChild>
