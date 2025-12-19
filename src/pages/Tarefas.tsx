@@ -110,8 +110,6 @@ const DroppableColumnContainer = React.memo(function DroppableColumnContainer({ 
 // ✅ NOVO: SortableColumn - Coluna que pode ser arrastada e reordenada
 const SortableColumn = React.memo(function SortableColumn({ 
   column, 
-  columnIndex,
-  totalColumns,
   tasksByColumn, 
   tasksPerColumn, 
   taskCountsByColumn,
@@ -121,12 +119,9 @@ const SortableColumn = React.memo(function SortableColumn({
   carregarDados,
   loadMoreTasks,
   selectedBoard,
-  emitGlobalEvent,
-  onMoveColumn
+  emitGlobalEvent
 }: { 
   column: Column;
-  columnIndex: number;
-  totalColumns: number;
   tasksByColumn: Record<string, Task[]>;
   tasksPerColumn: Record<string, number>;
   taskCountsByColumn: Record<string, number>;
@@ -137,7 +132,6 @@ const SortableColumn = React.memo(function SortableColumn({
   loadMoreTasks: (columnId: string) => void;
   selectedBoard: string;
   emitGlobalEvent: (event: any) => void;
-  onMoveColumn: (columnId: string, direction: 'left' | 'right') => void;
 }) {
   const {
     attributes,
@@ -195,27 +189,6 @@ const SortableColumn = React.memo(function SortableColumn({
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold">{column.nome}</h3>
           <div className="flex gap-1">
-            {/* Botões de mover para esquerda/direita */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20 disabled:opacity-40"
-              onClick={() => onMoveColumn(column.id, 'left')}
-              disabled={columnIndex === 0}
-              title="Mover para esquerda"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20 disabled:opacity-40"
-              onClick={() => onMoveColumn(column.id, 'right')}
-              disabled={columnIndex === totalColumns - 1}
-              title="Mover para direita"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
             <EditarColunaDialog
               columnId={column.id}
               nomeAtual={column.nome}
@@ -329,6 +302,7 @@ export default function Tarefas() {
   const activeColumnIdRef = useRef<string | null>(null); // ✅ Ref para acessar no realtime
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMovingRef = useRef(false); // ✅ NOVO: Bloquear operações concorrentes
+  const scrollContainerRef = useRef<HTMLDivElement>(null); // 🎯 Ref para navegação horizontal
 
   const TASKS_PER_PAGE = 20; // ✅ OTIMIZAÇÃO: Aumentado de 10 para 20
   const INITIAL_LOAD_LIMIT = 50; // ✅ OTIMIZAÇÃO: Limitar carga inicial
@@ -1171,67 +1145,21 @@ export default function Tarefas() {
 
   const handleDragCancel = useCallback(() => setActiveTaskId(null), []);
 
-  // ✅ NOVO: Função para mover coluna via botões de seta
-  const handleMoveColumn = useCallback(async (columnId: string, direction: 'left' | 'right') => {
-    const currentIndex = columnsFiltradas.findIndex(c => c.id === columnId);
-    if (currentIndex === -1) return;
-
-    const newIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
+  // 🎯 Navegação horizontal suave (scroll das colunas)
+  const scrollHorizontal = useCallback((direction: 'left' | 'right') => {
+    if (!scrollContainerRef.current) return;
     
-    // Validar limites
-    if (newIndex < 0 || newIndex >= columnsFiltradas.length) return;
-
-    try {
-      // Bloquear operações concorrentes
-      if (isMovingRef.current) {
-        toast.warning("Aguarde a operação anterior finalizar");
-        return;
-      }
-      isMovingRef.current = true;
-
-      // Reordenar colunas localmente
-      const reorderedColumns = arrayMove(columnsFiltradas, currentIndex, newIndex);
-      
-      // Atualizar posições
-      const updatedColumnsWithPosition = reorderedColumns.map((col, index) => ({
-        ...col,
-        posicao: index
-      }));
-
-      // Atualizar estado local imediatamente
-      setColumns(prev => {
-        const boardColumns = prev.filter(col => col.board_id === selectedBoard);
-        const otherColumns = prev.filter(col => col.board_id !== selectedBoard);
-        const newPositions = new Map(updatedColumnsWithPosition.map(c => [c.id, c.posicao]));
-        const updatedBoardColumns = boardColumns.map(col => ({
-          ...col,
-          posicao: newPositions.has(col.id) ? newPositions.get(col.id)! : col.posicao
-        }));
-        return [...updatedBoardColumns, ...otherColumns].sort((a, b) => a.posicao - b.posicao);
-      });
-
-      // Persistir no banco de dados
-      const updates = updatedColumnsWithPosition.map(col => ({
-        id: col.id,
-        posicao: col.posicao
-      }));
-
-      for (const update of updates) {
-        await supabase
-          .from('task_columns')
-          .update({ posicao: update.posicao })
-          .eq('id', update.id);
-      }
-
-      toast.success(`Coluna movida para ${direction === 'left' ? 'esquerda' : 'direita'}`);
-    } catch (error) {
-      console.error('Erro ao mover coluna:', error);
-      toast.error("Erro ao mover coluna");
-      carregarDados();
-    } finally {
-      isMovingRef.current = false;
-    }
-  }, [columnsFiltradas, selectedBoard, carregarDados]);
+    const container = scrollContainerRef.current;
+    const scrollAmount = 400; // Largura da coluna + gap
+    const targetScroll = direction === 'left' 
+      ? container.scrollLeft - scrollAmount 
+      : container.scrollLeft + scrollAmount;
+    
+    container.scrollTo({
+      left: targetScroll,
+      behavior: 'smooth'
+    });
+  }, []);
 
   const criarNovoBoard = useCallback(async () => {
     if (!novoBoardNome.trim()) return;
@@ -1623,6 +1551,28 @@ export default function Tarefas() {
         />
       )}
 
+      {/* 🎯 Botões de navegação horizontal - apenas em modo board e com mais de 3 colunas */}
+      {viewMode === 'board' && columnsFiltradas.length > 3 && (
+        <div className="flex gap-2 mb-4 justify-end">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => scrollHorizontal('left')}
+            title="Rolar para esquerda"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => scrollHorizontal('right')}
+            title="Rolar para direita"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
       {viewMode === 'calendar' ? (
         <TarefaCalendar />
       ) : viewMode === 'dashboard' ? (
@@ -1753,13 +1703,11 @@ export default function Tarefas() {
             items={columnsFiltradas.map(c => c.id)} 
             strategy={horizontalListSortingStrategy}
           >
-            <div className="flex overflow-x-auto gap-4 pb-4">
-              {columnsFiltradas.map((column, index) => (
+            <div ref={scrollContainerRef} className="flex overflow-x-auto gap-4 pb-4 min-h-[500px] scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-muted/20 hover:scrollbar-thumb-primary/50 scroll-smooth">
+              {columnsFiltradas.map((column) => (
                 <SortableColumn
                   key={column.id}
                   column={column}
-                  columnIndex={index}
-                  totalColumns={columnsFiltradas.length}
                   tasksByColumn={tasksByColumn}
                   tasksPerColumn={tasksPerColumn}
                   taskCountsByColumn={taskCountsByColumn}
@@ -1770,7 +1718,6 @@ export default function Tarefas() {
                   loadMoreTasks={loadMoreTasks}
                   selectedBoard={selectedBoard}
                   emitGlobalEvent={emitGlobalEvent}
-                  onMoveColumn={handleMoveColumn}
                 />
               ))}
             {/* Botão para adicionar nova coluna - apenas admin pode criar colunas */}
