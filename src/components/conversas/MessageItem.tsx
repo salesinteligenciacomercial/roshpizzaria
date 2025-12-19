@@ -23,7 +23,7 @@ import { MessageActions } from "./MessageActions";
 import { PDFPreview } from "./PDFPreview";
 import { PdfViewerDialog } from "./PdfViewerDialog";
 import { toast } from "@/hooks/use-toast";
-import { getMediaUrl } from "@/utils/mediaLoader";
+import { getMediaUrl, isPermanentUrl } from "@/utils/mediaLoader";
 
 interface Message {
   id: string;
@@ -96,22 +96,30 @@ function MessageItemComponent({
 
   // Carregar mídia quando componente montar
   useEffect(() => {
-    // ⚡ CORREÇÃO: Se já tem mediaUrl (blob ou data URL), usar diretamente
+    // ⚡ CORREÇÃO DEFINITIVA: Priorizar URLs permanentes do Storage
     if (message.mediaUrl && (message.type === 'image' || message.type === 'video' || message.type === 'audio' || message.type === 'pdf')) {
-      // Verificar se é uma URL blob ou data URL (já disponível)
-      if (message.mediaUrl.startsWith('blob:') || message.mediaUrl.startsWith('data:')) {
-        console.log('✅ [MESSAGE-ITEM] Usando URL direta da mídia:', {
+      
+      // ✅ PRIORIDADE 1: URLs permanentes do Supabase Storage (nunca expiram)
+      if (isPermanentUrl(message.mediaUrl)) {
+        console.log('✅ [MESSAGE-ITEM] URL permanente detectada:', {
           id: message.id,
           type: message.type,
-          urlType: message.mediaUrl.startsWith('blob:') ? 'blob' : 'data',
-          urlPreview: message.mediaUrl.substring(0, 50)
+          urlPreview: message.mediaUrl.substring(0, 80)
         });
         setMediaUrl(message.mediaUrl);
         setMediaLoading(false);
         return;
       }
       
-      // Se não for blob/data URL, tentar carregar via getMediaUrl
+      // ⚠️ Blob URLs expiram - NÃO usar diretamente, buscar URL permanente
+      if (message.mediaUrl.startsWith('blob:')) {
+        console.log('⚠️ [MESSAGE-ITEM] Blob URL detectada (expira) - buscando URL permanente:', {
+          id: message.id,
+          type: message.type
+        });
+      }
+      
+      // Se não for URL permanente, tentar carregar via getMediaUrl (que retorna URL permanente quando possível)
       setMediaLoading(true);
       console.log('🔄 [MESSAGE-ITEM] Carregando mídia do banco:', {
         id: message.id,
@@ -125,6 +133,7 @@ function MessageItemComponent({
           console.log('✅ [MESSAGE-ITEM] Mídia carregada do banco:', { 
             id: message.id, 
             type: message.type,
+            isPermanent: isPermanentUrl(url),
             urlPreview: url?.substring(0, 100) || 'sem URL'
           });
           setMediaUrl(url);
@@ -137,8 +146,12 @@ function MessageItemComponent({
             error: error?.message || String(error),
             mediaUrlPreview: message.mediaUrl?.substring(0, 50)
           });
-          // ⚡ CORREÇÃO: Se falhar, tentar usar a URL original como fallback
-          if (message.mediaUrl) {
+          // ⚡ FALLBACK: Se falhar e URL original é permanente, usar
+          if (message.mediaUrl && isPermanentUrl(message.mediaUrl)) {
+            console.log('⚠️ [MESSAGE-ITEM] Usando URL original permanente como fallback');
+            setMediaUrl(message.mediaUrl);
+          } else if (message.mediaUrl && !message.mediaUrl.startsWith('blob:')) {
+            // URL não é blob, tentar usar mesmo assim
             console.log('⚠️ [MESSAGE-ITEM] Usando URL original como fallback:', message.mediaUrl.substring(0, 50));
             setMediaUrl(message.mediaUrl);
           }
@@ -154,9 +167,10 @@ function MessageItemComponent({
       });
     }
 
-    // Cleanup blob URL quando desmontar
+    // Cleanup blob URL quando desmontar (apenas se for blob)
     return () => {
-      if (mediaUrl && mediaUrl.startsWith('blob:')) {
+      if (mediaUrl && mediaUrl.startsWith('blob:') && !isPermanentUrl(message.mediaUrl || '')) {
+        // Só revogar se a URL original não era permanente
         URL.revokeObjectURL(mediaUrl);
       }
     };

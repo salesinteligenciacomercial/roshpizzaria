@@ -5,8 +5,18 @@ import { supabase } from "@/integrations/supabase/client";
  * Suporta tanto Evolution API quanto Meta API
  */
 
+// Cache para URLs permanentes (evita reprocessamento)
+const permanentUrlCache = new Map<string, string>();
+
 export async function getMediaUrl(messageId: string, type?: string): Promise<string> {
   try {
+    // Verificar cache primeiro
+    const cachedUrl = permanentUrlCache.get(messageId);
+    if (cachedUrl) {
+      console.log('✅ [MEDIA-LOADER] URL do cache:', { messageId, url: cachedUrl.substring(0, 50) });
+      return cachedUrl;
+    }
+    
     console.log('🔄 [MEDIA-LOADER] Carregando mídia:', { messageId, type });
     
     // Primeiro, buscar a mídia do banco
@@ -27,6 +37,14 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
       inicio: message.midia_url.substring(0, 100)
     });
 
+    // ⚡ PRIORIDADE 1: Se for URL do Supabase Storage, retornar direto (URL permanente)
+    if (message.midia_url.includes('supabase.co/storage/') || 
+        message.midia_url.includes('/storage/v1/object/')) {
+      console.log('✅ [MEDIA-LOADER] URL permanente do Supabase Storage detectada');
+      permanentUrlCache.set(messageId, message.midia_url);
+      return message.midia_url;
+    }
+
     // Se já for data URI (base64), retornar direto
     if (message.midia_url.startsWith('data:')) {
       console.log('✅ [MEDIA-LOADER] Usando data URI existente (base64)');
@@ -36,6 +54,14 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
     // Se for JSON com metadados de mídia
     try {
       const mediaData = JSON.parse(message.midia_url);
+      
+      // Verificar se tem URL do Storage dentro do JSON
+      if (mediaData.storageUrl || mediaData.storage_url) {
+        const storageUrl = mediaData.storageUrl || mediaData.storage_url;
+        console.log('✅ [MEDIA-LOADER] URL de Storage encontrada no JSON');
+        permanentUrlCache.set(messageId, storageUrl);
+        return storageUrl;
+      }
       
       // Detectar se é mídia da Meta API
       if (mediaData.source === 'meta' && mediaData.media_id) {
@@ -167,6 +193,14 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
     }
 
     // Fallback: tentar carregar URL diretamente
+    // Se for uma URL HTTP válida, usar diretamente (é permanente)
+    if (message.midia_url.startsWith('http://') || message.midia_url.startsWith('https://')) {
+      console.log('✅ [MEDIA-LOADER] Usando URL HTTP diretamente (permanente)');
+      permanentUrlCache.set(messageId, message.midia_url);
+      return message.midia_url;
+    }
+    
+    // Último recurso: fetch e criar blob
     const response = await fetch(message.midia_url);
     if (response.ok) {
       const blob = await response.blob();
@@ -180,4 +214,30 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
     console.error('❌ [MEDIA-LOADER] Erro geral:', error);
     throw error;
   }
+}
+
+/**
+ * Verifica se uma URL é permanente (não expira)
+ */
+export function isPermanentUrl(url: string): boolean {
+  if (!url) return false;
+  
+  // URLs do Supabase Storage são permanentes
+  if (url.includes('supabase.co/storage/') || url.includes('/storage/v1/object/')) {
+    return true;
+  }
+  
+  // URLs HTTP normais são permanentes
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    // Exceto blob URLs que expiram
+    if (url.startsWith('blob:')) return false;
+    return true;
+  }
+  
+  // Data URIs são permanentes (estão embutidas)
+  if (url.startsWith('data:')) {
+    return true;
+  }
+  
+  return false;
 }
