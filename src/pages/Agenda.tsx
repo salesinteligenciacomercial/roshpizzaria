@@ -979,7 +979,7 @@ export default function Agenda() {
       }
 
       const dataHoraInicio = new Date(`${formData.data}T${formData.hora_inicio}:00`);
-      const duracaoMin = tempoMedioPadrao;
+      const duracaoMin = formAgendaSelecionada?.tempo_medio_servico || tempoMedioPadrao;
       const dataHoraFim = new Date(dataHoraInicio.getTime() + duracaoMin * 60000);
       
       // 3. Validar se data/hora não está no passado (com margem de 1 minuto para evitar falsos positivos)
@@ -1043,7 +1043,7 @@ export default function Agenda() {
         tipo_servico: formData.tipo_servico,
         data: formData.data,
         hora_inicio: formData.hora_inicio,
-        duracao_minutos: tempoMedioPadrao,
+        duracao_minutos: formAgendaSelecionada?.tempo_medio_servico || tempoMedioPadrao,
         agenda_id: formData.agenda_id || 'nenhuma',
         lead_id: formData.lead_id || 'nenhum',
         custo_estimado: formData.custo_estimado || '0'
@@ -1127,7 +1127,7 @@ export default function Agenda() {
         const fimDisponivel = horaFimDisponivel * 60 + minutoFimDisponivel;
         
         const [horaInicio, minutoInicio] = formData.hora_inicio.split(':').map(Number);
-        const duracaoMin = tempoMedioPadrao;
+        const duracaoMin = formAgendaSelecionada?.tempo_medio_servico || tempoMedioPadrao;
         const inicioSolicitado = horaInicio * 60 + minutoInicio;
         const fimSolicitado = inicioSolicitado + duracaoMin;
 
@@ -1742,7 +1742,7 @@ export default function Agenda() {
       console.error('  FormData:', {
         tipo_servico: formData.tipo_servico,
         data: formData.data,
-        horarios: `${formData.hora_inicio} + ${tempoMedioPadrao}min`,
+        horarios: `${formData.hora_inicio} + ${formAgendaSelecionada?.tempo_medio_servico || tempoMedioPadrao}min`,
         agenda: formData.agenda_id || 'nenhuma',
         lead: formData.lead_id || 'nenhum'
       });
@@ -2466,15 +2466,19 @@ export default function Agenda() {
                 <div className="space-y-2">
                   <Label>Selecione o Horário <span className="text-destructive">*</span></Label>
                   <p className="text-xs text-muted-foreground mb-2">
-                    Duração do compromisso: <strong>{tempoMedioPadrao} minutos</strong> (configurado nas configurações)
+                    Duração do compromisso: <strong>{formAgendaSelecionada?.tempo_medio_servico || tempoMedioPadrao} minutos</strong> 
+                    {formAgendaSelecionada?.permite_simultaneo && formAgendaSelecionada?.capacidade_simultanea > 1 && (
+                      <> | Capacidade simultânea: <strong>{formAgendaSelecionada.capacidade_simultanea}</strong></>
+                    )}
                   </p>
                   <HorarioSeletor
                     data={formData.data}
                     horarioComercial={formHorarioComercial}
                     compromissosExistentes={formCompromissosExistentes}
                     horarioSelecionado={formData.hora_inicio}
-                    duracaoMinutos={tempoMedioPadrao}
+                    duracaoMinutos={formAgendaSelecionada?.tempo_medio_servico || tempoMedioPadrao}
                     permitirSimultaneo={formAgendaSelecionada?.permite_simultaneo || false}
+                    capacidadeSimultanea={formAgendaSelecionada?.capacidade_simultanea || 1}
                     diasFuncionamento={formDiasFuncionamento}
                     onSelecionarHorario={handleSelecionarHorarioForm}
                   />
