@@ -21,6 +21,7 @@ interface HorarioSeletorProps {
   horarioSelecionado?: string;
   duracaoMinutos?: number;
   permitirSimultaneo?: boolean;
+  capacidadeSimultanea?: number; // Quantidade máxima de compromissos simultâneos
   diasFuncionamento?: string[]; // Dias da semana que a empresa funciona
   onSelecionarHorario: (horario: string) => void;
 }
@@ -53,6 +54,7 @@ export function HorarioSeletor({
   horarioSelecionado,
   duracaoMinutos = 30,
   permitirSimultaneo = false,
+  capacidadeSimultanea = 1,
   diasFuncionamento = ["segunda", "terca", "quarta", "quinta", "sexta"],
   onSelecionarHorario,
 }: HorarioSeletorProps) {
@@ -106,9 +108,10 @@ export function HorarioSeletor({
           );
         });
 
-        // Se permite simultâneo, sempre disponível (exceto se passou)
+        // Se permite simultâneo, verifica se ainda há capacidade disponível
         // Se não permite, só disponível se não houver compromissos e não passou
-        const disponivel = !horarioPassou && (permitirSimultaneo || compromissosNoHorario.length === 0);
+        const capacidadeMaxima = permitirSimultaneo ? capacidadeSimultanea : 1;
+        const disponivel = !horarioPassou && (compromissosNoHorario.length < capacidadeMaxima);
 
         horarios.push({
           horario: horarioStr,
@@ -150,7 +153,7 @@ export function HorarioSeletor({
     }
 
     return horarios;
-  }, [data, dataBase, horarioComercial, compromissosExistentes, duracaoMinutos, permitirSimultaneo, ehDiaFuncionamento]);
+  }, [data, dataBase, horarioComercial, compromissosExistentes, duracaoMinutos, permitirSimultaneo, capacidadeSimultanea, ehDiaFuncionamento]);
 
   const totalDisponiveis = horariosDisponiveis.filter((h) => h.disponivel).length;
   const totalOcupados = horariosDisponiveis.filter((h) => !h.disponivel && !h.passado).length;

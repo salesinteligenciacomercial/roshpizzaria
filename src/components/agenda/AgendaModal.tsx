@@ -550,6 +550,7 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
               horarioSelecionado={formData.hora_inicio}
               duracaoMinutos={parseInt(formData.duracao_minutos) || 30}
               permitirSimultaneo={agendaSelecionada?.permite_simultaneo || false}
+              capacidadeSimultanea={agendaSelecionada?.capacidade_simultanea || 1}
               onSelecionarHorario={handleSelecionarHorario}
             />
           </div>
