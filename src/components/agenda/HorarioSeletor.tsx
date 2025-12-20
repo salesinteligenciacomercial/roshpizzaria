@@ -210,10 +210,14 @@ export function HorarioSeletor({
       {/* Lista de horários */}
       <ScrollArea className="h-[300px] pr-4">
         <div className="grid grid-cols-3 gap-2">
-          {horariosDisponiveis.map((item) => {
+        {horariosDisponiveis.map((item) => {
             const isSelected = horarioSelecionado === item.horario;
             const hasCompromissos = item.compromissos.length > 0;
             const isPassado = item.passado;
+            const capacidadeMaxima = permitirSimultaneo ? capacidadeSimultanea : 1;
+            const vagasRestantes = capacidadeMaxima - item.compromissos.length;
+            const estaCheio = vagasRestantes <= 0;
+            const parcialmenteOcupado = hasCompromissos && !estaCheio;
 
             return (
               <Button
@@ -226,7 +230,8 @@ export function HorarioSeletor({
                 className={cn(
                   "relative flex flex-col items-center justify-center h-auto py-3",
                   !item.disponivel && "opacity-50 cursor-not-allowed",
-                  hasCompromissos && !isPassado && "border-red-500 bg-red-50 dark:bg-red-950/20",
+                  estaCheio && !isPassado && "border-red-500 bg-red-50 dark:bg-red-950/20",
+                  parcialmenteOcupado && !isPassado && "border-orange-500 bg-orange-50 dark:bg-orange-950/20",
                   isPassado && "border-gray-300 bg-gray-100 dark:bg-gray-800/50 line-through"
                 )}
               >
@@ -239,17 +244,36 @@ export function HorarioSeletor({
                   </div>
                 )}
                 
-                {!isPassado && hasCompromissos && (
+                {/* Cheio - não pode mais agendar */}
+                {!isPassado && estaCheio && (
                   <div className="flex items-center gap-1 mt-1">
                     <div className="h-1.5 w-1.5 rounded-full bg-red-600" />
                     <span className="text-xs text-muted-foreground">
-                      {item.compromissos.length}
+                      {item.compromissos.length}/{capacidadeMaxima}
                     </span>
                   </div>
                 )}
                 
+                {/* Parcialmente ocupado - ainda pode agendar */}
+                {!isPassado && parcialmenteOcupado && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <div className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                    <span className="text-xs text-muted-foreground">
+                      {item.compromissos.length}/{capacidadeMaxima}
+                    </span>
+                  </div>
+                )}
+                
+                {/* Totalmente livre */}
                 {!isPassado && !hasCompromissos && item.disponivel && (
-                  <div className="h-1.5 w-1.5 rounded-full bg-green-600 mt-1" />
+                  <div className="flex items-center gap-1 mt-1">
+                    <div className="h-1.5 w-1.5 rounded-full bg-green-600" />
+                    {permitirSimultaneo && capacidadeMaxima > 1 && (
+                      <span className="text-xs text-muted-foreground">
+                        0/{capacidadeMaxima}
+                      </span>
+                    )}
+                  </div>
                 )}
               </Button>
             );
@@ -263,20 +287,20 @@ export function HorarioSeletor({
           <div className="h-3 w-3 rounded-full bg-green-600" />
           <span>Livre</span>
         </div>
+        {permitirSimultaneo && capacidadeSimultanea > 1 && (
+          <div className="flex items-center gap-2">
+            <div className="h-3 w-3 rounded-full bg-orange-500" />
+            <span>Parcial ({capacidadeSimultanea} vagas)</span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full bg-red-600" />
-          <span>Ocupado</span>
+          <span>Cheio</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full bg-gray-400" />
           <span>Passado</span>
         </div>
-        {permitirSimultaneo && (
-          <div className="flex items-center gap-2">
-            <Clock className="h-3 w-3" />
-            <span>Múltiplos atendimentos permitidos</span>
-          </div>
-        )}
       </div>
     </div>
   );
