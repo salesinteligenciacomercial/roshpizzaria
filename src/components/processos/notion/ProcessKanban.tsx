@@ -1,27 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
+import React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { 
   Plus, 
-  MoreHorizontal, 
   Calendar as CalendarIcon, 
   User, 
-  Tag,
   GripVertical,
   Trash2,
-  Edit,
-  CheckCircle2,
-  Circle,
-  Clock
+  Edit
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -31,10 +27,11 @@ import {
   DragEndEvent,
   DragOverlay,
   DragStartEvent,
+  DragOverEvent,
   PointerSensor,
   useSensor,
   useSensors,
-  closestCenter,
+  useDroppable,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -77,6 +74,35 @@ const DEFAULT_COLUMNS: KanbanColumn[] = [
   { id: "done", title: "Concluído", color: "bg-green-500", tasks: [] },
 ];
 
+// Componente de área droppable para a coluna
+const DroppableColumnArea = React.memo(function DroppableColumnArea({ 
+  columnId, 
+  children 
+}: { 
+  columnId: string; 
+  children: ReactNode 
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `column-${columnId}`,
+    data: {
+      type: 'column',
+      columnId: columnId,
+    },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "min-h-[400px] transition-all duration-200 rounded-b-lg",
+        isOver && "bg-primary/10 border-2 border-dashed border-primary"
+      )}
+    >
+      {children}
+    </div>
+  );
+});
+
 function TaskCard({ task, onEdit, onDelete }: { task: ProcessTask; onEdit: () => void; onDelete: () => void }) {
   const {
     attributes,
@@ -85,7 +111,13 @@ function TaskCard({ task, onEdit, onDelete }: { task: ProcessTask; onEdit: () =>
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id });
+  } = useSortable({ 
+    id: task.id,
+    data: {
+      type: 'task',
+      task: task,
+    }
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -104,21 +136,21 @@ function TaskCard({ task, onEdit, onDelete }: { task: ProcessTask; onEdit: () =>
       ref={setNodeRef}
       style={style}
       className={cn(
-        "bg-background border border-border rounded-lg p-3 shadow-sm hover:shadow-md transition-all cursor-pointer group",
-        isDragging && "opacity-50 shadow-lg"
+        "bg-background border border-border rounded-lg p-3 shadow-sm hover:shadow-md transition-all group",
+        isDragging && "opacity-50 shadow-lg z-50"
       )}
     >
       <div className="flex items-start gap-2">
         <div
           {...attributes}
           {...listeners}
-          className="mt-1 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
+          className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
         >
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
+          <GripVertical className="h-4 w-4" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <h4 className="font-medium text-sm truncate" onClick={onEdit}>
+            <h4 className="font-medium text-sm truncate cursor-pointer hover:text-primary" onClick={onEdit}>
               {task.title}
             </h4>
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -185,32 +217,48 @@ function KanbanColumnComponent({
   onDeleteTask: (taskId: string) => void;
 }) {
   return (
-    <div className="flex-shrink-0 w-72 bg-muted/30 rounded-xl p-3">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className={cn("w-3 h-3 rounded-full", column.color)} />
-          <h3 className="font-semibold text-sm">{column.title}</h3>
-          <Badge variant="secondary" className="text-xs">{column.tasks.length}</Badge>
+    <div className="flex-shrink-0 w-72 bg-muted/30 rounded-xl overflow-hidden">
+      <div className={cn("p-3 text-white", column.color)}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-sm">{column.title}</h3>
+            <Badge variant="secondary" className="text-xs bg-white/20 text-white border-0">
+              {column.tasks.length}
+            </Badge>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-7 w-7 text-white hover:bg-white/20" 
+            onClick={() => onAddTask(column.id)}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onAddTask(column.id)}>
-          <Plus className="h-4 w-4" />
-        </Button>
       </div>
 
-      <ScrollArea className="h-[calc(100vh-380px)]">
-        <SortableContext items={column.tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-          <div className="space-y-2 pr-2">
-            {column.tasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                onEdit={() => onEditTask(task)}
-                onDelete={() => onDeleteTask(task.id)}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </ScrollArea>
+      <DroppableColumnArea columnId={column.id}>
+        <ScrollArea className="h-[calc(100vh-380px)] p-3">
+          <SortableContext items={column.tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {column.tasks.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  Arraste tarefas aqui
+                </div>
+              ) : (
+                column.tasks.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onEdit={() => onEditTask(task)}
+                    onDelete={() => onDeleteTask(task.id)}
+                  />
+                ))
+              )}
+            </div>
+          </SortableContext>
+        </ScrollArea>
+      </DroppableColumnArea>
     </div>
   );
 }
@@ -223,6 +271,7 @@ export function ProcessKanban({ companyId }: ProcessKanbanProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newTaskStatus, setNewTaskStatus] = useState<string>("todo");
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [overColumnId, setOverColumnId] = useState<string | null>(null);
   
   // Form state
   const [taskForm, setTaskForm] = useState({
@@ -237,7 +286,7 @@ export function ProcessKanban({ companyId }: ProcessKanbanProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 5,
       },
     })
   );
@@ -252,7 +301,6 @@ export function ProcessKanban({ companyId }: ProcessKanbanProps) {
   const loadTasks = async () => {
     if (!companyId) return;
 
-    // Load tasks from process_pages with properties.is_task = true
     const { data, error } = await supabase
       .from('process_pages')
       .select('*')
@@ -285,7 +333,6 @@ export function ProcessKanban({ companyId }: ProcessKanbanProps) {
 
     setTasks(mappedTasks);
     
-    // Distribute tasks to columns
     const newColumns = DEFAULT_COLUMNS.map(col => ({
       ...col,
       tasks: mappedTasks.filter(t => t.status === col.id)
@@ -307,12 +354,35 @@ export function ProcessKanban({ companyId }: ProcessKanbanProps) {
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    const task = tasks.find(t => t.id === event.active.id);
+    const { active } = event;
+    const task = tasks.find(t => t.id === active.id);
     if (task) setActiveTask(task);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over } = event;
+    
+    if (!over) {
+      setOverColumnId(null);
+      return;
+    }
+
+    // Check if hovering over a column
+    const overId = over.id as string;
+    if (overId.startsWith('column-')) {
+      setOverColumnId(overId.replace('column-', ''));
+    } else {
+      // Hovering over a task - find which column it belongs to
+      const overTask = tasks.find(t => t.id === overId);
+      if (overTask) {
+        setOverColumnId(overTask.status);
+      }
+    }
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     setActiveTask(null);
+    setOverColumnId(null);
     
     const { active, over } = event;
     if (!over) return;
@@ -320,27 +390,38 @@ export function ProcessKanban({ companyId }: ProcessKanbanProps) {
     const activeId = active.id as string;
     const overId = over.id as string;
 
-    // Find the column that contains the over element
-    let targetColumn: KanbanColumn | undefined;
-    for (const col of columns) {
-      if (col.tasks.find(t => t.id === overId) || col.id === overId) {
-        targetColumn = col;
-        break;
+    // Determine target column
+    let targetColumnId: string | null = null;
+
+    // Check if dropped on a column
+    if (overId.startsWith('column-')) {
+      targetColumnId = overId.replace('column-', '');
+    } else {
+      // Dropped on a task - find which column the task belongs to
+      const overTask = tasks.find(t => t.id === overId);
+      if (overTask) {
+        targetColumnId = overTask.status;
       }
     }
 
-    if (!targetColumn) return;
+    if (!targetColumnId) return;
 
     const task = tasks.find(t => t.id === activeId);
-    if (!task || task.status === targetColumn.id) return;
+    if (!task || task.status === targetColumnId) return;
 
     // Update task status in database
+    const currentProps = task as Record<string, any>;
     const { error } = await supabase
       .from('process_pages')
       .update({
         properties: {
-          ...task,
-          status: targetColumn.id,
+          description: currentProps.description,
+          priority: currentProps.priority,
+          due_date: currentProps.due_date,
+          assignee_id: currentProps.assignee_id,
+          assignee_name: currentProps.assignee_name,
+          tags: currentProps.tags,
+          status: targetColumnId,
         }
       })
       .eq('id', activeId);
@@ -350,13 +431,19 @@ export function ProcessKanban({ companyId }: ProcessKanbanProps) {
       return;
     }
 
-    // Update local state
-    setTasks(prev => prev.map(t => 
-      t.id === activeId ? { ...t, status: targetColumn!.id } : t
-    ));
+    // Update local state immediately
+    const updatedTasks = tasks.map(t => 
+      t.id === activeId ? { ...t, status: targetColumnId! } : t
+    );
+    setTasks(updatedTasks);
     
-    loadTasks();
-    toast.success('Tarefa movida');
+    const newColumns = DEFAULT_COLUMNS.map(col => ({
+      ...col,
+      tasks: updatedTasks.filter(t => t.status === col.id)
+    }));
+    setColumns(newColumns);
+    
+    toast.success(`Tarefa movida para ${DEFAULT_COLUMNS.find(c => c.id === targetColumnId)?.title}`);
   };
 
   const handleAddTask = (status: string) => {
@@ -459,8 +546,10 @@ export function ProcessKanban({ companyId }: ProcessKanbanProps) {
     <div className="h-[calc(100vh-280px)]">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-xl font-bold">Quadro de Tarefas</h2>
-          <p className="text-sm text-muted-foreground">Arraste as tarefas para alterar o status</p>
+          <h2 className="text-xl font-bold">Quadro de Tarefas do Time</h2>
+          <p className="text-sm text-muted-foreground">
+            Arraste as tarefas entre as colunas para alterar o status
+          </p>
         </div>
         <Button onClick={() => handleAddTask("todo")}>
           <Plus className="h-4 w-4 mr-2" />
@@ -470,8 +559,8 @@ export function ProcessKanban({ companyId }: ProcessKanbanProps) {
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
         onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
         <div className="flex gap-4 overflow-x-auto pb-4">
@@ -488,8 +577,16 @@ export function ProcessKanban({ companyId }: ProcessKanbanProps) {
 
         <DragOverlay>
           {activeTask ? (
-            <div className="bg-background border border-border rounded-lg p-3 shadow-lg w-72">
-              <h4 className="font-medium text-sm">{activeTask.title}</h4>
+            <div className="bg-background border border-primary rounded-lg p-3 shadow-xl w-72 rotate-2">
+              <div className="flex items-center gap-2">
+                <GripVertical className="h-4 w-4 text-muted-foreground" />
+                <h4 className="font-medium text-sm">{activeTask.title}</h4>
+              </div>
+              {activeTask.description && (
+                <p className="text-xs text-muted-foreground mt-1 ml-6 line-clamp-2">
+                  {activeTask.description}
+                </p>
+              )}
             </div>
           ) : null}
         </DragOverlay>
