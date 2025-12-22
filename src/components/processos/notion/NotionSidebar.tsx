@@ -495,19 +495,6 @@ export function NotionSidebar({
               <CheckSquare className="h-4 w-4 mr-2" />
               Tarefa
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onCreatePage(null, 'playbook')}>
-              <BookOpen className="h-4 w-4 mr-2" />
-              Playbook
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onCreatePage(null, 'cadence')}>
-              <Workflow className="h-4 w-4 mr-2" />
-              Cadência
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onCreatePage(null, 'stage')}>
-              <GitBranch className="h-4 w-4 mr-2" />
-              Etapa
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

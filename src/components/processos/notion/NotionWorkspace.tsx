@@ -257,19 +257,6 @@ export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
                   <CheckSquare className="h-4 w-4 mr-2" />
                   Tarefa
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => handleCreateItem(null, 'playbook')}>
-                  <BookOpen className="h-4 w-4 mr-2" />
-                  Playbook
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleCreateItem(null, 'cadence')}>
-                  <Workflow className="h-4 w-4 mr-2" />
-                  Cadência
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleCreateItem(null, 'stage')}>
-                  <GitBranch className="h-4 w-4 mr-2" />
-                  Etapa
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <TemplateLibrary 

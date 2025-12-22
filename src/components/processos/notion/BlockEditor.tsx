@@ -26,7 +26,8 @@ import {
   FileText,
   Workflow,
   GitBranch,
-  FilePlus
+  FilePlus,
+  CalendarDays
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -49,6 +50,7 @@ import { InlineKanban } from "./InlineKanban";
 import { InlinePlaybook } from "./InlinePlaybook";
 import { InlineCadence } from "./InlineCadence";
 import { InlineStage } from "./InlineStage";
+import { InlineAgenda } from "./InlineAgenda";
 
 interface Block {
   id: string;
@@ -76,6 +78,7 @@ const BLOCK_TYPES = [
   { type: 'playbook', icon: FileText, label: 'Playbook', shortcut: '', category: 'Processos' },
   { type: 'cadence', icon: Workflow, label: 'Cadência', shortcut: '', category: 'Processos' },
   { type: 'stage', icon: GitBranch, label: 'Etapa', shortcut: '', category: 'Processos' },
+  { type: 'agenda', icon: CalendarDays, label: 'Agenda', shortcut: '', category: 'Processos' },
   { type: 'quote', icon: Quote, label: 'Citação', shortcut: '>', category: 'Formatação' },
   { type: 'code', icon: Code, label: 'Código', shortcut: '```', category: 'Formatação' },
   { type: 'callout', icon: AlertCircle, label: 'Destaque', shortcut: '!', category: 'Formatação' },
@@ -442,6 +445,14 @@ export function BlockEditor({ pageId, blocks, onBlocksChange, companyId }: Block
           <InlineStage
             content={block.content.stageData || { stage_name: '', objectives: '', max_time_hours: 24, checklist: [], dos: [], donts: [] }}
             onUpdate={(stageData) => updateBlock(block.id, { ...block.content, stageData })}
+            onRemove={() => deleteBlock(block.id)}
+          />
+        );
+      case 'agenda':
+        return (
+          <InlineAgenda
+            content={block.content.agendaData || { nome: '', compromissos: [] }}
+            onUpdate={(agendaData) => updateBlock(block.id, { ...block.content, agendaData })}
             onRemove={() => deleteBlock(block.id)}
           />
         );
