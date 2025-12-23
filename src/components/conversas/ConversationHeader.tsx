@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Phone, Video, Info, User, MessageSquare, Instagram, Facebook, FileText, DollarSign, RefreshCw, CheckCircle2, AlertCircle, Loader2, Check, Plus, RotateCcw } from "lucide-react";
+import { Phone, Video, Info, User, MessageSquare, Instagram, Facebook, FileText, DollarSign, RefreshCw, CheckCircle2, AlertCircle, Loader2, Check, Plus, RotateCcw, ArrowRightLeft, Bot } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader as UIDialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
@@ -25,6 +25,9 @@ import { useEffect, useState } from "react";
    mostrarBotaoCriarLead?: boolean;
    onCriarLead?: () => void;
    onFinalizeAtendimento?: (message: string) => void;
+   onTransferAtendimento?: () => void;
+   onToggleAI?: () => void;
+   isAIActive?: boolean;
    onlineStatus?: OnlineStatus;
    isContactInactive?: boolean;
    onRestoreConversation?: () => void;
@@ -47,6 +50,9 @@ import { useEffect, useState } from "react";
    mostrarBotaoCriarLead = false,
    onCriarLead,
    onFinalizeAtendimento,
+   onTransferAtendimento,
+   onToggleAI,
+   isAIActive = false,
    onlineStatus = 'unknown',
    isContactInactive = false,
    onRestoreConversation,
@@ -194,6 +200,32 @@ import { useEffect, useState } from "react";
                       Restaurar Conversa
                     </>
                   )}
+                </Button>
+              )}
+              {/* Botão IA */}
+              {onToggleAI && (
+                <Button
+                  variant={isAIActive ? "default" : "outline"}
+                  size="sm"
+                  onClick={onToggleAI}
+                  className="mr-1 gap-1.5"
+                  title={isAIActive ? "Desativar IA" : "Ativar IA"}
+                >
+                  <Bot className="h-4 w-4" />
+                  {isAIActive ? "IA Ativa" : "IA"}
+                </Button>
+              )}
+              {/* Botão Transferir Atendimento */}
+              {onTransferAtendimento && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onTransferAtendimento}
+                  className="mr-1 gap-1.5"
+                  title="Transferir atendimento"
+                >
+                  <ArrowRightLeft className="h-4 w-4" />
+                  Transferir
                 </Button>
               )}
               {onFinalizeAtendimento && (

@@ -1434,6 +1434,8 @@ function Conversas() {
     id: string;
     name: string;
   }[]>([]);
+  // Dialog de transferência no header
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
 
   // Estados para tarefas do lead
   const [leadTasks, setLeadTasks] = useState<any[]>([]);
@@ -7371,8 +7373,51 @@ function Conversas() {
         {selectedConv ? <>
             {/* Header - ABSOLUTAMENTE FIXO */}
             <div className="flex-shrink-0 bg-background border-b">
-              <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} />
+              <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onTransferAtendimento={() => setTransferDialogOpen(true)} onToggleAI={() => toggleAiMode(selectedConv.id)} isAIActive={aiMode[selectedConv.id] || false} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} />
             </div>
+            
+            {/* Dialog de Transferir Atendimento */}
+            <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Transferir Atendimento</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                  {/* Filas */}
+                  {queues.length > 0 && <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Filas</h4>
+                      {queues.map(q => <Button key={q.id} variant="outline" className="w-full justify-start" onClick={() => { assignConversationToQueue(q.id, q.name); setTransferDialogOpen(false); }}>
+                          📥 {q.name}
+                        </Button>)}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Ver membros da fila:</span>
+                        <Select value={selectedQueueId} onValueChange={setSelectedQueueId}>
+                          <SelectTrigger className="h-8">
+                            <SelectValue placeholder="Selecione uma fila" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {queues.map(q => <SelectItem key={`sel-header-${q.id}`} value={q.id}>{q.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>}
+                  {/* Agentes */}
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium">Agentes</h4>
+                    {companyUsers.length === 0 ? <p className="text-xs text-muted-foreground">Carregando usuários...</p> : companyUsers.map(user => <Button key={user.id} variant="outline" className="w-full justify-start" onClick={() => { assignConversationToUser(user.id, user.name); setTransferDialogOpen(false); }}>
+                          👤 {user.name}
+                        </Button>)}
+                  </div>
+                  {/* Membros da fila selecionada */}
+                  {selectedQueueId && <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Membros da Fila</h4>
+                      {queueMembers.length === 0 ? <p className="text-xs text-muted-foreground">Nenhum membro na fila selecionada.</p> : queueMembers.map(m => <Button key={`m-header-${m.id}`} variant="outline" className="w-full justify-start" onClick={() => { assignConversationToUser(m.id, m.name); setTransferDialogOpen(false); }}>
+                            👤 {m.name}
+                          </Button>)}
+                    </div>}
+                </div>
+              </DialogContent>
+            </Dialog>
 
             <div className="flex flex-1 overflow-hidden scrollbar-hide">
               {/* Messages Area */}
@@ -7868,12 +7913,6 @@ function Conversas() {
                     <div>
                       <h4 className="text-foreground font-medium mb-3">Ações Rápidas</h4>
                       <div className="space-y-2">
-                        {/* AI Toggle */}
-                        <Button onClick={() => toggleAiMode(selectedConv.id)} variant={aiMode[selectedConv.id] ? "default" : "outline"} className="w-full justify-start">
-                          <Bot className="h-4 w-4 mr-2" />
-                          {aiMode[selectedConv.id] ? "Desativar IA" : "Ativar IA"}
-                        </Button>
-
                         {/* Quick Messages */}
                         <Dialog>
                           <DialogTrigger asChild>
@@ -9022,56 +9061,6 @@ function Conversas() {
                           </DialogContent>
                         </Dialog>
 
-                        {/* Transfer */}
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start">
-                              <ArrowRightLeft className="h-4 w-4 mr-2" /> Transferir Atendimento
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Transferir Atendimento</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-3">
-                              {/* Filas */}
-                              {queues.length > 0 && <div className="space-y-2">
-                                  <h4 className="text-sm font-medium">Filas</h4>
-                                  {queues.map(q => <Button key={q.id} variant="outline" className="w-full justify-start" onClick={() => assignConversationToQueue(q.id, q.name)}>
-                                      📥 {q.name}
-                                    </Button>)}
-                                  {/* Selecionar fila para ver membros */}
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-muted-foreground">Ver membros da fila:</span>
-                                    <Select value={selectedQueueId} onValueChange={setSelectedQueueId}>
-                                      <SelectTrigger className="h-8">
-                                        <SelectValue placeholder="Selecione uma fila" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {queues.map(q => <SelectItem key={`sel-${q.id}`} value={q.id}>{q.name}</SelectItem>)}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                </div>}
-
-                              {/* Agentes */}
-                              <div className="space-y-2">
-                                <h4 className="text-sm font-medium">Agentes</h4>
-                                {companyUsers.length === 0 ? <p className="text-xs text-muted-foreground">Carregando usuários...</p> : companyUsers.map(user => <Button key={user.id} variant="outline" className="w-full justify-start" onClick={() => assignConversationToUser(user.id, user.name)}>
-                                      👤 {user.name}
-                                    </Button>)}
-                              </div>
-
-                              {/* Membros da fila selecionada */}
-                              {selectedQueueId && <div className="space-y-2">
-                                  <h4 className="text-sm font-medium">Membros da Fila</h4>
-                                  {queueMembers.length === 0 ? <p className="text-xs text-muted-foreground">Nenhum membro na fila selecionada.</p> : queueMembers.map(m => <Button key={`m-${m.id}`} variant="outline" className="w-full justify-start" onClick={() => assignConversationToUser(m.id, m.name)}>
-                                        👤 {m.name}
-                                      </Button>)}
-                                </div>}
-                            </div>
-                          </DialogContent>
-                        </Dialog>
                       </div>
                     </div>
                   </div>
