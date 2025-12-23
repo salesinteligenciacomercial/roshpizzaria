@@ -3,10 +3,116 @@ import { supabase } from "@/integrations/supabase/client";
 /**
  * Utilitário para carregar mídias do WhatsApp através da edge function
  * Suporta tanto Evolution API quanto Meta API
+ * 
+ * ⚡ CORREÇÃO: Agora salva mídias permanentemente no Supabase Storage
+ * para que PDFs e outros arquivos não desapareçam ao recarregar a página
  */
 
 // Cache para URLs permanentes (evita reprocessamento)
 const permanentUrlCache = new Map<string, string>();
+
+// Set para evitar uploads duplicados em paralelo
+const uploadingMedia = new Set<string>();
+
+/**
+ * Salva mídia no Supabase Storage e retorna URL permanente
+ */
+async function saveMediaToStorage(
+  messageId: string,
+  base64Data: string,
+  mimeType: string,
+  companyId: string
+): Promise<string | null> {
+  try {
+    // Evitar uploads duplicados
+    if (uploadingMedia.has(messageId)) {
+      console.log('⏳ [MEDIA-LOADER] Upload já em andamento para:', messageId);
+      return null;
+    }
+    
+    uploadingMedia.add(messageId);
+    
+    // Determinar extensão do arquivo baseado no mimeType
+    const extensionMap: Record<string, string> = {
+      'application/pdf': 'pdf',
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'video/mp4': 'mp4',
+      'video/webm': 'webm',
+      'audio/ogg': 'ogg',
+      'audio/mpeg': 'mp3',
+      'audio/wav': 'wav',
+      'audio/ogg; codecs=opus': 'ogg',
+    };
+    
+    const extension = extensionMap[mimeType] || 'bin';
+    const fileName = `${companyId}/${messageId}.${extension}`;
+    
+    console.log('💾 [MEDIA-LOADER] Salvando mídia no Storage:', {
+      messageId,
+      mimeType,
+      extension,
+      fileName
+    });
+    
+    // Converter base64 para Uint8Array
+    const byteCharacters = atob(base64Data);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    
+    // Upload para o Storage
+    const { data: uploadData, error: uploadError } = await supabase
+      .storage
+      .from('conversation-media')
+      .upload(fileName, byteArray, {
+        contentType: mimeType,
+        upsert: true
+      });
+    
+    if (uploadError) {
+      console.error('❌ [MEDIA-LOADER] Erro no upload para Storage:', uploadError);
+      uploadingMedia.delete(messageId);
+      return null;
+    }
+    
+    // Obter URL pública
+    const { data: publicUrlData } = supabase
+      .storage
+      .from('conversation-media')
+      .getPublicUrl(fileName);
+    
+    const permanentUrl = publicUrlData.publicUrl;
+    
+    console.log('✅ [MEDIA-LOADER] Mídia salva no Storage:', {
+      messageId,
+      url: permanentUrl.substring(0, 80)
+    });
+    
+    // Atualizar midia_url no banco com URL permanente
+    const { error: updateError } = await supabase
+      .from('conversas')
+      .update({ midia_url: permanentUrl })
+      .eq('id', messageId);
+    
+    if (updateError) {
+      console.error('❌ [MEDIA-LOADER] Erro ao atualizar midia_url:', updateError);
+    } else {
+      console.log('✅ [MEDIA-LOADER] midia_url atualizada no banco com URL permanente');
+    }
+    
+    uploadingMedia.delete(messageId);
+    return permanentUrl;
+  } catch (error) {
+    console.error('❌ [MEDIA-LOADER] Erro ao salvar mídia no Storage:', error);
+    uploadingMedia.delete(messageId);
+    return null;
+  }
+}
 
 export async function getMediaUrl(messageId: string, type?: string): Promise<string> {
   try {
@@ -99,7 +205,16 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
             throw new Error('Edge function não retornou dados');
           }
 
-          // Converter base64 para blob
+          // ⚡ CORREÇÃO: Salvar no Storage para URL permanente
+          const permanentUrl = await saveMediaToStorage(messageId, base64Data, mimeType, message.company_id);
+          
+          if (permanentUrl) {
+            permanentUrlCache.set(messageId, permanentUrl);
+            console.log('✅ [MEDIA-LOADER] Mídia Meta salva permanentemente');
+            return permanentUrl;
+          }
+
+          // Fallback: Converter base64 para blob se Storage falhar
           const byteCharacters = atob(base64Data);
           const byteNumbers = new Array(byteCharacters.length);
           for (let i = 0; i < byteCharacters.length; i++) {
@@ -109,7 +224,7 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
           const blob = new Blob([byteArray], { type: mimeType });
           
           const url = URL.createObjectURL(blob);
-          console.log('✅ [MEDIA-LOADER] Mídia Meta carregada:', {
+          console.log('✅ [MEDIA-LOADER] Mídia Meta carregada (blob URL temporária):', {
             blobSize: blob.size,
             blobType: blob.type
           });
@@ -163,7 +278,16 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
             throw new Error('Edge function não retornou dados');
           }
 
-          // Converter base64 para blob
+          // ⚡ CORREÇÃO: Salvar no Storage para URL permanente
+          const permanentUrl = await saveMediaToStorage(messageId, base64Data, mimeType, message.company_id);
+          
+          if (permanentUrl) {
+            permanentUrlCache.set(messageId, permanentUrl);
+            console.log('✅ [MEDIA-LOADER] Mídia Evolution salva permanentemente');
+            return permanentUrl;
+          }
+
+          // Fallback: Converter base64 para blob se Storage falhar
           const byteCharacters = atob(base64Data);
           const byteNumbers = new Array(byteCharacters.length);
           for (let i = 0; i < byteCharacters.length; i++) {
@@ -173,7 +297,7 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
           const blob = new Blob([byteArray], { type: mimeType });
           
           const url = URL.createObjectURL(blob);
-          console.log('✅ [MEDIA-LOADER] Mídia Evolution carregada:', {
+          console.log('✅ [MEDIA-LOADER] Mídia Evolution carregada (blob URL temporária):', {
             blobSize: blob.size,
             blobType: blob.type,
             mediaType: type || message.tipo_mensagem
