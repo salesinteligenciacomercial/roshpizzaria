@@ -46,6 +46,48 @@ const getSupportedMimeType = () => {
   return mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || 'video/webm';
 };
 
+// Play notification sound when participant joins
+const playJoinNotification = () => {
+  try {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    // Pleasant chime sound
+    oscillator.frequency.value = 587.33; // D5 note
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+    
+    // Second chime
+    setTimeout(() => {
+      const osc2 = audioContext.createOscillator();
+      const gain2 = audioContext.createGain();
+      
+      osc2.connect(gain2);
+      gain2.connect(audioContext.destination);
+      
+      osc2.frequency.value = 783.99; // G5 note
+      osc2.type = 'sine';
+      
+      gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      osc2.start(audioContext.currentTime);
+      osc2.stop(audioContext.currentTime + 0.3);
+    }, 100);
+  } catch (error) {
+    console.log('Could not play notification sound');
+  }
+};
+
 const PublicMeeting = () => {
   const { meetingId } = useParams<{ meetingId: string }>();
   const [guestName, setGuestName] = useState('');
@@ -262,7 +304,14 @@ const PublicMeeting = () => {
                 iceCandidateQueueRef.current.push(candidate);
               }
             } else if (signal.signal_type === 'guest-joined') {
-              toast.success(`${signal.signal_data.guestName} entrou na reunião`);
+              console.log('[Host] Guest joined:', signal.signal_data);
+              // Play notification sound
+              playJoinNotification();
+              // Show toast notification
+              toast.success(`${signal.signal_data?.guestName || 'Participante'} entrou na reunião`, {
+                duration: 5000,
+                icon: '👤',
+              });
               setWaitingForGuests(false);
             } else if (signal.signal_type === 'call-end') {
               handleEndCall();
@@ -312,7 +361,29 @@ const PublicMeeting = () => {
         }
       }
       
-      setWaitingForGuests(true);
+      // Also check for pending guest-joined signals
+      const { data: pendingJoins } = await supabase
+        .from('meeting_signals')
+        .select('*')
+        .eq('meeting_id', meetingId!)
+        .eq('signal_type', 'guest-joined')
+        .order('created_at', { ascending: false });
+      
+      if (pendingJoins && pendingJoins.length > 0) {
+        for (const join of pendingJoins) {
+          const joinData = join.signal_data as any;
+          console.log('[Host] Found pending guest-joined:', joinData);
+          playJoinNotification();
+          toast.success(`${joinData?.guestName || 'Participante'} entrou na reunião`, {
+            duration: 5000,
+            icon: '👤',
+          });
+        }
+        setWaitingForGuests(false);
+      } else {
+        setWaitingForGuests(true);
+      }
+      
       setIsConnecting(false);
       toast.success('Sala iniciada! Aguardando participantes...');
 
