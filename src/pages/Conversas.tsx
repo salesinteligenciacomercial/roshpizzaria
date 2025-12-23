@@ -40,6 +40,7 @@ import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
 import { useConversationsCache } from "@/hooks/useConversationsCache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTagsManager } from "@/hooks/useTagsManager";
+import { useConversationSearch, loadAllUniqueConversations } from "@/hooks/useConversationSearch";
 import * as evolutionAPI from "@/services/evolutionApi";
 interface Message {
   id: string;
@@ -274,6 +275,15 @@ function Conversas() {
     updateConversation: updateCachedConversation,
     addMessage: addCachedMessage
   } = useConversationsCache(userCompanyId);
+
+  // 🔍 BUSCA NO BANCO: Hook para buscar conversas diretamente no banco
+  const {
+    searchResults,
+    isSearching,
+    hasSearched,
+    searchConversations,
+    clearSearch
+  } = useConversationSearch(userCompanyId);
 
   // ⚡ DESATIVADO: Carregamento de avatares movido para lazy loading
   // Para evitar loops e melhorar performance
@@ -707,14 +717,22 @@ function Conversas() {
     };
   };
 
-  // MELHORIA: Debounce mais agressivo na busca (500ms) - otimização de performance
+  // 🔍 BUSCA INTELIGENTE: Debounce + busca no banco de dados
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
-    }, 500); // 500ms de delay
+      
+      // 🔍 Se tem termo de busca, buscar no banco de dados
+      if (searchTerm.trim().length >= 2) {
+        console.log('🔍 [SEARCH] Iniciando busca no banco:', searchTerm);
+        searchConversations(searchTerm);
+      } else {
+        clearSearch();
+      }
+    }, 600); // 600ms de delay para busca no banco
 
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchTerm, searchConversations, clearSearch]);
 
   // 🔐 CARREGAR GRUPOS BLOQUEADOS
   useEffect(() => {
@@ -803,14 +821,26 @@ function Conversas() {
     }).length;
   }, [conversations]);
 
-  // ✅ FILTROS CORRIGIDOS: Implementação conforme especificação do usuário
+  // ✅ FILTROS CORRIGIDOS + BUSCA NO BANCO: Priorizar resultados da busca quando existirem
   const filteredConversations = useMemo(() => {
+    // 🔍 Se tem resultados de busca do banco de dados, usar esses resultados
+    const hasValidSearch = debouncedSearchTerm.trim().length >= 2 && hasSearched;
+    
+    // Se está buscando no banco, mostrar resultados da busca
+    if (hasValidSearch && searchResults.length > 0) {
+      console.log('🔍 [SEARCH] Usando resultados do banco:', searchResults.length);
+      return searchResults as Conversation[];
+    }
+    
     console.log('🔍 [DEBUG] Filtrando conversas:', {
       total: conversations.length,
       filtro: filter,
       busca: debouncedSearchTerm,
-      gruposBloqueados: blockedGroups.size
+      gruposBloqueados: blockedGroups.size,
+      hasSearched,
+      searchResultsCount: searchResults.length
     });
+    
     let filtered = conversations;
 
     // Aplicar filtro de status conforme especificação
@@ -822,66 +852,56 @@ function Conversas() {
       filtered = filtered.filter(conv => conv.isGroup === true);
     } else if (filter === "waiting") {
       // ✅ Filtro "Aguardando": Contatos que enviaram mensagem e ainda não foram respondidos
-      // Critérios: última mensagem é do contato (sender === 'contact') + não está finalizada
       filtered = filtered.filter(conv => {
-        if (conv.isGroup === true) return false; // Excluir grupos
-        if (conv.status === 'resolved') return false; // Excluir finalizadas
-
-        // Verificar se a última mensagem é do contato (aguardando resposta)
+        if (conv.isGroup === true) return false;
+        if (conv.status === 'resolved') return false;
         const lastMessage = conv.messages?.[conv.messages.length - 1];
         if (!lastMessage) return false;
-
-        // ✅ Se última mensagem é do contato = aguardando resposta
         return lastMessage.sender === 'contact';
       });
     } else if (filter === "answered") {
       // ✅ Filtro "Em Atendimento": Conversas ativas onde já houve resposta nossa
-      // Critérios: última mensagem é do usuário (sender === 'user') + não está finalizada
-      // Quando responder uma conversa que estava em "aguardando", ela vai para "em atendimento"
       filtered = filtered.filter(conv => {
-        if (conv.isGroup === true) return false; // Excluir grupos
-        if (conv.status === 'resolved') return false; // Excluir finalizadas
-
-        // Verificar se a última mensagem é do usuário (foi respondida)
+        if (conv.isGroup === true) return false;
+        if (conv.status === 'resolved') return false;
         const lastMessage = conv.messages?.[conv.messages.length - 1];
         if (!lastMessage) return false;
-
-        // ✅ Se última mensagem é do usuário = foi respondida
         return lastMessage.sender === 'user';
       });
     } else if (filter === "resolved") {
-      // ✅ Filtro "Finalizados": Conversas marcadas como finalizadas com o botão "Finalizar atendimento"
+      // ✅ Filtro "Finalizados"
       filtered = filtered.filter(conv => {
-        if (conv.isGroup === true) return false; // Excluir grupos
+        if (conv.isGroup === true) return false;
         return conv.status === 'resolved';
       });
     } else if (filter === "responsible") {
-      // ✅ Filtro "Responsável": Conversas onde o usuário atual é responsável pelo contato/lead
+      // ✅ Filtro "Responsável"
       filtered = filtered.filter(conv => {
-        if (conv.isGroup === true) return false; // Excluir grupos
-        // Verificar se o usuário atual é responsável (via responsavel ou assignedUser)
+        if (conv.isGroup === true) return false;
         return conv.responsavel === currentUserId || conv.assignedUser?.id === currentUserId;
       });
     } else if (filter === "transferred") {
-      // ✅ Filtro "Transferência": Conversas que foram transferidas para o usuário atual
+      // ✅ Filtro "Transferência"
       filtered = filtered.filter(conv => {
-        if (conv.isGroup === true) return false; // Excluir grupos
-        // Verificar se tem atribuição de usuário (foi transferida)
+        if (conv.isGroup === true) return false;
         return conv.assignedUser?.id === currentUserId;
       });
     }
     console.log('📊 [DEBUG] Após filtro de status:', filtered.length);
 
-    // Aplicar busca debounced (mais agressivo)
-    if (debouncedSearchTerm.trim()) {
+    // Aplicar busca local (para buscas curtas < 2 caracteres)
+    if (debouncedSearchTerm.trim() && debouncedSearchTerm.trim().length < 2) {
       const searchLower = debouncedSearchTerm.toLowerCase();
-      filtered = filtered.filter(conv => conv.contactName.toLowerCase().includes(searchLower) || conv.lastMessage?.toLowerCase().includes(searchLower) || conv.phoneNumber?.includes(searchLower));
+      filtered = filtered.filter(conv => 
+        conv.contactName.toLowerCase().includes(searchLower) || 
+        conv.lastMessage?.toLowerCase().includes(searchLower) || 
+        conv.phoneNumber?.includes(searchLower)
+      );
     }
     console.log('📊 [DEBUG] Após busca:', filtered.length);
 
     // Ordenar por última mensagem (mais recentes primeiro)
     filtered = filtered.sort((a, b) => {
-      // ⚡ CORREÇÃO: Garantir que timestamp seja Date antes de chamar getTime()
       const aLastMsg = a.messages?.[a.messages.length - 1];
       const bLastMsg = b.messages?.[b.messages.length - 1];
       const aTimestamp = aLastMsg?.timestamp instanceof Date ? aLastMsg.timestamp : aLastMsg?.timestamp ? new Date(aLastMsg.timestamp) : null;
@@ -891,10 +911,8 @@ function Conversas() {
       return bTime - aTime;
     });
 
-    // ⚡ CORREÇÃO CRÍTICA: REMOVER limite de exibição - todas as conversas devem ser exibidas
-    // Todas as conversas do WhatsApp precisam aparecer no CRM
-    return filtered; // Removido .slice(0, conversationsLimit) para exibir TODAS as conversas
-  }, [conversations, filter, debouncedSearchTerm, currentUserId, blockedGroups]);
+    return filtered;
+  }, [conversations, filter, debouncedSearchTerm, currentUserId, blockedGroups, hasSearched, searchResults]);
 
   // Mensagens exibidas: sempre refletir state atual da conversa selecionada (evitar cache obsoleto)
   // ⚡ CORREÇÃO: Não limitar mensagens exibidas - mostrar todas para preservar histórico
@@ -948,27 +966,24 @@ function Conversas() {
     return null;
   }, []);
 
-  // ⚡ CORREÇÃO: Carregar TODAS as conversas, não apenas 50
+  // ⚡ CORREÇÃO CRÍTICA: Carregar TODAS as conversas únicas usando nova função otimizada
   const loadInitialConversations = useCallback(async () => {
+    if (!userCompanyId) return;
+    
     try {
-      // ⚡ CORREÇÃO CRÍTICA: Remover limite - carregar TODAS as conversas do WhatsApp
-      const {
-        data,
-        error
-      } = await supabase.from('conversas').select('*').eq('company_id', userCompanyId || '').order('created_at', {
-        ascending: false
-      });
-      // REMOVIDO: .limit(50) - agora carrega TODAS as conversas
-
-      if (error) throw error;
-
-      // Processar e cachear conversas
-      if (data && data.length > 0) {
-        // Processar dados e atualizar cache
-        console.log(`📦 [PERFORMANCE] Carregadas ${data.length} conversas iniciais`);
+      console.log('📦 [LOAD-ALL] Iniciando carregamento otimizado de todas as conversas...');
+      setLoadingConversations(true);
+      
+      const allConversations = await loadAllUniqueConversations(userCompanyId);
+      
+      if (allConversations.length > 0) {
+        console.log(`✅ [LOAD-ALL] ${allConversations.length} conversas únicas carregadas`);
+        setConversations(allConversations as Conversation[]);
       }
     } catch (error) {
-      console.error('❌ [PERFORMANCE] Erro ao carregar conversas iniciais:', error);
+      console.error('❌ [LOAD-ALL] Erro ao carregar conversas:', error);
+    } finally {
+      setLoadingConversations(false);
     }
   }, [userCompanyId]);
 
