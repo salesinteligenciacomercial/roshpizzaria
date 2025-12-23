@@ -2,11 +2,10 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Video, Phone, Clock, Plus, Link2 } from 'lucide-react';
-import { useMeetings, IncomingCall } from '@/hooks/useMeetings';
+import { useMeetings } from '@/hooks/useMeetings';
 import { MeetingHistory } from '@/components/meetings/MeetingHistory';
 import { StartCallDialog } from '@/components/meetings/StartCallDialog';
 import { VideoCallModalV2 } from '@/components/meetings/VideoCallModalV2';
-import { IncomingCallModal } from '@/components/meetings/IncomingCallModal';
 import { CreatePublicMeetingDialog } from '@/components/meetings/CreatePublicMeetingDialog';
 
 const Reunioes = () => {
@@ -20,14 +19,12 @@ const Reunioes = () => {
     isCaller: boolean;
   } | null>(null);
 
+  // Note: Incoming calls are handled globally by GlobalCallListenerV2 in MainLayout
   const {
     meetings,
     loading,
-    incomingCall,
     currentUserId,
     createMeeting,
-    acceptCall,
-    rejectCall,
     endMeeting,
     addNotes,
     deleteMeeting,
@@ -47,18 +44,7 @@ const Reunioes = () => {
     }
   };
 
-  const handleAcceptCall = async () => {
-    const call = await acceptCall();
-    if (call) {
-      setActiveCall({
-        meetingId: call.meetingId,
-        remoteUserId: call.callerId,
-        remoteUserName: call.callerName,
-        callType: call.callType,
-        isCaller: false,
-      });
-    }
-  };
+  // Note: handleAcceptCall removed - incoming calls handled by GlobalCallListenerV2
 
   const handleCallEnded = () => {
     if (activeCall) {
@@ -187,16 +173,7 @@ const Reunioes = () => {
         />
       )}
 
-      {/* Incoming Call Modal */}
-      {incomingCall && (
-        <IncomingCallModal
-          open={true}
-          callerName={incomingCall.callerName}
-          callType={incomingCall.callType}
-          onAccept={handleAcceptCall}
-          onReject={rejectCall}
-        />
-      )}
+      {/* Note: Incoming Call Modal removed - handled globally by GlobalCallListenerV2 in MainLayout */}
     </>
   );
 };

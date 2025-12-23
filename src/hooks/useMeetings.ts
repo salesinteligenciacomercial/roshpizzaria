@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -30,11 +30,8 @@ export const useMeetings = () => {
   const { toast } = useToast();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
-  const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
-  
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Initialize user data
   useEffect(() => {
@@ -79,47 +76,8 @@ export const useMeetings = () => {
     }
   }, [companyId]);
 
-  // Subscribe to incoming calls
-  useEffect(() => {
-    if (!currentUserId) return;
-
-    const channel = supabase
-      .channel(`incoming-calls-${currentUserId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'meeting_signals',
-          filter: `to_user=eq.${currentUserId}`,
-        },
-        async (payload) => {
-          const signal = payload.new as any;
-          if (signal.signal_type === 'call-request') {
-            // Get caller info
-            const { data: callerProfile } = await supabase
-              .from('profiles')
-              .select('full_name')
-              .eq('id', signal.from_user)
-              .maybeSingle();
-
-            setIncomingCall({
-              meetingId: signal.meeting_id,
-              callerId: signal.from_user,
-              callerName: callerProfile?.full_name || 'Usuário',
-              callType: signal.signal_data?.callType || 'video',
-            });
-          }
-        }
-      )
-      .subscribe();
-
-    channelRef.current = channel;
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentUserId]);
+  // NOTE: Incoming call subscription is handled by GlobalCallListenerV2
+  // This hook only manages meeting history and creating calls
 
   // Load meetings when company is set
   useEffect(() => {
@@ -181,63 +139,7 @@ export const useMeetings = () => {
     }
   }, [currentUserId, companyId, toast]);
 
-  // Accept call
-  const acceptCall = useCallback(async () => {
-    if (!incomingCall || !currentUserId) return;
-
-    try {
-      // Update meeting status
-      await supabase
-        .from('meetings')
-        .update({ 
-          status: 'active',
-          started_at: new Date().toISOString(),
-        })
-        .eq('id', incomingCall.meetingId);
-
-      // Send accept signal
-      await supabase.from('meeting_signals').insert({
-        meeting_id: incomingCall.meetingId,
-        from_user: currentUserId,
-        to_user: incomingCall.callerId,
-        signal_type: 'call-accept',
-        signal_data: {},
-      });
-
-      const callInfo = { ...incomingCall };
-      setIncomingCall(null);
-      return callInfo;
-    } catch (error) {
-      console.error('Error accepting call:', error);
-      return null;
-    }
-  }, [incomingCall, currentUserId]);
-
-  // Reject call
-  const rejectCall = useCallback(async () => {
-    if (!incomingCall || !currentUserId) return;
-
-    try {
-      // Update meeting status
-      await supabase
-        .from('meetings')
-        .update({ status: 'missed' })
-        .eq('id', incomingCall.meetingId);
-
-      // Send reject signal
-      await supabase.from('meeting_signals').insert({
-        meeting_id: incomingCall.meetingId,
-        from_user: currentUserId,
-        to_user: incomingCall.callerId,
-        signal_type: 'call-reject',
-        signal_data: {},
-      });
-
-      setIncomingCall(null);
-    } catch (error) {
-      console.error('Error rejecting call:', error);
-    }
-  }, [incomingCall, currentUserId]);
+  // NOTE: acceptCall and rejectCall are now handled by GlobalCallListenerV2
 
   // End meeting
   const endMeeting = useCallback(async (meetingId: string) => {
@@ -291,12 +193,9 @@ export const useMeetings = () => {
   return {
     meetings,
     loading,
-    incomingCall,
     currentUserId,
     companyId,
     createMeeting,
-    acceptCall,
-    rejectCall,
     endMeeting,
     addNotes,
     deleteMeeting,

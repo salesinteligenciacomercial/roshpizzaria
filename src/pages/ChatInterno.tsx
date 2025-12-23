@@ -35,7 +35,6 @@ import { ShareItemDialog } from '@/components/internal-chat/ShareItemDialog';
 import { EditGroupDialog } from '@/components/internal-chat/EditGroupDialog';
 import { MessageItem } from '@/components/internal-chat/MessageItem';
 import { VideoCallModal } from '@/components/meetings/VideoCallModal';
-import { IncomingCallModal } from '@/components/meetings/IncomingCallModal';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -100,11 +99,9 @@ export default function ChatInterno() {
   
   const { members } = useTeamMembers();
   
+  // Note: Incoming calls are handled globally by GlobalCallListenerV2 in MainLayout
   const {
-    incomingCall,
     createMeeting,
-    acceptCall,
-    rejectCall,
     endMeeting,
   } = useMeetings();
 
@@ -141,19 +138,7 @@ export default function ChatInterno() {
     }
   };
 
-  // Handle incoming call accept
-  const handleAcceptCall = async () => {
-    const callInfo = await acceptCall();
-    if (callInfo) {
-      setActiveCall({
-        meetingId: callInfo.meetingId,
-        remoteUserId: callInfo.callerId,
-        remoteUserName: callInfo.callerName,
-        callType: callInfo.callType,
-        isCaller: false,
-      });
-    }
-  };
+  // Note: handleAcceptCall removed - incoming calls handled by GlobalCallListenerV2
 
   // Handle call ended
   const handleCallEnded = () => {
@@ -845,16 +830,7 @@ export default function ChatInterno() {
         />
       )}
 
-      {/* Incoming Call Modal */}
-      {incomingCall && (
-        <IncomingCallModal
-          open={true}
-          callerName={incomingCall.callerName}
-          callType={incomingCall.callType}
-          onAccept={handleAcceptCall}
-          onReject={rejectCall}
-        />
-      )}
+      {/* Note: Incoming Call Modal removed - handled globally by GlobalCallListenerV2 in MainLayout */}
     </div>
   );
 }
