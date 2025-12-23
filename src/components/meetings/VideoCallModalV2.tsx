@@ -11,10 +11,12 @@ import { Button } from '@/components/ui/button';
 import { 
   Mic, MicOff, Video, VideoOff, PhoneOff, 
   Monitor, MonitorOff, Circle, Square,
-  Loader2
+  Loader2, FileText, Download, X, MessageSquare
 } from 'lucide-react';
 import { useWebRTCSession, RoomState, ParticipantRole } from '@/hooks/useWebRTCSession';
 import { toast } from 'sonner';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { supabase } from '@/integrations/supabase/client';
 
 interface VideoCallModalV2Props {
   open: boolean;
@@ -57,6 +59,11 @@ export const VideoCallModalV2 = ({
   const [callDuration, setCallDuration] = useState(0);
   const [displayRoomState, setDisplayRoomState] = useState<RoomState>('idle');
   const [localVideoReady, setLocalVideoReady] = useState(false);
+  
+  // Transcription state
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptions, setTranscriptions] = useState<Array<{ text: string; timestamp: string; speaker: string }>>([]);
+  const [showTranscriptions, setShowTranscriptions] = useState(false);
 
   // ========== REFS ==========
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -67,6 +74,11 @@ export const VideoCallModalV2 = ({
   const callIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedRef = useRef(false);
   const isMountedRef = useRef(true);
+  
+  // Transcription refs
+  const transcriptionRecorderRef = useRef<MediaRecorder | null>(null);
+  const transcriptionChunksRef = useRef<Blob[]>([]);
+  const transcriptionIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // ========== ROLE ==========
   const role: ParticipantRole = isCaller ? 'host' : 'participant';
@@ -352,12 +364,148 @@ export const VideoCallModalV2 = ({
     toast.success('Gravação salva!');
   }, []);
 
+  // ========== TRANSCRIPTION ==========
+  const startTranscription = useCallback(async () => {
+    const streams: MediaStream[] = [];
+    if (localStream) streams.push(localStream);
+    if (remoteStream) streams.push(remoteStream);
+
+    if (streams.length === 0) {
+      toast.error('Nenhum stream de áudio disponível');
+      return;
+    }
+
+    try {
+      const audioContext = new AudioContext();
+      const destination = audioContext.createMediaStreamDestination();
+
+      streams.forEach(stream => {
+        if (stream.getAudioTracks().length > 0) {
+          const source = audioContext.createMediaStreamSource(stream);
+          source.connect(destination);
+        }
+      });
+
+      const audioStream = destination.stream;
+      const mimeType = 'audio/webm;codecs=opus';
+      
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        toast.error('Formato de áudio não suportado');
+        return;
+      }
+
+      const recorder = new MediaRecorder(audioStream, { mimeType });
+      transcriptionRecorderRef.current = recorder;
+      transcriptionChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          transcriptionChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.start(100);
+      setIsTranscribing(true);
+      setShowTranscriptions(true);
+
+      transcriptionIntervalRef.current = setInterval(async () => {
+        if (transcriptionChunksRef.current.length === 0) return;
+
+        const audioBlob = new Blob(transcriptionChunksRef.current, { type: mimeType });
+        transcriptionChunksRef.current = [];
+
+        if (audioBlob.size < 1000) return;
+
+        try {
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          
+          reader.onloadend = async () => {
+            const base64data = reader.result as string;
+            const base64Audio = base64data.split(',')[1];
+
+            const { data, error } = await supabase.functions.invoke('transcrever-reuniao', {
+              body: { audio: base64Audio, language: 'pt' }
+            });
+
+            if (error) {
+              console.error('Transcription error:', error);
+              return;
+            }
+
+            if (data?.text && data.text.trim().length > 0) {
+              const timestamp = new Date().toLocaleTimeString('pt-BR', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                second: '2-digit'
+              });
+              
+              setTranscriptions(prev => [...prev, {
+                text: data.text.trim(),
+                timestamp,
+                speaker: isCaller ? 'Você' : remoteUserName
+              }]);
+            }
+          };
+        } catch (err) {
+          console.error('Error processing transcription:', err);
+        }
+      }, 10000);
+
+      toast.success('Transcrição iniciada');
+    } catch (error) {
+      console.error('Error starting transcription:', error);
+      toast.error('Erro ao iniciar transcrição');
+    }
+  }, [localStream, remoteStream, isCaller, remoteUserName]);
+
+  const stopTranscription = useCallback(() => {
+    if (transcriptionRecorderRef.current && isTranscribing) {
+      transcriptionRecorderRef.current.stop();
+      setIsTranscribing(false);
+      
+      if (transcriptionIntervalRef.current) {
+        clearInterval(transcriptionIntervalRef.current);
+        transcriptionIntervalRef.current = null;
+      }
+      
+      toast.success('Transcrição encerrada');
+    }
+  }, [isTranscribing]);
+
+  const downloadTranscription = useCallback(() => {
+    if (transcriptions.length === 0) {
+      toast.error('Nenhuma transcrição disponível');
+      return;
+    }
+
+    const content = transcriptions.map(t => 
+      `[${t.timestamp}] ${t.speaker}: ${t.text}`
+    ).join('\n\n');
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `transcricao_reuniao_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast.success('Transcrição salva!');
+  }, [transcriptions]);
+
   // ========== CLOSE ==========
   const handleClose = useCallback(() => {
     console.log('[VideoCall] Closing');
 
     if (isRecording) {
       stopRecording();
+    }
+    
+    if (isTranscribing) {
+      stopTranscription();
     }
 
     if (callIntervalRef.current) {
@@ -369,16 +517,23 @@ export const VideoCallModalV2 = ({
       clearInterval(recordingIntervalRef.current);
       recordingIntervalRef.current = null;
     }
+    
+    if (transcriptionIntervalRef.current) {
+      clearInterval(transcriptionIntervalRef.current);
+      transcriptionIntervalRef.current = null;
+    }
 
     endCall();
     hasInitializedRef.current = false;
     setRemoteStream(null);
     setCallDuration(0);
     setLocalVideoReady(false);
+    setTranscriptions([]);
+    setShowTranscriptions(false);
     
     onCallEnded();
     onClose();
-  }, [isRecording, stopRecording, endCall, onCallEnded, onClose]);
+  }, [isRecording, isTranscribing, stopRecording, stopTranscription, endCall, onCallEnded, onClose]);
 
   // ========== RENDER ==========
   const isConnecting = displayRoomState !== 'connected';
@@ -521,8 +676,19 @@ export const VideoCallModalV2 = ({
             size="lg"
             className="rounded-full h-14 w-14"
             onClick={isRecording ? stopRecording : startRecording}
+            title={isRecording ? 'Parar gravação' : 'Gravar reunião'}
           >
             {isRecording ? <Square className="h-6 w-6" /> : <Circle className="h-6 w-6" />}
+          </Button>
+
+          <Button
+            variant={isTranscribing ? 'default' : 'secondary'}
+            size="lg"
+            className="rounded-full h-14 w-14"
+            onClick={isTranscribing ? stopTranscription : startTranscription}
+            title={isTranscribing ? 'Parar transcrição' : 'Transcrever áudio'}
+          >
+            <FileText className="h-6 w-6" />
           </Button>
 
           <Button
@@ -534,6 +700,49 @@ export const VideoCallModalV2 = ({
             <PhoneOff className="h-6 w-6" />
           </Button>
         </div>
+
+        {/* Transcription Panel */}
+        {showTranscriptions && (
+          <div className="absolute right-4 top-16 bottom-24 w-72 bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg flex flex-col z-10">
+            <div className="flex items-center justify-between p-2 border-b">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-primary" />
+                <span className="font-medium text-sm">Transcrição</span>
+                {isTranscribing && <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />}
+              </div>
+              <div className="flex items-center gap-1">
+                {transcriptions.length > 0 && (
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={downloadTranscription}>
+                    <Download className="h-3 w-3" />
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowTranscriptions(false)}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+            <ScrollArea className="flex-1 p-2">
+              {transcriptions.length === 0 ? (
+                <div className="text-center text-muted-foreground text-xs py-6">
+                  {isTranscribing ? 'Aguardando áudio...' : 'Inicie a transcrição'}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {transcriptions.map((t, i) => (
+                    <div key={i} className="text-xs">
+                      <div className="flex items-center gap-1 text-muted-foreground mb-0.5">
+                        <span className="font-medium">{t.speaker}</span>
+                        <span>•</span>
+                        <span>{t.timestamp}</span>
+                      </div>
+                      <p>{t.text}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
