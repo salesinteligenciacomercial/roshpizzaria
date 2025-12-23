@@ -1716,14 +1716,16 @@ function Conversas() {
         onConflict: 'company_id,telefone_formatado'
       });
 
-      // Atualizar localmente
+      // Atualizar localmente - INCLUIR assignedUser para que o filtro funcione
       setSelectedConv({
         ...selectedConv,
-        responsavel: displayName
+        responsavel: userId, // ID do responsável
+        assignedUser: { id: userId, name: displayName } // Objeto completo
       });
       setConversations(prev => prev.map(c => c.id === selectedConv.id ? {
         ...c,
-        responsavel: displayName
+        responsavel: userId,
+        assignedUser: { id: userId, name: displayName }
       } : c));
       toast.success(`Atendimento transferido para ${displayName}`);
     } catch (e) {
@@ -1744,15 +1746,17 @@ function Conversas() {
         onConflict: 'company_id,telefone_formatado'
       });
 
-      // Atualizar localmente
+      // Atualizar localmente - Limpar assignedUser quando vai para fila
       const label = `Fila: ${queueName}`;
       setSelectedConv({
         ...selectedConv,
-        responsavel: label
+        responsavel: label,
+        assignedUser: undefined // Limpar quando vai para fila
       });
       setConversations(prev => prev.map(c => c.id === selectedConv.id ? {
         ...c,
-        responsavel: label
+        responsavel: label,
+        assignedUser: undefined
       } : c));
       toast.success(`Atendimento enviado para a fila ${queueName}`);
     } catch (e) {
