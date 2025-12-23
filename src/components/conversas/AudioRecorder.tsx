@@ -11,6 +11,7 @@ export function AudioRecorder({ onSendAudio }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [isSending, setIsSending] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -69,8 +70,9 @@ export function AudioRecorder({ onSendAudio }: AudioRecorderProps) {
   };
 
   const sendAudio = async () => {
-    if (!audioBlob) return;
+    if (!audioBlob || isSending) return;
     
+    setIsSending(true);
     try {
       await onSendAudio(audioBlob);
       setAudioBlob(null);
@@ -79,6 +81,8 @@ export function AudioRecorder({ onSendAudio }: AudioRecorderProps) {
     } catch (error) {
       console.error("Erro ao enviar áudio:", error);
       toast.error("Erro ao enviar áudio");
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -94,10 +98,10 @@ export function AudioRecorder({ onSendAudio }: AudioRecorderProps) {
         <audio controls className="flex-1 h-8">
           <source src={URL.createObjectURL(audioBlob)} type="audio/ogg" />
         </audio>
-        <Button size="icon" variant="ghost" onClick={cancelRecording}>
+        <Button size="icon" variant="ghost" onClick={cancelRecording} disabled={isSending}>
           <X className="h-4 w-4" />
         </Button>
-        <Button size="icon" onClick={sendAudio} className="bg-[#25D366] hover:bg-[#128C7E]">
+        <Button size="icon" onClick={sendAudio} disabled={isSending} className="bg-[#25D366] hover:bg-[#128C7E]">
           <Send className="h-4 w-4" />
         </Button>
       </div>
