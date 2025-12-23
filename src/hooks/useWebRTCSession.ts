@@ -518,30 +518,54 @@ export const useWebRTCSession = (config: WebRTCSessionConfig) => {
 
   // ========== CLEANUP ==========
   const cleanup = useCallback(() => {
+    // Prevent double cleanup
+    if (isCleanedUpRef.current) {
+      console.log('[WebRTC] Already cleaned up, skipping');
+      return;
+    }
+    
     console.log('[WebRTC] Cleaning up session');
     isCleanedUpRef.current = true;
 
-    // Stop media tracks
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-    }
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-      screenStreamRef.current = null;
-    }
-
-    // Close peer connection
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-    }
-
-    // Remove channel subscription
+    // Remove channel subscription first to prevent new signals
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
+
+    // Close peer connection
+    if (peerConnectionRef.current) {
+      try {
+        peerConnectionRef.current.close();
+      } catch (e) {
+        console.warn('[WebRTC] Error closing peer connection:', e);
+      }
+      peerConnectionRef.current = null;
+    }
+
+    // Stop media tracks after a small delay to prevent race conditions
+    setTimeout(() => {
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => {
+          try {
+            track.stop();
+          } catch (e) {
+            console.warn('[WebRTC] Error stopping track:', e);
+          }
+        });
+        localStreamRef.current = null;
+      }
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach(track => {
+          try {
+            track.stop();
+          } catch (e) {
+            console.warn('[WebRTC] Error stopping screen track:', e);
+          }
+        });
+        screenStreamRef.current = null;
+      }
+    }, 100);
 
     // Reset state
     hasRemoteDescriptionRef.current = false;
@@ -655,9 +679,12 @@ export const useWebRTCSession = (config: WebRTCSessionConfig) => {
   // ========== CLEANUP ON UNMOUNT ==========
   useEffect(() => {
     return () => {
-      cleanup();
+      // Only cleanup if session was actually started
+      if (!isCleanedUpRef.current && peerConnectionRef.current) {
+        cleanup();
+      }
     };
-  }, []);
+  }, [cleanup]);
 
   // ========== RETURN ==========
   return {

@@ -55,8 +55,8 @@ export const VideoCallModalV2 = ({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [callDuration, setCallDuration] = useState(0);
-  const [hasInitialized, setHasInitialized] = useState(false);
   const [displayRoomState, setDisplayRoomState] = useState<RoomState>('idle');
+  const [localVideoReady, setLocalVideoReady] = useState(false);
 
   // ========== REFS ==========
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -65,6 +65,8 @@ export const VideoCallModalV2 = ({
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const callIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const hasInitializedRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   // ========== ROLE ==========
   const role: ParticipantRole = isCaller ? 'host' : 'participant';
@@ -109,13 +111,22 @@ export const VideoCallModalV2 = ({
     },
   });
 
+  // ========== TRACK MOUNT STATE ==========
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // ========== INITIALIZE CALL ==========
   useEffect(() => {
-    if (open && !hasInitialized) {
-      setHasInitialized(true);
+    if (open && !hasInitializedRef.current) {
+      hasInitializedRef.current = true;
       setRemoteStream(null);
       setCallDuration(0);
       setDisplayRoomState('idle');
+      setLocalVideoReady(false);
 
       const init = async () => {
         try {
@@ -123,38 +134,84 @@ export const VideoCallModalV2 = ({
           await startSession(callType === 'video');
         } catch (error) {
           console.error('[VideoCall] Init error:', error);
-          toast.error('Erro ao iniciar chamada');
+          if (isMountedRef.current) {
+            toast.error('Erro ao iniciar chamada');
+          }
         }
       };
 
-      init();
+      // Small delay to ensure DOM is ready
+      setTimeout(init, 100);
     }
-  }, [open, hasInitialized, role, callType, startSession]);
+  }, [open, role, callType, startSession]);
 
   // ========== SET LOCAL VIDEO ==========
   useEffect(() => {
-    if (localVideoRef.current) {
-      const stream = isScreenSharing && screenStream ? screenStream : localStream;
-      if (stream) {
-        localVideoRef.current.srcObject = stream;
-        localVideoRef.current.play().catch(console.error);
-      }
+    const stream = isScreenSharing && screenStream ? screenStream : localStream;
+    
+    if (!stream) {
+      console.log('[VideoCall] No local stream available yet');
+      return;
     }
+
+    const setVideoSource = (retryCount = 0) => {
+      if (!isMountedRef.current) return;
+      
+      const videoEl = localVideoRef.current;
+      if (videoEl) {
+        console.log('[VideoCall] Setting local video source, tracks:', stream.getTracks().length);
+        videoEl.srcObject = stream;
+        videoEl.play()
+          .then(() => {
+            console.log('[VideoCall] Local video playing');
+            setLocalVideoReady(true);
+          })
+          .catch((err) => {
+            console.warn('[VideoCall] Play failed, retrying...', err);
+            if (retryCount < 5 && isMountedRef.current) {
+              setTimeout(() => setVideoSource(retryCount + 1), 200);
+            }
+          });
+      } else if (retryCount < 10 && isMountedRef.current) {
+        // Video element not ready yet, retry
+        console.log('[VideoCall] Video element not ready, retrying...');
+        setTimeout(() => setVideoSource(retryCount + 1), 100);
+      }
+    };
+
+    setVideoSource();
   }, [localStream, screenStream, isScreenSharing]);
 
   // ========== SET REMOTE VIDEO ==========
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
-      remoteVideoRef.current.play().catch(console.error);
+    if (!remoteStream) return;
 
-      // Listen for track changes
-      remoteStream.onaddtrack = () => {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
-        }
-      };
-    }
+    const setRemoteVideoSource = (retryCount = 0) => {
+      if (!isMountedRef.current) return;
+      
+      const videoEl = remoteVideoRef.current;
+      if (videoEl) {
+        console.log('[VideoCall] Setting remote video source');
+        videoEl.srcObject = remoteStream;
+        videoEl.play().catch((err) => {
+          console.warn('[VideoCall] Remote play failed, retrying...', err);
+          if (retryCount < 5 && isMountedRef.current) {
+            setTimeout(() => setRemoteVideoSource(retryCount + 1), 200);
+          }
+        });
+
+        // Listen for track changes
+        remoteStream.onaddtrack = () => {
+          if (remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = remoteStream;
+          }
+        };
+      } else if (retryCount < 10 && isMountedRef.current) {
+        setTimeout(() => setRemoteVideoSource(retryCount + 1), 100);
+      }
+    };
+
+    setRemoteVideoSource();
   }, [remoteStream]);
 
   // ========== CLEANUP ON UNMOUNT ==========
@@ -314,9 +371,10 @@ export const VideoCallModalV2 = ({
     }
 
     endCall();
-    setHasInitialized(false);
+    hasInitializedRef.current = false;
     setRemoteStream(null);
     setCallDuration(0);
+    setLocalVideoReady(false);
     
     onCallEnded();
     onClose();
@@ -405,7 +463,15 @@ export const VideoCallModalV2 = ({
               playsInline
               muted
               className="w-full h-full object-cover"
+              style={{ transform: 'scaleX(-1)' }}
             />
+            
+            {/* Loading state for local video */}
+            {!localVideoReady && localStream && (
+              <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            )}
             
             {!isScreenSharing && (!localStream || !isVideoEnabled) && (
               <div className="absolute inset-0 flex items-center justify-center bg-muted">
