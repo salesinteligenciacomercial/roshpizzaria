@@ -979,28 +979,42 @@ function Conversas() {
       if (allConversations.length > 0) {
         console.log(`✅ [LOAD-ALL] ${allConversations.length} conversas únicas carregadas`);
         
-        // ⚡ CORREÇÃO: Preservar avatarUrls já carregados das conversas existentes
+        // ⚡ CORREÇÃO: Preservar avatarUrls E assignedUser das conversas existentes
         setConversations(prev => {
-          // Criar mapa de avatares existentes (apenas os que NÃO são placeholder)
+          // Criar mapas de dados existentes
           const avatarMap = new Map<string, string>();
+          const assignedUserMap = new Map<string, { id: string; name: string; avatar?: string }>();
+          const responsavelMap = new Map<string, string>();
+          
           prev.forEach(c => {
             const phoneKey = c.phoneNumber || c.id;
             if (c.avatarUrl && !c.avatarUrl.includes('ui-avatars.com')) {
               avatarMap.set(phoneKey, c.avatarUrl);
             }
+            // ⚡ CRÍTICO: Preservar assignedUser para manter filtro "Transferidos"
+            if (c.assignedUser?.id) {
+              assignedUserMap.set(phoneKey, c.assignedUser);
+            }
+            if (c.responsavel) {
+              responsavelMap.set(phoneKey, c.responsavel);
+            }
           });
           
-          // Mesclar novas conversas preservando avatares
+          // Mesclar novas conversas preservando avatares E assignedUser
           const merged = (allConversations as Conversation[]).map(conv => {
             const phoneKey = conv.phoneNumber || conv.id;
             const existingAvatar = avatarMap.get(phoneKey);
+            const existingAssignedUser = assignedUserMap.get(phoneKey);
+            const existingResponsavel = responsavelMap.get(phoneKey);
             return {
               ...conv,
-              avatarUrl: existingAvatar || conv.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.contactName)}&background=0ea5e9&color=fff`
+              avatarUrl: existingAvatar || conv.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.contactName)}&background=0ea5e9&color=fff`,
+              assignedUser: conv.assignedUser || existingAssignedUser,
+              responsavel: conv.responsavel || existingResponsavel
             };
           });
           
-          console.log(`✅ [LOAD-ALL] ${avatarMap.size} avatares preservados`);
+          console.log(`✅ [LOAD-ALL] ${avatarMap.size} avatares, ${assignedUserMap.size} assignedUsers preservados`);
           return merged;
         });
         

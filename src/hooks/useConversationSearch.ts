@@ -228,6 +228,55 @@ export const loadAllUniqueConversations = async (companyId: string): Promise<Con
 
     console.log(`📊 [LOAD-ALL] ${conversasMap.size} conversas únicas identificadas`);
 
+    // ⚡ CORREÇÃO CRÍTICA: Buscar assignments (assignedUser) para manter filtro "Transferidos"
+    const telefonesParaBuscar = Array.from(conversasMap.keys()).map(tel => tel.replace(/[^0-9]/g, '')).filter(tel => tel.length >= 10);
+    const assignmentsMap = new Map<string, { id: string; name: string }>();
+    
+    if (telefonesParaBuscar.length > 0) {
+      // Buscar em lotes de 100 para evitar limite do Supabase
+      const BATCH_SIZE = 100;
+      let allAssignments: any[] = [];
+      
+      for (let i = 0; i < telefonesParaBuscar.length; i += BATCH_SIZE) {
+        const batch = telefonesParaBuscar.slice(i, i + BATCH_SIZE);
+        const { data: assignmentsData } = await supabase
+          .from('conversation_assignments')
+          .select('telefone_formatado, assigned_user_id')
+          .eq('company_id', companyId)
+          .in('telefone_formatado', batch);
+        
+        if (assignmentsData) {
+          allAssignments = [...allAssignments, ...assignmentsData];
+        }
+      }
+
+      // Buscar nomes dos usuários atribuídos
+      const assignedUserIds = [...new Set(allAssignments.map(a => a.assigned_user_id).filter(Boolean))];
+      const userNamesMap = new Map<string, string>();
+      
+      if (assignedUserIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', assignedUserIds);
+        
+        if (profiles) {
+          profiles.forEach(p => userNamesMap.set(p.id, p.full_name || p.email || 'Usuário'));
+        }
+      }
+
+      // Mapear assignments
+      allAssignments.forEach((assignment: any) => {
+        const telKey = assignment.telefone_formatado?.replace(/[^0-9]/g, '') || '';
+        if (telKey && assignment.assigned_user_id) {
+          const userName = userNamesMap.get(assignment.assigned_user_id) || 'Usuário';
+          assignmentsMap.set(telKey, { id: assignment.assigned_user_id, name: userName });
+        }
+      });
+      
+      console.log(`👥 [LOAD-ALL] ${assignmentsMap.size} responsáveis carregados`);
+    }
+
     // Converter para formato Conversation (com apenas 1 mensagem inicial)
     const conversations: Conversation[] = Array.from(conversasMap.entries()).map(([telefone, conv]) => {
       const isGroup = conv.is_group || /@g\.us$/.test(telefone);
@@ -255,6 +304,10 @@ export const loadAllUniqueConversations = async (companyId: string): Promise<Con
       }
 
       const origemApi = conv.origem_api || 'evolution';
+      
+      // ⚡ CRÍTICO: Incluir assignedUser do banco para manter filtro "Transferidos"
+      const telKey = telefone.replace(/[^0-9]/g, '');
+      const assignedUserData = assignmentsMap.get(telKey);
 
       return {
         id: `conv-${telefone}`,
@@ -268,6 +321,9 @@ export const loadAllUniqueConversations = async (companyId: string): Promise<Con
         phoneNumber: telefone,
         isGroup,
         origemApi: origemApi as "evolution" | "meta",
+        // ⚡ CORREÇÃO: Incluir assignedUser para filtro "Transferidos" funcionar
+        responsavel: assignedUserData?.id,
+        assignedUser: assignedUserData ? { id: assignedUserData.id, name: assignedUserData.name } : undefined,
       };
     });
 
