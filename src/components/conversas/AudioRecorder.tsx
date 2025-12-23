@@ -70,19 +70,32 @@ export function AudioRecorder({ onSendAudio }: AudioRecorderProps) {
   };
 
   const sendAudio = async () => {
-    if (!audioBlob || isSending) return;
+    // Proteção contra múltiplos envios
+    if (!audioBlob || isSending) {
+      console.log('🎤 [AudioRecorder] Envio bloqueado - isSending:', isSending, 'hasBlob:', !!audioBlob);
+      return;
+    }
     
+    console.log('🎤 [AudioRecorder] Iniciando envio de áudio...');
     setIsSending(true);
+    
+    // Guardar referência do blob para limpar após envio
+    const blobToSend = audioBlob;
+    
+    // Limpar estado IMEDIATAMENTE para evitar interface congelada
+    setAudioBlob(null);
+    setRecordingTime(0);
+    chunksRef.current = [];
+    
     try {
-      await onSendAudio(audioBlob);
-      setAudioBlob(null);
-      setRecordingTime(0);
-      chunksRef.current = [];
+      await onSendAudio(blobToSend);
+      console.log('✅ [AudioRecorder] Áudio enviado com sucesso');
     } catch (error) {
-      console.error("Erro ao enviar áudio:", error);
-      toast.error("Erro ao enviar áudio");
+      console.error("❌ [AudioRecorder] Erro ao enviar áudio:", error);
+      toast.error("Erro ao enviar áudio. Tente novamente.");
     } finally {
       setIsSending(false);
+      console.log('🎤 [AudioRecorder] Estado resetado');
     }
   };
 
