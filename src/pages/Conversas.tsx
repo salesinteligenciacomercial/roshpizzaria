@@ -978,14 +978,83 @@ function Conversas() {
       
       if (allConversations.length > 0) {
         console.log(`✅ [LOAD-ALL] ${allConversations.length} conversas únicas carregadas`);
-        setConversations(allConversations as Conversation[]);
+        
+        // ⚡ CORREÇÃO: Preservar avatarUrls já carregados das conversas existentes
+        setConversations(prev => {
+          // Criar mapa de avatares existentes (apenas os que NÃO são placeholder)
+          const avatarMap = new Map<string, string>();
+          prev.forEach(c => {
+            const phoneKey = c.phoneNumber || c.id;
+            if (c.avatarUrl && !c.avatarUrl.includes('ui-avatars.com')) {
+              avatarMap.set(phoneKey, c.avatarUrl);
+            }
+          });
+          
+          // Mesclar novas conversas preservando avatares
+          const merged = (allConversations as Conversation[]).map(conv => {
+            const phoneKey = conv.phoneNumber || conv.id;
+            const existingAvatar = avatarMap.get(phoneKey);
+            return {
+              ...conv,
+              avatarUrl: existingAvatar || conv.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.contactName)}&background=0ea5e9&color=fff`
+            };
+          });
+          
+          console.log(`✅ [LOAD-ALL] ${avatarMap.size} avatares preservados`);
+          return merged;
+        });
+        
+        // ⚡ LAZY LOADING: Carregar avatares que ainda são placeholder
+        const conversasComPlaceholder = allConversations.filter(conv => 
+          !conv.avatarUrl || conv.avatarUrl.includes('ui-avatars.com')
+        );
+        
+        if (conversasComPlaceholder.length > 0) {
+          console.log(`📸 [LOAD-ALL] Carregando ${conversasComPlaceholder.length} avatares em background...`);
+          
+          // Carregar primeiros 5 imediatamente
+          const primeiros = conversasComPlaceholder.slice(0, 5);
+          primeiros.forEach(async (conv) => {
+            if (conv.phoneNumber) {
+              try {
+                const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, userCompanyId, conv.contactName);
+                if (profilePicUrl && !profilePicUrl.includes('ui-avatars.com')) {
+                  setConversations(prev => prev.map(c => 
+                    (c.phoneNumber === conv.phoneNumber || c.id === conv.id) ? { ...c, avatarUrl: profilePicUrl } : c
+                  ));
+                }
+              } catch (error) {
+                // Silenciar erros de avatar
+              }
+            }
+          });
+          
+          // Restantes em background com delay
+          const restantes = conversasComPlaceholder.slice(5);
+          restantes.forEach((conv, index) => {
+            setTimeout(async () => {
+              if (conv.phoneNumber) {
+                try {
+                  const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, userCompanyId, conv.contactName);
+                  if (profilePicUrl && !profilePicUrl.includes('ui-avatars.com')) {
+                    setConversations(prev => prev.map(c => 
+                      (c.phoneNumber === conv.phoneNumber || c.id === conv.id) ? { ...c, avatarUrl: profilePicUrl } : c
+                    ));
+                  }
+                } catch (error) {
+                  // Silenciar erros de avatar
+                }
+              }
+            }, index * 200); // Espaçar requisições
+          });
+        }
       }
     } catch (error) {
       console.error('❌ [LOAD-ALL] Erro ao carregar conversas:', error);
     } finally {
       setLoadingConversations(false);
     }
-  }, [userCompanyId]);
+  }, [userCompanyId, getProfilePictureWithFallback]);
 
   // CORREÇÃO: Carregar tarefas quando o modal de tarefas abrir e tiver lead vinculado
   useEffect(() => {
