@@ -155,6 +155,7 @@ const PublicMeeting = () => {
       
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(console.warn);
       }
 
       const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -171,6 +172,7 @@ const PublicMeeting = () => {
         setRemoteStream(event.streams[0]);
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = event.streams[0];
+          remoteVideoRef.current.play().catch(console.warn);
         }
         setIsConnecting(false);
         setWaitingForGuests(false);
@@ -223,20 +225,25 @@ const PublicMeeting = () => {
 
             if (signal.signal_type === 'offer') {
               // Guest sent offer, respond with answer
-              await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
-              hasRemoteDescriptionRef.current = true;
-              await processIceCandidateQueue();
-              
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
-              
-              await supabase.from('meeting_signals').insert([{
-                meeting_id: meetingId!,
-                from_user: 'host',
-                to_user: signal.from_user,
-                signal_type: 'answer',
-                signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
-              }]);
+              try {
+                await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
+                hasRemoteDescriptionRef.current = true;
+                await processIceCandidateQueue();
+                
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                
+                await supabase.from('meeting_signals').insert([{
+                  meeting_id: meetingId!,
+                  from_user: 'host',
+                  to_user: signal.from_user,
+                  signal_type: 'answer',
+                  signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
+                }]);
+                console.log('Host sent answer to guest:', signal.from_user);
+              } catch (error) {
+                console.error('Error handling offer:', error);
+              }
             } else if (signal.signal_type === 'answer') {
               if (pc.signalingState === 'have-local-offer') {
                 await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
@@ -262,9 +269,49 @@ const PublicMeeting = () => {
             }
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log('Host subscription status:', status);
+        });
 
       channelRef.current = channel;
+      
+      // Wait for subscription to be ready
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Check for any pending offers from guests
+      const { data: pendingOffers } = await supabase
+        .from('meeting_signals')
+        .select('*')
+        .eq('meeting_id', meetingId!)
+        .eq('signal_type', 'offer')
+        .order('created_at', { ascending: true });
+      
+      if (pendingOffers && pendingOffers.length > 0) {
+        console.log('Found pending offer from guest');
+        const offer = pendingOffers[0];
+        const signalData = offer.signal_data as any;
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
+          hasRemoteDescriptionRef.current = true;
+          await processIceCandidateQueue();
+          
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          
+          await supabase.from('meeting_signals').insert([{
+            meeting_id: meetingId!,
+            from_user: 'host',
+            to_user: offer.from_user,
+            signal_type: 'answer',
+            signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
+          }]);
+          console.log('Host sent answer to pending guest');
+          setWaitingForGuests(false);
+        } catch (error) {
+          console.error('Error processing pending offer:', error);
+        }
+      }
+      
       setWaitingForGuests(true);
       setIsConnecting(false);
       toast.success('Sala iniciada! Aguardando participantes...');
@@ -289,6 +336,7 @@ const PublicMeeting = () => {
       
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(console.warn);
       }
 
       const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -305,6 +353,7 @@ const PublicMeeting = () => {
         setRemoteStream(event.streams[0]);
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = event.streams[0];
+          remoteVideoRef.current.play().catch(console.warn);
         }
         setIsConnecting(false);
       };
@@ -375,9 +424,14 @@ const PublicMeeting = () => {
             }
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log('Guest subscription status:', status);
+        });
 
       channelRef.current = channel;
+      
+      // Wait for subscription to be ready
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Notify host that guest joined
       await supabase.from('meeting_signals').insert([{
@@ -404,6 +458,33 @@ const PublicMeeting = () => {
       }]);
 
       console.log('Guest offer sent');
+      
+      // Poll for answer in case realtime misses it
+      const pollForAnswer = async () => {
+        if (hasRemoteDescriptionRef.current) return;
+        
+        const { data: answers } = await supabase
+          .from('meeting_signals')
+          .select('*')
+          .eq('meeting_id', meetingId!)
+          .eq('to_user', guestIdRef.current)
+          .eq('signal_type', 'answer')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (answers && answers.length > 0 && pc.signalingState === 'have-local-offer') {
+          const answerData = answers[0].signal_data as any;
+          console.log('Found pending answer from host');
+          await pc.setRemoteDescription(new RTCSessionDescription(answerData.sdp));
+          hasRemoteDescriptionRef.current = true;
+          await processIceCandidateQueue();
+        }
+      };
+      
+      // Poll a few times in case realtime is slow
+      setTimeout(pollForAnswer, 1000);
+      setTimeout(pollForAnswer, 3000);
+      setTimeout(pollForAnswer, 5000);
 
     } catch (error) {
       console.error('Error initializing WebRTC as guest:', error);
