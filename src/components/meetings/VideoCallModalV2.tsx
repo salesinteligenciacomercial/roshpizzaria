@@ -387,7 +387,7 @@ export const VideoCallModalV2 = ({
   return (
     <Dialog open={open} onOpenChange={() => handleClose()}>
       <DialogContent 
-        className="max-w-4xl w-full h-[80vh] p-0 gap-0 bg-background/95 backdrop-blur-sm" 
+        className="max-w-4xl w-full h-[80vh] p-0 gap-0 bg-background/95 backdrop-blur-sm flex flex-col" 
         aria-describedby={undefined}
       >
         <VisuallyHidden>
