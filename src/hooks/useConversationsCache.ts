@@ -375,8 +375,23 @@ export const useConversationsCache = (companyId: string | null) => {
             const fresh = await loadFromDatabase();
             if (fresh.length > 0) {
               console.log(`✅ [SYNC] ${fresh.length} conversas atualizadas`);
-              setConversations(fresh);
-              saveToCache(fresh);
+              // ⚡ CORREÇÃO: Preservar avatarUrls já carregados
+              setConversations(prev => {
+                const avatarMap = new Map<string, string>();
+                prev.forEach(c => {
+                  if (c.avatarUrl && !c.avatarUrl.includes('ui-avatars.com')) {
+                    avatarMap.set(c.id, c.avatarUrl);
+                  }
+                });
+                
+                const merged = fresh.map(c => ({
+                  ...c,
+                  avatarUrl: avatarMap.get(c.id) || c.avatarUrl
+                }));
+                
+                saveToCache(merged);
+                return merged;
+              });
               setLastSync(Date.now());
             }
             setIsSyncing(false);
@@ -390,8 +405,23 @@ export const useConversationsCache = (companyId: string | null) => {
       console.log('📡 [SYNC] Carregando do banco...');
       const fresh = await loadFromDatabase();
       console.log(`✅ [SYNC] ${fresh.length} conversas carregadas`);
-      setConversations(fresh);
-      saveToCache(fresh);
+      // ⚡ CORREÇÃO: Preservar avatarUrls já carregados ao forçar refresh
+      setConversations(prev => {
+        const avatarMap = new Map<string, string>();
+        prev.forEach(c => {
+          if (c.avatarUrl && !c.avatarUrl.includes('ui-avatars.com')) {
+            avatarMap.set(c.id, c.avatarUrl);
+          }
+        });
+        
+        const merged = fresh.map(c => ({
+          ...c,
+          avatarUrl: avatarMap.get(c.id) || c.avatarUrl
+        }));
+        
+        saveToCache(merged);
+        return merged;
+      });
       setLastSync(Date.now());
     } catch (error) {
       console.error('❌ [SYNC] Erro:', error);

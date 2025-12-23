@@ -1288,7 +1288,8 @@ function Conversas() {
               messages: [novaMensagemObj],
               tags: [],
               phoneNumber: telefoneKey,
-              isGroup: novaMensagem.is_group || /@g\.us$/.test(novaMensagem.numero || '')
+              isGroup: novaMensagem.is_group || /@g\.us$/.test(novaMensagem.numero || ''),
+              avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent((novaMensagem.nome_contato || telefoneKey).substring(0, 2))}&background=0ea5e9&color=fff`
             };
             return [novaConversa, ...prev];
           }
@@ -3107,7 +3108,8 @@ function Conversas() {
                 // Atualizar última mensagem
                 status: statusFinal,
                 // ⚡ Status atualizado baseado na última mensagem
-                isGroup: conversaExistente.isGroup // ⚡ PRESERVAR flag de grupo
+                isGroup: conversaExistente.isGroup, // ⚡ PRESERVAR flag de grupo
+                avatarUrl: conversaExistente.avatarUrl || novaConv.avatarUrl // ⚡ PRESERVAR avatar
               };
             }
 
@@ -3127,7 +3129,8 @@ function Conversas() {
               ...novaConv,
               status: statusFinal,
               // ⚡ Status atualizado baseado na última mensagem
-              isGroup: conversaExistente?.isGroup ?? novaConv.isGroup // ⚡ PRESERVAR flag de grupo
+              isGroup: conversaExistente?.isGroup ?? novaConv.isGroup, // ⚡ PRESERVAR flag de grupo
+              avatarUrl: conversaExistente?.avatarUrl || novaConv.avatarUrl // ⚡ PRESERVAR avatar
             };
           });
           const finalMerged = [...conversasRealtime, ...merged];
