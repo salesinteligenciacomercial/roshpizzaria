@@ -2359,29 +2359,31 @@ function Conversas() {
         }
       }
 
-      // ⚡ OTIMIZAÇÃO EXTREMA: Carregamento ultra-rápido
+      // ⚡ OTIMIZAÇÃO: Carregamento balanceado entre velocidade e completude
       const MESSAGES_PER_CONVERSATION = 5; // Reduzido para 5 (carrega mais depois)
 
-      // ⚡ FASE 1 - OTIMIZAÇÃO EXTREMA: Carregar menos mensagens inicialmente
-      const MESSAGES_TO_FETCH = append ? 100 : 300; // Reduzido de 500 para 300 (mais rápido)
+      // ⚡ CORREÇÃO CRÍTICA: Aumentar limite para buscar mais mensagens/conversas
+      // Para append, buscar 1000 mensagens para garantir que encontre novas conversas
+      // Para carga inicial, buscar 500 mensagens
+      const MESSAGES_TO_FETCH = append ? 1000 : 500;
 
       // ⚡ OTIMIZAÇÃO: Query com campos essenciais (midia_url necessário para exibir mídias)
       let query = supabase.from('conversas').select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme, sent_by, owner_id, arquivo_nome, midia_url').eq('company_id', companyId).order('created_at', {
         ascending: false
       });
 
-      // ⚡ CORREÇÃO: Para append, buscar mensagens mais antigas usando a data da última mensagem carregada
+      // ⚡ CORREÇÃO: Para append, usar offset baseado no número de conversas já carregadas
+      // Em vez de buscar por data, usar paginação real com offset
       if (append && conversations.length > 0) {
-        // Encontrar a data da mensagem mais antiga já carregada
-        const todasMensagens = conversations.flatMap(c => c.messages);
-        if (todasMensagens.length > 0) {
-          const dataMaisAntiga = todasMensagens.map(m => m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp)).sort((a, b) => a.getTime() - b.getTime())[0];
-
-          // Buscar mensagens mais antigas que a data mais antiga já carregada
-          query = query.lt('created_at', dataMaisAntiga.toISOString());
-        }
+        // Contar quantas mensagens já temos carregadas para usar como offset
+        const totalMensagensCarregadas = conversations.reduce((acc, c) => acc + c.messages.length, 0);
+        console.log(`📊 [APPEND] Total mensagens já carregadas: ${totalMensagensCarregadas}, usando como offset`);
+        
+        // Usar range para paginação real
+        query = query.range(totalMensagensCarregadas, totalMensagensCarregadas + MESSAGES_TO_FETCH - 1);
+      } else {
+        query = query.limit(MESSAGES_TO_FETCH);
       }
-      query = query.limit(MESSAGES_TO_FETCH);
       const {
         data: conversasResult,
         error: conversasError
@@ -3018,21 +3020,61 @@ function Conversas() {
       // ⚡ MERGE INTELIGENTE: Preservar conversas em tempo real e evitar duplicatas
       if (append) {
         setConversations(prev => {
-          // ⚡ CORREÇÃO: Filtrar conversas que já existem para evitar duplicação
-          const telefonesExistentes = new Set(prev.map(c => c.phoneNumber || c.id));
-          const conversasNovas = novasConversas.filter(conv => {
+          // ⚡ CORREÇÃO CRÍTICA: Mesclar mensagens de conversas existentes com novas mensagens
+          // Em vez de filtrar conversas duplicadas, mesclar as mensagens
+          const conversasMap = new Map<string, any>();
+          
+          // Primeiro, adicionar todas as conversas existentes ao mapa
+          prev.forEach(conv => {
             const tel = conv.phoneNumber || conv.id;
-            return !telefonesExistentes.has(tel);
+            conversasMap.set(tel, { ...conv });
           });
-          if (conversasNovas.length === 0) {
-            console.log('⚠️ [APPEND] Nenhuma conversa nova encontrada (todas já estão carregadas)');
-            setHasMoreConversations(false); // Não há mais conversas para carregar
+          
+          // Agora, mesclar novas conversas/mensagens
+          let conversasNovasCount = 0;
+          let mensagensNovasCount = 0;
+          
+          novasConversas.forEach(novaConv => {
+            const tel = novaConv.phoneNumber || novaConv.id;
+            const existente = conversasMap.get(tel);
+            
+            if (existente) {
+              // Conversa já existe - mesclar mensagens
+              const idsExistentes = new Set(existente.messages.map((m: any) => m.id));
+              const novasMensagens = novaConv.messages.filter(m => !idsExistentes.has(m.id));
+              
+              if (novasMensagens.length > 0) {
+                mensagensNovasCount += novasMensagens.length;
+                const todasMensagens = [...existente.messages, ...novasMensagens].sort((a, b) => {
+                  const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+                  const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+                  return timeA - timeB;
+                });
+                conversasMap.set(tel, {
+                  ...existente,
+                  messages: todasMensagens,
+                  lastMessage: todasMensagens[todasMensagens.length - 1]?.content || existente.lastMessage
+                });
+              }
+            } else {
+              // Nova conversa - adicionar
+              conversasNovasCount++;
+              conversasMap.set(tel, novaConv);
+            }
+          });
+          
+          const merged = Array.from(conversasMap.values());
+          
+          console.log(`✅ [APPEND] ${conversasNovasCount} conversas novas, ${mensagensNovasCount} mensagens adicionadas a conversas existentes`);
+          
+          // Se não encontrou NENHUMA novidade (nem conversas nem mensagens), não há mais para carregar
+          if (conversasNovasCount === 0 && mensagensNovasCount === 0) {
+            console.log('⚠️ [APPEND] Nenhuma novidade encontrada (todas as conversas e mensagens já estão carregadas)');
+            setHasMoreConversations(false);
             toast.info('Todas as conversas já estão carregadas');
-            return prev; // Não adicionar duplicatas
+            return prev;
           }
-          console.log(`✅ [APPEND] Adicionando ${conversasNovas.length} conversas novas (${novasConversas.length - conversasNovas.length} duplicadas ignoradas)`);
-          const merged = [...prev, ...conversasNovas];
-
+          
           // Salvar no cache COM company_id
           try {
             sessionStorage.setItem(CONVERSATIONS_CACHE_KEY, JSON.stringify(merged));
@@ -3043,17 +3085,21 @@ function Conversas() {
           } catch (e) {
             console.warn('⚠️ [CACHE] Erro ao salvar cache:', e);
           }
-
-          // Se não encontrou conversas novas, não há mais para carregar
-          if (conversasNovas.length < novasConversas.length || conversasNovas.length === 0) {
+          
+          // Verificar se ainda pode ter mais dados
+          // Se carregamos menos do que o limite, provavelmente não há mais
+          if (novasConversas.length === 0) {
             setHasMoreConversations(false);
           }
+          
           return merged;
         });
-        toast.success(`+${novasConversas.filter(conv => {
+        
+        const novasCount = novasConversas.filter(conv => {
           const tel = conv.phoneNumber || conv.id;
           return !conversations.some(c => (c.phoneNumber || c.id) === tel);
-        }).length} novas conversas carregadas`);
+        }).length;
+        toast.success(`+${novasCount} novas conversas carregadas`);
       } else {
         setConversations(prev => {
           const telefonesDoBanco = new Set(novasConversas.map(c => c.phoneNumber || c.id));
@@ -7376,7 +7422,7 @@ function Conversas() {
                     Carregando mais...
                   </> : <>
                     <RefreshCw className="h-4 w-4 mr-2" />
-                    Carregar Mais Conversas ({conversationsLimit} por vez)
+                    Carregar Mais Conversas
                   </>}
               </Button>
             </div>}
