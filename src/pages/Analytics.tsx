@@ -4,34 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import {
-  BarChart3,
-  TrendingUp,
-  Users,
-  DollarSign,
-  Target,
-  MessageSquare,
-  Calendar,
-  CheckCircle,
-  Bot,
-  Activity,
-  Trophy,
-  XCircle,
-  Download,
-  Share2,
-  Filter,
-  Settings,
-  Eye,
-  PieChart,
-  Clock,
-  Zap,
-  RefreshCw,
-  CalendarDays,
-  UserCheck,
-  AlertTriangle,
-  ArrowUpRight,
-  ArrowDownRight
-} from "lucide-react";
+import { BarChart3, TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity, Trophy, XCircle, Download, Share2, Filter, Settings, Eye, PieChart, Clock, Zap, RefreshCw, CalendarDays, UserCheck, AlertTriangle, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -40,35 +13,11 @@ import { useGlobalSync } from "@/hooks/useGlobalSync";
 import { useLeadsSync, RealtimeStatus } from "@/hooks/useLeadsSync";
 import { Wifi, WifiOff } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-} from 'chart.js';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 
 // Registrar componentes do Chart.js
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
-
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler);
 interface Stats {
   totalLeads: number;
   totalValue: number;
@@ -79,7 +28,6 @@ interface Stats {
   tarefas: number;
   mensagensIA: number;
 }
-
 interface GlobalFilters {
   period: string;
   startDate?: string;
@@ -88,22 +36,22 @@ interface GlobalFilters {
   channel?: string;
   team?: string;
 }
-
 interface LeadReportStats {
   totalGanhos: number;
   totalPerdidos: number;
   valorTotalGanhos: number;
   taxaConversao: number;
 }
-
 interface CommunicationStats {
   totalConversas: number;
   taxaResposta: number;
   tempoMedioResposta: number;
-  conversasPorCanal: { canal: string; quantidade: number }[];
+  conversasPorCanal: {
+    canal: string;
+    quantidade: number;
+  }[];
   satisfacao: number;
 }
-
 interface ProductivityStats {
   tarefasCriadas: number;
   tarefasConcluidas: number;
@@ -116,9 +64,12 @@ interface ProductivityStats {
   taxaComparecimento: number;
   tempoMedioTarefa: number;
 }
-
 export default function Analytics() {
-  const { canAccess, isAdmin, loading: permissionsLoading } = usePermissions();
+  const {
+    canAccess,
+    isAdmin,
+    loading: permissionsLoading
+  } = usePermissions();
 
   // Verificar permissão de acesso ao Analytics
   if (!permissionsLoading && !canAccess('analytics') && !isAdmin) {
@@ -132,9 +83,8 @@ export default function Analytics() {
     conversas: 0,
     compromissos: 0,
     tarefas: 0,
-    mensagensIA: 0,
+    mensagensIA: 0
   });
-
   const [loading, setLoading] = useState(true);
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [etapas, setEtapas] = useState<any[]>([]);
@@ -143,14 +93,12 @@ export default function Analytics() {
   const [globalFilters, setGlobalFilters] = useState<GlobalFilters>({
     period: 'all'
   });
-
   const [reportStats, setReportStats] = useState<LeadReportStats>({
     totalGanhos: 0,
     totalPerdidos: 0,
     valorTotalGanhos: 0,
     taxaConversao: 0
   });
-
   const [communicationStats, setCommunicationStats] = useState<CommunicationStats>({
     totalConversas: 0,
     taxaResposta: 0,
@@ -158,7 +106,6 @@ export default function Analytics() {
     conversasPorCanal: [],
     satisfacao: 0
   });
-
   const [productivityStats, setProductivityStats] = useState<ProductivityStats>({
     tarefasCriadas: 0,
     tarefasConcluidas: 0,
@@ -171,17 +118,19 @@ export default function Analytics() {
     taxaComparecimento: 0,
     tempoMedioTarefa: 0
   });
-
   const [reportLoading, setReportLoading] = useState(false);
   const [communicationLoading, setCommunicationLoading] = useState(false);
   const [productivityLoading, setProductivityLoading] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting');
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
-  
+
   // ✅ Estado para usuários da empresa (filtro de responsável)
-  const [companyUsers, setCompanyUsers] = useState<{ id: string; name: string }[]>([]);
+  const [companyUsers, setCompanyUsers] = useState<{
+    id: string;
+    name: string;
+  }[]>([]);
   const [userCompanyId, setUserCompanyId] = useState<string | null>(null);
-  
+
   // Ref para evitar múltiplas atualizações simultâneas
   const isUpdatingRef = useRef(false);
   const updateDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -189,23 +138,16 @@ export default function Analytics() {
   // ✅ SINCRONIZAÇÃO EM TEMPO REAL - Atualiza quando dados mudam em outros módulos
   const refreshAllStats = useCallback(async () => {
     if (isUpdatingRef.current) return;
-    
+
     // Debounce para evitar múltiplas atualizações em sequência rápida
     if (updateDebounceRef.current) {
       clearTimeout(updateDebounceRef.current);
     }
-    
     updateDebounceRef.current = setTimeout(async () => {
       isUpdatingRef.current = true;
       console.log('📊 [Analytics] Atualizando dados em tempo real...');
-      
       try {
-        await Promise.all([
-          fetchStats(),
-          fetchReportStats(),
-          fetchCommunicationStats(),
-          fetchProductivityStats()
-        ]);
+        await Promise.all([fetchStats(), fetchReportStats(), fetchCommunicationStats(), fetchProductivityStats()]);
         setLastUpdate(new Date());
       } catch (error) {
         console.error('[Analytics] Erro ao atualizar dados:', error);
@@ -218,39 +160,39 @@ export default function Analytics() {
   // ✅ HOOK DE SINCRONIZAÇÃO GLOBAL - Recebe eventos de todos os módulos
   useGlobalSync({
     callbacks: {
-      onLeadCreated: (data) => {
+      onLeadCreated: data => {
         console.log('📊 [Analytics] Novo lead criado:', data?.name);
         refreshAllStats();
       },
-      onLeadUpdated: (data) => {
+      onLeadUpdated: data => {
         console.log('📊 [Analytics] Lead atualizado:', data?.name);
         refreshAllStats();
       },
-      onLeadDeleted: (data) => {
+      onLeadDeleted: data => {
         console.log('📊 [Analytics] Lead removido:', data?.name);
         refreshAllStats();
       },
-      onTaskCreated: (data) => {
+      onTaskCreated: data => {
         console.log('📊 [Analytics] Nova tarefa criada:', data?.title);
         refreshAllStats();
       },
-      onTaskUpdated: (data) => {
+      onTaskUpdated: data => {
         console.log('📊 [Analytics] Tarefa atualizada:', data?.title);
         refreshAllStats();
       },
-      onTaskDeleted: (data) => {
+      onTaskDeleted: data => {
         console.log('📊 [Analytics] Tarefa removida:', data?.title);
         refreshAllStats();
       },
-      onMeetingScheduled: (data) => {
+      onMeetingScheduled: data => {
         console.log('📊 [Analytics] Reunião agendada:', data?.title);
         refreshAllStats();
       },
-      onMeetingUpdated: (data) => {
+      onMeetingUpdated: data => {
         console.log('📊 [Analytics] Reunião atualizada:', data?.title);
         refreshAllStats();
       },
-      onMeetingCompleted: (data) => {
+      onMeetingCompleted: data => {
         console.log('📊 [Analytics] Reunião concluída:', data?.title);
         refreshAllStats();
       },
@@ -262,7 +204,7 @@ export default function Analytics() {
         console.log('📊 [Analytics] Conversa atualizada');
         refreshAllStats();
       },
-      onFunnelStageChanged: (data) => {
+      onFunnelStageChanged: data => {
         console.log('📊 [Analytics] Lead movido no funil:', data?.leadName);
         refreshAllStats();
       }
@@ -271,7 +213,9 @@ export default function Analytics() {
   });
 
   // ✅ HOOK DE SINCRONIZAÇÃO DE LEADS - Atualiza quando leads mudam
-  const { connectionStatus } = useLeadsSync({
+  const {
+    connectionStatus
+  } = useLeadsSync({
     onInsert: () => refreshAllStats(),
     onUpdate: () => refreshAllStats(),
     onDelete: () => refreshAllStats(),
@@ -287,29 +231,27 @@ export default function Analytics() {
   useEffect(() => {
     const loadCompanyData = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: {
+            user
+          }
+        } = await supabase.auth.getUser();
         if (!user) return;
 
         // Buscar company_id do usuário
-        const { data: userRole } = await supabase
-          .from('user_roles')
-          .select('company_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
+        const {
+          data: userRole
+        } = await supabase.from('user_roles').select('company_id').eq('user_id', user.id).maybeSingle();
         if (!userRole?.company_id) {
           console.warn('[Analytics] Usuário sem empresa vinculada');
           return;
         }
-
         setUserCompanyId(userRole.company_id);
 
         // Buscar todos os usuários da empresa
-        const { data: userRoles } = await supabase
-          .from('user_roles')
-          .select('user_id')
-          .eq('company_id', userRole.company_id);
-
+        const {
+          data: userRoles
+        } = await supabase.from('user_roles').select('user_id').eq('company_id', userRole.company_id);
         const userIds = (userRoles || []).map((ur: any) => ur.user_id);
         if (userIds.length === 0) {
           setCompanyUsers([]);
@@ -317,44 +259,35 @@ export default function Analytics() {
         }
 
         // Buscar nomes dos usuários na tabela profiles
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, email')
-          .in('id', userIds);
-
-        const users = (profiles || [])
-          .map(p => ({ 
-            id: p.id, 
-            name: (p.full_name || p.email || 'Usuário sem nome') as string 
-          }))
-          .filter(u => u.name);
-
+        const {
+          data: profiles
+        } = await supabase.from('profiles').select('id, full_name, email').in('id', userIds);
+        const users = (profiles || []).map(p => ({
+          id: p.id,
+          name: (p.full_name || p.email || 'Usuário sem nome') as string
+        })).filter(u => u.name);
         console.log('👥 [Analytics] Usuários carregados:', users.length);
         setCompanyUsers(users);
       } catch (error) {
         console.error('[Analytics] Erro ao carregar usuários:', error);
       }
     };
-
     loadCompanyData();
   }, []);
-
   useEffect(() => {
     fetchAllStats();
     // Fallback: impedir loading infinito em caso de erro silencioso
     const timer = setTimeout(() => {
-      setLoading((prev) => {
+      setLoading(prev => {
         if (prev) console.warn('[Analytics] Timeout de carregamento — exibindo layout com dados parciais');
         return false;
       });
     }, 8000);
     return () => clearTimeout(timer);
   }, []);
-
   useEffect(() => {
     fetchFilteredStats();
   }, [globalFilters]);
-
   useEffect(() => {
     if (selectedFunil) {
       fetchEtapasDoFunil(selectedFunil);
@@ -362,16 +295,10 @@ export default function Analytics() {
       setEtapas([]);
     }
   }, [selectedFunil]);
-
   const fetchAllStats = async () => {
     setLoading(true);
     try {
-      await Promise.all([
-        fetchStats(),
-        fetchReportStats(),
-        fetchCommunicationStats(),
-        fetchProductivityStats()
-      ]);
+      await Promise.all([fetchStats(), fetchReportStats(), fetchCommunicationStats(), fetchProductivityStats()]);
     } catch (error) {
       console.error("Erro ao carregar estatísticas:", error);
       setFatalError((error as Error)?.message || 'Erro ao carregar estatísticas');
@@ -379,44 +306,36 @@ export default function Analytics() {
       setLoading(false);
     }
   };
-
   const fetchFilteredStats = async () => {
-    await Promise.all([
-      fetchReportStats(),
-      fetchCommunicationStats(),
-      fetchProductivityStats()
-    ]);
+    await Promise.all([fetchReportStats(), fetchCommunicationStats(), fetchProductivityStats()]);
   };
-
   const fetchStats = async () => {
     try {
       // Leads
-      const { data: leads } = await supabase.from("leads").select("value, status, etapa_id");
+      const {
+        data: leads
+      } = await supabase.from("leads").select("value, status, etapa_id");
       const totalLeads = leads?.length || 0;
       const totalValue = leads?.reduce((sum, lead) => sum + (Number(lead.value) || 0), 0) || 0;
-      const activeDeals = leads?.filter((l) => l.status !== "perdido" && l.status !== "ganho").length || 0;
-      const wonDeals = leads?.filter((l) => l.status === "ganho").length || 0;
-      const conversionRate = totalLeads > 0 ? (wonDeals / totalLeads) * 100 : 0;
+      const activeDeals = leads?.filter(l => l.status !== "perdido" && l.status !== "ganho").length || 0;
+      const wonDeals = leads?.filter(l => l.status === "ganho").length || 0;
+      const conversionRate = totalLeads > 0 ? wonDeals / totalLeads * 100 : 0;
 
       // ✅ CORREÇÃO: Contar CONVERSAS ÚNICAS (números únicos) APENAS da empresa do usuário
-      let conversasQuery = supabase
-        .from("conversas")
-        .select("numero, telefone_formatado, is_group");
-      
+      let conversasQuery = supabase.from("conversas").select("numero, telefone_formatado, is_group");
+
       // Aplicar filtro de empresa se disponível
       if (userCompanyId) {
         conversasQuery = conversasQuery.eq('company_id', userCompanyId);
       }
-      
-      const { data: conversasData } = await conversasQuery;
-      
+      const {
+        data: conversasData
+      } = await conversasQuery;
       const numerosUnicos = new Set<string>();
       conversasData?.forEach((c: any) => {
         // Incluir grupos também na contagem
         const isGroup = c.is_group || /@g\.us$/.test(c.numero || '');
-        const numero = isGroup 
-          ? c.numero 
-          : (c.telefone_formatado || c.numero || '').replace(/[^0-9]/g, '');
+        const numero = isGroup ? c.numero : (c.telefone_formatado || c.numero || '').replace(/[^0-9]/g, '');
         if (numero && numero.length >= 8) {
           numerosUnicos.add(numero);
         }
@@ -424,13 +343,28 @@ export default function Analytics() {
       const conversasCount = numerosUnicos.size;
 
       // Compromissos
-      const { count: compromissosCount } = await supabase.from("compromissos").select("*", { count: 'exact', head: true });
+      const {
+        count: compromissosCount
+      } = await supabase.from("compromissos").select("*", {
+        count: 'exact',
+        head: true
+      });
 
       // Tarefas
-      const { count: tarefasCount } = await supabase.from("tasks").select("*", { count: 'exact', head: true });
+      const {
+        count: tarefasCount
+      } = await supabase.from("tasks").select("*", {
+        count: 'exact',
+        head: true
+      });
 
       // Mensagens IA
-      const { count: iaCount } = await supabase.from("ia_training_data").select("*", { count: 'exact', head: true });
+      const {
+        count: iaCount
+      } = await supabase.from("ia_training_data").select("*", {
+        count: 'exact',
+        head: true
+      });
 
       // Carregar funis disponíveis
       let funisData: any[] | null = null;
@@ -452,7 +386,6 @@ export default function Analytics() {
       } else if (selectedFunil && !funisData.some((f: any) => f.id === selectedFunil)) {
         setSelectedFunil(null);
       }
-
       setStats({
         totalLeads,
         totalValue,
@@ -461,38 +394,34 @@ export default function Analytics() {
         conversas: conversasCount || 0,
         compromissos: compromissosCount || 0,
         tarefas: tarefasCount || 0,
-        mensagensIA: iaCount || 0,
+        mensagensIA: iaCount || 0
       });
     } catch (error) {
       console.error("Erro ao carregar estatísticas:", error);
     }
   };
-
   const fetchEtapasDoFunil = async (funilId: string) => {
     try {
-      const { data: leads } = await supabase.from("leads").select("value, status, etapa_id, funil_id");
-      const { data: etapasData } = await supabase
-        .from("etapas")
-        .select("id, nome, cor, funil_id")
-        .eq("funil_id", funilId)
-        .order("posicao");
-
+      const {
+        data: leads
+      } = await supabase.from("leads").select("value, status, etapa_id, funil_id");
+      const {
+        data: etapasData
+      } = await supabase.from("etapas").select("id, nome, cor, funil_id").eq("funil_id", funilId).order("posicao");
       const leadsDoFunil = leads?.filter(l => l.funil_id === funilId) || [];
-      const etapasComContagem = await Promise.all((etapasData || []).map(async (etapa) => {
+      const etapasComContagem = await Promise.all((etapasData || []).map(async etapa => {
         const leadsNaEtapa = leadsDoFunil.filter(l => l.etapa_id === etapa.id) || [];
         return {
           ...etapa,
           quantidade: leadsNaEtapa.length,
-          valor: leadsNaEtapa.reduce((sum, l) => sum + (Number(l.value) || 0), 0),
+          valor: leadsNaEtapa.reduce((sum, l) => sum + (Number(l.value) || 0), 0)
         };
       }));
-
       setEtapas(etapasComContagem);
     } catch (error) {
       console.error("[Analytics] Erro ao carregar etapas do funil:", error);
     }
   };
-
   const fetchReportStats = async () => {
     try {
       setReportLoading(true);
@@ -505,7 +434,6 @@ export default function Analytics() {
       if (globalFilters.period !== 'all') {
         const now = new Date();
         let startDate: Date;
-
         switch (globalFilters.period) {
           case 'today':
             startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -526,25 +454,24 @@ export default function Analytics() {
           default:
             startDate = new Date(0);
         }
-
         queryGanhos = queryGanhos.gte('created_at', startDate.toISOString());
         queryPerdidos = queryPerdidos.gte('created_at', startDate.toISOString());
       }
-
-      const { data: leadsGanhos, error: errorGanhos } = await queryGanhos;
-      const { data: leadsPerdidos, error: errorPerdidos } = await queryPerdidos;
-
+      const {
+        data: leadsGanhos,
+        error: errorGanhos
+      } = await queryGanhos;
+      const {
+        data: leadsPerdidos,
+        error: errorPerdidos
+      } = await queryPerdidos;
       if (errorGanhos || errorPerdidos) {
         throw new Error("Erro ao carregar estatísticas de relatório");
       }
-
       const valorTotal = leadsGanhos?.reduce((acc, lead) => acc + (lead.value || 0), 0) || 0;
       const totalGanhos = leadsGanhos?.length || 0;
       const totalPerdidos = leadsPerdidos?.length || 0;
-      const taxaConversao = totalGanhos + totalPerdidos > 0
-        ? (totalGanhos / (totalGanhos + totalPerdidos)) * 100
-        : 0;
-
+      const taxaConversao = totalGanhos + totalPerdidos > 0 ? totalGanhos / (totalGanhos + totalPerdidos) * 100 : 0;
       setReportStats({
         totalGanhos,
         totalPerdidos,
@@ -557,24 +484,24 @@ export default function Analytics() {
       setReportLoading(false);
     }
   };
-
   const fetchCommunicationStats = async () => {
     try {
       setCommunicationLoading(true);
 
       // ✅ BUSCA DADOS REAIS DE CONVERSAS (usando colunas corretas da tabela)
-      const { data: conversasData } = await supabase
-        .from("conversas")
-        .select("id, numero, telefone_formatado, origem, status, created_at, updated_at, fromme, read, delivered");
-      
+      const {
+        data: conversasData
+      } = await supabase.from("conversas").select("id, numero, telefone_formatado, origem, status, created_at, updated_at, fromme, read, delivered");
+
       // ✅ CORREÇÃO: Contar CONVERSAS ÚNICAS (números únicos), não mensagens
       const numerosUnicos = new Set<string>();
       const canaisPorNumero: Record<string, string> = {}; // Mapear número -> canal
-      
+
       conversasData?.forEach((c: any) => {
         // Normalizar número (remover caracteres não numéricos)
         const numero = (c.telefone_formatado || c.numero || '').replace(/[^0-9]/g, '');
-        if (numero && numero.length >= 8) { // Ignorar números inválidos
+        if (numero && numero.length >= 8) {
+          // Ignorar números inválidos
           numerosUnicos.add(numero);
           // Guardar o canal do número (origem ou whatsapp como padrão)
           if (!canaisPorNumero[numero]) {
@@ -582,17 +509,16 @@ export default function Analytics() {
           }
         }
       });
-      
+
       // Total de conversas = números únicos
       const totalConversas = numerosUnicos.size;
-      
+
       // Calcular conversas por canal (baseado nos números únicos)
       const canaisContagem: Record<string, number> = {};
       Object.values(canaisPorNumero).forEach(canal => {
         const canalNormalizado = canal.toLowerCase();
         canaisContagem[canalNormalizado] = (canaisContagem[canalNormalizado] || 0) + 1;
       });
-      
       const conversasPorCanal = Object.entries(canaisContagem).map(([canal, quantidade]) => ({
         canal: canal.charAt(0).toUpperCase() + canal.slice(1),
         quantidade
@@ -600,7 +526,10 @@ export default function Analytics() {
 
       // Se não houver dados por canal, mostrar WhatsApp como padrão
       if (conversasPorCanal.length === 0 && totalConversas > 0) {
-        conversasPorCanal.push({ canal: "WhatsApp", quantidade: totalConversas });
+        conversasPorCanal.push({
+          canal: "WhatsApp",
+          quantidade: totalConversas
+        });
       }
 
       // Calcular taxa de resposta (conversas com pelo menos uma resposta nossa)
@@ -613,9 +542,7 @@ export default function Analytics() {
           }
         }
       });
-      const taxaResposta = totalConversas > 0 
-        ? Math.round((numerosComResposta.size / totalConversas) * 100 * 10) / 10 
-        : 0;
+      const taxaResposta = totalConversas > 0 ? Math.round(numerosComResposta.size / totalConversas * 100 * 10) / 10 : 0;
 
       // Calcular tempo médio de resposta (simplificado)
       let tempoMedioResposta = 0;
@@ -626,7 +553,7 @@ export default function Analytics() {
           const resposta = new Date(c.updated_at).getTime();
           return acc + Math.abs(resposta - inicio);
         }, 0);
-        tempoMedioResposta = Math.round((tempoTotal / conversasComResposta.length / (1000 * 60 * 60)) * 10) / 10; // em horas
+        tempoMedioResposta = Math.round(tempoTotal / conversasComResposta.length / (1000 * 60 * 60) * 10) / 10; // em horas
       }
 
       // Taxa de satisfação baseada em conversas com mensagens lidas
@@ -639,12 +566,8 @@ export default function Analytics() {
           }
         }
       });
-      const satisfacao = totalConversas > 0 
-        ? Math.round((numerosComLeitura.size / totalConversas) * 100 * 10) / 10 
-        : 0;
-
+      const satisfacao = totalConversas > 0 ? Math.round(numerosComLeitura.size / totalConversas * 100 * 10) / 10 : 0;
       console.log(`📊 [Analytics] Conversas únicas: ${totalConversas} (de ${conversasData?.length || 0} mensagens)`);
-
       setCommunicationStats({
         totalConversas,
         taxaResposta: Math.min(taxaResposta, 100),
@@ -658,21 +581,19 @@ export default function Analytics() {
       setCommunicationLoading(false);
     }
   };
-
   const fetchProductivityStats = async () => {
     try {
       setProductivityLoading(true);
 
       // ✅ TAREFAS - Buscar dados reais com datas para cálculo de tempo
-      const { data: tarefasData } = await supabase
-        .from("tasks")
-        .select("status, created_at, updated_at, due_date");
-      
+      const {
+        data: tarefasData
+      } = await supabase.from("tasks").select("status, created_at, updated_at, due_date");
       const tarefasCriadas = tarefasData?.length || 0;
       const tarefasConcluidas = tarefasData?.filter((t: any) => t.status === "completed" || t.status === "done").length || 0;
       const tarefasEmAndamento = tarefasData?.filter((t: any) => t.status === "in_progress" || t.status === "doing").length || 0;
       const tarefasPendentes = tarefasData?.filter((t: any) => t.status === "pending" || t.status === "todo" || !t.status).length || 0;
-      
+
       // Calcular tarefas atrasadas (due_date < hoje e não concluídas)
       const hoje = new Date();
       const tarefasAtrasadas = tarefasData?.filter((t: any) => {
@@ -680,39 +601,28 @@ export default function Analytics() {
         const dueDate = new Date(t.due_date);
         return dueDate < hoje && t.status !== "completed" && t.status !== "done";
       }).length || 0;
-
-      const taxaConclusao = tarefasCriadas > 0 ? (tarefasConcluidas / tarefasCriadas) * 100 : 0;
+      const taxaConclusao = tarefasCriadas > 0 ? tarefasConcluidas / tarefasCriadas * 100 : 0;
 
       // ✅ Calcular tempo médio de conclusão de tarefas (dados reais)
       let tempoMedioTarefa = 0;
-      const tarefasComDatas = tarefasData?.filter((t: any) => 
-        (t.status === "completed" || t.status === "done") && t.created_at && t.updated_at
-      ) || [];
-      
+      const tarefasComDatas = tarefasData?.filter((t: any) => (t.status === "completed" || t.status === "done") && t.created_at && t.updated_at) || [];
       if (tarefasComDatas.length > 0) {
         const tempoTotal = tarefasComDatas.reduce((acc: number, t: any) => {
           const inicio = new Date(t.created_at).getTime();
           const fim = new Date(t.updated_at).getTime();
           return acc + Math.abs(fim - inicio);
         }, 0);
-        tempoMedioTarefa = Math.round((tempoTotal / tarefasComDatas.length / (1000 * 60 * 60)) * 10) / 10; // em horas
+        tempoMedioTarefa = Math.round(tempoTotal / tarefasComDatas.length / (1000 * 60 * 60) * 10) / 10; // em horas
       }
 
       // ✅ COMPROMISSOS - Buscar dados reais
-      const { data: compromissosData } = await supabase
-        .from("compromissos")
-        .select("status, data_hora_inicio, data_hora_fim");
-      
+      const {
+        data: compromissosData
+      } = await supabase.from("compromissos").select("status, data_hora_inicio, data_hora_fim");
       const compromissosAgendados = compromissosData?.length || 0;
-      const compromissosRealizados = compromissosData?.filter((c: any) => 
-        c.status === "realizado" || c.status === "concluido"
-      ).length || 0;
-      const taxaComparecimento = compromissosAgendados > 0 
-        ? (compromissosRealizados / compromissosAgendados) * 100 
-        : 0;
-
+      const compromissosRealizados = compromissosData?.filter((c: any) => c.status === "realizado" || c.status === "concluido").length || 0;
+      const taxaComparecimento = compromissosAgendados > 0 ? compromissosRealizados / compromissosAgendados * 100 : 0;
       console.log(`📊 [Analytics] Tarefas: ${tarefasCriadas} total, ${tarefasConcluidas} concluídas, ${tarefasEmAndamento} em andamento, ${tarefasPendentes} pendentes, ${tarefasAtrasadas} atrasadas`);
-
       setProductivityStats({
         tarefasCriadas,
         tarefasConcluidas,
@@ -731,104 +641,88 @@ export default function Analytics() {
       setProductivityLoading(false);
     }
   };
-
-  const statCards = [
-    {
-      title: "Total de Leads",
-      value: stats.totalLeads,
-      icon: Users,
-      description: "Leads ativos no sistema",
-      color: "text-primary",
-      trend: "+12%",
-      trendColor: "text-success"
-    },
-    {
-      title: "Valor em Pipeline",
-      value: `R$ ${stats.totalValue.toLocaleString("pt-BR")}`,
-      icon: DollarSign,
-      description: "Valor total em negociação",
-      color: "text-success",
-      trend: "+8%",
-      trendColor: "text-success"
-    },
-    {
-      title: "Taxa de Conversão",
-      value: `${stats.conversionRate}%`,
-      icon: TrendingUp,
-      description: "Conversão média",
-      color: "text-accent",
-      trend: "+5%",
-      trendColor: "text-success"
-    },
-    {
-      title: "Negócios Ativos",
-      value: stats.activeDeals,
-      icon: Target,
-      description: "Em andamento",
-      color: "text-warning",
-      trend: "+15%",
-      trendColor: "text-success"
-    },
-  ];
-
-  const operacionalCards = [
-    {
-      title: "Conversas Ativas",
-      value: stats.conversas,
-      icon: MessageSquare,
-      description: "WhatsApp, Instagram, Facebook",
-      color: "text-blue-500",
-      trend: "+22%",
-      trendColor: "text-success"
-    },
-    {
-      title: "Agendamentos",
-      value: stats.compromissos,
-      icon: Calendar,
-      description: "Compromissos marcados",
-      color: "text-purple-500",
-      trend: "+18%",
-      trendColor: "text-success"
-    },
-    {
-      title: "Tarefas",
-      value: stats.tarefas,
-      icon: CheckCircle,
-      description: "Em todos os quadros",
-      color: "text-green-500",
-      trend: "+25%",
-      trendColor: "text-success"
-    },
-    {
-      title: "Atendimentos IA",
-      value: stats.mensagensIA,
-      icon: Bot,
-      description: "Mensagens processadas",
-      color: "text-cyan-500",
-      trend: "+35%",
-      trendColor: "text-success"
-    },
-  ];
+  const statCards = [{
+    title: "Total de Leads",
+    value: stats.totalLeads,
+    icon: Users,
+    description: "Leads ativos no sistema",
+    color: "text-primary",
+    trend: "+12%",
+    trendColor: "text-success"
+  }, {
+    title: "Valor em Pipeline",
+    value: `R$ ${stats.totalValue.toLocaleString("pt-BR")}`,
+    icon: DollarSign,
+    description: "Valor total em negociação",
+    color: "text-success",
+    trend: "+8%",
+    trendColor: "text-success"
+  }, {
+    title: "Taxa de Conversão",
+    value: `${stats.conversionRate}%`,
+    icon: TrendingUp,
+    description: "Conversão média",
+    color: "text-accent",
+    trend: "+5%",
+    trendColor: "text-success"
+  }, {
+    title: "Negócios Ativos",
+    value: stats.activeDeals,
+    icon: Target,
+    description: "Em andamento",
+    color: "text-warning",
+    trend: "+15%",
+    trendColor: "text-success"
+  }];
+  const operacionalCards = [{
+    title: "Conversas Ativas",
+    value: stats.conversas,
+    icon: MessageSquare,
+    description: "WhatsApp, Instagram, Facebook",
+    color: "text-blue-500",
+    trend: "+22%",
+    trendColor: "text-success"
+  }, {
+    title: "Agendamentos",
+    value: stats.compromissos,
+    icon: Calendar,
+    description: "Compromissos marcados",
+    color: "text-purple-500",
+    trend: "+18%",
+    trendColor: "text-success"
+  }, {
+    title: "Tarefas",
+    value: stats.tarefas,
+    icon: CheckCircle,
+    description: "Em todos os quadros",
+    color: "text-green-500",
+    trend: "+25%",
+    trendColor: "text-success"
+  }, {
+    title: "Atendimentos IA",
+    value: stats.mensagensIA,
+    icon: Bot,
+    description: "Mensagens processadas",
+    color: "text-cyan-500",
+    trend: "+35%",
+    trendColor: "text-success"
+  }];
 
   // Renderiza a página imediatamente; quando loading=true, os cards usam valores padrão
   // e botões exibem apenas um pequeno spinner, sem bloquear a tela inteira.
 
   if (fatalError) {
-    return (
-      <div className="max-w-3xl mx-auto p-6">
+    return <div className="max-w-3xl mx-auto p-6">
         <h1 className="text-2xl font-bold mb-2">Não foi possível carregar o Analytics</h1>
         <p className="text-muted-foreground mb-4">Exibindo layout sem dados. Detalhes técnicos:</p>
         <pre className="bg-muted p-3 rounded text-sm overflow-auto">{fatalError}</pre>
-      </div>
-    );
+      </div>;
   }
-
-  return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+  return <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div className="space-y-2">
         <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-          Analytics
+          Analytics  e Relatórios        
         </h1>
         <p className="text-muted-foreground text-lg">Visão completa e análises detalhadas do seu CRM</p>
         </div>
@@ -836,22 +730,16 @@ export default function Analytics() {
         {/* ✅ Indicador de Status de Conexão Realtime */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border">
-            {realtimeStatus === 'connected' ? (
-              <>
+            {realtimeStatus === 'connected' ? <>
                 <Wifi className="h-4 w-4 text-green-500" />
                 <span className="text-sm text-green-600 font-medium">Sincronizado</span>
-              </>
-            ) : realtimeStatus === 'connecting' || realtimeStatus === 'reconnecting' ? (
-              <>
+              </> : realtimeStatus === 'connecting' || realtimeStatus === 'reconnecting' ? <>
                 <RefreshCw className="h-4 w-4 text-yellow-500 animate-spin" />
                 <span className="text-sm text-yellow-600 font-medium">Conectando...</span>
-              </>
-            ) : (
-              <>
+              </> : <>
                 <WifiOff className="h-4 w-4 text-red-500" />
                 <span className="text-sm text-red-600 font-medium">Desconectado</span>
-              </>
-            )}
+              </>}
           </div>
           <div className="text-xs text-muted-foreground">
             Última atualização: {lastUpdate.toLocaleTimeString('pt-BR')}
@@ -872,12 +760,7 @@ export default function Analytics() {
                 Aplicados a todas as abas do Analytics
               </p>
             </div>
-            <Button
-              onClick={fetchFilteredStats}
-              disabled={reportLoading || communicationLoading || productivityLoading}
-              variant="outline"
-              size="sm"
-            >
+            <Button onClick={fetchFilteredStats} disabled={reportLoading || communicationLoading || productivityLoading} variant="outline" size="sm">
               <RefreshCw className={`h-4 w-4 mr-2 ${reportLoading ? 'animate-spin' : ''}`} />
               Atualizar
             </Button>
@@ -887,10 +770,10 @@ export default function Analytics() {
           <div className="flex gap-4 items-end flex-wrap">
             <div className="space-y-2">
               <label className="text-sm font-medium">Período</label>
-              <Select
-                value={globalFilters.period}
-                onValueChange={(value) => setGlobalFilters(prev => ({ ...prev, period: value }))}
-              >
+              <Select value={globalFilters.period} onValueChange={value => setGlobalFilters(prev => ({
+              ...prev,
+              period: value
+            }))}>
                 <SelectTrigger className="w-48">
                   <SelectValue />
                 </SelectTrigger>
@@ -906,29 +789,27 @@ export default function Analytics() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Responsável</label>
-              <Select
-                value={globalFilters.responsible || "all"}
-                onValueChange={(value) => setGlobalFilters(prev => ({ ...prev, responsible: value === 'all' ? undefined : value }))}
-              >
+              <Select value={globalFilters.responsible || "all"} onValueChange={value => setGlobalFilters(prev => ({
+              ...prev,
+              responsible: value === 'all' ? undefined : value
+            }))}>
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  {companyUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
+                  {companyUsers.map(user => <SelectItem key={user.id} value={user.id}>
                       {user.name}
-                    </SelectItem>
-                  ))}
+                    </SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Canal</label>
-              <Select
-                value={globalFilters.channel || "all"}
-                onValueChange={(value) => setGlobalFilters(prev => ({ ...prev, channel: value === 'all' ? undefined : value }))}
-              >
+              <Select value={globalFilters.channel || "all"} onValueChange={value => setGlobalFilters(prev => ({
+              ...prev,
+              channel: value === 'all' ? undefined : value
+            }))}>
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
@@ -976,12 +857,9 @@ export default function Analytics() {
         <TabsContent value="overview" className="space-y-6">
           {/* KPIs Principais */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {statCards.map((stat, index) => (
-              <Card
-                key={stat.title}
-                className="group relative overflow-hidden border-0 shadow-card transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
+            {statCards.map((stat, index) => <Card key={stat.title} className="group relative overflow-hidden border-0 shadow-card transition-all duration-300 hover:shadow-xl hover:-translate-y-1" style={{
+            animationDelay: `${index * 100}ms`
+          }}>
                 <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
@@ -1000,17 +878,12 @@ export default function Analytics() {
                     </Badge>
                   </div>
                 </CardContent>
-              </Card>
-            ))}
+              </Card>)}
           </div>
 
           {/* Métricas Operacionais */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {operacionalCards.map((stat, index) => (
-              <Card
-                key={stat.title}
-                className="group relative overflow-hidden border-0 shadow-card transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
-              >
+            {operacionalCards.map((stat, index) => <Card key={stat.title} className="group relative overflow-hidden border-0 shadow-card transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
                 <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
@@ -1029,8 +902,7 @@ export default function Analytics() {
                     </Badge>
                   </div>
                 </CardContent>
-              </Card>
-            ))}
+              </Card>)}
           </div>
 
           {/* Pipeline Visual */}
@@ -1042,31 +914,20 @@ export default function Analytics() {
                     <PieChart className="h-5 w-5 text-primary" />
                     Pipeline por Etapa
                   </CardTitle>
-                  {funis.length > 0 && (
-                    <Badge variant="secondary" className="text-xs">
+                  {funis.length > 0 && <Badge variant="secondary" className="text-xs">
                       {funis.length} {funis.length === 1 ? 'funil' : 'funis'}
-                    </Badge>
-                  )}
+                    </Badge>}
                 </div>
-                <Select
-                  value={selectedFunil || ""}
-                  onValueChange={(value) => setSelectedFunil(value)}
-                >
+                <Select value={selectedFunil || ""} onValueChange={value => setSelectedFunil(value)}>
                   <SelectTrigger className="min-w-[200px] sm:w-[280px]">
                     <SelectValue placeholder={funis.length === 0 ? "Nenhum funil encontrado" : "Selecione o funil de vendas"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {funis.length === 0 ? (
-                      <div className="p-2 text-sm text-muted-foreground text-center">
+                    {funis.length === 0 ? <div className="p-2 text-sm text-muted-foreground text-center">
                         Nenhum funil disponível
-                      </div>
-                    ) : (
-                      funis.map((funil) => (
-                        <SelectItem key={funil.id} value={funil.id}>
+                      </div> : funis.map(funil => <SelectItem key={funil.id} value={funil.id}>
                           {funil.nome}
-                        </SelectItem>
-                      ))
-                    )}
+                        </SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -1075,31 +936,22 @@ export default function Analytics() {
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
-              {!selectedFunil ? (
-                <div className="text-center py-8 text-muted-foreground">
+              {!selectedFunil ? <div className="text-center py-8 text-muted-foreground">
                   <Target className="h-12 w-12 mx-auto mb-2 opacity-20" />
                   <p className="text-sm">
-                    {funis.length === 0 
-                      ? "Nenhum funil de vendas encontrado. Crie um funil para visualizar os dados."
-                      : "Selecione um funil de vendas para visualizar as etapas"}
+                    {funis.length === 0 ? "Nenhum funil de vendas encontrado. Crie um funil para visualizar os dados." : "Selecione um funil de vendas para visualizar as etapas"}
                   </p>
-                </div>
-              ) : etapas.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
+                </div> : etapas.length === 0 ? <div className="text-center py-8 text-muted-foreground">
                   <Target className="h-12 w-12 mx-auto mb-2 opacity-20" />
                   <p className="text-sm">Nenhuma etapa encontrada para este funil</p>
-                </div>
-              ) : (
-                etapas.map((etapa) => {
-                  const totalLeadsDoFunil = etapas.reduce((sum: number, e: any) => sum + e.quantidade, 0);
-                  return (
-                    <div key={etapa.id} className="space-y-2">
+                </div> : etapas.map(etapa => {
+              const totalLeadsDoFunil = etapas.reduce((sum: number, e: any) => sum + e.quantidade, 0);
+              return <div key={etapa.id} className="space-y-2">
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: etapa.cor }}
-                          />
+                          <div className="w-3 h-3 rounded-full" style={{
+                      backgroundColor: etapa.cor
+                    }} />
                           <span className="font-medium">{etapa.nome}</span>
                         </div>
                         <div className="text-sm text-muted-foreground">
@@ -1107,18 +959,13 @@ export default function Analytics() {
                         </div>
                       </div>
                       <div className="w-full bg-muted rounded-full h-3">
-                        <div
-                          className="h-3 rounded-full transition-all duration-500"
-                          style={{
-                            backgroundColor: etapa.cor,
-                            width: `${totalLeadsDoFunil > 0 ? (etapa.quantidade / totalLeadsDoFunil) * 100 : 0}%`
-                          }}
-                        />
+                        <div className="h-3 rounded-full transition-all duration-500" style={{
+                    backgroundColor: etapa.cor,
+                    width: `${totalLeadsDoFunil > 0 ? etapa.quantidade / totalLeadsDoFunil * 100 : 0}%`
+                  }} />
                       </div>
-                    </div>
-                  );
-                })
-              )}
+                    </div>;
+            })}
             </CardContent>
           </Card>
 
@@ -1215,12 +1062,10 @@ export default function Analytics() {
               </CardHeader>
               <CardContent className="relative">
                 <div className="text-3xl font-bold text-blue-600">
-                  R$ {reportStats.totalGanhos > 0
-                    ? (reportStats.valorTotalGanhos / reportStats.totalGanhos).toLocaleString('pt-BR', {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0
-                      })
-                    : '0'}
+                  R$ {reportStats.totalGanhos > 0 ? (reportStats.valorTotalGanhos / reportStats.totalGanhos).toLocaleString('pt-BR', {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0
+                }) : '0'}
                 </div>
                 <div className="flex items-center justify-between mt-1">
                   <p className="text-xs text-muted-foreground">Por lead convertido</p>
@@ -1293,14 +1138,12 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {etapas.map((etapa, index) => (
-                    <div key={etapa.id} className="space-y-2">
+                  {etapas.map((etapa, index) => <div key={etapa.id} className="space-y-2">
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: etapa.cor }}
-                          />
+                          <div className="w-3 h-3 rounded-full" style={{
+                        backgroundColor: etapa.cor
+                      }} />
                           <span className="font-medium">{etapa.nome}</span>
                           <Badge variant="outline" className="text-xs">
                             {etapa.quantidade} leads
@@ -1312,23 +1155,19 @@ export default function Analytics() {
                       </div>
                       <div className="relative">
                         <div className="w-full bg-muted rounded-full h-4">
-                          <div
-                            className="h-4 rounded-full transition-all duration-1000 ease-out"
-                            style={{
-                              backgroundColor: etapa.cor,
-                              width: `${stats.totalLeads > 0 ? (etapa.quantidade / stats.totalLeads) * 100 : 0}%`,
-                              animationDelay: `${index * 200}ms`
-                            }}
-                          />
+                          <div className="h-4 rounded-full transition-all duration-1000 ease-out" style={{
+                        backgroundColor: etapa.cor,
+                        width: `${stats.totalLeads > 0 ? etapa.quantidade / stats.totalLeads * 100 : 0}%`,
+                        animationDelay: `${index * 200}ms`
+                      }} />
                         </div>
                         <div className="absolute inset-0 flex items-center justify-center">
                           <span className="text-xs font-medium text-white drop-shadow-sm">
-                            {stats.totalLeads > 0 ? Math.round((etapa.quantidade / stats.totalLeads) * 100) : 0}%
+                            {stats.totalLeads > 0 ? Math.round(etapa.quantidade / stats.totalLeads * 100) : 0}%
                           </span>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    </div>)}
                 </div>
               </CardContent>
             </Card>
@@ -1345,40 +1184,37 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 <div className="h-64">
-                  <Doughnut
-                    data={{
-                      labels: etapas.map(etapa => etapa.nome),
-                      datasets: [{
-                        data: etapas.map(etapa => etapa.valor),
-                        backgroundColor: etapas.map(etapa => etapa.cor),
-                        borderWidth: 2,
-                        borderColor: '#ffffff',
-                      }]
-                    }}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: {
-                          position: 'bottom' as const,
-                          labels: {
-                            padding: 20,
-                            usePointStyle: true,
-                          }
-                        },
-                        tooltip: {
-                          callbacks: {
-                            label: function(context) {
-                              const value = context.parsed;
-                              const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
-                              const percentage = ((value / total) * 100).toFixed(1);
-                              return `R$ ${value.toLocaleString('pt-BR')} (${percentage}%)`;
-                            }
-                          }
+                  <Doughnut data={{
+                  labels: etapas.map(etapa => etapa.nome),
+                  datasets: [{
+                    data: etapas.map(etapa => etapa.valor),
+                    backgroundColor: etapas.map(etapa => etapa.cor),
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                  }]
+                }} options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: {
+                      position: 'bottom' as const,
+                      labels: {
+                        padding: 20,
+                        usePointStyle: true
+                      }
+                    },
+                    tooltip: {
+                      callbacks: {
+                        label: function (context) {
+                          const value = context.parsed;
+                          const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+                          const percentage = (value / total * 100).toFixed(1);
+                          return `R$ ${value.toLocaleString('pt-BR')} (${percentage}%)`;
                         }
                       }
-                    }}
-                  />
+                    }
+                  }
+                }} />
                 </div>
               </CardContent>
             </Card>
@@ -1398,17 +1234,12 @@ export default function Analytics() {
             <CardContent>
               <div className="space-y-4">
                 {etapas.map((etapa, index) => {
-                  const conversionRate = index === 0
-                    ? (etapa.quantidade / stats.totalLeads) * 100
-                    : (etapa.quantidade / (etapas[index - 1]?.quantidade || stats.totalLeads)) * 100;
-
-                  return (
-                    <div key={etapa.id} className="flex items-center justify-between p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                const conversionRate = index === 0 ? etapa.quantidade / stats.totalLeads * 100 : etapa.quantidade / (etapas[index - 1]?.quantidade || stats.totalLeads) * 100;
+                return <div key={etapa.id} className="flex items-center justify-between p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3">
-                        <div
-                          className="w-4 h-4 rounded-full"
-                          style={{ backgroundColor: etapa.cor }}
-                        />
+                        <div className="w-4 h-4 rounded-full" style={{
+                      backgroundColor: etapa.cor
+                    }} />
                         <div>
                           <p className="font-medium">{etapa.nome}</p>
                           <p className="text-sm text-muted-foreground">
@@ -1419,21 +1250,14 @@ export default function Analytics() {
                       <div className="text-right">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold">{conversionRate.toFixed(1)}%</span>
-                          <Badge
-                            variant={conversionRate > 50 ? "default" : conversionRate > 25 ? "secondary" : "destructive"}
-                            className="text-xs"
-                          >
+                          <Badge variant={conversionRate > 50 ? "default" : conversionRate > 25 ? "secondary" : "destructive"} className="text-xs">
                             {conversionRate > 50 ? "Excelente" : conversionRate > 25 ? "Bom" : "Atenção"}
                           </Badge>
                         </div>
-                        <Progress
-                          value={conversionRate}
-                          className="w-24 h-2 mt-1"
-                        />
+                        <Progress value={conversionRate} className="w-24 h-2 mt-1" />
                       </div>
-                    </div>
-                  );
-                })}
+                    </div>;
+              })}
               </div>
             </CardContent>
           </Card>
@@ -1603,39 +1427,26 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {communicationStats.conversasPorCanal.map((canal, index) => (
-                    <div key={canal.canal} className="space-y-2">
+                  {communicationStats.conversasPorCanal.map((canal, index) => <div key={canal.canal} className="space-y-2">
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${
-                            canal.canal === 'WhatsApp' ? 'bg-green-500' :
-                            canal.canal === 'Instagram' ? 'bg-pink-500' :
-                            'bg-blue-500'
-                          }`} />
+                          <div className={`w-3 h-3 rounded-full ${canal.canal === 'WhatsApp' ? 'bg-green-500' : canal.canal === 'Instagram' ? 'bg-pink-500' : 'bg-blue-500'}`} />
                           <span className="font-medium">{canal.canal}</span>
                           <Badge variant="outline" className="text-xs">
                             {canal.quantidade} conversas
                           </Badge>
                         </div>
                         <div className="text-sm font-semibold">
-                          {((canal.quantidade / communicationStats.totalConversas) * 100).toFixed(1)}%
+                          {(canal.quantidade / communicationStats.totalConversas * 100).toFixed(1)}%
                         </div>
                       </div>
                       <div className="w-full bg-muted rounded-full h-3">
-                        <div
-                          className={`h-3 rounded-full transition-all duration-1000 ease-out ${
-                            canal.canal === 'WhatsApp' ? 'bg-green-500' :
-                            canal.canal === 'Instagram' ? 'bg-pink-500' :
-                            'bg-blue-500'
-                          }`}
-                          style={{
-                            width: `${(canal.quantidade / communicationStats.totalConversas) * 100}%`,
-                            animationDelay: `${index * 200}ms`
-                          }}
-                        />
+                        <div className={`h-3 rounded-full transition-all duration-1000 ease-out ${canal.canal === 'WhatsApp' ? 'bg-green-500' : canal.canal === 'Instagram' ? 'bg-pink-500' : 'bg-blue-500'}`} style={{
+                      width: `${canal.quantidade / communicationStats.totalConversas * 100}%`,
+                      animationDelay: `${index * 200}ms`
+                    }} />
                       </div>
-                    </div>
-                  ))}
+                    </div>)}
                 </div>
               </CardContent>
             </Card>
@@ -1652,49 +1463,38 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 <div className="h-64">
-                  <Bar
-                    data={{
-                      labels: communicationStats.conversasPorCanal.length > 0 
-                        ? communicationStats.conversasPorCanal.map(c => c.canal)
-                        : ['WhatsApp'],
-                      datasets: [{
-                        label: 'Conversas',
-                        data: communicationStats.conversasPorCanal.length > 0 
-                          ? communicationStats.conversasPorCanal.map(c => c.quantidade)
-                          : [communicationStats.totalConversas],
-                        backgroundColor: communicationStats.conversasPorCanal.map(c => 
-                          c.canal.toLowerCase() === 'whatsapp' ? '#22c55e' :
-                          c.canal.toLowerCase() === 'instagram' ? '#ec4899' :
-                          '#3b82f6'
-                        ),
-                        borderRadius: 4,
-                      }]
-                    }}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: {
-                          display: false
-                        },
-                        tooltip: {
-                          callbacks: {
-                            label: function(context) {
-                              return `${context.parsed.y} conversas`;
-                            }
-                          }
-                        }
-                      },
-                      scales: {
-                        y: {
-                          beginAtZero: true,
-                          ticks: {
-                            stepSize: 1
-                          }
+                  <Bar data={{
+                  labels: communicationStats.conversasPorCanal.length > 0 ? communicationStats.conversasPorCanal.map(c => c.canal) : ['WhatsApp'],
+                  datasets: [{
+                    label: 'Conversas',
+                    data: communicationStats.conversasPorCanal.length > 0 ? communicationStats.conversasPorCanal.map(c => c.quantidade) : [communicationStats.totalConversas],
+                    backgroundColor: communicationStats.conversasPorCanal.map(c => c.canal.toLowerCase() === 'whatsapp' ? '#22c55e' : c.canal.toLowerCase() === 'instagram' ? '#ec4899' : '#3b82f6'),
+                    borderRadius: 4
+                  }]
+                }} options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: {
+                      display: false
+                    },
+                    tooltip: {
+                      callbacks: {
+                        label: function (context) {
+                          return `${context.parsed.y} conversas`;
                         }
                       }
-                    }}
-                  />
+                    }
+                  },
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      ticks: {
+                        stepSize: 1
+                      }
+                    }
+                  }
+                }} />
                 </div>
               </CardContent>
             </Card>
@@ -1713,61 +1513,55 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               <div className="h-64">
-                <Line
-                  data={{
-                    labels: ['06h', '08h', '10h', '12h', '14h', '16h', '18h', '20h'],
-                    datasets: [
-                      {
-                        label: 'Mensagens Recebidas',
-                        data: [12, 45, 78, 95, 87, 76, 54, 23],
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        tension: 0.4,
-                        fill: true,
-                      },
-                      {
-                        label: 'Respostas da Equipe',
-                        data: [8, 38, 65, 82, 71, 58, 42, 15],
-                        borderColor: '#22c55e',
-                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                        tension: 0.4,
-                        fill: true,
-                      }
-                    ]
-                  }}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: {
-                        position: 'top' as const,
-                      },
-                      tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                      }
-                    },
-                    scales: {
-                      y: {
-                        beginAtZero: true,
-                        grid: {
-                          display: true,
-                          color: 'rgba(0, 0, 0, 0.1)',
-                        }
-                      },
-                      x: {
-                        grid: {
-                          display: false,
-                        }
-                      }
-                    },
-                    interaction: {
-                      mode: 'nearest',
-                      axis: 'x',
-                      intersect: false
+                <Line data={{
+                labels: ['06h', '08h', '10h', '12h', '14h', '16h', '18h', '20h'],
+                datasets: [{
+                  label: 'Mensagens Recebidas',
+                  data: [12, 45, 78, 95, 87, 76, 54, 23],
+                  borderColor: '#3b82f6',
+                  backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                  tension: 0.4,
+                  fill: true
+                }, {
+                  label: 'Respostas da Equipe',
+                  data: [8, 38, 65, 82, 71, 58, 42, 15],
+                  borderColor: '#22c55e',
+                  backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                  tension: 0.4,
+                  fill: true
+                }]
+              }} options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'top' as const
+                  },
+                  tooltip: {
+                    mode: 'index',
+                    intersect: false
+                  }
+                },
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    grid: {
+                      display: true,
+                      color: 'rgba(0, 0, 0, 0.1)'
                     }
-                  }}
-                />
+                  },
+                  x: {
+                    grid: {
+                      display: false
+                    }
+                  }
+                },
+                interaction: {
+                  mode: 'nearest',
+                  axis: 'x',
+                  intersect: false
+                }
+              }} />
               </div>
             </CardContent>
           </Card>
@@ -1834,14 +1628,10 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {companyUsers.length === 0 ? (
-                    <div className="text-center py-6 text-muted-foreground">
+                  {companyUsers.length === 0 ? <div className="text-center py-6 text-muted-foreground">
                       <UserCheck className="h-8 w-8 mx-auto mb-2 opacity-30" />
                       <p className="text-sm">Nenhum usuário encontrado na empresa</p>
-                      </div>
-                  ) : (
-                    companyUsers.slice(0, 5).map((user, index) => (
-                      <div key={user.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                      </div> : companyUsers.slice(0, 5).map((user, index) => <div key={user.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                             <span className="text-sm font-semibold text-primary">{index + 1}</span>
@@ -1853,15 +1643,10 @@ export default function Analytics() {
                             </p>
                       </div>
                     </div>
-                        <Badge 
-                          variant={index === 0 ? "default" : index < 3 ? "secondary" : "outline"}
-                          className={index === 0 ? "bg-green-100 text-green-800" : ""}
-                        >
+                        <Badge variant={index === 0 ? "default" : index < 3 ? "secondary" : "outline"} className={index === 0 ? "bg-green-100 text-green-800" : ""}>
                           {index === 0 ? 'Excelente' : index < 3 ? 'Muito Bom' : 'Bom'}
                         </Badge>
-                  </div>
-                    ))
-                  )}
+                  </div>)}
                 </div>
               </CardContent>
             </Card>
@@ -2032,45 +1817,37 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 <div className="h-64">
-                  <Doughnut
-                    data={{
-                      labels: ['Concluídas', 'Em Andamento', 'Pendentes', 'Atrasadas'],
-                      datasets: [{
-                        data: [
-                          productivityStats.tarefasConcluidas,
-                          productivityStats.tarefasEmAndamento,
-                          productivityStats.tarefasPendentes,
-                          productivityStats.tarefasAtrasadas
-                        ],
-                        backgroundColor: ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444'],
-                        borderWidth: 2,
-                        borderColor: '#ffffff',
-                      }]
-                    }}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: {
-                          position: 'bottom' as const,
-                          labels: {
-                            padding: 20,
-                            usePointStyle: true,
-                          }
-                        },
-                        tooltip: {
-                          callbacks: {
-                            label: function(context) {
-                              const value = context.parsed;
-                              const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
-                              const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0';
-                              return `${context.label}: ${value} (${percentage}%)`;
-                            }
-                          }
+                  <Doughnut data={{
+                  labels: ['Concluídas', 'Em Andamento', 'Pendentes', 'Atrasadas'],
+                  datasets: [{
+                    data: [productivityStats.tarefasConcluidas, productivityStats.tarefasEmAndamento, productivityStats.tarefasPendentes, productivityStats.tarefasAtrasadas],
+                    backgroundColor: ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444'],
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                  }]
+                }} options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: {
+                      position: 'bottom' as const,
+                      labels: {
+                        padding: 20,
+                        usePointStyle: true
+                      }
+                    },
+                    tooltip: {
+                      callbacks: {
+                        label: function (context) {
+                          const value = context.parsed;
+                          const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+                          const percentage = total > 0 ? (value / total * 100).toFixed(1) : '0';
+                          return `${context.label}: ${value} (${percentage}%)`;
                         }
                       }
-                    }}
-                  />
+                    }
+                  }
+                }} />
                 </div>
               </CardContent>
             </Card>
@@ -2123,57 +1900,51 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               <div className="h-64">
-                <Bar
-                  data={{
-                    labels: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'],
-                    datasets: [
-                      {
-                        label: 'Tarefas Concluídas',
-                        data: [12, 15, 18, 14, 16, 8, 5],
-                        backgroundColor: '#3b82f6',
-                        borderRadius: 4,
-                      },
-                      {
-                        label: 'Compromissos Realizados',
-                        data: [8, 10, 12, 9, 11, 4, 2],
-                        backgroundColor: '#22c55e',
-                        borderRadius: 4,
-                      }
-                    ]
-                  }}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: {
-                        position: 'top' as const,
-                      },
-                      tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                      }
-                    },
-                    scales: {
-                      y: {
-                        beginAtZero: true,
-                        grid: {
-                          display: true,
-                          color: 'rgba(0, 0, 0, 0.1)',
-                        }
-                      },
-                      x: {
-                        grid: {
-                          display: false,
-                        }
-                      }
-                    },
-                    interaction: {
-                      mode: 'nearest',
-                      axis: 'x',
-                      intersect: false
+                <Bar data={{
+                labels: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'],
+                datasets: [{
+                  label: 'Tarefas Concluídas',
+                  data: [12, 15, 18, 14, 16, 8, 5],
+                  backgroundColor: '#3b82f6',
+                  borderRadius: 4
+                }, {
+                  label: 'Compromissos Realizados',
+                  data: [8, 10, 12, 9, 11, 4, 2],
+                  backgroundColor: '#22c55e',
+                  borderRadius: 4
+                }]
+              }} options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'top' as const
+                  },
+                  tooltip: {
+                    mode: 'index',
+                    intersect: false
+                  }
+                },
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    grid: {
+                      display: true,
+                      color: 'rgba(0, 0, 0, 0.1)'
                     }
-                  }}
-                />
+                  },
+                  x: {
+                    grid: {
+                      display: false
+                    }
+                  }
+                },
+                interaction: {
+                  mode: 'nearest',
+                  axis: 'x',
+                  intersect: false
+                }
+              }} />
               </div>
             </CardContent>
           </Card>
@@ -2192,45 +1963,25 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {companyUsers.length === 0 ? (
-                    <div className="text-center py-6 text-muted-foreground">
+                  {companyUsers.length === 0 ? <div className="text-center py-6 text-muted-foreground">
                       <Trophy className="h-8 w-8 mx-auto mb-2 opacity-30" />
                       <p className="text-sm">Nenhum usuário encontrado na empresa</p>
-                    </div>
-                  ) : (
-                    companyUsers.slice(0, 5).map((user, index) => (
-                      <div 
-                        key={user.id} 
-                        className={`flex items-center justify-between p-3 rounded-lg ${
-                          index === 0 
-                            ? 'bg-gradient-to-r from-yellow-50 to-yellow-100 border border-yellow-200' 
-                            : 'bg-muted/30'
-                        }`}
-                      >
+                    </div> : companyUsers.slice(0, 5).map((user, index) => <div key={user.id} className={`flex items-center justify-between p-3 rounded-lg ${index === 0 ? 'bg-gradient-to-r from-yellow-50 to-yellow-100 border border-yellow-200' : 'bg-muted/30'}`}>
                     <div className="flex items-center gap-3">
                           <div className={`${index === 0 ? 'w-10 h-10 bg-yellow-500' : 'w-8 h-8 bg-primary/10'} rounded-full flex items-center justify-center`}>
-                            {index === 0 ? (
-                        <Trophy className="h-5 w-5 text-white" />
-                            ) : (
-                              <span className="text-sm font-semibold text-primary">{index + 1}</span>
-                            )}
+                            {index === 0 ? <Trophy className="h-5 w-5 text-white" /> : <span className="text-sm font-semibold text-primary">{index + 1}</span>}
                       </div>
                       <div>
                             <p className={index === 0 ? "font-bold" : "font-medium"}>{user.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {Math.max(28 - (index * 4), 10)} tarefas • {Math.max(95 - (index * 7), 70)}% conclusão
+                              {Math.max(28 - index * 4, 10)} tarefas • {Math.max(95 - index * 7, 70)}% conclusão
                             </p>
                       </div>
                     </div>
-                        <Badge 
-                          variant={index === 0 ? "default" : index < 3 ? "secondary" : "outline"}
-                          className={index === 0 ? "bg-yellow-100 text-yellow-800" : ""}
-                        >
+                        <Badge variant={index === 0 ? "default" : index < 3 ? "secondary" : "outline"} className={index === 0 ? "bg-yellow-100 text-yellow-800" : ""}>
                           {index === 0 ? '🏆 #1' : index < 3 ? 'Muito Bom' : 'Bom'}
                         </Badge>
-                  </div>
-                    ))
-                  )}
+                  </div>)}
                 </div>
               </CardContent>
             </Card>
@@ -2370,7 +2121,10 @@ export default function Analytics() {
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Período</label>
-                  <Select value={globalFilters.period} onValueChange={(value) => setGlobalFilters(prev => ({ ...prev, period: value }))}>
+                  <Select value={globalFilters.period} onValueChange={value => setGlobalFilters(prev => ({
+                  ...prev,
+                  period: value
+                }))}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -2388,24 +2142,28 @@ export default function Analytics() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Responsável</label>
-                  <Select value={globalFilters.responsible || "all"} onValueChange={(value) => setGlobalFilters(prev => ({ ...prev, responsible: value === 'all' ? undefined : value }))}>
+                  <Select value={globalFilters.responsible || "all"} onValueChange={value => setGlobalFilters(prev => ({
+                  ...prev,
+                  responsible: value === 'all' ? undefined : value
+                }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
-                      {companyUsers.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
+                      {companyUsers.map(user => <SelectItem key={user.id} value={user.id}>
                           {user.name}
-                        </SelectItem>
-                      ))}
+                        </SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Equipe</label>
-                  <Select value={globalFilters.team || "all"} onValueChange={(value) => setGlobalFilters(prev => ({ ...prev, team: value === 'all' ? undefined : value }))}>
+                  <Select value={globalFilters.team || "all"} onValueChange={value => setGlobalFilters(prev => ({
+                  ...prev,
+                  team: value === 'all' ? undefined : value
+                }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Todas" />
                     </SelectTrigger>
@@ -2421,7 +2179,10 @@ export default function Analytics() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Canal</label>
-                  <Select value={globalFilters.channel || "all"} onValueChange={(value) => setGlobalFilters(prev => ({ ...prev, channel: value === 'all' ? undefined : value }))}>
+                  <Select value={globalFilters.channel || "all"} onValueChange={value => setGlobalFilters(prev => ({
+                  ...prev,
+                  channel: value === 'all' ? undefined : value
+                }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
@@ -3092,6 +2853,5 @@ export default function Analytics() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
-  );
+    </div>;
 }
