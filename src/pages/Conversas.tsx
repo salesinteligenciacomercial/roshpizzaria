@@ -721,7 +721,7 @@ function Conversas() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
-      
+
       // 🔍 Se tem termo de busca, buscar no banco de dados
       if (searchTerm.trim().length >= 2) {
         console.log('🔍 [SEARCH] Iniciando busca no banco:', searchTerm);
@@ -825,13 +825,12 @@ function Conversas() {
   const filteredConversations = useMemo(() => {
     // 🔍 Se tem resultados de busca do banco de dados, usar esses resultados
     const hasValidSearch = debouncedSearchTerm.trim().length >= 2 && hasSearched;
-    
+
     // Se está buscando no banco, mostrar resultados da busca
     if (hasValidSearch && searchResults.length > 0) {
       console.log('🔍 [SEARCH] Usando resultados do banco:', searchResults.length);
       return searchResults as Conversation[];
     }
-    
     console.log('🔍 [DEBUG] Filtrando conversas:', {
       total: conversations.length,
       filtro: filter,
@@ -840,7 +839,6 @@ function Conversas() {
       hasSearched,
       searchResultsCount: searchResults.length
     });
-    
     let filtered = conversations;
 
     // Aplicar filtro de status conforme especificação
@@ -892,11 +890,7 @@ function Conversas() {
     // Aplicar busca local (para buscas curtas < 2 caracteres)
     if (debouncedSearchTerm.trim() && debouncedSearchTerm.trim().length < 2) {
       const searchLower = debouncedSearchTerm.toLowerCase();
-      filtered = filtered.filter(conv => 
-        conv.contactName.toLowerCase().includes(searchLower) || 
-        conv.lastMessage?.toLowerCase().includes(searchLower) || 
-        conv.phoneNumber?.includes(searchLower)
-      );
+      filtered = filtered.filter(conv => conv.contactName.toLowerCase().includes(searchLower) || conv.lastMessage?.toLowerCase().includes(searchLower) || conv.phoneNumber?.includes(searchLower));
     }
     console.log('📊 [DEBUG] Após busca:', filtered.length);
 
@@ -910,7 +904,6 @@ function Conversas() {
       const bTime = bTimestamp?.getTime() || 0;
       return bTime - aTime;
     });
-
     return filtered;
   }, [conversations, filter, debouncedSearchTerm, currentUserId, blockedGroups, hasSearched, searchResults]);
 
@@ -969,23 +962,23 @@ function Conversas() {
   // ⚡ CORREÇÃO CRÍTICA: Carregar TODAS as conversas únicas usando nova função otimizada
   const loadInitialConversations = useCallback(async () => {
     if (!userCompanyId) return;
-    
     try {
       console.log('📦 [LOAD-ALL] Iniciando carregamento otimizado de todas as conversas...');
       setLoadingConversations(true);
-      
       const allConversations = await loadAllUniqueConversations(userCompanyId);
-      
       if (allConversations.length > 0) {
         console.log(`✅ [LOAD-ALL] ${allConversations.length} conversas únicas carregadas`);
-        
+
         // ⚡ CORREÇÃO: Preservar avatarUrls E assignedUser das conversas existentes
         setConversations(prev => {
           // Criar mapas de dados existentes
           const avatarMap = new Map<string, string>();
-          const assignedUserMap = new Map<string, { id: string; name: string; avatar?: string }>();
+          const assignedUserMap = new Map<string, {
+            id: string;
+            name: string;
+            avatar?: string;
+          }>();
           const responsavelMap = new Map<string, string>();
-          
           prev.forEach(c => {
             const phoneKey = c.phoneNumber || c.id;
             if (c.avatarUrl && !c.avatarUrl.includes('ui-avatars.com')) {
@@ -999,7 +992,7 @@ function Conversas() {
               responsavelMap.set(phoneKey, c.responsavel);
             }
           });
-          
+
           // Mesclar novas conversas preservando avatares E assignedUser
           const merged = (allConversations as Conversation[]).map(conv => {
             const phoneKey = conv.phoneNumber || conv.id;
@@ -1013,36 +1006,33 @@ function Conversas() {
               responsavel: conv.responsavel || existingResponsavel
             };
           });
-          
           console.log(`✅ [LOAD-ALL] ${avatarMap.size} avatares, ${assignedUserMap.size} assignedUsers preservados`);
           return merged;
         });
-        
+
         // ⚡ LAZY LOADING: Carregar avatares que ainda são placeholder
-        const conversasComPlaceholder = allConversations.filter(conv => 
-          !conv.avatarUrl || conv.avatarUrl.includes('ui-avatars.com')
-        );
-        
+        const conversasComPlaceholder = allConversations.filter(conv => !conv.avatarUrl || conv.avatarUrl.includes('ui-avatars.com'));
         if (conversasComPlaceholder.length > 0) {
           console.log(`📸 [LOAD-ALL] Carregando ${conversasComPlaceholder.length} avatares em background...`);
-          
+
           // Carregar primeiros 5 imediatamente
           const primeiros = conversasComPlaceholder.slice(0, 5);
-          primeiros.forEach(async (conv) => {
+          primeiros.forEach(async conv => {
             if (conv.phoneNumber) {
               try {
                 const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, userCompanyId, conv.contactName);
                 if (profilePicUrl && !profilePicUrl.includes('ui-avatars.com')) {
-                  setConversations(prev => prev.map(c => 
-                    (c.phoneNumber === conv.phoneNumber || c.id === conv.id) ? { ...c, avatarUrl: profilePicUrl } : c
-                  ));
+                  setConversations(prev => prev.map(c => c.phoneNumber === conv.phoneNumber || c.id === conv.id ? {
+                    ...c,
+                    avatarUrl: profilePicUrl
+                  } : c));
                 }
               } catch (error) {
                 // Silenciar erros de avatar
               }
             }
           });
-          
+
           // Restantes em background com delay
           const restantes = conversasComPlaceholder.slice(5);
           restantes.forEach((conv, index) => {
@@ -1051,9 +1041,10 @@ function Conversas() {
                 try {
                   const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, userCompanyId, conv.contactName);
                   if (profilePicUrl && !profilePicUrl.includes('ui-avatars.com')) {
-                    setConversations(prev => prev.map(c => 
-                      (c.phoneNumber === conv.phoneNumber || c.id === conv.id) ? { ...c, avatarUrl: profilePicUrl } : c
-                    ));
+                    setConversations(prev => prev.map(c => c.phoneNumber === conv.phoneNumber || c.id === conv.id ? {
+                      ...c,
+                      avatarUrl: profilePicUrl
+                    } : c));
                   }
                 } catch (error) {
                   // Silenciar erros de avatar
@@ -1249,7 +1240,7 @@ function Conversas() {
         console.log('🔍 [REALTIME-MULTIUSER] Mensagem de:', sentBy || (isFromMe ? 'Usuário' : 'Contato'), '| owner_id:', novaMensagem.owner_id);
 
         // Mapear tipos de mensagem corretamente (inclui 'pdf' e 'document')
-        const tipoMensagem = novaMensagem.tipo_mensagem === 'texto' ? 'text' : novaMensagem.tipo_mensagem === 'image' ? 'image' : novaMensagem.tipo_mensagem === 'audio' ? 'audio' : novaMensagem.tipo_mensagem === 'video' ? 'video' : (novaMensagem.tipo_mensagem === 'document' || novaMensagem.tipo_mensagem === 'pdf') ? 'pdf' : novaMensagem.tipo_mensagem || 'text';
+        const tipoMensagem = novaMensagem.tipo_mensagem === 'texto' ? 'text' : novaMensagem.tipo_mensagem === 'image' ? 'image' : novaMensagem.tipo_mensagem === 'audio' ? 'audio' : novaMensagem.tipo_mensagem === 'video' ? 'video' : novaMensagem.tipo_mensagem === 'document' || novaMensagem.tipo_mensagem === 'pdf' ? 'pdf' : novaMensagem.tipo_mensagem || 'text';
 
         // Criar objeto de mensagem
         const novaMensagemObj: Message = {
@@ -1259,10 +1250,11 @@ function Conversas() {
           sender: isFromMe ? 'user' : 'contact',
           timestamp: new Date(novaMensagem.created_at || Date.now()),
           delivered: novaMensagem.delivered === true || novaMensagem.status === 'Enviada',
-          read: novaMensagem.read === true, // ⚡ CORREÇÃO: Usar campo read do banco (true = contato visualizou)
+          read: novaMensagem.read === true,
+          // ⚡ CORREÇÃO: Usar campo read do banco (true = contato visualizou)
           mediaUrl: novaMensagem.midia_url,
           fileName: novaMensagem.arquivo_nome,
-          mimeType: novaMensagem.tipo_mensagem === 'video' ? 'video/mp4' : novaMensagem.tipo_mensagem === 'audio' ? 'audio/mpeg' : novaMensagem.tipo_mensagem === 'image' ? 'image/jpeg' : (novaMensagem.tipo_mensagem === 'document' || novaMensagem.tipo_mensagem === 'pdf') ? 'application/pdf' : undefined,
+          mimeType: novaMensagem.tipo_mensagem === 'video' ? 'video/mp4' : novaMensagem.tipo_mensagem === 'audio' ? 'audio/mpeg' : novaMensagem.tipo_mensagem === 'image' ? 'image/jpeg' : novaMensagem.tipo_mensagem === 'document' || novaMensagem.tipo_mensagem === 'pdf' ? 'application/pdf' : undefined,
           sentBy: sentBy
         };
 
@@ -1802,13 +1794,20 @@ function Conversas() {
       // Atualizar localmente - INCLUIR assignedUser para que o filtro funcione
       setSelectedConv({
         ...selectedConv,
-        responsavel: userId, // ID do responsável
-        assignedUser: { id: userId, name: displayName } // Objeto completo
+        responsavel: userId,
+        // ID do responsável
+        assignedUser: {
+          id: userId,
+          name: displayName
+        } // Objeto completo
       });
       setConversations(prev => prev.map(c => c.id === selectedConv.id ? {
         ...c,
         responsavel: userId,
-        assignedUser: { id: userId, name: displayName }
+        assignedUser: {
+          id: userId,
+          name: displayName
+        }
       } : c));
       toast.success(`Atendimento transferido para ${displayName}`);
     } catch (e) {
@@ -2071,14 +2070,14 @@ function Conversas() {
           const message: Message = {
             id: msg.id,
             content: msg.mensagem || '',
-            type: msg.tipo_mensagem === 'image' ? 'image' : msg.tipo_mensagem === 'audio' ? 'audio' : msg.tipo_mensagem === 'video' ? 'video' : (msg.tipo_mensagem === 'document' || msg.tipo_mensagem === 'pdf') ? 'pdf' : 'text',
+            type: msg.tipo_mensagem === 'image' ? 'image' : msg.tipo_mensagem === 'audio' ? 'audio' : msg.tipo_mensagem === 'video' ? 'video' : msg.tipo_mensagem === 'document' || msg.tipo_mensagem === 'pdf' ? 'pdf' : 'text',
             sender: isFromMe ? 'user' : 'contact',
             timestamp: new Date(msg.created_at),
             delivered: msg.status === 'Enviada',
             read: msg.status === 'Lida',
             mediaUrl: msg.midia_url,
             fileName: msg.arquivo_nome,
-            mimeType: msg.tipo_mensagem === 'video' ? 'video/mp4' : msg.tipo_mensagem === 'audio' ? 'audio/mpeg' : msg.tipo_mensagem === 'image' ? 'image/jpeg' : (msg.tipo_mensagem === 'document' || msg.tipo_mensagem === 'pdf') ? 'application/pdf' : undefined,
+            mimeType: msg.tipo_mensagem === 'video' ? 'video/mp4' : msg.tipo_mensagem === 'audio' ? 'audio/mpeg' : msg.tipo_mensagem === 'image' ? 'image/jpeg' : msg.tipo_mensagem === 'document' || msg.tipo_mensagem === 'pdf' ? 'application/pdf' : undefined,
             sentBy: sentBy
           };
           conv.messages.push(message);
@@ -2196,33 +2195,31 @@ function Conversas() {
     const loadInitialData = async () => {
       // Se já está carregando ou já carregou, não fazer nada
       if (loadingConversations || initialLoadRef.current) return;
-      
       try {
         // ⚡ CORREÇÃO CRÍTICA: Primeiro obter o company_id do usuário atual
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: {
+            user
+          }
+        } = await supabase.auth.getUser();
         if (!user) {
           console.warn('⚠️ [LOAD] Usuário não autenticado');
           return;
         }
-        
-        const { data: userRole } = await supabase
-          .from('user_roles')
-          .select('company_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        
+        const {
+          data: userRole
+        } = await supabase.from('user_roles').select('company_id').eq('user_id', user.id).maybeSingle();
         if (!userRole?.company_id) {
           console.warn('⚠️ [LOAD] Usuário sem empresa associada');
           return;
         }
-        
         const currentCompanyId = userRole.company_id;
-        
+
         // ⚡ CORREÇÃO CRÍTICA: Verificar se o cache é da MESMA empresa
         const cachedCompanyId = sessionStorage.getItem(CONVERSATIONS_CACHE_COMPANY_KEY);
         const cachedData = sessionStorage.getItem(CONVERSATIONS_CACHE_KEY);
         const cacheTimestamp = sessionStorage.getItem(CONVERSATIONS_CACHE_TIMESTAMP_KEY);
-        
+
         // Se cache é de outra empresa, LIMPAR TUDO
         if (cachedCompanyId && cachedCompanyId !== currentCompanyId) {
           console.log(`🗑️ [CACHE] Cache de outra empresa (${cachedCompanyId}) - limpando...`);
@@ -2245,22 +2242,20 @@ function Conversas() {
             setConversations(restoredConversations);
           }
         }
-        
+
         // Atualizar state com company_id
         setUserCompanyId(currentCompanyId);
         userCompanyIdRef.current = currentCompanyId;
-        
+
         // Agora carregar do banco
         console.log('⚡ [LOAD] Carregando conversas para company:', currentCompanyId);
         await loadSupabaseConversations();
         initialLoadRef.current = true;
         console.log('✅ [LOAD] Conversas carregadas');
-        
       } catch (error) {
         console.error('❌ [LOAD] Erro ao carregar:', error);
       }
     };
-    
     loadInitialData();
   }, []); // ⚡ Executar apenas uma vez no mount
 
@@ -2465,7 +2460,7 @@ function Conversas() {
         // Contar quantas mensagens já temos carregadas para usar como offset
         const totalMensagensCarregadas = conversations.reduce((acc, c) => acc + c.messages.length, 0);
         console.log(`📊 [APPEND] Total mensagens já carregadas: ${totalMensagensCarregadas}, usando como offset`);
-        
+
         // Usar range para paginação real
         query = query.range(totalMensagensCarregadas, totalMensagensCarregadas + MESSAGES_TO_FETCH - 1);
       } else {
@@ -2848,7 +2843,10 @@ function Conversas() {
 
       // ETAPA 3: Buscar assignments (responsáveis) das conversas
       // Buscar assignments para todos os telefones (para mostrar responsável e filtrar se necessário)
-      let assignmentsMap = new Map<string, { id: string; name: string }>(); // telefone -> {id, nome} do responsável
+      let assignmentsMap = new Map<string, {
+        id: string;
+        name: string;
+      }>(); // telefone -> {id, nome} do responsável
 
       // ⚡ CORREÇÃO: Buscar assignments de TODOS os telefones das conversas (sem limite)
       const telefonesParaBuscar = Array.from(conversasMap.keys()).map(tel => tel.replace(/[^0-9]/g, '')).filter(tel => tel.length >= 10);
@@ -2888,7 +2886,10 @@ function Conversas() {
           const telKey = assignment.telefone_formatado?.replace(/[^0-9]/g, '') || '';
           if (telKey && assignment.assigned_user_id) {
             const userName = assignedUserNamesMap.get(assignment.assigned_user_id) || 'Usuário';
-            assignmentsMap.set(telKey, { id: assignment.assigned_user_id, name: userName });
+            assignmentsMap.set(telKey, {
+              id: assignment.assigned_user_id,
+              name: userName
+            });
           }
         });
         console.log('👥 [LOAD] Responsáveis carregados:', assignmentsMap.size, 'conversas com responsável');
@@ -2994,14 +2995,15 @@ function Conversas() {
           return {
             id: m.id || `msg-${Date.now()}-${Math.random()}`,
             content: m.mensagem || '',
-            type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem === 'image' ? 'image' : m.tipo_mensagem === 'audio' ? 'audio' : m.tipo_mensagem === 'video' ? 'video' : (m.tipo_mensagem === 'document' || m.tipo_mensagem === 'pdf') ? 'pdf' : m.tipo_mensagem || 'text') as any,
+            type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem === 'image' ? 'image' : m.tipo_mensagem === 'audio' ? 'audio' : m.tipo_mensagem === 'video' ? 'video' : m.tipo_mensagem === 'document' || m.tipo_mensagem === 'pdf' ? 'pdf' : m.tipo_mensagem || 'text') as any,
             sender: sender,
             timestamp: new Date(m.created_at || Date.now()),
             delivered: m.delivered === true || m.status === 'Enviada',
-            read: m.read === true, // ⚡ CORREÇÃO: Usar campo read do banco (true = contato visualizou)
+            read: m.read === true,
+            // ⚡ CORREÇÃO: Usar campo read do banco (true = contato visualizou)
             mediaUrl: m.midia_url,
             fileName: m.arquivo_nome,
-            mimeType: m.tipo_mensagem === 'video' ? 'video/mp4' : m.tipo_mensagem === 'audio' ? 'audio/mpeg' : m.tipo_mensagem === 'image' ? 'image/jpeg' : (m.tipo_mensagem === 'document' || m.tipo_mensagem === 'pdf') ? 'application/pdf' : undefined,
+            mimeType: m.tipo_mensagem === 'video' ? 'video/mp4' : m.tipo_mensagem === 'audio' ? 'audio/mpeg' : m.tipo_mensagem === 'image' ? 'image/jpeg' : m.tipo_mensagem === 'document' || m.tipo_mensagem === 'pdf' ? 'application/pdf' : undefined,
             sentBy: sentBy // Nome do usuário que enviou
           };
         });
@@ -3060,15 +3062,19 @@ function Conversas() {
           channel: "whatsapp" as const,
           status: statusConversa,
           lastMessage: messagensFormatadas[messagensFormatadas.length - 1]?.content || '',
-          unread: (messagensFormatadas.length > 0 && messagensFormatadas[messagensFormatadas.length - 1]?.sender === 'contact') ? 1 : 0,
+          unread: messagensFormatadas.length > 0 && messagensFormatadas[messagensFormatadas.length - 1]?.sender === 'contact' ? 1 : 0,
           messages: messagensFormatadas,
           tags: [],
           phoneNumber: telefone,
           avatarUrl: isGroup ? `https://ui-avatars.com/api/?name=${encodeURIComponent('Grupo')}&background=10b981&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`,
           isGroup: isGroup,
           // ⚡ CORREÇÃO: Incluir assignedUser com id e nome para filtros funcionarem
-          responsavel: assignedUserData?.id || undefined, // ID do responsável para filtros
-          assignedUser: assignedUserData ? { id: assignedUserData.id, name: assignedUserData.name } : undefined // Objeto completo para exibição
+          responsavel: assignedUserData?.id || undefined,
+          // ID do responsável para filtros
+          assignedUser: assignedUserData ? {
+            id: assignedUserData.id,
+            name: assignedUserData.name
+          } : undefined // Objeto completo para exibição
         };
 
         // ⚡ LOG: Debug de conversa criada
@@ -3110,26 +3116,25 @@ function Conversas() {
           // ⚡ CORREÇÃO CRÍTICA: Mesclar mensagens de conversas existentes com novas mensagens
           // Em vez de filtrar conversas duplicadas, mesclar as mensagens
           const conversasMap = new Map<string, any>();
-          
+
           // Primeiro, adicionar todas as conversas existentes ao mapa
           prev.forEach(conv => {
             const tel = conv.phoneNumber || conv.id;
-            conversasMap.set(tel, { ...conv });
+            conversasMap.set(tel, {
+              ...conv
+            });
           });
-          
+
           // Agora, mesclar novas conversas/mensagens
           let conversasNovasCount = 0;
           let mensagensNovasCount = 0;
-          
           novasConversas.forEach(novaConv => {
             const tel = novaConv.phoneNumber || novaConv.id;
             const existente = conversasMap.get(tel);
-            
             if (existente) {
               // Conversa já existe - mesclar mensagens
               const idsExistentes = new Set(existente.messages.map((m: any) => m.id));
               const novasMensagens = novaConv.messages.filter(m => !idsExistentes.has(m.id));
-              
               if (novasMensagens.length > 0) {
                 mensagensNovasCount += novasMensagens.length;
                 const todasMensagens = [...existente.messages, ...novasMensagens].sort((a, b) => {
@@ -3149,11 +3154,9 @@ function Conversas() {
               conversasMap.set(tel, novaConv);
             }
           });
-          
           const merged = Array.from(conversasMap.values());
-          
           console.log(`✅ [APPEND] ${conversasNovasCount} conversas novas, ${mensagensNovasCount} mensagens adicionadas a conversas existentes`);
-          
+
           // Se não encontrou NENHUMA novidade (nem conversas nem mensagens), não há mais para carregar
           if (conversasNovasCount === 0 && mensagensNovasCount === 0) {
             console.log('⚠️ [APPEND] Nenhuma novidade encontrada (todas as conversas e mensagens já estão carregadas)');
@@ -3161,7 +3164,7 @@ function Conversas() {
             toast.info('Todas as conversas já estão carregadas');
             return prev;
           }
-          
+
           // Salvar no cache COM company_id
           try {
             sessionStorage.setItem(CONVERSATIONS_CACHE_KEY, JSON.stringify(merged));
@@ -3172,16 +3175,14 @@ function Conversas() {
           } catch (e) {
             console.warn('⚠️ [CACHE] Erro ao salvar cache:', e);
           }
-          
+
           // Verificar se ainda pode ter mais dados
           // Se carregamos menos do que o limite, provavelmente não há mais
           if (novasConversas.length === 0) {
             setHasMoreConversations(false);
           }
-          
           return merged;
         });
-        
         const novasCount = novasConversas.filter(conv => {
           const tel = conv.phoneNumber || conv.id;
           return !conversations.some(c => (c.phoneNumber || c.id) === tel);
@@ -3241,7 +3242,8 @@ function Conversas() {
                 // Atualizar última mensagem
                 status: statusFinal,
                 // ⚡ Status atualizado baseado na última mensagem
-                isGroup: conversaExistente.isGroup, // ⚡ PRESERVAR flag de grupo
+                isGroup: conversaExistente.isGroup,
+                // ⚡ PRESERVAR flag de grupo
                 avatarUrl: conversaExistente.avatarUrl || novaConv.avatarUrl // ⚡ PRESERVAR avatar
               };
             }
@@ -3262,7 +3264,8 @@ function Conversas() {
               ...novaConv,
               status: statusFinal,
               // ⚡ Status atualizado baseado na última mensagem
-              isGroup: conversaExistente?.isGroup ?? novaConv.isGroup, // ⚡ PRESERVAR flag de grupo
+              isGroup: conversaExistente?.isGroup ?? novaConv.isGroup,
+              // ⚡ PRESERVAR flag de grupo
               avatarUrl: conversaExistente?.avatarUrl || novaConv.avatarUrl // ⚡ PRESERVAR avatar
             };
           });
@@ -3543,7 +3546,8 @@ function Conversas() {
             sender: sender,
             timestamp: new Date(m.created_at || Date.now()),
             delivered: m.delivered === true || m.status === 'Enviada',
-            read: m.read === true, // ⚡ CORREÇÃO: Usar campo read do banco (true = contato visualizou)
+            read: m.read === true,
+            // ⚡ CORREÇÃO: Usar campo read do banco (true = contato visualizou)
             mediaUrl: m.midia_url,
             fileName: m.arquivo_nome
           };
@@ -5203,18 +5207,17 @@ function Conversas() {
             const fileExt = reminderMediaFile.name.split('.').pop();
             const fileName = `reminder_${Date.now()}.${fileExt}`;
             const filePath = `${companyId}/${fileName}`;
-            
-            const { data: uploadData, error: uploadError } = await supabase.storage
-              .from('conversation-media')
-              .upload(filePath, reminderMediaFile);
-            
+            const {
+              data: uploadData,
+              error: uploadError
+            } = await supabase.storage.from('conversation-media').upload(filePath, reminderMediaFile);
             if (uploadError) {
               console.error('Erro ao fazer upload da mídia:', uploadError);
               toast.warning("Lembrete será criado sem mídia - erro no upload");
             } else {
-              const { data: urlData } = supabase.storage
-                .from('conversation-media')
-                .getPublicUrl(filePath);
+              const {
+                data: urlData
+              } = supabase.storage.from('conversation-media').getPublicUrl(filePath);
               midiaUrl = urlData.publicUrl;
               console.log('✅ Mídia do lembrete uploaded:', midiaUrl);
             }
@@ -7144,7 +7147,7 @@ function Conversas() {
         {/* Header - Fixo, não move com scroll */}
         <div className="px-3 py-4 bg-background border-b border-border flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-semibold text-foreground">Conversas</h1>
+            <h1 className="text-xl font-semibold text-foreground">Bate-Papo</h1>
             <div className="flex gap-2 items-center">
               <NovaConversaDialog onNovaConversa={async (nome, numero) => {
               try {
@@ -7537,7 +7540,10 @@ function Conversas() {
                   {/* Filas */}
                   {queues.length > 0 && <div className="space-y-2">
                       <h4 className="text-sm font-medium">Filas</h4>
-                      {queues.map(q => <Button key={q.id} variant="outline" className="w-full justify-start" onClick={() => { assignConversationToQueue(q.id, q.name); setTransferDialogOpen(false); }}>
+                      {queues.map(q => <Button key={q.id} variant="outline" className="w-full justify-start" onClick={() => {
+                  assignConversationToQueue(q.id, q.name);
+                  setTransferDialogOpen(false);
+                }}>
                           📥 {q.name}
                         </Button>)}
                       <div className="flex items-center gap-2">
@@ -7555,14 +7561,20 @@ function Conversas() {
                   {/* Agentes */}
                   <div className="space-y-2">
                     <h4 className="text-sm font-medium">Agentes</h4>
-                    {companyUsers.length === 0 ? <p className="text-xs text-muted-foreground">Carregando usuários...</p> : companyUsers.map(user => <Button key={user.id} variant="outline" className="w-full justify-start" onClick={() => { assignConversationToUser(user.id, user.name); setTransferDialogOpen(false); }}>
+                    {companyUsers.length === 0 ? <p className="text-xs text-muted-foreground">Carregando usuários...</p> : companyUsers.map(user => <Button key={user.id} variant="outline" className="w-full justify-start" onClick={() => {
+                  assignConversationToUser(user.id, user.name);
+                  setTransferDialogOpen(false);
+                }}>
                           👤 {user.name}
                         </Button>)}
                   </div>
                   {/* Membros da fila selecionada */}
                   {selectedQueueId && <div className="space-y-2">
                       <h4 className="text-sm font-medium">Membros da Fila</h4>
-                      {queueMembers.length === 0 ? <p className="text-xs text-muted-foreground">Nenhum membro na fila selecionada.</p> : queueMembers.map(m => <Button key={`m-header-${m.id}`} variant="outline" className="w-full justify-start" onClick={() => { assignConversationToUser(m.id, m.name); setTransferDialogOpen(false); }}>
+                      {queueMembers.length === 0 ? <p className="text-xs text-muted-foreground">Nenhum membro na fila selecionada.</p> : queueMembers.map(m => <Button key={`m-header-${m.id}`} variant="outline" className="w-full justify-start" onClick={() => {
+                  assignConversationToUser(m.id, m.name);
+                  setTransferDialogOpen(false);
+                }}>
                             👤 {m.name}
                           </Button>)}
                     </div>}
@@ -7747,7 +7759,9 @@ function Conversas() {
               </div>
 
               {/* Info Panel - COM SCROLL */}
-              {showInfoPanel && <div className="w-[340px] bg-background border-l border-border flex flex-col flex-shrink-0" style={{ height: 'calc(100vh - 64px)' }}>
+              {showInfoPanel && <div className="w-[340px] bg-background border-l border-border flex flex-col flex-shrink-0" style={{
+            height: 'calc(100vh - 64px)'
+          }}>
                   <div className="p-6 space-y-6 flex-1 overflow-y-auto pb-32">
                     {/* Contact Info */}
                     <div className="text-center">
@@ -8605,61 +8619,36 @@ function Conversas() {
                                       <div>
                                         <Label>Anexar Imagem (opcional)</Label>
                                         <div className="mt-2">
-                                          {reminderMediaPreview ? (
-                                            <div className="relative inline-block">
-                                              <img 
-                                                src={reminderMediaPreview} 
-                                                alt="Preview" 
-                                                className="max-w-[200px] max-h-[150px] rounded-lg border object-cover"
-                                              />
-                                              <Button
-                                                type="button"
-                                                variant="destructive"
-                                                size="icon"
-                                                className="absolute -top-2 -right-2 h-6 w-6"
-                                                onClick={() => {
-                                                  setReminderMediaFile(null);
-                                                  setReminderMediaPreview(null);
-                                                }}
-                                              >
+                                          {reminderMediaPreview ? <div className="relative inline-block">
+                                              <img src={reminderMediaPreview} alt="Preview" className="max-w-[200px] max-h-[150px] rounded-lg border object-cover" />
+                                              <Button type="button" variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6" onClick={() => {
+                                      setReminderMediaFile(null);
+                                      setReminderMediaPreview(null);
+                                    }}>
                                                 <X className="h-3 w-3" />
                                               </Button>
-                                            </div>
-                                          ) : (
-                                            <div className="flex items-center gap-2">
-                                              <input
-                                                type="file"
-                                                id="reminder-media-upload"
-                                                className="hidden"
-                                                accept="image/*"
-                                                onChange={(e) => {
-                                                  const file = e.target.files?.[0];
-                                                  if (file) {
-                                                    if (file.size > 16 * 1024 * 1024) {
-                                                      toast.error("Arquivo muito grande. Máximo 16MB");
-                                                      return;
-                                                    }
-                                                    setReminderMediaFile(file);
-                                                    const reader = new FileReader();
-                                                    reader.onloadend = () => {
-                                                      setReminderMediaPreview(reader.result as string);
-                                                    };
-                                                    reader.readAsDataURL(file);
-                                                  }
-                                                  e.target.value = '';
-                                                }}
-                                              />
-                                              <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => document.getElementById('reminder-media-upload')?.click()}
-                                              >
+                                            </div> : <div className="flex items-center gap-2">
+                                              <input type="file" id="reminder-media-upload" className="hidden" accept="image/*" onChange={e => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        if (file.size > 16 * 1024 * 1024) {
+                                          toast.error("Arquivo muito grande. Máximo 16MB");
+                                          return;
+                                        }
+                                        setReminderMediaFile(file);
+                                        const reader = new FileReader();
+                                        reader.onloadend = () => {
+                                          setReminderMediaPreview(reader.result as string);
+                                        };
+                                        reader.readAsDataURL(file);
+                                      }
+                                      e.target.value = '';
+                                    }} />
+                                              <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('reminder-media-upload')?.click()}>
                                                 <ImageIcon className="h-4 w-4 mr-2" />
                                                 Selecionar Imagem
                                               </Button>
-                                            </div>
-                                          )}
+                                            </div>}
                                         </div>
                                         <p className="text-xs text-muted-foreground mt-1">
                                           A imagem será enviada junto com a mensagem do lembrete
