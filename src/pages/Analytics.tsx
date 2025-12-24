@@ -973,7 +973,7 @@ export default function Analytics() {
             <CardHeader className="relative">
               <CardTitle className="text-2xl font-bold flex items-center gap-2">
                 <Activity className="h-6 w-6 text-primary" />
-                CEUSIA CRM - Sistema Multiempresa
+                 Waze Platform - Sistema Operacional e Comercial de Atendimento e Vendas                                          
               </CardTitle>
               <p className="text-muted-foreground mt-2">
                 Plataforma completa de gestão comercial com IA integrada
