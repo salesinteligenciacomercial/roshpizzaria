@@ -10,12 +10,10 @@ import { CallHistory } from '@/components/discador/CallHistory';
 import { SDRDashboard } from '@/components/discador/SDRDashboard';
 import { StartCallFromLeadDialog } from '@/components/discador/StartCallFromLeadDialog';
 import { supabase } from '@/integrations/supabase/client';
-
 const Discador = () => {
   const [activeTab, setActiveTab] = useState('fazer-ligacao');
   const [showCallDialog, setShowCallDialog] = useState(false);
   const [showNotesDialog, setShowNotesDialog] = useState(false);
-  
   const {
     callState,
     callHistory,
@@ -27,7 +25,6 @@ const Discador = () => {
     loadCallHistory,
     getSDRMetrics
   } = useCallCenter();
-
   useEffect(() => {
     loadCallHistory();
   }, [loadCallHistory]);
@@ -38,42 +35,34 @@ const Discador = () => {
       setShowNotesDialog(true);
     }
   }, [callState.status, callState.isActive]);
-
   const handleStartCall = async (leadId: string, leadName: string, phoneNumber: string) => {
     const success = await startCall(leadId, leadName, phoneNumber);
     if (success) {
       setShowCallDialog(false);
     }
   };
-
   const handleEndCall = () => {
     endCall();
   };
-
   const handleSaveNotes = async (notes: string, result: string) => {
     // Update call result first
     if (callState.callRecordId) {
-      await supabase
-        .from('call_history')
-        .update({ call_result: result })
-        .eq('id', callState.callRecordId);
+      await supabase.from('call_history').update({
+        call_result: result
+      }).eq('id', callState.callRecordId);
     }
-    
     const success = await saveCallNotes(notes);
     if (success) {
       setShowNotesDialog(false);
       loadCallHistory();
     }
   };
-
-  return (
-    <>
+  return <>
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold flex items-center gap-3">
-              <PhoneCall className="w-8 h-8 text-primary" />
+            <h1 className="text-3xl font-bold flex items-center gap-3">Call Center<PhoneCall className="w-8 h-8 text-primary" />
               Discador
             </h1>
             <p className="text-muted-foreground mt-1">
@@ -131,20 +120,20 @@ const Discador = () => {
                     <span className="text-muted-foreground">Ligações realizadas</span>
                     <span className="font-bold text-lg">
                       {callHistory.filter(c => {
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        return new Date(c.call_start) >= today;
-                      }).length}
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      return new Date(c.call_start) >= today;
+                    }).length}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Atendidas</span>
                     <span className="font-bold text-lg text-green-500">
                       {callHistory.filter(c => {
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        return new Date(c.call_start) >= today && c.call_result === 'atendida';
-                      }).length}
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      return new Date(c.call_start) >= today && c.call_result === 'atendida';
+                    }).length}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -173,12 +162,7 @@ const Discador = () => {
 
           {/* Tab: Histórico */}
           <TabsContent value="historico">
-            <CallHistory
-              calls={callHistory}
-              isLoading={isLoading}
-              onRefresh={loadCallHistory}
-              onCallLead={handleStartCall}
-            />
+            <CallHistory calls={callHistory} isLoading={isLoading} onRefresh={loadCallHistory} onCallLead={handleStartCall} />
           </TabsContent>
 
           {/* Tab: Painel SDR */}
@@ -189,37 +173,13 @@ const Discador = () => {
       </div>
 
       {/* Start Call Dialog */}
-      <StartCallFromLeadDialog
-        open={showCallDialog}
-        onClose={() => setShowCallDialog(false)}
-        onStartCall={handleStartCall}
-      />
+      <StartCallFromLeadDialog open={showCallDialog} onClose={() => setShowCallDialog(false)} onStartCall={handleStartCall} />
 
       {/* Active Call Modal */}
-      {callState.isActive && callState.status !== 'finalizado' && (
-        <CallModal
-          open={true}
-          onClose={() => {}}
-          leadName={callState.leadName}
-          phoneNumber={callState.phoneNumber}
-          status={callState.status}
-          duration={callState.duration}
-          isMuted={callState.isMuted}
-          onEndCall={handleEndCall}
-          onToggleMute={toggleMute}
-        />
-      )}
+      {callState.isActive && callState.status !== 'finalizado' && <CallModal open={true} onClose={() => {}} leadName={callState.leadName} phoneNumber={callState.phoneNumber} status={callState.status} duration={callState.duration} isMuted={callState.isMuted} onEndCall={handleEndCall} onToggleMute={toggleMute} />}
 
       {/* Post-Call Notes Dialog */}
-      <PostCallNotesDialog
-        open={showNotesDialog}
-        leadName={callState.leadName}
-        phoneNumber={callState.phoneNumber}
-        duration={callState.duration}
-        onSave={handleSaveNotes}
-      />
-    </>
-  );
+      <PostCallNotesDialog open={showNotesDialog} leadName={callState.leadName} phoneNumber={callState.phoneNumber} duration={callState.duration} onSave={handleSaveNotes} />
+    </>;
 };
-
 export default Discador;
