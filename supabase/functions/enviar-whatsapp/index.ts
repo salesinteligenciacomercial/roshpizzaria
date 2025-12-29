@@ -19,7 +19,7 @@ const enviarWhatsAppSchema = z.object({
     const isContactJid = /@s\.whatsapp\.net$/.test(val);
     return isDigits || isGroupJid || isContactJid;
   }, 'Informe dígitos (10-15), JID de contato @s.whatsapp.net ou grupo @g.us'),
-  mensagem: z.string().max(4096, 'Mensagem muito longa').optional(),
+  mensagem: z.string().max(65536, 'Mensagem muito longa').optional(),
   tipo_mensagem: z.enum(['text', 'texto', 'image', 'audio', 'video', 'document', 'pdf']).optional(),
   mediaUrl: z.string().url('URL de mídia inválida').optional(),
   mediaBase64: z.string().optional(),
