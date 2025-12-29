@@ -283,7 +283,7 @@ function MessageItemComponent({
           {/* Text Message */}
           {message.type === "text" && (
             <div className="max-w-full">
-              <p className="text-sm break-words overflow-wrap-anywhere">{message.content}</p>
+              <p className="text-sm break-words overflow-wrap-anywhere whitespace-pre-wrap">{message.content}</p>
               {message.edited && (
                 <span className="text-[10px] text-muted-foreground italic"> (editado)</span>
               )}
