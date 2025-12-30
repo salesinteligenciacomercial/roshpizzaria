@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Building2, Plus, Pencil, Trash2, Users, RefreshCw, CheckCircle2, AlertCircle, UsersRound, Bot } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Users, RefreshCw, CheckCircle2, AlertCircle, UsersRound, Bot, MessageSquare, Video, Phone, Target, Workflow } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +32,12 @@ interface Subconta {
   settings: any;
   allow_group_messages: boolean;
   allow_ai_features: boolean;
+  // Módulos Premium
+  allow_chat_equipe: boolean;
+  allow_reunioes: boolean;
+  allow_discador: boolean;
+  allow_processos_comerciais: boolean;
+  allow_automacao: boolean;
 }
 
 export function SubcontasManager() {
@@ -317,6 +323,44 @@ export function SubcontasManager() {
     }
   };
 
+  // Toggle genérico para módulos premium
+  const toggleModuloPremium = async (
+    subcontaId: string, 
+    campo: 'allow_chat_equipe' | 'allow_reunioes' | 'allow_discador' | 'allow_processos_comerciais' | 'allow_automacao',
+    currentValue: boolean,
+    nomeModulo: string
+  ) => {
+    try {
+      const newValue = !currentValue;
+      
+      const { error } = await supabase
+        .from('companies')
+        .update({ [campo]: newValue })
+        .eq('id', subcontaId);
+
+      if (error) throw error;
+
+      // Atualizar estado local
+      setSubcontas(prev => prev.map(s => 
+        s.id === subcontaId ? { ...s, [campo]: newValue } : s
+      ));
+
+      toast({
+        title: newValue ? `${nomeModulo} Ativado` : `${nomeModulo} Desativado`,
+        description: newValue 
+          ? `Esta subconta agora pode acessar o módulo ${nomeModulo}.`
+          : `Esta subconta não terá mais acesso ao módulo ${nomeModulo}.`,
+      });
+    } catch (error: any) {
+      console.error(`Erro ao alterar configuração de ${nomeModulo}:`, error);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao alterar configuração',
+        description: error.message,
+      });
+    }
+  };
+
   const getPlanBadge = (plan: string) => {
     const variants: Record<string, any> = {
       free: 'secondary',
@@ -439,7 +483,7 @@ export function SubcontasManager() {
                         <strong>Contato:</strong> {subconta.settings.responsavel} • {subconta.settings.email}
                       </div>
                     )}
-                    {/* Toggles de Funcionalidades */}
+                    {/* Toggles de Funcionalidades Básicas */}
                     <div className="flex flex-wrap items-center gap-4 mt-2 pt-2 border-t border-border/50">
                       {/* Toggle de Grupos */}
                       <div className="flex items-center gap-2">
@@ -465,6 +509,66 @@ export function SubcontasManager() {
                         <span className={`text-xs font-medium ${subconta.allow_ai_features ? 'text-green-600' : 'text-muted-foreground'}`}>
                           {subconta.allow_ai_features ? 'Ativo' : 'Inativo'}
                         </span>
+                      </div>
+                    </div>
+
+                    {/* Toggles de Módulos Premium */}
+                    <div className="flex flex-wrap items-center gap-3 mt-2 pt-2 border-t border-border/50">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Módulos Premium:</span>
+                      
+                      {/* Chat Equipe */}
+                      <div className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1">
+                        <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Chat</span>
+                        <Switch
+                          className="scale-75"
+                          checked={subconta.allow_chat_equipe || false}
+                          onCheckedChange={() => toggleModuloPremium(subconta.id, 'allow_chat_equipe', subconta.allow_chat_equipe || false, 'Chat Equipe')}
+                        />
+                      </div>
+                      
+                      {/* Reuniões */}
+                      <div className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1">
+                        <Video className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Reuniões</span>
+                        <Switch
+                          className="scale-75"
+                          checked={subconta.allow_reunioes || false}
+                          onCheckedChange={() => toggleModuloPremium(subconta.id, 'allow_reunioes', subconta.allow_reunioes || false, 'Reuniões')}
+                        />
+                      </div>
+                      
+                      {/* Discador */}
+                      <div className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1">
+                        <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Discador</span>
+                        <Switch
+                          className="scale-75"
+                          checked={subconta.allow_discador || false}
+                          onCheckedChange={() => toggleModuloPremium(subconta.id, 'allow_discador', subconta.allow_discador || false, 'Discador')}
+                        />
+                      </div>
+                      
+                      {/* Processos Comerciais */}
+                      <div className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1">
+                        <Target className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Processos</span>
+                        <Switch
+                          className="scale-75"
+                          checked={subconta.allow_processos_comerciais || false}
+                          onCheckedChange={() => toggleModuloPremium(subconta.id, 'allow_processos_comerciais', subconta.allow_processos_comerciais || false, 'Processos Comerciais')}
+                        />
+                      </div>
+                      
+                      {/* Automação */}
+                      <div className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1">
+                        <Workflow className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Automação</span>
+                        <Switch
+                          className="scale-75"
+                          checked={subconta.allow_automacao || false}
+                          onCheckedChange={() => toggleModuloPremium(subconta.id, 'allow_automacao', subconta.allow_automacao || false, 'Automação')}
+                        />
                       </div>
                     </div>
                   </div>

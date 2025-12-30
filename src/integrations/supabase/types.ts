@@ -317,7 +317,12 @@ export type Database = {
       companies: {
         Row: {
           allow_ai_features: boolean | null
+          allow_automacao: boolean | null
+          allow_chat_equipe: boolean | null
+          allow_discador: boolean | null
           allow_group_messages: boolean | null
+          allow_processos_comerciais: boolean | null
+          allow_reunioes: boolean | null
           cnpj: string | null
           created_at: string | null
           created_by: string | null
@@ -337,7 +342,12 @@ export type Database = {
         }
         Insert: {
           allow_ai_features?: boolean | null
+          allow_automacao?: boolean | null
+          allow_chat_equipe?: boolean | null
+          allow_discador?: boolean | null
           allow_group_messages?: boolean | null
+          allow_processos_comerciais?: boolean | null
+          allow_reunioes?: boolean | null
           cnpj?: string | null
           created_at?: string | null
           created_by?: string | null
@@ -357,7 +367,12 @@ export type Database = {
         }
         Update: {
           allow_ai_features?: boolean | null
+          allow_automacao?: boolean | null
+          allow_chat_equipe?: boolean | null
+          allow_discador?: boolean | null
           allow_group_messages?: boolean | null
+          allow_processos_comerciais?: boolean | null
+          allow_reunioes?: boolean | null
           cnpj?: string | null
           created_at?: string | null
           created_by?: string | null

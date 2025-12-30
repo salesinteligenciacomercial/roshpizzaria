@@ -1,12 +1,13 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, MessageSquare, Calendar, Bot, Settings, LogOut, MessagesSquare, Video, PhoneCall, Target } from "lucide-react";
+import { LayoutDashboard, Users, MessageSquare, Calendar, Bot, Settings, LogOut, MessagesSquare, Video, PhoneCall, Target, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useModuleAccess } from "@/hooks/useModuleAccess";
 import { useInternalChat } from "@/hooks/useInternalChat";
 const navigation = [{
   name: "Analytics",
@@ -86,9 +87,17 @@ export function Sidebar({
     loading: permissionsLoading
   } = usePermissions();
   const {
+    canAccessModule,
+    loading: moduleLoading,
+    isMasterAccount
+  } = useModuleAccess();
+  const {
     getTotalUnread
   } = useInternalChat();
   const totalUnread = getTotalUnread();
+
+  // Módulos premium que requerem liberação
+  const premiumModules = ['automacao', 'chat-equipe', 'reunioes', 'discador', 'processos'];
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
@@ -133,36 +142,92 @@ export function Sidebar({
       <TooltipProvider delayDuration={0}>
         <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
           {navigation.filter(item => {
-          if (permissionsLoading) return true;
-          if (item.menuKey === 'chat-equipe') return true; // Always show chat
+          if (permissionsLoading || moduleLoading) return true;
+          if (item.menuKey === 'configuracoes') return true; // Always show config
+          
+          // Verificar se é módulo premium
+          const isPremiumModule = premiumModules.includes(item.menuKey);
+          if (isPremiumModule && !isMasterAccount) {
+            // Verificar se tem acesso ao módulo
+            return canAccessModule(item.menuKey);
+          }
+          
           return canAccess(item.menuKey || '');
-        }).map(item => <Tooltip key={item.name}>
+        }).map(item => {
+          const isPremiumModule = premiumModules.includes(item.menuKey);
+          const hasModuleAccess = isMasterAccount || canAccessModule(item.menuKey);
+          const isLocked = isPremiumModule && !hasModuleAccess && !moduleLoading;
+          
+          return (
+            <Tooltip key={item.name}>
               <TooltipTrigger asChild>
-                <NavLink to={item.href} className={({
-              isActive
-            }) => `group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 ${isActive ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md shadow-primary/20" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-1"} ${effectiveCollapsed ? "justify-center" : ""}`}>
+                <NavLink 
+                  to={isLocked ? "#" : item.href} 
+                  onClick={(e) => {
+                    if (isLocked) {
+                      e.preventDefault();
+                      toast({
+                        title: "Módulo Premium",
+                        description: `O módulo ${item.name} requer ativação. Entre em contato com o administrador.`,
+                        variant: "destructive"
+                      });
+                    }
+                  }}
+                  className={({
+                    isActive
+                  }) => `group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 ${
+                    isLocked 
+                      ? "text-sidebar-foreground/40 cursor-not-allowed" 
+                      : isActive 
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md shadow-primary/20" 
+                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-1"
+                  } ${effectiveCollapsed ? "justify-center" : ""}`}
+                >
                   {({
-                isActive
-              }) => <>
-                      <div className={`p-1.5 rounded-lg transition-colors relative ${isActive ? "bg-white/20" : "bg-sidebar-accent/30 group-hover:bg-sidebar-accent"}`}>
+                    isActive
+                  }) => <>
+                      <div className={`p-1.5 rounded-lg transition-colors relative ${
+                        isLocked
+                          ? "bg-sidebar-accent/20"
+                          : isActive 
+                            ? "bg-white/20" 
+                            : "bg-sidebar-accent/30 group-hover:bg-sidebar-accent"
+                      }`}>
                         <item.icon className="h-4 w-4" />
-                        {item.showBadge && totalUnread > 0 && effectiveCollapsed && <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-destructive text-destructive-foreground">
+                        {isLocked && !effectiveCollapsed && (
+                          <Lock className="h-3 w-3 absolute -top-1 -right-1 text-muted-foreground" />
+                        )}
+                        {item.showBadge && totalUnread > 0 && effectiveCollapsed && !isLocked && (
+                          <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-destructive text-destructive-foreground">
                             {totalUnread > 99 ? '99+' : totalUnread}
-                          </Badge>}
+                          </Badge>
+                        )}
                       </div>
-                      {!effectiveCollapsed && <span className="flex-1 flex items-center justify-between">
+                      {!effectiveCollapsed && (
+                        <span className="flex-1 flex items-center justify-between">
                           {item.name}
-                          {item.showBadge && totalUnread > 0 && <Badge variant="destructive" className="ml-2 text-xs">
+                          {isLocked && (
+                            <Lock className="h-3 w-3 text-muted-foreground" />
+                          )}
+                          {item.showBadge && totalUnread > 0 && !isLocked && (
+                            <Badge variant="destructive" className="ml-2 text-xs">
                               {totalUnread > 99 ? '99+' : totalUnread}
-                            </Badge>}
-                        </span>}
-                    </>}
+                            </Badge>
+                          )}
+                        </span>
+                      )}
+                    </>
+                  }
                 </NavLink>
               </TooltipTrigger>
-              {effectiveCollapsed && <TooltipContent side="right" className="font-medium">
-                  {item.name} {item.showBadge && totalUnread > 0 && `(${totalUnread})`}
-                </TooltipContent>}
-            </Tooltip>)}
+              {effectiveCollapsed && (
+                <TooltipContent side="right" className="font-medium">
+                  {item.name} {isLocked ? "(Bloqueado)" : item.showBadge && totalUnread > 0 ? `(${totalUnread})` : ""}
+                </TooltipContent>
+              )}
+            </Tooltip>
+          );
+        })}
         </nav>
       </TooltipProvider>
 
