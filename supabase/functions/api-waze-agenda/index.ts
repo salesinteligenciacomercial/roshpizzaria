@@ -401,6 +401,13 @@ Deno.serve(async (req) => {
         )
       }
 
+      // Se não foi passada uma agenda_id, buscar a agenda do profissional automaticamente
+      let agendaIdFinal = agenda_id
+      if (!agendaIdFinal && agendaIds.length > 0) {
+        agendaIdFinal = agendaIds[0] // Usar a primeira agenda vinculada ao profissional
+        console.log('[api-waze-agenda] Usando agenda do profissional automaticamente:', agendaIdFinal)
+      }
+
       const { data: novoCompromisso, error } = await supabaseAdmin
         .from('compromissos')
         .insert({
@@ -413,7 +420,7 @@ Deno.serve(async (req) => {
           paciente,
           telefone,
           lead_id,
-          agenda_id,
+          agenda_id: agendaIdFinal,
           profissional_id: profissional.id,
           company_id: profissional.company_id,
           owner_id: user.id,
@@ -662,12 +669,32 @@ Deno.serve(async (req) => {
       }
 
       // Buscar compromisso existente com dados completos
-      const { data: existente } = await supabaseAdmin
+      // Permite buscar por profissional_id OU agenda_id vinculada para sincronização
+      let existente = null
+      
+      // Primeiro tentar buscar por profissional_id
+      const { data: compPorProfissional } = await supabaseAdmin
         .from('compromissos')
         .select('*, lead:leads(name, phone, telefone)')
         .eq('id', id)
         .eq('profissional_id', profissional.id)
         .single()
+      
+      if (compPorProfissional) {
+        existente = compPorProfissional
+      } else if (agendaIds.length > 0) {
+        // Se não encontrou por profissional_id, tentar por agenda_id vinculada
+        const { data: compPorAgenda } = await supabaseAdmin
+          .from('compromissos')
+          .select('*, lead:leads(name, phone, telefone)')
+          .eq('id', id)
+          .in('agenda_id', agendaIds)
+          .single()
+        
+        if (compPorAgenda) {
+          existente = compPorAgenda
+        }
+      }
 
       if (!existente) {
         return new Response(

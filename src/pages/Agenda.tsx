@@ -890,10 +890,21 @@ export default function Agenda() {
     try {
       const dataInicio = new Date(formData.data + "T00:00:00");
       const dataFim = new Date(formData.data + "T23:59:59");
-      let query = supabase.from("compromissos").select("id, data_hora_inicio, data_hora_fim, agenda_id").gte("data_hora_inicio", dataInicio.toISOString()).lte("data_hora_inicio", dataFim.toISOString());
+      let query = supabase.from("compromissos").select("id, data_hora_inicio, data_hora_fim, agenda_id, profissional_id").gte("data_hora_inicio", dataInicio.toISOString()).lte("data_hora_inicio", dataFim.toISOString());
 
-      // Se uma agenda específica foi selecionada, filtrar apenas os compromissos dessa agenda
-      if (formData.agenda_id) {
+      // Se uma agenda específica foi selecionada, filtrar por agenda_id OU profissional_id
+      // Isso garante sincronização com compromissos criados tanto pelo CRM quanto pelo app Waze Agenda
+      if (formData.agenda_id && formAgendaSelecionada) {
+        const responsavelId = formAgendaSelecionada.responsavel_id;
+        if (responsavelId) {
+          // Filtrar por agenda_id OU profissional_id para capturar todos os compromissos do colaborador
+          query = query.or(`agenda_id.eq.${formData.agenda_id},profissional_id.eq.${responsavelId}`);
+          console.log('📅 [Agenda] Filtrando compromissos por agenda_id ou profissional_id:', formData.agenda_id, responsavelId);
+        } else {
+          query = query.eq("agenda_id", formData.agenda_id);
+          console.log('📅 [Agenda] Filtrando compromissos por agenda_id:', formData.agenda_id);
+        }
+      } else if (formData.agenda_id) {
         query = query.eq("agenda_id", formData.agenda_id);
         console.log('📅 [Agenda] Filtrando compromissos por agenda_id:', formData.agenda_id);
       } else {
@@ -907,10 +918,15 @@ export default function Agenda() {
         if (user) {
           const {
             data: agendaPrincipal
-          } = await supabase.from("agendas").select("id").eq("owner_id", user.id).eq("tipo", "principal").single();
+          } = await supabase.from("agendas").select("id, responsavel_id").eq("owner_id", user.id).eq("tipo", "principal").single();
           if (agendaPrincipal) {
-            // Buscar compromissos da agenda principal OU compromissos sem agenda
-            query = query.or(`agenda_id.eq.${agendaPrincipal.id},agenda_id.is.null`);
+            if (agendaPrincipal.responsavel_id) {
+              // Buscar compromissos da agenda principal OU compromissos do profissional vinculado OU compromissos sem agenda
+              query = query.or(`agenda_id.eq.${agendaPrincipal.id},profissional_id.eq.${agendaPrincipal.responsavel_id},agenda_id.is.null`);
+            } else {
+              // Buscar compromissos da agenda principal OU compromissos sem agenda
+              query = query.or(`agenda_id.eq.${agendaPrincipal.id},agenda_id.is.null`);
+            }
             console.log('📅 [Agenda] Filtrando compromissos da agenda principal:', agendaPrincipal.id);
           }
         }
@@ -1175,6 +1191,13 @@ export default function Agenda() {
       const agendaId = formData.agenda_id?.trim();
       if (agendaId && agendaId.length > 0) {
         compromissoData.agenda_id = agendaId;
+        
+        // IMPORTANTE: Se uma agenda foi selecionada, definir o profissional_id 
+        // baseado no responsavel_id da agenda para sincronização com app Waze Agenda
+        if (formAgendaSelecionada?.responsavel_id) {
+          compromissoData.profissional_id = formAgendaSelecionada.responsavel_id;
+          console.log('📅 [Agenda] Definindo profissional_id baseado na agenda:', formAgendaSelecionada.responsavel_id);
+        }
       } else {
         compromissoData.agenda_id = null; // Explicitamente null se vazio
       }

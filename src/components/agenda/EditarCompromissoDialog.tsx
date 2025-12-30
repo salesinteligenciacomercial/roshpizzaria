@@ -37,6 +37,7 @@ interface Agenda {
   tipo: string;
   status: string;
   capacidade_simultanea: number;
+  responsavel_id?: string;
   disponibilidade: {
     dias: string[];
     horario_inicio: string;
@@ -425,6 +426,16 @@ export function EditarCompromissoDialog({
         // Preencher titulo com tipo_servico formatado
         titulo: tipoServicoFinal.charAt(0).toUpperCase() + tipoServicoFinal.slice(1),
       };
+
+      // IMPORTANTE: Se uma agenda foi selecionada, definir o profissional_id 
+      // baseado no responsavel_id da agenda para sincronização com app Waze Agenda
+      const agendaSelecionadaParaProf = agendaId ? agendas.find(a => a.id === agendaId) : null;
+      if (agendaSelecionadaParaProf?.responsavel_id) {
+        updateData.profissional_id = agendaSelecionadaParaProf.responsavel_id;
+        console.log('📅 [Agenda] Definindo profissional_id baseado na agenda:', agendaSelecionadaParaProf.responsavel_id);
+      } else {
+        updateData.profissional_id = null;
+      }
 
       // Preencher paciente e telefone com dados do lead para compatibilidade com app Waze Agenda
       if (leadSelecionadoData) {
