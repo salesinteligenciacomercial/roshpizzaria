@@ -73,6 +73,7 @@ interface Compromisso {
   id: string;
   agenda_id?: string;
   lead_id?: string;
+  profissional_id?: string;
   usuario_responsavel_id: string;
   data_hora_inicio: string;
   data_hora_fim: string;
@@ -87,10 +88,15 @@ interface Compromisso {
   lead?: {
     name: string;
     phone?: string;
+    profile_picture_url?: string;
   };
   agenda?: {
     nome: string;
     tipo: string;
+  };
+  profissional?: {
+    nome: string;
+    especialidade?: string;
   };
 }
 interface Lead {
@@ -394,8 +400,9 @@ export default function Agenda() {
     try {
       let query = supabase.from('compromissos').select(`
           *,
-          lead:leads(name, phone),
-          agenda:agendas(nome, tipo)
+          lead:leads(name, phone, profile_picture_url),
+          agenda:agendas(nome, tipo),
+          profissional:profissionais(nome, especialidade)
         `).order('data_hora_inicio', {
         ascending: true
       });
@@ -2672,26 +2679,33 @@ export default function Agenda() {
                                     <CalendarIcon className="h-3 w-3" />
                                     {compromisso.agenda.nome} ({compromisso.agenda.tipo})
                                   </p>}
-                                {/* Exibir lead ou paciente */}
+                                {/* Exibir lead ou paciente com foto */}
                                 {compromisso.lead ? (
                                   <div className="flex items-center gap-2">
                                     <Avatar className="h-6 w-6">
-                                      <AvatarImage src={compromisso.lead_id ? leadAvatars[compromisso.lead_id] : undefined} alt={compromisso.lead.name} onError={e => {
-                                // Se falhar, tentar buscar
-                                if (compromisso.lead_id && compromisso.lead) {
-                                  buscarAvatarLead({
-                                    id: compromisso.lead_id,
-                                    name: compromisso.lead.name,
-                                    phone: compromisso.lead.phone,
-                                    telefone: compromisso.lead.phone
-                                  });
-                                }
-                              }} />
+                                      <AvatarImage 
+                                        src={compromisso.lead.profile_picture_url || (compromisso.lead_id ? leadAvatars[compromisso.lead_id] : undefined)} 
+                                        alt={compromisso.lead.name} 
+                                        onError={e => {
+                                          // Se falhar, tentar buscar
+                                          if (compromisso.lead_id && compromisso.lead) {
+                                            buscarAvatarLead({
+                                              id: compromisso.lead_id,
+                                              name: compromisso.lead.name,
+                                              phone: compromisso.lead.phone,
+                                              telefone: compromisso.lead.phone
+                                            });
+                                          }
+                                        }} 
+                                      />
                                       <AvatarFallback className="h-6 w-6 text-xs bg-primary/10">
                                         {compromisso.lead.name.charAt(0).toUpperCase()}
                                       </AvatarFallback>
                                     </Avatar>
                                     <span className="text-sm">{compromisso.lead.name}</span>
+                                    {compromisso.lead.phone && (
+                                      <span className="text-xs text-muted-foreground">({compromisso.lead.phone})</span>
+                                    )}
                                   </div>
                                 ) : compromisso.paciente && (
                                   <div className="flex items-center gap-2">
@@ -2701,6 +2715,19 @@ export default function Agenda() {
                                       </AvatarFallback>
                                     </Avatar>
                                     <span className="text-sm">{compromisso.paciente}</span>
+                                    {compromisso.telefone && (
+                                      <span className="text-xs text-muted-foreground">({compromisso.telefone})</span>
+                                    )}
+                                  </div>
+                                )}
+                                {/* Exibir profissional/colaborador */}
+                                {compromisso.profissional && (
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <User className="h-3 w-3 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground">
+                                      Colaborador: <strong>{compromisso.profissional.nome}</strong>
+                                      {compromisso.profissional.especialidade && ` (${compromisso.profissional.especialidade})`}
+                                    </span>
                                   </div>
                                 )}
                                 {compromisso.observacoes && <p className="text-xs text-muted-foreground mt-2">
@@ -2858,25 +2885,32 @@ export default function Agenda() {
                                   <CalendarIcon className="h-3 w-3" />
                                   {compromisso.agenda.nome} ({compromisso.agenda.tipo})
                                 </p>}
-                              {/* Exibir lead ou paciente */}
+                              {/* Exibir lead ou paciente com foto */}
                               {compromisso.lead ? (
                                 <div className="flex items-center gap-2">
                                   <Avatar className="h-6 w-6">
-                                    <AvatarImage src={compromisso.lead_id ? leadAvatars[compromisso.lead_id] : undefined} alt={compromisso.lead.name} onError={e => {
-                              if (compromisso.lead_id && compromisso.lead) {
-                                buscarAvatarLead({
-                                  id: compromisso.lead_id,
-                                  name: compromisso.lead.name,
-                                  phone: compromisso.lead.phone,
-                                  telefone: compromisso.lead.phone
-                                });
-                              }
-                            }} />
+                                    <AvatarImage 
+                                      src={compromisso.lead.profile_picture_url || (compromisso.lead_id ? leadAvatars[compromisso.lead_id] : undefined)} 
+                                      alt={compromisso.lead.name} 
+                                      onError={e => {
+                                        if (compromisso.lead_id && compromisso.lead) {
+                                          buscarAvatarLead({
+                                            id: compromisso.lead_id,
+                                            name: compromisso.lead.name,
+                                            phone: compromisso.lead.phone,
+                                            telefone: compromisso.lead.phone
+                                          });
+                                        }
+                                      }} 
+                                    />
                                     <AvatarFallback className="h-6 w-6 text-xs bg-primary/10">
                                       {compromisso.lead.name.charAt(0).toUpperCase()}
                                     </AvatarFallback>
                                   </Avatar>
                                   <span className="text-sm">{compromisso.lead.name}</span>
+                                  {compromisso.lead.phone && (
+                                    <span className="text-xs text-muted-foreground">({compromisso.lead.phone})</span>
+                                  )}
                                 </div>
                               ) : compromisso.paciente && (
                                 <div className="flex items-center gap-2">
@@ -2886,6 +2920,19 @@ export default function Agenda() {
                                     </AvatarFallback>
                                   </Avatar>
                                   <span className="text-sm">{compromisso.paciente}</span>
+                                  {compromisso.telefone && (
+                                    <span className="text-xs text-muted-foreground">({compromisso.telefone})</span>
+                                  )}
+                                </div>
+                              )}
+                              {/* Exibir profissional/colaborador */}
+                              {compromisso.profissional && (
+                                <div className="flex items-center gap-2 mt-1">
+                                  <User className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-xs text-muted-foreground">
+                                    Colaborador: <strong>{compromisso.profissional.nome}</strong>
+                                    {compromisso.profissional.especialidade && ` (${compromisso.profissional.especialidade})`}
+                                  </span>
                                 </div>
                               )}
                               {compromisso.observacoes && <p className="text-xs text-muted-foreground mt-1">
