@@ -63,7 +63,7 @@ serve(async (req) => {
     // ========================================
     // BUSCAR PROMPT PERSONALIZADO DA BASE DE DADOS
     // ========================================
-    let promptPersonalizado = customPrompt || null;
+    let promptPersonalizado: string | null = typeof customPrompt === 'string' ? customPrompt : null;
     
     if (!promptPersonalizado && companyId) {
       const { data: iaConfig } = await supabase
@@ -75,7 +75,9 @@ serve(async (req) => {
       // Buscar prompt específico para agente de atendimento
       if (iaConfig?.custom_prompts) {
         const customPrompts = iaConfig.custom_prompts as any;
-        promptPersonalizado = customPrompts.atendimento || customPrompts.default || null;
+        const prompt = customPrompts.atendimento || customPrompts.default || null;
+        // Garantir que é uma string
+        promptPersonalizado = typeof prompt === 'string' ? prompt : null;
       }
     }
 
