@@ -410,16 +410,34 @@ export function EditarCompromissoDialog({
       console.log('📋 [DEBUG] Compromisso atual - usuario_responsavel_id:', compromisso.usuario_responsavel_id);
 
       // Preparar dados de atualização
+      // Buscar dados do lead selecionado para preencher paciente e telefone
+      const leadSelecionadoData = leadId && leadId !== 'none' ? leads.find(l => l.id === leadId) : null;
+      const tipoServicoFinal = tipoServico.trim() || 'outro';
+      
       const updateData: any = {
-        // titulo removido - coluna não existe no banco
         agenda_id: agendaId && agendaId.trim() ? agendaId.trim() : null,
         lead_id: leadId === 'none' ? null : (leadId && leadId.trim() ? leadId.trim() : null),
         data_hora_inicio: dataHoraInicio.toISOString(),
         data_hora_fim: dataHoraFim.toISOString(),
-        tipo_servico: tipoServico.trim() || 'outro',
+        tipo_servico: tipoServicoFinal,
         observacoes: observacoes && observacoes.trim() ? observacoes.trim() : null,
         custo_estimado: custoEstimado && custoEstimado.trim() ? parseFloat(custoEstimado) : null,
+        // Preencher titulo com tipo_servico formatado
+        titulo: tipoServicoFinal.charAt(0).toUpperCase() + tipoServicoFinal.slice(1),
       };
+
+      // Preencher paciente e telefone com dados do lead para compatibilidade com app Waze Agenda
+      if (leadSelecionadoData) {
+        updateData.paciente = leadSelecionadoData.name;
+        const telefoneDoLead = leadSelecionadoData.phone || leadSelecionadoData.telefone;
+        if (telefoneDoLead) {
+          updateData.telefone = telefoneDoLead;
+        }
+      } else {
+        // Se não tem lead, limpar paciente e telefone
+        updateData.paciente = null;
+        updateData.telefone = null;
+      }
 
       // Log dos dados antes de atualizar para debug
       console.log('📤 [DEBUG] Dados que serão atualizados:');
@@ -430,24 +448,17 @@ export function EditarCompromissoDialog({
       console.log('  - tipo_servico:', updateData.tipo_servico);
       console.log('  - observacoes:', updateData.observacoes);
       console.log('  - custo_estimado:', updateData.custo_estimado);
+      console.log('  - titulo:', updateData.titulo);
+      console.log('  - paciente:', updateData.paciente);
+      console.log('  - telefone:', updateData.telefone);
       console.log('📋 [DEBUG] ID do compromisso:', compromisso.id);
       console.log('📋 [DEBUG] Dados completos (JSON):', JSON.stringify(updateData, null, 2));
-
-      // Garantir que não há campo titulo no updateData (remover se existir)
-      const updateDataLimpo: any = {};
-      Object.keys(updateData).forEach(key => {
-        if (key !== 'titulo') {
-          updateDataLimpo[key] = updateData[key];
-        }
-      });
-      
-      console.log('📤 [DEBUG] updateDataLimpo (garantido sem titulo):', JSON.stringify(updateDataLimpo, null, 2));
 
       // Tentar atualizar
       console.log('🔄 [DEBUG] Tentando atualizar compromisso...');
       const { data: updatedData, error } = await supabase
         .from("compromissos")
-        .update(updateDataLimpo)
+        .update(updateData)
         .eq("id", compromisso.id)
         .select()
         .single();

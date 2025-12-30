@@ -81,6 +81,9 @@ interface Compromisso {
   observacoes?: string;
   custo_estimado?: number;
   lembrete_enviado: boolean;
+  titulo?: string;
+  paciente?: string;
+  telefone?: string;
   lead?: {
     name: string;
     phone?: string;
@@ -1148,6 +1151,9 @@ export default function Agenda() {
       // Garantir que tipo_servico não seja string vazia
       const tipoServicoFinal = formData.tipo_servico?.trim() || 'outro';
 
+      // Buscar dados do lead selecionado para preencher paciente e telefone
+      const leadSelecionadoData = formData.lead_id ? leads.find(l => l.id === formData.lead_id) : null;
+
       // Preparar dados do compromisso - APENAS campos obrigatórios e válidos
       const compromissoData: any = {
         // Campos obrigatórios (NOT NULL)
@@ -1183,6 +1189,18 @@ export default function Agenda() {
       // Campos opcionais de texto
       if (formData.observacoes?.trim()) {
         compromissoData.observacoes = formData.observacoes.trim();
+      }
+
+      // Preencher titulo com tipo_servico formatado
+      compromissoData.titulo = tipoServicoFinal.charAt(0).toUpperCase() + tipoServicoFinal.slice(1);
+
+      // Preencher paciente e telefone com dados do lead para compatibilidade com app Waze Agenda
+      if (leadSelecionadoData) {
+        compromissoData.paciente = leadSelecionadoData.name;
+        const telefoneDoLead = leadSelecionadoData.phone || leadSelecionadoData.telefone;
+        if (telefoneDoLead) {
+          compromissoData.telefone = telefoneDoLead;
+        }
       }
 
       // Custo estimado - validar antes de adicionar
@@ -2643,7 +2661,7 @@ export default function Agenda() {
                             <div className="flex justify-between items-start mb-2">
                               <div className="space-y-1 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-medium">{compromisso.tipo_servico}</span>
+                                  <span className="font-medium">{compromisso.titulo || compromisso.tipo_servico}</span>
                                   {getStatusBadge(compromisso.status)}
                                 </div>
                                 <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -2654,7 +2672,9 @@ export default function Agenda() {
                                     <CalendarIcon className="h-3 w-3" />
                                     {compromisso.agenda.nome} ({compromisso.agenda.tipo})
                                   </p>}
-                                {compromisso.lead && <div className="flex items-center gap-2">
+                                {/* Exibir lead ou paciente */}
+                                {compromisso.lead ? (
+                                  <div className="flex items-center gap-2">
                                     <Avatar className="h-6 w-6">
                                       <AvatarImage src={compromisso.lead_id ? leadAvatars[compromisso.lead_id] : undefined} alt={compromisso.lead.name} onError={e => {
                                 // Se falhar, tentar buscar
@@ -2672,7 +2692,17 @@ export default function Agenda() {
                                       </AvatarFallback>
                                     </Avatar>
                                     <span className="text-sm">{compromisso.lead.name}</span>
-                                  </div>}
+                                  </div>
+                                ) : compromisso.paciente && (
+                                  <div className="flex items-center gap-2">
+                                    <Avatar className="h-6 w-6">
+                                      <AvatarFallback className="h-6 w-6 text-xs bg-primary/10">
+                                        {compromisso.paciente.charAt(0).toUpperCase()}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <span className="text-sm">{compromisso.paciente}</span>
+                                  </div>
+                                )}
                                 {compromisso.observacoes && <p className="text-xs text-muted-foreground mt-2">
                                     {compromisso.observacoes}
                                   </p>}
@@ -2810,7 +2840,7 @@ export default function Agenda() {
                           <div className="flex justify-between items-start">
                             <div className="space-y-2 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-medium text-base">{compromisso.tipo_servico}</span>
+                                <span className="font-medium text-base">{compromisso.titulo || compromisso.tipo_servico}</span>
                                 {getStatusBadge(compromisso.status)}
                               </div>
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -2828,7 +2858,9 @@ export default function Agenda() {
                                   <CalendarIcon className="h-3 w-3" />
                                   {compromisso.agenda.nome} ({compromisso.agenda.tipo})
                                 </p>}
-                              {compromisso.lead && <div className="flex items-center gap-2">
+                              {/* Exibir lead ou paciente */}
+                              {compromisso.lead ? (
+                                <div className="flex items-center gap-2">
                                   <Avatar className="h-6 w-6">
                                     <AvatarImage src={compromisso.lead_id ? leadAvatars[compromisso.lead_id] : undefined} alt={compromisso.lead.name} onError={e => {
                               if (compromisso.lead_id && compromisso.lead) {
@@ -2845,7 +2877,20 @@ export default function Agenda() {
                                     </AvatarFallback>
                                   </Avatar>
                                   <span className="text-sm">{compromisso.lead.name}</span>
-                                </div>}
+                                </div>
+                              ) : compromisso.paciente && (
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-6 w-6">
+                                    <AvatarFallback className="h-6 w-6 text-xs bg-primary/10">
+                                      {compromisso.paciente.charAt(0).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-sm">{compromisso.paciente}</span>
+                                </div>
+                              )}
+                              {compromisso.observacoes && <p className="text-xs text-muted-foreground mt-1">
+                                  {compromisso.observacoes}
+                                </p>}
                               {compromisso.custo_estimado && <p className="text-sm font-medium text-primary">
                                   R$ {compromisso.custo_estimado.toFixed(2)}
                                 </p>}
