@@ -128,20 +128,20 @@ export function useAIAgents() {
 
       if (configError) throw configError;
 
-      // Se não existe configuração, criar uma padrão
+      // Se não existe configuração, criar uma padrão COM TODOS AGENTES DESATIVADOS
       if (!iaConfig) {
         const { data: newConfig, error: insertError } = await supabase
           .from('ia_configurations')
           .insert({
             company_id: userRole.company_id,
-            learning_mode: true,
+            learning_mode: false,
             auto_optimization: false,
             collaborative_mode: true,
             custom_prompts: {
-              atendimento: { enabled: true, auto_response: true },
-              vendedora: { enabled: true, auto_response: false },
+              atendimento: { enabled: false, auto_response: false },
+              vendedora: { enabled: false, auto_response: false },
               suporte: { enabled: false, auto_response: false },
-              agendamento: { enabled: true, auto_response: true }
+              agendamento: { enabled: false, auto_response: false }
             }
           })
           .select()
