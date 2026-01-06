@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Phone, Video, Info, User, MessageSquare, Instagram, Facebook, FileText, DollarSign, RefreshCw, CheckCircle2, AlertCircle, Loader2, Check, Plus, RotateCcw, ArrowRightLeft, Bot, ArrowLeft } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Dialog, DialogContent, DialogHeader as UIDialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
@@ -62,6 +63,7 @@ import { useEffect, useState } from "react";
    onBack,
    showBackButton = false,
   }: ConversationHeaderProps) {
+   const isMobile = useIsMobile();
    const [finalizeOpen, setFinalizeOpen] = useState(false);
    const [finalizeMessage, setFinalizeMessage] = useState("");
 
@@ -192,132 +194,220 @@ import { useEffect, useState } from "react";
                   )}
                 </div>
              </div>
-            </div>
-             {/* Ações */}
-             <div className="flex items-center gap-1">
-              {/* Botão Restaurar Conversa */}
-              {isContactInactive && onRestoreConversation && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onRestoreConversation}
-                  disabled={restoringConversation}
-                  className="mr-2 gap-1.5"
-                  title="Restaurar últimas mensagens do WhatsApp"
-                >
-                  {restoringConversation ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Restaurando...
-                    </>
-                  ) : (
-                    <>
-                      <RotateCcw className="h-4 w-4" />
-                      Restaurar Conversa
-                    </>
-                  )}
-                </Button>
+             </div>
+              {/* Ações - Versão Desktop */}
+              <div className="hidden md:flex items-center gap-1">
+               {/* Botão Restaurar Conversa */}
+               {isContactInactive && onRestoreConversation && (
+                 <Button
+                   variant="outline"
+                   size="sm"
+                   onClick={onRestoreConversation}
+                   disabled={restoringConversation}
+                   className="mr-2 gap-1.5"
+                   title="Restaurar últimas mensagens do WhatsApp"
+                 >
+                   {restoringConversation ? (
+                     <>
+                       <Loader2 className="h-4 w-4 animate-spin" />
+                       Restaurando...
+                     </>
+                   ) : (
+                     <>
+                       <RotateCcw className="h-4 w-4" />
+                       Restaurar Conversa
+                     </>
+                   )}
+                 </Button>
+               )}
+               {/* Botão IA */}
+               {onToggleAI && (
+                 <Button
+                   variant={isAIActive ? "default" : "outline"}
+                   size="sm"
+                   onClick={onToggleAI}
+                   className="mr-1 gap-1.5"
+                   title={isAIActive ? "Desativar IA" : "Ativar IA"}
+                 >
+                   <Bot className="h-4 w-4" />
+                   {isAIActive ? "IA Ativa" : "IA"}
+                 </Button>
+               )}
+               {/* Botão Transferir Atendimento */}
+               {onTransferAtendimento && (
+                 <Button
+                   variant="outline"
+                   size="sm"
+                   onClick={onTransferAtendimento}
+                   className="mr-1 gap-1.5"
+                   title="Transferir atendimento"
+                 >
+                   <ArrowRightLeft className="h-4 w-4" />
+                   Transferir
+                 </Button>
+               )}
+               {onFinalizeAtendimento && (
+                <Dialog open={finalizeOpen} onOpenChange={setFinalizeOpen}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      className="mr-2"
+                      title="Finalizar atendimento"
+                    >
+                      Finalizar
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-lg">
+                    <UIDialogHeader>
+                      <DialogTitle>Mensagem de finalização</DialogTitle>
+                    </UIDialogHeader>
+                    <div className="space-y-3">
+                      <Textarea
+                        rows={6}
+                        value={finalizeMessage}
+                        onChange={(e) => setFinalizeMessage(e.target.value)}
+                      />
+                      <div className="flex justify-between">
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            localStorage.setItem("continuum_finalize_template", finalizeMessage);
+                          }}
+                        >
+                          Salvar como padrão
+                        </Button>
+                        <div className="flex gap-2">
+                          <Button variant="outline" onClick={() => setFinalizeOpen(false)}>Cancelar</Button>
+                          <Button
+                            onClick={() => {
+                              onFinalizeAtendimento(finalizeMessage);
+                              localStorage.setItem("continuum_finalize_template", finalizeMessage);
+                              setFinalizeOpen(false);
+                            }}
+                          >
+                            Enviar e finalizar
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               )}
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="hover:bg-primary/10"
+                title="Ligar"
+              >
+                <Phone className="h-5 w-5" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="hover:bg-primary/10"
+                title="Videochamada"
+              >
+                <Video className="h-5 w-5" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={onToggleInfoPanel}
+                className={showInfoPanel ? "bg-primary/10 text-primary" : "hover:bg-primary/10"}
+                title="Informações"
+              >
+                <Info className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {/* Ações - Versão Mobile (apenas ícones) */}
+            <div className="flex md:hidden items-center gap-0.5">
               {/* Botão IA */}
               {onToggleAI && (
                 <Button
-                  variant={isAIActive ? "default" : "outline"}
-                  size="sm"
+                  variant={isAIActive ? "default" : "ghost"}
+                  size="icon"
                   onClick={onToggleAI}
-                  className="mr-1 gap-1.5"
+                  className="h-8 w-8"
                   title={isAIActive ? "Desativar IA" : "Ativar IA"}
                 >
                   <Bot className="h-4 w-4" />
-                  {isAIActive ? "IA Ativa" : "IA"}
                 </Button>
               )}
               {/* Botão Transferir Atendimento */}
               {onTransferAtendimento && (
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
                   onClick={onTransferAtendimento}
-                  className="mr-1 gap-1.5"
+                  className="h-8 w-8"
                   title="Transferir atendimento"
                 >
                   <ArrowRightLeft className="h-4 w-4" />
-                  Transferir
                 </Button>
               )}
+              {/* Botão Finalizar */}
               {onFinalizeAtendimento && (
-               <Dialog open={finalizeOpen} onOpenChange={setFinalizeOpen}>
-                 <DialogTrigger asChild>
-                   <Button 
-                     variant="outline"
-                     size="sm"
-                     className="mr-2"
-                     title="Finalizar atendimento"
-                   >
-                     Finalizar
-                   </Button>
-                 </DialogTrigger>
-                 <DialogContent className="sm:max-w-lg">
-                   <UIDialogHeader>
-                     <DialogTitle>Mensagem de finalização</DialogTitle>
-                   </UIDialogHeader>
-                   <div className="space-y-3">
-                     <Textarea
-                       rows={6}
-                       value={finalizeMessage}
-                       onChange={(e) => setFinalizeMessage(e.target.value)}
-                     />
-                     <div className="flex justify-between">
-                       <Button
-                         variant="ghost"
-                         onClick={() => {
-                           localStorage.setItem("continuum_finalize_template", finalizeMessage);
-                         }}
-                       >
-                         Salvar como padrão
-                       </Button>
-                       <div className="flex gap-2">
-                         <Button variant="outline" onClick={() => setFinalizeOpen(false)}>Cancelar</Button>
-                         <Button
-                           onClick={() => {
-                             onFinalizeAtendimento(finalizeMessage);
-                             localStorage.setItem("continuum_finalize_template", finalizeMessage);
-                             setFinalizeOpen(false);
-                           }}
-                         >
-                           Enviar e finalizar
-                         </Button>
-                       </div>
-                     </div>
-                   </div>
-                 </DialogContent>
-               </Dialog>
-             )}
-             <Button 
-               variant="ghost" 
-               size="icon"
-               className="hover:bg-primary/10"
-               title="Ligar"
-             >
-               <Phone className="h-5 w-5" />
-             </Button>
-             <Button 
-               variant="ghost" 
-               size="icon"
-               className="hover:bg-primary/10"
-               title="Videochamada"
-             >
-               <Video className="h-5 w-5" />
-             </Button>
-             <Button 
-               variant="ghost" 
-               size="icon"
-               onClick={onToggleInfoPanel}
-               className={showInfoPanel ? "bg-primary/10 text-primary" : "hover:bg-primary/10"}
-               title="Informações"
-             >
-               <Info className="h-5 w-5" />
-             </Button>
-           </div>
+                <Dialog open={finalizeOpen} onOpenChange={setFinalizeOpen}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      title="Finalizar atendimento"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="w-[95vw] max-w-lg mx-auto">
+                    <UIDialogHeader>
+                      <DialogTitle>Mensagem de finalização</DialogTitle>
+                    </UIDialogHeader>
+                    <div className="space-y-3">
+                      <Textarea
+                        rows={6}
+                        value={finalizeMessage}
+                        onChange={(e) => setFinalizeMessage(e.target.value)}
+                      />
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            localStorage.setItem("continuum_finalize_template", finalizeMessage);
+                          }}
+                        >
+                          Salvar como padrão
+                        </Button>
+                        <div className="flex gap-2">
+                          <Button variant="outline" className="flex-1" onClick={() => setFinalizeOpen(false)}>Cancelar</Button>
+                          <Button
+                            className="flex-1"
+                            onClick={() => {
+                              onFinalizeAtendimento(finalizeMessage);
+                              localStorage.setItem("continuum_finalize_template", finalizeMessage);
+                              setFinalizeOpen(false);
+                            }}
+                          >
+                            Enviar e finalizar
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+              {/* Botão Info */}
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={onToggleInfoPanel}
+                className={`h-8 w-8 ${showInfoPanel ? "bg-primary/10 text-primary" : ""}`}
+                title="Informações"
+              >
+                <Info className="h-4 w-4" />
+              </Button>
+            </div>
          </div>
          {/* Informações do Lead */}
          {(tags.length > 0 || funnelStage || produto || valor || responsavel) && (
