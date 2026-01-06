@@ -307,7 +307,7 @@ export default function ChatInterno() {
     if (!name || name === 'Conversa') return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
-  return <div className="h-[calc(100vh-7rem)] flex bg-background rounded-xl border border-border overflow-hidden">
+  return <div className="h-[calc(100vh-7rem)] flex bg-background rounded-xl border border-border" style={{ overflow: 'hidden' }}>
       {/* Lista de Conversas */}
       <div className={`w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card ${!showMobileList && 'hidden md:flex'}`}>
         {/* Header */}
@@ -396,84 +396,144 @@ export default function ChatInterno() {
       </div>
 
       {/* Área de Chat */}
-      <div className={`flex-1 flex flex-col ${showMobileList && 'hidden md:flex'}`}>
+      <div 
+        className={`flex flex-col ${showMobileList && 'hidden md:flex'}`}
+        style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden' }}
+      >
         {selectedConversation ? <>
-            {/* Header do Chat */}
+            {/* Header do Chat - Layout fixo com CSS inline para garantir visibilidade */}
             <div 
-              className="p-2 md:p-4 border-b border-border bg-card"
               style={{ 
                 display: 'flex', 
                 alignItems: 'center',
+                padding: '8px',
                 gap: '6px',
-                minHeight: '52px',
+                minHeight: '48px',
+                borderBottom: '1px solid hsl(var(--border))',
+                backgroundColor: 'hsl(var(--card))',
                 width: '100%',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                overflow: 'visible'
               }}
             >
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="md:hidden shrink-0" 
-                style={{ width: '28px', height: '28px' }} 
+              {/* Botão voltar - mobile only */}
+              <button 
                 onClick={() => setShowMobileList(true)}
+                className="md:hidden"
+                style={{ 
+                  width: '28px', 
+                  height: '28px', 
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  borderRadius: '4px'
+                }}
               >
                 <ArrowLeft className="h-4 w-4" />
-              </Button>
+              </button>
               
-              <Avatar className="h-8 w-8 shrink-0">
-                <AvatarImage src={getConversationAvatar(selectedConversation) || undefined} />
-                <AvatarFallback className={selectedConversation.is_group ? 'bg-primary/20' : 'bg-muted'}>
-                  {selectedConversation.is_group ? <Users className="h-4 w-4 text-primary" /> : getInitials(getConversationName(selectedConversation))}
-                </AvatarFallback>
-              </Avatar>
+              {/* Avatar */}
+              <div style={{ flexShrink: 0, width: '32px', height: '32px' }}>
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={getConversationAvatar(selectedConversation) || undefined} />
+                  <AvatarFallback className={selectedConversation.is_group ? 'bg-primary/20' : 'bg-muted'}>
+                    {selectedConversation.is_group ? <Users className="h-4 w-4 text-primary" /> : getInitials(getConversationName(selectedConversation))}
+                  </AvatarFallback>
+                </Avatar>
+              </div>
               
-              <div className="flex-1 min-w-0 overflow-hidden">
-                <h3 className="font-semibold text-foreground text-sm truncate">
+              {/* Nome - expande mas com overflow hidden */}
+              <div style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden' }}>
+                <div 
+                  className="font-semibold text-foreground text-sm"
+                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
                   {getConversationName(selectedConversation)}
-                </h3>
+                </div>
                 {selectedConversation.is_group && selectedConversation.participants && (
-                  <p className="text-xs text-muted-foreground truncate">
+                  <div 
+                    className="text-xs text-muted-foreground"
+                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
                     {selectedConversation.participants.length} participantes
-                  </p>
+                  </div>
                 )}
               </div>
 
-              {/* Buttons container - fixed size */}
-              <div className="flex items-center shrink-0" style={{ gap: '2px' }}>
-                {/* Call buttons - only for 1:1 conversations */}
+              {/* Container de botões - NUNCA encolhe */}
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  gap: '2px',
+                  flexShrink: 0,
+                  marginLeft: 'auto'
+                }}
+              >
+                {/* Botões de chamada - apenas para 1:1 */}
                 {!selectedConversation.is_group && (
                   <>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <button 
                       onClick={() => handleStartCall('audio')} 
-                      className="text-muted-foreground hover:text-primary shrink-0"
-                      style={{ width: '28px', height: '28px' }}
+                      className="text-muted-foreground hover:text-primary"
+                      style={{ 
+                        width: '28px', 
+                        height: '28px',
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        borderRadius: '4px'
+                      }}
                     >
                       <Phone className="h-4 w-4" />
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    </button>
+                    <button 
                       onClick={() => handleStartCall('video')} 
-                      className="text-muted-foreground hover:text-primary shrink-0"
-                      style={{ width: '28px', height: '28px' }}
+                      className="text-muted-foreground hover:text-primary"
+                      style={{ 
+                        width: '28px', 
+                        height: '28px',
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        borderRadius: '4px'
+                      }}
                     >
                       <VideoIcon className="h-4 w-4" />
-                    </Button>
+                    </button>
                   </>
                 )}
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon"
-                      className="shrink-0"
-                      style={{ width: '28px', height: '28px' }}
+                    <button 
+                      style={{ 
+                        width: '28px', 
+                        height: '28px',
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        borderRadius: '4px'
+                      }}
                     >
                       <MoreVertical className="h-4 w-4" />
-                    </Button>
+                    </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     {selectedConversation.is_group && <>
