@@ -399,61 +399,97 @@ export default function ChatInterno() {
       <div className={`flex-1 flex flex-col ${showMobileList && 'hidden md:flex'}`}>
         {selectedConversation ? <>
             {/* Header do Chat */}
-            <div className="p-3 md:p-4 border-b border-border flex items-center gap-2 md:gap-3 bg-card" style={{ overflow: 'visible' }}>
-              <Button variant="ghost" size="icon" className="md:hidden h-8 w-8" style={{ flexShrink: 0, minWidth: '32px' }} onClick={() => setShowMobileList(true)}>
+            <div 
+              className="p-3 md:p-4 border-b border-border bg-card"
+              style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'auto auto 1fr auto', 
+                alignItems: 'center',
+                gap: '8px',
+                minHeight: '56px'
+              }}
+            >
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="md:hidden" 
+                style={{ width: '32px', height: '32px', flexShrink: 0 }} 
+                onClick={() => setShowMobileList(true)}
+              >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               
-              <Avatar className="h-8 w-8 md:h-10 md:w-10" style={{ flexShrink: 0, minWidth: '32px' }}>
+              <Avatar className="h-8 w-8 md:h-10 md:w-10" style={{ flexShrink: 0 }}>
                 <AvatarImage src={getConversationAvatar(selectedConversation) || undefined} />
                 <AvatarFallback className={selectedConversation.is_group ? 'bg-primary/20' : 'bg-muted'}>
                   {selectedConversation.is_group ? <Users className="h-4 w-4 text-primary" /> : getInitials(getConversationName(selectedConversation))}
                 </AvatarFallback>
               </Avatar>
               
-              <div style={{ flex: '1 1 0%', minWidth: 0, maxWidth: 'calc(100% - 180px)', overflow: 'hidden' }}>
-                <h3 className="font-semibold text-foreground text-sm md:text-base" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                <h3 
+                  className="font-semibold text-foreground text-sm md:text-base truncate"
+                >
                   {getConversationName(selectedConversation)}
                 </h3>
                 {selectedConversation.is_group && selectedConversation.participants && (
-                  <p className="text-xs text-muted-foreground" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <p className="text-xs text-muted-foreground truncate">
                     {selectedConversation.participants.length} participantes
                   </p>
                 )}
               </div>
 
-              {/* Call buttons - only for 1:1 conversations */}
-              {!selectedConversation.is_group && (
-                <div className="flex items-center" style={{ flexShrink: 0 }}>
-                  <Button variant="ghost" size="icon" onClick={() => handleStartCall('audio')} className="text-muted-foreground hover:text-primary h-8 w-8" style={{ flexShrink: 0, minWidth: '32px' }}>
-                    <Phone className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => handleStartCall('video')} className="text-muted-foreground hover:text-primary h-8 w-8" style={{ flexShrink: 0, minWidth: '32px' }}>
-                    <VideoIcon className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
+              {/* Buttons container - fixed width */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                {/* Call buttons - only for 1:1 conversations */}
+                {!selectedConversation.is_group && (
+                  <>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => handleStartCall('audio')} 
+                      className="text-muted-foreground hover:text-primary"
+                      style={{ width: '32px', height: '32px', minWidth: '32px', flexShrink: 0 }}
+                    >
+                      <Phone className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => handleStartCall('video')} 
+                      className="text-muted-foreground hover:text-primary"
+                      style={{ width: '32px', height: '32px', minWidth: '32px', flexShrink: 0 }}
+                    >
+                      <VideoIcon className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" style={{ flexShrink: 0, minWidth: '32px' }}>
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {selectedConversation.is_group && <>
-                      <DropdownMenuItem onClick={() => setEditGroupOpen(true)}>
-                        <Settings className="h-4 w-4 mr-2" />
-                        Editar grupo
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                    </>}
-                  <DropdownMenuItem onClick={() => setShareDialogOpen(true)}>
-                    <Share2 className="h-4 w-4 mr-2" />
-                    Compartilhar item do CRM
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      style={{ width: '32px', height: '32px', minWidth: '32px', flexShrink: 0 }}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {selectedConversation.is_group && <>
+                        <DropdownMenuItem onClick={() => setEditGroupOpen(true)}>
+                          <Settings className="h-4 w-4 mr-2" />
+                          Editar grupo
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>}
+                    <DropdownMenuItem onClick={() => setShareDialogOpen(true)}>
+                      <Share2 className="h-4 w-4 mr-2" />
+                      Compartilhar item do CRM
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
 
             {/* Mensagens */}
