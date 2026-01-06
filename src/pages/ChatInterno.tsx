@@ -449,8 +449,8 @@ export default function ChatInterno() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <MoreVertical className="h-5 w-5" />
+                  <Button variant="ghost" size="icon" className="flex-shrink-0 h-8 w-8">
+                    <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
