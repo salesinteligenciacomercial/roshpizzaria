@@ -163,36 +163,16 @@ import { useEffect, useState } from "react";
                 )}
               </div>
               {/* Nome e Canal */}
-              <div className="flex flex-col">
+              <div className="flex flex-col min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h2 className="font-bold text-lg text-foreground">
+                  <h2 className="font-bold text-lg text-foreground truncate">
                     {contactName}
                   </h2>
                   {getSyncStatusBadge()}
                 </div>
-                 <div className="flex items-center gap-2 text-xs">
-                   <div className="flex items-center gap-1.5 text-muted-foreground">
-                     <span className="capitalize font-medium">{channel}</span>
-                   </div>
-                  {/* Badge de Lead Vinculado */}
-                  {leadVinculado && (
-                    <Badge className="gap-1 bg-green-600 hover:bg-green-700">
-                      <Check className="h-3 w-3" />
-                      Lead Cadastrado
-                    </Badge>
-                  )}
-                  {mostrarBotaoCriarLead && onCriarLead && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={onCriarLead}
-                      className="h-6 text-xs gap-1"
-                    >
-                      <Plus className="h-3 w-3" />
-                      Criar Lead no CRM
-                    </Button>
-                  )}
-                </div>
+                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                   <span className="capitalize font-medium">{channel}</span>
+                 </div>
              </div>
              </div>
               {/* Ações - Versão Desktop */}
@@ -409,6 +389,29 @@ import { useEffect, useState } from "react";
               </Button>
             </div>
          </div>
+         
+         {/* Lead Badge e botão criar lead - linha separada para mobile */}
+         {(leadVinculado || (mostrarBotaoCriarLead && onCriarLead)) && (
+           <div className="flex items-center gap-2 flex-wrap">
+             {leadVinculado && (
+               <Badge className="gap-1 bg-green-600 hover:bg-green-700">
+                 <Check className="h-3 w-3" />
+                 Lead Cadastrado
+               </Badge>
+             )}
+             {mostrarBotaoCriarLead && onCriarLead && (
+               <Button
+                 variant="outline"
+                 size="sm"
+                 onClick={onCriarLead}
+                 className="h-6 text-xs gap-1"
+               >
+                 <Plus className="h-3 w-3" />
+                 Criar Lead no CRM
+               </Button>
+             )}
+          </div>
+         )}
          {/* Informações do Lead */}
          {(tags.length > 0 || funnelStage || produto || valor || responsavel) && (
            <div className="space-y-2 pt-2 border-t border-border/50">
