@@ -399,20 +399,20 @@ export default function ChatInterno() {
       <div className={`flex-1 flex flex-col ${showMobileList && 'hidden md:flex'}`}>
         {selectedConversation ? <>
             {/* Header do Chat */}
-            <div className="p-4 border-b border-border flex items-center gap-3 bg-card">
-              <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setShowMobileList(true)}>
+            <div className="p-3 md:p-4 border-b border-border flex items-center gap-2 md:gap-3 bg-card">
+              <Button variant="ghost" size="icon" className="md:hidden flex-shrink-0 h-8 w-8" onClick={() => setShowMobileList(true)}>
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               
-              <Avatar className="h-10 w-10">
+              <Avatar className="h-8 w-8 md:h-10 md:w-10 flex-shrink-0">
                 <AvatarImage src={getConversationAvatar(selectedConversation) || undefined} />
                 <AvatarFallback className={selectedConversation.is_group ? 'bg-primary/20' : 'bg-muted'}>
                   {selectedConversation.is_group ? <Users className="h-4 w-4 text-primary" /> : getInitials(getConversationName(selectedConversation))}
                 </AvatarFallback>
               </Avatar>
               
-              <div className="flex-1">
-                <h3 className="font-semibold text-foreground">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-foreground truncate text-sm md:text-base">
                   {getConversationName(selectedConversation)}
                 </h3>
                 {selectedConversation.is_group && selectedConversation.participants && <p className="text-xs text-muted-foreground">
@@ -422,11 +422,11 @@ export default function ChatInterno() {
 
               {/* Call buttons - only for 1:1 conversations */}
               {!selectedConversation.is_group && <TooltipProvider>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-0.5 md:gap-1 flex-shrink-0">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => handleStartCall('audio')} className="text-muted-foreground hover:text-primary">
-                          <Phone className="h-5 w-5" />
+                        <Button variant="ghost" size="icon" onClick={() => handleStartCall('audio')} className="text-muted-foreground hover:text-primary h-8 w-8">
+                          <Phone className="h-4 w-4 md:h-5 md:w-5" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -436,8 +436,8 @@ export default function ChatInterno() {
                     
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => handleStartCall('video')} className="text-muted-foreground hover:text-primary">
-                          <VideoIcon className="h-5 w-5" />
+                        <Button variant="ghost" size="icon" onClick={() => handleStartCall('video')} className="text-muted-foreground hover:text-primary h-8 w-8">
+                          <VideoIcon className="h-4 w-4 md:h-5 md:w-5" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
