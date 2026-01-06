@@ -400,36 +400,35 @@ export default function ChatInterno() {
         {selectedConversation ? <>
             {/* Header do Chat */}
             <div 
-              className="p-3 md:p-4 border-b border-border bg-card"
+              className="p-2 md:p-4 border-b border-border bg-card"
               style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'auto auto 1fr auto', 
+                display: 'flex', 
                 alignItems: 'center',
-                gap: '8px',
-                minHeight: '56px'
+                gap: '6px',
+                minHeight: '52px',
+                width: '100%',
+                boxSizing: 'border-box'
               }}
             >
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="md:hidden" 
-                style={{ width: '32px', height: '32px', flexShrink: 0 }} 
+                className="md:hidden shrink-0" 
+                style={{ width: '28px', height: '28px' }} 
                 onClick={() => setShowMobileList(true)}
               >
-                <ArrowLeft className="h-5 w-5" />
+                <ArrowLeft className="h-4 w-4" />
               </Button>
               
-              <Avatar className="h-8 w-8 md:h-10 md:w-10" style={{ flexShrink: 0 }}>
+              <Avatar className="h-8 w-8 shrink-0">
                 <AvatarImage src={getConversationAvatar(selectedConversation) || undefined} />
                 <AvatarFallback className={selectedConversation.is_group ? 'bg-primary/20' : 'bg-muted'}>
                   {selectedConversation.is_group ? <Users className="h-4 w-4 text-primary" /> : getInitials(getConversationName(selectedConversation))}
                 </AvatarFallback>
               </Avatar>
               
-              <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                <h3 
-                  className="font-semibold text-foreground text-sm md:text-base truncate"
-                >
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <h3 className="font-semibold text-foreground text-sm truncate">
                   {getConversationName(selectedConversation)}
                 </h3>
                 {selectedConversation.is_group && selectedConversation.participants && (
@@ -439,8 +438,8 @@ export default function ChatInterno() {
                 )}
               </div>
 
-              {/* Buttons container - fixed width */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+              {/* Buttons container - fixed size */}
+              <div className="flex items-center shrink-0" style={{ gap: '2px' }}>
                 {/* Call buttons - only for 1:1 conversations */}
                 {!selectedConversation.is_group && (
                   <>
@@ -448,8 +447,8 @@ export default function ChatInterno() {
                       variant="ghost" 
                       size="icon" 
                       onClick={() => handleStartCall('audio')} 
-                      className="text-muted-foreground hover:text-primary"
-                      style={{ width: '32px', height: '32px', minWidth: '32px', flexShrink: 0 }}
+                      className="text-muted-foreground hover:text-primary shrink-0"
+                      style={{ width: '28px', height: '28px' }}
                     >
                       <Phone className="h-4 w-4" />
                     </Button>
@@ -457,8 +456,8 @@ export default function ChatInterno() {
                       variant="ghost" 
                       size="icon" 
                       onClick={() => handleStartCall('video')} 
-                      className="text-muted-foreground hover:text-primary"
-                      style={{ width: '32px', height: '32px', minWidth: '32px', flexShrink: 0 }}
+                      className="text-muted-foreground hover:text-primary shrink-0"
+                      style={{ width: '28px', height: '28px' }}
                     >
                       <VideoIcon className="h-4 w-4" />
                     </Button>
@@ -470,7 +469,8 @@ export default function ChatInterno() {
                     <Button 
                       variant="ghost" 
                       size="icon"
-                      style={{ width: '32px', height: '32px', minWidth: '32px', flexShrink: 0 }}
+                      className="shrink-0"
+                      style={{ width: '28px', height: '28px' }}
                     >
                       <MoreVertical className="h-4 w-4" />
                     </Button>
