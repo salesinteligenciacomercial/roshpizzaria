@@ -1,4 +1,4 @@
-import { Bell, Building2, PanelLeftClose, PanelLeft, MessageSquare, Instagram, Zap, Clock, Users, LogOut, Settings } from "lucide-react";
+import { Bell, Building2, PanelLeftClose, PanelLeft, MessageSquare, Instagram, Zap, Clock, Users, LogOut, Settings, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +29,7 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   // Métricas rápidas para página de Conversas
   const conversationsMetrics = useMemo(() => {
@@ -207,23 +209,25 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/40 bg-background/95 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 shadow-sm">
-      <div className="flex h-16 items-center gap-4 px-6">
+      <div className="flex h-14 md:h-16 items-center gap-2 md:gap-4 px-3 md:px-6">
         {/* Toggle Sidebar Button */}
         <Button
           variant="ghost"
           size="icon"
           onClick={onToggleSidebar}
           className="hover:bg-muted group transition-all"
-          title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          title={isMobile ? "Abrir menu" : (sidebarCollapsed ? "Expandir menu" : "Recolher menu")}
         >
-          {sidebarCollapsed ? (
+          {isMobile ? (
+            <Menu className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+          ) : sidebarCollapsed ? (
             <PanelLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
           ) : (
             <PanelLeftClose className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
           )}
         </Button>
 
-        {/* Cards de métricas (apenas em Conversas) */}
+        {/* Cards de métricas (apenas em Conversas e em desktop) */}
         {location.pathname?.toLowerCase().includes("conversas") && (
           <div className="hidden lg:flex items-center gap-2 flex-1 overflow-x-auto">
             <div className="px-3 py-2 border rounded-lg bg-muted/20 whitespace-nowrap flex items-center gap-2 text-sm">
@@ -243,39 +247,43 @@ export function Header({ onToggleSidebar, sidebarCollapsed }: HeaderProps) {
             </div>
             <div className="px-3 py-2 border rounded-lg bg-muted/20 whitespace-nowrap flex items-center gap-2 text-sm">
               <Zap className="h-4 w-4" /> {conversationsMetrics.telegram} Telegram
+            </div>
           </div>
-        </div>
         )}
 
-        {/* Removido: busca global no topo */}
+        {/* Spacer para empurrar ações para direita */}
+        <div className="flex-1" />
 
         {/* Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 md:gap-3">
+          {/* Badge da empresa - esconder em mobile pequeno */}
           {!loading && companyName && (
-            <Badge variant="outline" className="flex items-center gap-2">
+            <Badge variant="outline" className="hidden sm:flex items-center gap-2 text-xs md:text-sm">
               <Building2 className="h-3 w-3" />
-              {companyName}
+              <span className="hidden md:inline">{companyName}</span>
+              <span className="md:hidden">{companyName.substring(0, 10)}{companyName.length > 10 ? '...' : ''}</span>
             </Badge>
           )}
 
           <Button 
             variant="ghost" 
             size="icon" 
-            className="relative hover:bg-muted group transition-all"
+            className="relative hover:bg-muted group transition-all h-9 w-9 md:h-10 md:w-10"
           >
-            <Bell className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive animate-pulse" />
+            <Bell className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+            <span className="absolute top-1 right-1 md:top-1.5 md:right-1.5 h-2 w-2 rounded-full bg-destructive animate-pulse" />
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <div className="flex items-center gap-3 pl-3 border-l border-border/40 cursor-pointer hover:bg-muted/50 rounded-lg p-2 transition-colors">
-                <div className="text-right hidden sm:block">
+              <div className="flex items-center gap-2 md:gap-3 pl-2 md:pl-3 border-l border-border/40 cursor-pointer hover:bg-muted/50 rounded-lg p-1.5 md:p-2 transition-colors">
+                {/* Nome/Role - apenas em telas maiores */}
+                <div className="text-right hidden md:block">
                   <p className="text-sm font-medium text-foreground">{userName}</p>
                   <p className="text-xs text-muted-foreground">{userRole}</p>
                 </div>
-                <Avatar className="h-9 w-9 ring-2 ring-primary/10 hover:ring-primary/30 transition-all">
-                  <AvatarFallback className="bg-gradient-primary text-primary-foreground text-sm font-semibold">
+                <Avatar className="h-8 w-8 md:h-9 md:w-9 ring-2 ring-primary/10 hover:ring-primary/30 transition-all">
+                  <AvatarFallback className="bg-gradient-primary text-primary-foreground text-xs md:text-sm font-semibold">
                     {initials}
                   </AvatarFallback>
                 </Avatar>

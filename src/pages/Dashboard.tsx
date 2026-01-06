@@ -323,36 +323,38 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="space-y-2">
-        <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+    <div className="space-y-4 md:space-y-8 animate-in fade-in duration-500">
+      <div className="space-y-1 md:space-y-2">
+        <h1 className="text-2xl md:text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
           Analytics & Dashboard
         </h1>
-        <p className="text-muted-foreground text-lg">Visão completa e análises detalhadas do seu CRM</p>
+        <p className="text-muted-foreground text-sm md:text-lg">Visão completa e análises detalhadas do seu CRM</p>
       </div>
 
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="dashboard" className="gap-2">
-            <Activity className="h-4 w-4" />
-            Dashboard
+        <TabsList className="w-full overflow-x-auto flex md:grid md:grid-cols-4">
+          <TabsTrigger value="dashboard" className="gap-1 md:gap-2 text-xs md:text-sm flex-shrink-0">
+            <Activity className="h-3 w-3 md:h-4 md:w-4" />
+            <span className="hidden sm:inline">Dashboard</span>
+            <span className="sm:hidden">Dash</span>
           </TabsTrigger>
-          <TabsTrigger value="relatorios" className="gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Relatórios
+          <TabsTrigger value="relatorios" className="gap-1 md:gap-2 text-xs md:text-sm flex-shrink-0">
+            <BarChart3 className="h-3 w-3 md:h-4 md:w-4" />
+            <span className="hidden sm:inline">Relatórios</span>
+            <span className="sm:hidden">Rel.</span>
           </TabsTrigger>
-          <TabsTrigger value="insights" className="gap-2">
-            <TrendingUp className="h-4 w-4" />
+          <TabsTrigger value="insights" className="gap-1 md:gap-2 text-xs md:text-sm flex-shrink-0">
+            <TrendingUp className="h-3 w-3 md:h-4 md:w-4" />
             Insights
           </TabsTrigger>
-          <TabsTrigger value="export" className="gap-2">
-            <Download className="h-4 w-4" />
+          <TabsTrigger value="export" className="gap-1 md:gap-2 text-xs md:text-sm flex-shrink-0">
+            <Download className="h-3 w-3 md:h-4 md:w-4" />
             Export
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="dashboard" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <TabsContent value="dashboard" className="space-y-4 md:space-y-6">
+          <div className="grid gap-3 md:gap-6 grid-cols-2 lg:grid-cols-4">
             {statCards.map((stat, index) => (
               <Card 
                 key={stat.title} 
@@ -360,17 +362,17 @@ export default function Dashboard() {
                 style={{ animationDelay: `${index * 100}ms` }}
               >
                 <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2 p-3 md:p-6">
+                  <CardTitle className="text-xs md:text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors line-clamp-1">
                     {stat.title}
                   </CardTitle>
-                  <div className={`p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300`}>
-                    <stat.icon className={`h-5 w-5 ${stat.color}`} />
+                  <div className={`p-1.5 md:p-2.5 rounded-lg md:rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300`}>
+                    <stat.icon className={`h-4 w-4 md:h-5 md:w-5 ${stat.color}`} />
                   </div>
                 </CardHeader>
-                <CardContent className="relative">
-                  <div className="text-3xl font-bold text-foreground">{stat.value}</div>
-                  <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
+                <CardContent className="relative p-3 md:p-6 pt-0">
+                  <div className="text-xl md:text-3xl font-bold text-foreground">{stat.value}</div>
+                  <p className="text-[10px] md:text-xs text-muted-foreground mt-1 line-clamp-1">{stat.description}</p>
                 </CardContent>
               </Card>
             ))}

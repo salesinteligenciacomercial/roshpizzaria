@@ -840,19 +840,20 @@ export default function Leads() {
   const getInitials = (name: string) => {
     return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
   };
-  return <div className="space-y-6">
-      <div className="flex items-center justify-between">
+  return <div className="space-y-4 md:space-y-6">
+      {/* Header responsivo */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Contatos do CRM </h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Contatos do CRM</h1>
+          <p className="text-sm md:text-base text-muted-foreground">
             Gerencie todos os seus leads em um só lugar
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <TagsManager onTagSelected={setSelectedTag} selectedTag={selectedTag} />
-          <Button variant="outline" onClick={exportarLeads}>
-            <Download className="mr-2 h-4 w-4" />
-            Exportar
+          <Button variant="outline" size="sm" className="md:size-default" onClick={exportarLeads}>
+            <Download className="h-4 w-4 md:mr-2" />
+            <span className="hidden md:inline">Exportar</span>
           </Button>
           <ImportarLeadsDialog onLeadsImported={carregarLeads} />
           <NovoLeadDialog onLeadCreated={carregarLeads} />
@@ -860,21 +861,27 @@ export default function Leads() {
       </div>
 
       <div className="space-y-3">
-        <div className="flex gap-4">
+        {/* Busca e filtros responsivos */}
+        <div className="flex flex-col md:flex-row gap-3 md:gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Buscar por nome, email, telefone, empresa, CPF, origem, valor (>=1000, <=500, >100, <50, =200) ou observações..." className="pl-10" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            <Input 
+              placeholder="Buscar leads..." 
+              className="pl-10 text-sm" 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)} 
+            />
           </div>
-          <div className="flex gap-2">
-            <Button variant={selectedStatus === "all" ? "default" : "outline"} onClick={() => setSelectedStatus("all")}>
+          <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0">
+            <Button size="sm" variant={selectedStatus === "all" ? "default" : "outline"} onClick={() => setSelectedStatus("all")} className="flex-shrink-0">
               Todos
             </Button>
-            <Button variant={selectedStatus === "novo" ? "default" : "outline"} onClick={() => setSelectedStatus("novo")}>
+            <Button size="sm" variant={selectedStatus === "novo" ? "default" : "outline"} onClick={() => setSelectedStatus("novo")} className="flex-shrink-0">
               Novos
             </Button>
-            <Button variant={selectionMode ? "default" : "outline"} onClick={toggleSelectionMode} className={selectionMode ? "bg-primary" : ""}>
-              <CheckSquare className="mr-2 h-4 w-4" />
-              Seleção em Massa
+            <Button size="sm" variant={selectionMode ? "default" : "outline"} onClick={toggleSelectionMode} className={`flex-shrink-0 ${selectionMode ? "bg-primary" : ""}`}>
+              <CheckSquare className="h-4 w-4 md:mr-2" />
+              <span className="hidden md:inline">Seleção em Massa</span>
             </Button>
           </div>
         </div>

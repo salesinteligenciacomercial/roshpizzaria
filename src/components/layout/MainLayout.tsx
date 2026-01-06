@@ -5,10 +5,12 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { GlobalCallListenerV2 } from "@/components/meetings/GlobalCallListenerV2";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export function MainLayout() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const isMobile = useIsMobile();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   const isSupabaseConfigured = supabaseUrl && supabaseKey && 
@@ -17,10 +19,14 @@ export function MainLayout() {
   const bypassAuth = (import.meta.env.VITE_BYPASS_AUTH === '1') || 
                      (import.meta.env.DEV === true) ||
                      !isSupabaseConfigured;
+  
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar-collapsed');
     return saved === 'true';
   });
+  
+  // Controle de sidebar aberta em mobile (drawer)
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout | undefined;
@@ -121,6 +127,13 @@ export function MainLayout() {
     };
   }, [isSupabaseConfigured, bypassAuth]);
 
+  // Fechar sidebar quando mudar para mobile
+  useEffect(() => {
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
+  }, [isMobile]);
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -134,19 +147,49 @@ export function MainLayout() {
   }
 
   const toggleSidebar = () => {
-    setSidebarCollapsed(prev => {
-      const newValue = !prev;
-      localStorage.setItem('sidebar-collapsed', String(newValue));
-      return newValue;
-    });
+    if (isMobile) {
+      setSidebarOpen(prev => !prev);
+    } else {
+      setSidebarCollapsed(prev => {
+        const newValue = !prev;
+        localStorage.setItem('sidebar-collapsed', String(newValue));
+        return newValue;
+      });
+    }
+  };
+
+  const closeSidebar = () => {
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
   };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar collapsed={sidebarCollapsed} />
+      {/* Backdrop para mobile */}
+      {isMobile && sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+          onClick={closeSidebar}
+        />
+      )}
+      
+      {/* Sidebar - escondida em mobile, drawer quando aberta */}
+      <div className={`
+        ${isMobile 
+          ? `fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
+          : ''
+        }
+      `}>
+        <Sidebar collapsed={!isMobile && sidebarCollapsed} onNavigate={closeSidebar} />
+      </div>
+      
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Header onToggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} />
-        <main className="flex-1 overflow-y-auto p-6">
+        <Header 
+          onToggleSidebar={toggleSidebar} 
+          sidebarCollapsed={isMobile ? !sidebarOpen : sidebarCollapsed} 
+        />
+        <main className="flex-1 overflow-y-auto p-2 md:p-6">
           <Outlet />
         </main>
       </div>
