@@ -64,6 +64,25 @@ function transformWhatsAppPayload(entry: any) {
         // Capturar foto de perfil do contato (Meta API envia no webhook)
         const profilePictureUrl = contact?.profile?.picture || null;
         
+        // 🔥 CAPTURAR DADOS DE REFERRAL (Click-to-WhatsApp Ads)
+        const referral = message.referral || null;
+        let adData = null;
+        if (referral) {
+          console.log('🎯 [REFERRAL] Mensagem veio de anúncio:', JSON.stringify(referral, null, 2));
+          adData = {
+            source_type: referral.source_type, // "ad"
+            source_id: referral.source_id,     // ID do anúncio
+            source_url: referral.source_url,
+            headline: referral.headline,
+            body: referral.body,
+            ctwa_clid: referral.ctwa_clid,     // Click ID para atribuição
+            media_type: referral.media_type,
+            image_url: referral.image_url,
+            video_url: referral.video_url,
+            thumbnail_url: referral.thumbnail_url,
+          };
+        }
+        
         let messageType = 'text';
         let messageContent = '';
         let mediaUrl = '';
@@ -164,6 +183,7 @@ function transformWhatsAppPayload(entry: any) {
           context: message.context,
           is_from_me: false,
           source: 'whatsapp',
+          referral: adData, // 🔥 Dados do anúncio Click-to-WhatsApp
         });
       }
       
@@ -491,7 +511,7 @@ serve(async (req) => {
 
             const { data: existingLead } = await supabase
               .from('leads')
-              .select('id, name, profile_picture_url')
+              .select('id, name, profile_picture_url, lead_source_type, tags')
               .eq('company_id', company_id)
               .or(`telefone.ilike.%${formattedNumber}%,phone.ilike.%${formattedNumber}%`)
               .limit(1)
@@ -506,7 +526,72 @@ serve(async (req) => {
                 .eq('id', existingLead.id);
             }
 
-            const conversaData = {
+            // 🔥 PROCESSAR REFERRAL (Click-to-WhatsApp Ads)
+            let leadId = existingLead?.id || null;
+            const referral = msg.referral;
+            
+            if (referral) {
+              console.log('🎯 [CTWA] Processando lead de anúncio Click-to-WhatsApp');
+              
+              // Se não existe lead, criar automaticamente
+              if (!leadId) {
+                const newLeadData = {
+                  name: msg.contact_name || formattedNumber,
+                  telefone: formattedNumber,
+                  company_id: company_id,
+                  lead_source_type: 'ctwa',
+                  utm_source: 'facebook',
+                  utm_medium: 'cpc',
+                  utm_campaign: referral.headline || 'Click-to-WhatsApp',
+                  ad_id: referral.source_id || null,
+                  tags: ['Click-to-WhatsApp', 'Anúncio', 'Meta Ads'],
+                  notes: `Lead gerado via anúncio: ${referral.headline || 'Click-to-WhatsApp'}`,
+                  conversion_timestamp: new Date().toISOString(),
+                };
+                
+                console.log('🆕 Criando novo lead de CTWA:', JSON.stringify(newLeadData, null, 2));
+                
+                const { data: newLead, error: leadError } = await supabase
+                  .from('leads')
+                  .insert(newLeadData)
+                  .select('id')
+                  .single();
+                
+                if (leadError) {
+                  console.error('❌ Erro ao criar lead CTWA:', leadError);
+                } else {
+                  leadId = newLead?.id;
+                  console.log('✅ Lead CTWA criado com sucesso:', leadId);
+                }
+              } else {
+                // Lead existe - atualizar com dados do anúncio se não tiver
+                const updateData: any = {};
+                
+                if (!existingLead?.lead_source_type) {
+                  updateData.lead_source_type = 'ctwa';
+                  updateData.utm_source = 'facebook';
+                  updateData.utm_medium = 'cpc';
+                  updateData.utm_campaign = referral.headline || 'Click-to-WhatsApp';
+                  updateData.ad_id = referral.source_id || null;
+                  updateData.conversion_timestamp = new Date().toISOString();
+                  
+                  // Adicionar tags sem sobrescrever existentes
+                  const existingTags = existingLead?.tags || [];
+                  const newTags = ['Click-to-WhatsApp', 'Anúncio', 'Meta Ads'];
+                  updateData.tags = [...new Set([...existingTags, ...newTags])];
+                }
+                
+                if (Object.keys(updateData).length > 0) {
+                  console.log('📝 Atualizando lead existente com dados CTWA:', leadId);
+                  await supabase
+                    .from('leads')
+                    .update(updateData)
+                    .eq('id', leadId);
+                }
+              }
+            }
+
+            const conversaData: any = {
               numero: formattedNumber,
               telefone_formatado: formattedNumber,
               mensagem: msg.content,
@@ -515,13 +600,23 @@ serve(async (req) => {
               status: msg.is_from_me ? 'Enviada' : 'Recebida',
               fromme: msg.is_from_me || false,
               company_id: company_id,
-              lead_id: existingLead?.id || null,
+              lead_id: leadId,
               nome_contato: existingLead?.name || msg.contact_name || formattedNumber,
               midia_url: msg.media_url || null,
               arquivo_nome: msg.file_name || null,
               is_group: false,
-              origem_api: 'meta', // 🔥 IDENTIFICAÇÃO: Marcar como Meta API (oficial)
+              origem_api: 'meta',
             };
+            
+            // Adicionar dados de rastreamento de anúncio se existir referral
+            if (referral) {
+              conversaData.ad_source_type = referral.source_type || null;
+              conversaData.ad_source_id = referral.source_id || null;
+              conversaData.ad_headline = referral.headline || null;
+              conversaData.ctwa_clid = referral.ctwa_clid || null;
+              conversaData.campanha_id = referral.source_id || null;
+              conversaData.campanha_nome = referral.headline || 'Click-to-WhatsApp';
+            }
 
             console.log('💾 Inserindo conversa WhatsApp Meta:', JSON.stringify(conversaData, null, 2));
 

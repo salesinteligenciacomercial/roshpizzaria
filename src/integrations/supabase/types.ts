@@ -500,12 +500,16 @@ export type Database = {
       }
       conversas: {
         Row: {
+          ad_headline: string | null
+          ad_source_id: string | null
+          ad_source_type: string | null
           arquivo_nome: string | null
           assigned_user_id: string | null
           campanha_id: string | null
           campanha_nome: string | null
           company_id: string | null
           created_at: string | null
+          ctwa_clid: string | null
           delivered: boolean | null
           fila_id: string | null
           fromme: boolean | null
@@ -529,12 +533,16 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          ad_headline?: string | null
+          ad_source_id?: string | null
+          ad_source_type?: string | null
           arquivo_nome?: string | null
           assigned_user_id?: string | null
           campanha_id?: string | null
           campanha_nome?: string | null
           company_id?: string | null
           created_at?: string | null
+          ctwa_clid?: string | null
           delivered?: boolean | null
           fila_id?: string | null
           fromme?: boolean | null
@@ -558,12 +566,16 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          ad_headline?: string | null
+          ad_source_id?: string | null
+          ad_source_type?: string | null
           arquivo_nome?: string | null
           assigned_user_id?: string | null
           campanha_id?: string | null
           campanha_nome?: string | null
           company_id?: string | null
           created_at?: string | null
+          ctwa_clid?: string | null
           delivered?: boolean | null
           fila_id?: string | null
           fromme?: boolean | null
