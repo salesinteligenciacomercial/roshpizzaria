@@ -11,6 +11,7 @@ import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
 import { LeadQuickActions } from "@/components/leads/LeadQuickActions";
 import { LeadTagsDialog } from "@/components/leads/LeadTagsDialog";
 import { TagsManager } from "@/components/leads/TagsManager";
+import { AttachmentsManager } from "@/components/leads/AttachmentsManager";
 import { NovoLeadDialog } from "@/components/funil/NovoLeadDialog";
 import { EditarLeadDialog } from "@/components/funil/EditarLeadDialog";
 import { ImportarLeadsDialog } from "@/components/funil/ImportarLeadsDialog";
@@ -851,6 +852,7 @@ export default function Leads() {
         </div>
         <div className="flex flex-wrap gap-2">
           <TagsManager onTagSelected={setSelectedTag} selectedTag={selectedTag} />
+          <AttachmentsManager />
           <Button variant="outline" size="sm" className="md:size-default" onClick={exportarLeads}>
             <Download className="h-4 w-4 md:mr-2" />
             <span className="hidden md:inline">Exportar</span>
