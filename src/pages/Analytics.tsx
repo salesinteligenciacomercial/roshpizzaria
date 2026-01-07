@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { BarChart3, TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity, Trophy, XCircle, Download, Share2, Filter, Settings, Eye, PieChart, Clock, Zap, RefreshCw, CalendarDays, UserCheck, AlertTriangle, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { BarChart3, TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity, Trophy, XCircle, Download, Share2, Filter, Settings, Eye, PieChart, Clock, Zap, RefreshCw, CalendarDays, UserCheck, AlertTriangle, ArrowUpRight, ArrowDownRight, Megaphone } from "lucide-react";
+import CampaignAnalytics from "@/components/analytics/CampaignAnalytics";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -824,7 +825,7 @@ export default function Analytics() {
       </Card>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-6 h-auto p-1">
+        <TabsList className="grid w-full grid-cols-7 h-auto p-1">
           <TabsTrigger value="overview" className="gap-2 py-3">
             <Eye className="h-4 w-4" />
             <span className="hidden sm:inline">Visão Geral</span>
@@ -832,6 +833,10 @@ export default function Analytics() {
           <TabsTrigger value="sales" className="gap-2 py-3">
             <TrendingUp className="h-4 w-4" />
             <span className="hidden sm:inline">Vendas</span>
+          </TabsTrigger>
+          <TabsTrigger value="campaigns" className="gap-2 py-3">
+            <Megaphone className="h-4 w-4" />
+            <span className="hidden sm:inline">Campanhas</span>
           </TabsTrigger>
           <TabsTrigger value="communication" className="gap-2 py-3">
             <MessageSquare className="h-4 w-4" />
@@ -1318,7 +1323,14 @@ export default function Analytics() {
           </div>
         </TabsContent>
 
-        {/* Comunicação */}
+        {/* Campanhas de Tráfego Pago */}
+        <TabsContent value="campaigns" className="space-y-6">
+          <CampaignAnalytics 
+            userCompanyId={userCompanyId} 
+            globalFilters={globalFilters} 
+          />
+        </TabsContent>
+
         <TabsContent value="communication" className="space-y-6">
           {/* KPIs de Comunicação */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
