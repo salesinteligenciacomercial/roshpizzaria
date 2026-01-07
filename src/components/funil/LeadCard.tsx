@@ -2,7 +2,7 @@ import React, { useEffect, useState, memo, useCallback } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus } from "lucide-react";
+import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus, Paperclip } from "lucide-react";
 import { AgendaModal } from "@/components/agenda/AgendaModal";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { LeadAttachments } from "@/components/leads/LeadAttachments";
 
 /**
  * ✅ BACKUP ATUALIZADO - 2024-11-01
@@ -64,6 +65,9 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [responsaveisSelecionados, setResponsaveisSelecionados] = useState<string[]>([]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [attachmentsCount, setAttachmentsCount] = useState(0);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const [userCompanyId, setUserCompanyId] = useState<string | null>(null);
 
   const normalizePhoneBR = (raw?: string): string | null => {
     if (!raw) return null;
@@ -285,12 +289,34 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
     });
   };
 
+  // Carregar contagem de anexos
+  const carregarAttachmentsCount = useCallback(async () => {
+    try {
+      const companyId = await getCompanyId();
+      if (!companyId) return;
+      setUserCompanyId(companyId);
+      
+      const { count, error } = await supabase
+        .from("lead_attachments")
+        .select("*", { count: "exact", head: true })
+        .eq("lead_id", lead.id)
+        .eq("company_id", companyId);
+      
+      if (!error && count !== null) {
+        setAttachmentsCount(count);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar anexos:", error);
+    }
+  }, [lead.id]);
+
   useEffect(() => {
     if (lead.id) {
       carregarProximasAtividades();
       carregarResponsaveis();
+      carregarAttachmentsCount();
     }
-  }, [lead.id, carregarProximasAtividades, carregarResponsaveis]);
+  }, [lead.id, carregarProximasAtividades, carregarResponsaveis, carregarAttachmentsCount]);
 
   useEffect(() => {
     if (responsavelDialogOpen) {
@@ -446,6 +472,27 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
 
           {/* Ações (menu) + agenda + expandir */}
           <div className="flex items-center gap-1">
+            {/* Indicador de anexos/prontuário */}
+            {attachmentsCount > 0 && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge 
+                      variant="outline" 
+                      className="text-xs bg-primary/10 border-primary/20 text-primary cursor-pointer hover:bg-primary/20"
+                      onClick={(e) => { e.stopPropagation(); setAttachmentsOpen(true); }}
+                    >
+                      <Paperclip className="h-2.5 w-2.5 mr-1" />
+                      {attachmentsCount}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="font-medium">{attachmentsCount} arquivo(s) no prontuário</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
             {/* Data da Agenda - Mostrar ao lado do botão apagar */}
             {proximoCompromissoData && (
               <TooltipProvider>
@@ -722,6 +769,17 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Modal de Anexos/Prontuário */}
+        {attachmentsOpen && userCompanyId && (
+          <LeadAttachments
+            open={attachmentsOpen}
+            onOpenChange={setAttachmentsOpen}
+            leadId={lead.id}
+            companyId={userCompanyId}
+            leadName={lead.nome}
+          />
+        )}
       </div>
     </Card>
   );

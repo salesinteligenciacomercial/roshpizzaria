@@ -4,6 +4,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { 
@@ -15,7 +16,8 @@ import {
   Laugh,
   Frown,
   Angry,
-  Download
+  Download,
+  FileText
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -30,6 +32,8 @@ interface MessageActionsProps {
   onEdit: (messageId: string, newContent: string) => void;
   onDelete: (messageId: string, forEveryone: boolean) => void;
   onReact: (messageId: string, emoji: string) => void;
+  onSaveToMedicalRecord?: (mediaUrl: string, fileName: string, messageType: string) => void;
+  leadId?: string;
 }
 
 export function MessageActions({
@@ -43,6 +47,8 @@ export function MessageActions({
   onEdit,
   onDelete,
   onReact,
+  onSaveToMedicalRecord,
+  leadId,
 }: MessageActionsProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
@@ -173,6 +179,20 @@ export function MessageActions({
               <Download className="h-4 w-4 mr-2" />
               Baixar
             </DropdownMenuItem>
+          )}
+
+          {/* Opção de salvar no prontuário do lead */}
+          {mediaUrl && leadId && onSaveToMedicalRecord && (messageType === "image" || messageType === "video" || messageType === "pdf" || messageType === "document") && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => {
+                onSaveToMedicalRecord(mediaUrl, fileName || `arquivo-${messageId}`, messageType || 'document');
+                setShowEmojiPicker(false);
+              }}>
+                <FileText className="h-4 w-4 mr-2" />
+                Salvar no Prontuário
+              </DropdownMenuItem>
+            </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Send, MessageSquare, Info, User, DollarSign, Tag, 
   TrendingUp, Zap, Clock, MoreVertical, Edit, Trash2, Save,
-  Bot, Bell, Calendar, CheckCircle, ArrowRightLeft
+  Bot, Bell, Calendar, CheckCircle, ArrowRightLeft, FileText, Paperclip
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -31,6 +31,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, X } from "lucide-react";
+import { LeadAttachments } from "@/components/leads/LeadAttachments";
+import { SaveToMedicalRecordDialog } from "@/components/leads/SaveToMedicalRecordDialog";
 
 interface ConversaPopupProps {
   open: boolean;
@@ -89,6 +91,16 @@ export function ConversaPopup({
   const [funis, setFunis] = useState<Array<{ id: string; nome: string; etapas: Array<{ id: string; nome: string }> }>>([]);
   const [loadingFunis, setLoadingFunis] = useState(false);
   const [currentUserName, setCurrentUserName] = useState<string>(""); // Nome do usuário logado
+  
+  // ✅ NOVO: Estados para Prontuário/Anexos
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const [saveToRecordOpen, setSaveToRecordOpen] = useState(false);
+  const [saveToRecordData, setSaveToRecordData] = useState<{
+    mediaUrl: string;
+    fileName: string;
+    messageType: string;
+  } | null>(null);
+  const [attachmentsCount, setAttachmentsCount] = useState(0);
   
   // ✅ NOVO: Hook de tags sincronizado com gerenciador
   const { allTags: tagsExistentes, refreshTags, addTagToLead, removeTagFromLead } = useTagsManager();
@@ -506,6 +518,37 @@ export function ConversaPopup({
     }
   };
 
+  // ✅ NOVO: Carregar contagem de anexos
+  const carregarAttachmentsCount = async () => {
+    if (!leadId) return;
+    try {
+      const companyId = await getCompanyId();
+      if (!companyId) return;
+      
+      const { count, error } = await supabase
+        .from("lead_attachments")
+        .select("*", { count: "exact", head: true })
+        .eq("lead_id", leadId)
+        .eq("company_id", companyId);
+      
+      if (!error && count !== null) {
+        setAttachmentsCount(count);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar contagem de anexos:", error);
+    }
+  };
+
+  // ✅ NOVO: Salvar mídia no prontuário
+  const handleSaveToMedicalRecord = (mediaUrl: string, fileName: string, messageType: string) => {
+    if (!leadVinculado?.id) {
+      toast.error("Salve o lead primeiro para adicionar arquivos ao prontuário");
+      return;
+    }
+    setSaveToRecordData({ mediaUrl, fileName, messageType });
+    setSaveToRecordOpen(true);
+  };
+
   // Carregar mensagens quando o popup abrir
   useEffect(() => {
     if (open && leadPhone) {
@@ -514,6 +557,7 @@ export function ConversaPopup({
       carregarLead();
       carregarFunis(); // ✅ Carregar funis disponíveis
       carregarUsuarioAtual(); // ✅ Carregar nome do usuário
+      carregarAttachmentsCount(); // ✅ Carregar contagem de anexos
       refreshTags(); // ✅ Atualizar tags do gerenciador
       // Buscar foto de perfil via Edge Function (com cache)
       (async () => {
@@ -532,6 +576,7 @@ export function ConversaPopup({
       setMessageInput("");
       setLeadVinculado(null);
       setAvatarUrl(undefined);
+      setAttachmentsCount(0);
     }
   }, [open, leadPhone, leadId, refreshTags]);
 
@@ -1100,6 +1145,16 @@ export function ConversaPopup({
                   )}
                   {leadVinculado && (
                     <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => setAttachmentsOpen(true)}>
+                        <Paperclip className="h-4 w-4 mr-2" />
+                        Prontuário / Anexos
+                        {attachmentsCount > 0 && (
+                          <Badge variant="secondary" className="ml-2 text-xs">
+                            {attachmentsCount}
+                          </Badge>
+                        )}
+                      </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         onClick={excluirLead}
@@ -1705,6 +1760,40 @@ export function ConversaPopup({
           emitGlobalEvent({ type: 'task-created', source: 'conversa-popup', data: { lead_id: leadId } });
         }}
       />
+
+      {/* Modal de Prontuário/Anexos */}
+      {leadVinculado && (
+        <LeadAttachments
+          open={attachmentsOpen}
+          onOpenChange={(o) => {
+            setAttachmentsOpen(o);
+            if (!o) carregarAttachmentsCount();
+          }}
+          leadId={leadVinculado.id}
+          companyId={leadVinculado.company_id}
+          leadName={leadName}
+        />
+      )}
+
+      {/* Dialog para salvar mídia no prontuário */}
+      {saveToRecordOpen && saveToRecordData && leadVinculado && (
+        <SaveToMedicalRecordDialog
+          open={saveToRecordOpen}
+          onOpenChange={(o) => {
+            setSaveToRecordOpen(o);
+            if (!o) {
+              setSaveToRecordData(null);
+              carregarAttachmentsCount();
+            }
+          }}
+          mediaUrl={saveToRecordData.mediaUrl}
+          fileName={saveToRecordData.fileName}
+          messageType={saveToRecordData.messageType}
+          leadId={leadVinculado.id}
+          companyId={leadVinculado.company_id}
+          leadName={leadName}
+        />
+      )}
       </DialogContent>
     </Dialog>
   );
