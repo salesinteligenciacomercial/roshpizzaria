@@ -33,6 +33,7 @@ import { AgendaModal } from "@/components/agenda/AgendaModal";
 import { HorarioSeletor } from "@/components/agenda/HorarioSeletor";
 import { HorarioComercial, criarHorarioPadrao } from "@/components/agenda/HorarioComercialConfig";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
+import { LeadAttachments } from "@/components/leads/LeadAttachments";
 import { formatPhoneNumber, safeFormatPhoneNumber, normalizePhoneForComparison } from "@/utils/phoneFormatter";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { useLeadsSync } from "@/hooks/useLeadsSync";
@@ -374,6 +375,8 @@ function Conversas() {
   const [agendaModalOpen, setAgendaModalOpen] = useState(false);
   const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
   const [cleanHistoryDialogOpen, setCleanHistoryDialogOpen] = useState(false);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const [attachmentsCount, setAttachmentsCount] = useState(0);
   const [cleaningHistory, setCleaningHistory] = useState(false);
   const [cleaningProgress, setCleaningProgress] = useState(0);
   const [cleaningStats, setCleaningStats] = useState({
@@ -1927,7 +1930,26 @@ function Conversas() {
     }
   };
 
-  // CORREÇÃO: Carregar boards e columns (igual ao Funil de Vendas)
+  // Carregar contagem de anexos do lead
+  const carregarAttachmentsCount = async (leadId: string) => {
+    if (!leadId) {
+      setAttachmentsCount(0);
+      return;
+    }
+    try {
+      const { count, error } = await supabase
+        .from('lead_attachments')
+        .select('*', { count: 'exact', head: true })
+        .eq('lead_id', leadId);
+      
+      if (!error) {
+        setAttachmentsCount(count || 0);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar contagem de anexos:', err);
+    }
+  };
+
   const carregarBoardsEColumns = async () => {
     try {
       // Carregar boards
@@ -1965,6 +1987,9 @@ function Conversas() {
 
     // Carregar tarefas do lead
     carregarTarefasDoLead(leadVinculado.id);
+    
+    // Carregar contagem de anexos do lead
+    carregarAttachmentsCount(leadVinculado.id);
 
     // Configurar subscrição em tempo real
     const channel = supabase.channel(`tasks-${leadVinculado.id}`).on('postgres_changes', {
@@ -9205,6 +9230,26 @@ function Conversas() {
                           </DialogContent>
                         </Dialog>
 
+                        {/* Prontuário / Ficha Técnica */}
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-start"
+                          onClick={() => {
+                            if (leadVinculado?.id) {
+                              setAttachmentsOpen(true);
+                            } else {
+                              toast.info('Salve o lead primeiro para acessar o prontuário');
+                            }
+                          }}
+                        >
+                          <Paperclip className="h-4 w-4 mr-2" /> Prontuário / Ficha Técnica
+                          {attachmentsCount > 0 && (
+                            <Badge variant="secondary" className="ml-auto">
+                              {attachmentsCount}
+                            </Badge>
+                          )}
+                        </Button>
+
                       </div>
                     </div>
                   </div>
@@ -9271,6 +9316,20 @@ function Conversas() {
         }
         toast.success('Tarefa criada e vinculada ao lead!');
       }} />
+
+          {/* Modal de Prontuário / Ficha Técnica */}
+          <LeadAttachments
+            open={attachmentsOpen}
+            onOpenChange={(o) => {
+              setAttachmentsOpen(o);
+              if (!o && leadVinculado?.id) {
+                carregarAttachmentsCount(leadVinculado.id);
+              }
+            }}
+            leadId={leadVinculado.id}
+            companyId={userCompanyId || ''}
+            leadName={leadVinculado.name || selectedConv.contactName}
+          />
         </>}
     </div>;
 }
