@@ -19,7 +19,8 @@ import {
   Building2,
   Pencil,
   Plus,
-  UserCog
+  UserCog,
+  Target
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +28,7 @@ import { WhatsAppQRCode } from "@/components/configuracoes/WhatsAppQRCode";
 import { MetaApiConfig } from "@/components/configuracoes/MetaApiConfig";
 import { MetaIntegrationsConfig } from "@/components/configuracoes/MetaIntegrationsConfig";
 import { SubcontasManager } from "@/components/configuracoes/SubcontasManager";
+import { LeadAdsFormsConfig } from "@/components/configuracoes/LeadAdsFormsConfig";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { UsuariosSubcontaDialog } from "@/components/configuracoes/UsuariosSubcontaDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -1195,6 +1197,22 @@ export default function Configuracoes() {
           <WhatsAppQRCode />
           {currentCompany?.id && <MetaApiConfig companyId={currentCompany.id} />}
           {currentCompany?.id && <MetaIntegrationsConfig companyId={currentCompany.id} />}
+
+          {/* Lead Ads Forms - Rastreamento de Tráfego Pago */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="h-5 w-5 text-orange-500" />
+                Lead Ads (Tráfego Pago)
+              </CardTitle>
+              <CardDescription>
+                Configure formulários de Lead Ads do Facebook/Instagram para receber leads automaticamente
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <LeadAdsFormsConfig />
+            </CardContent>
+          </Card>
 
           <div className="grid gap-4 md:grid-cols-2">
             <Card>

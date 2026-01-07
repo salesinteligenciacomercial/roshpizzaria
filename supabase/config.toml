@@ -9,6 +9,9 @@ verify_jwt = false
 [functions.webhook-meta]
 verify_jwt = false
 
+[functions.webhook-leadgen]
+verify_jwt = false
+
 [functions.api-funil-vendas]
 verify_jwt = true
 

@@ -1137,16 +1137,99 @@ export type Database = {
           },
         ]
       }
+      lead_ad_forms: {
+        Row: {
+          auto_etapa_id: string | null
+          auto_funil_id: string | null
+          auto_qualify_with_ia: boolean | null
+          auto_responsavel_id: string | null
+          auto_tags: string[] | null
+          company_id: string | null
+          created_at: string | null
+          form_id: string
+          form_name: string | null
+          id: string
+          notify_phone: string | null
+          notify_whatsapp: boolean | null
+          page_id: string
+          qualification_prompt: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          auto_etapa_id?: string | null
+          auto_funil_id?: string | null
+          auto_qualify_with_ia?: boolean | null
+          auto_responsavel_id?: string | null
+          auto_tags?: string[] | null
+          company_id?: string | null
+          created_at?: string | null
+          form_id: string
+          form_name?: string | null
+          id?: string
+          notify_phone?: string | null
+          notify_whatsapp?: boolean | null
+          page_id: string
+          qualification_prompt?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          auto_etapa_id?: string | null
+          auto_funil_id?: string | null
+          auto_qualify_with_ia?: boolean | null
+          auto_responsavel_id?: string | null
+          auto_tags?: string[] | null
+          company_id?: string | null
+          created_at?: string | null
+          form_id?: string
+          form_name?: string | null
+          id?: string
+          notify_phone?: string | null
+          notify_whatsapp?: boolean | null
+          page_id?: string
+          qualification_prompt?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_ad_forms_auto_etapa_id_fkey"
+            columns: ["auto_etapa_id"]
+            isOneToOne: false
+            referencedRelation: "etapas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_ad_forms_auto_funil_id_fkey"
+            columns: ["auto_funil_id"]
+            isOneToOne: false
+            referencedRelation: "funis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_ad_forms_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
+          ad_creative_name: string | null
+          ad_id: string | null
+          adset_id: string | null
+          campaign_id: string | null
           company: string | null
           company_id: string | null
+          conversion_timestamp: string | null
           cpf: string | null
           created_at: string | null
           email: string | null
           etapa_id: string | null
+          form_id: string | null
           funil_id: string | null
           id: string
+          lead_source_type: string | null
           name: string
           notes: string | null
           owner_id: string | null
@@ -1162,17 +1245,29 @@ export type Database = {
           tags: string[] | null
           telefone: string | null
           updated_at: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
           value: number | null
         }
         Insert: {
+          ad_creative_name?: string | null
+          ad_id?: string | null
+          adset_id?: string | null
+          campaign_id?: string | null
           company?: string | null
           company_id?: string | null
+          conversion_timestamp?: string | null
           cpf?: string | null
           created_at?: string | null
           email?: string | null
           etapa_id?: string | null
+          form_id?: string | null
           funil_id?: string | null
           id?: string
+          lead_source_type?: string | null
           name: string
           notes?: string | null
           owner_id?: string | null
@@ -1188,17 +1283,29 @@ export type Database = {
           tags?: string[] | null
           telefone?: string | null
           updated_at?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
           value?: number | null
         }
         Update: {
+          ad_creative_name?: string | null
+          ad_id?: string | null
+          adset_id?: string | null
+          campaign_id?: string | null
           company?: string | null
           company_id?: string | null
+          conversion_timestamp?: string | null
           cpf?: string | null
           created_at?: string | null
           email?: string | null
           etapa_id?: string | null
+          form_id?: string | null
           funil_id?: string | null
           id?: string
+          lead_source_type?: string | null
           name?: string
           notes?: string | null
           owner_id?: string | null
@@ -1214,6 +1321,11 @@ export type Database = {
           tags?: string[] | null
           telefone?: string | null
           updated_at?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
           value?: number | null
         }
         Relationships: [
