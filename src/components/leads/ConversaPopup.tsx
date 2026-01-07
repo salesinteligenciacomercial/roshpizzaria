@@ -1544,6 +1544,31 @@ export function ConversaPopup({
                         Compromissos
                       </Button>
                       
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full justify-start gap-2"
+                        onClick={() => setTarefaOpen(true)}
+                      >
+                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                        Tarefas
+                      </Button>
+                      
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full justify-start gap-2"
+                        onClick={() => setAttachmentsOpen(true)}
+                      >
+                        <Paperclip className="h-4 w-4 text-indigo-500" />
+                        Prontuário / Ficha Técnica
+                        {attachmentsCount > 0 && (
+                          <Badge variant="secondary" className="ml-auto text-xs">
+                            {attachmentsCount}
+                          </Badge>
+                        )}
+                      </Button>
+                      
                     </div>
                   </div>
                 </div>
