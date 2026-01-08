@@ -33,9 +33,66 @@ const enviarWhatsAppSchema = z.object({
   }).optional(),
   quotedMessageId: z.string().optional(),
   force_provider: z.enum(['evolution', 'meta']).optional(),
-}).refine(data => data.mensagem || data.mediaUrl || data.mediaBase64, {
-  message: 'Mensagem, mídia URL ou mídia Base64 é obrigatória'
+  // Template support for Meta API (required for first message / mass dispatch)
+  template_name: z.string().optional(),
+  template_language: z.string().optional(),
+  template_components: z.array(z.any()).optional(),
+}).refine(data => data.mensagem || data.mediaUrl || data.mediaBase64 || data.template_name, {
+  message: 'Mensagem, mídia URL, mídia Base64 ou template é obrigatório'
 });
+
+// Send template message via Meta API
+async function sendMetaTemplateMessage(
+  phoneNumberId: string,
+  accessToken: string,
+  to: string,
+  templateName: string,
+  language: string = 'pt_BR',
+  components?: any[]
+): Promise<{ success: boolean; provider: string; data?: any; error?: string }> {
+  try {
+    const url = `${META_API_BASE_URL}/${META_API_VERSION}/${phoneNumberId}/messages`;
+    
+    const templatePayload: any = {
+      name: templateName,
+      language: { code: language },
+    };
+    
+    if (components && components.length > 0) {
+      templatePayload.components = components;
+    }
+
+    console.log("📤 Meta API - Enviando template:", templateName);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: to,
+        type: 'template',
+        template: templatePayload
+      }),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('Meta API Template Error:', data);
+      return { success: false, provider: 'meta', error: data.error?.message || 'Erro ao enviar template Meta API' };
+    }
+
+    console.log("✅ Meta API - Template enviado:", data.messages?.[0]?.id);
+    return { success: true, provider: 'meta', data };
+  } catch (error) {
+    console.error('Meta API Template Exception:', error);
+    return { success: false, provider: 'meta', error: String(error) };
+  }
+}
 
 // ============= META API FUNCTIONS =============
 async function sendMetaTextMessage(
@@ -450,6 +507,34 @@ serve(async (req) => {
           validatedData
         );
       }
+      // Template message (para primeira mensagem / disparo em massa)
+      else if (hasMetaCredentials && validatedData.template_name) {
+        console.log("📘 Tentando Meta API com template:", validatedData.template_name);
+        result = await sendMetaTemplateMessage(
+          connection.meta_phone_number_id,
+          connection.meta_access_token,
+          formattedNumber,
+          validatedData.template_name,
+          validatedData.template_language || 'pt_BR',
+          validatedData.template_components
+        );
+        
+        // Fallback para Evolution se Meta falhar e provider for "both"
+        if (!result.success && apiProvider === 'both' && hasEvolutionConfig) {
+          console.log("🔄 Template Meta falhou, tentando Evolution como fallback...");
+          const baseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
+          const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+          
+          result = await sendEvolutionMessage(
+            baseUrl.replace(/\/$/, ''),
+            connection.instance_name,
+            apiKey,
+            validatedData.numero,
+            false,
+            validatedData
+          );
+        }
+      }
       else if (hasMetaCredentials && validatedData.mediaUrl) {
         console.log("📘 Tentando Meta API com URL de mídia...");
         
@@ -466,6 +551,12 @@ serve(async (req) => {
           validatedData.mensagem || validatedData.caption,
           false // isMediaId = false (using URL)
         );
+        
+        // Detectar erro de janela de 24h e sugerir template
+        if (!result.success && result.error?.includes('Re-engagement message')) {
+          console.log("⚠️ Janela de 24h expirada - necessário usar template");
+          result.error = 'JANELA_24H_EXPIRADA: Este contato não enviou mensagem nas últimas 24h. Para enviar a primeira mensagem, use um template aprovado.';
+        }
       } else if (hasMetaCredentials && validatedData.mensagem) {
         console.log("📘 Tentando Meta API com texto...");
         result = await sendMetaTextMessage(
@@ -474,6 +565,12 @@ serve(async (req) => {
           formattedNumber,
           validatedData.mensagem
         );
+
+        // Detectar erro de janela de 24h e sugerir template
+        if (!result.success && (result.error?.includes('Re-engagement message') || result.error?.includes('outside the allowed window'))) {
+          console.log("⚠️ Janela de 24h expirada - necessário usar template");
+          result.error = 'JANELA_24H_EXPIRADA: Este contato não enviou mensagem nas últimas 24h. Para enviar a primeira mensagem, use um template aprovado.';
+        }
 
         // Fallback para Evolution se Meta falhar e provider for "both"
         if (!result.success && apiProvider === 'both' && hasEvolutionConfig) {
@@ -507,7 +604,7 @@ serve(async (req) => {
       } else {
         // Sem mensagem nem mídia válida e sem Evolution
         console.log("⚠️ Sem mensagem/mídia válida e sem Evolution");
-        result = { success: false, provider: 'meta', error: 'Mensagem, mídia ou Evolution API é obrigatória' };
+        result = { success: false, provider: 'meta', error: 'Mensagem, mídia, template ou Evolution API é obrigatória' };
       }
     }
     // Evolution API
