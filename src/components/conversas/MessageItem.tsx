@@ -106,8 +106,14 @@ function MessageItemComponent({
     ? allMessages.find(m => m.id === message.replyTo)
     : null;
 
+  // Estado para mídia expirada
+  const [mediaExpired, setMediaExpired] = useState(false);
+
   // Carregar mídia quando componente montar
   useEffect(() => {
+    // Reset estado de expiração ao mudar de mensagem
+    setMediaExpired(false);
+    
     // ⚡ CORREÇÃO DEFINITIVA: Priorizar URLs permanentes do Storage
     if (message.mediaUrl && (message.type === 'image' || message.type === 'video' || message.type === 'audio' || message.type === 'pdf' || message.type === 'document')) {
       
@@ -158,6 +164,15 @@ function MessageItemComponent({
             error: error?.message || String(error),
             mediaUrlPreview: message.mediaUrl?.substring(0, 50)
           });
+          
+          // ⚡ Detectar mídia expirada
+          if (error?.message === 'MEDIA_EXPIRED') {
+            console.warn('⚠️ [MESSAGE-ITEM] Mídia expirada:', message.id);
+            setMediaExpired(true);
+            setMediaLoading(false);
+            return;
+          }
+          
           // ⚡ FALLBACK: Se falhar e URL original é permanente, usar
           if (message.mediaUrl && isPermanentUrl(message.mediaUrl)) {
             console.log('⚠️ [MESSAGE-ITEM] Usando URL original permanente como fallback');
@@ -293,7 +308,13 @@ function MessageItemComponent({
           {/* Image Message */}
           {message.type === "image" && (
             <div className="space-y-2">
-              {mediaLoading ? (
+              {mediaExpired ? (
+                <div className="flex flex-col items-center justify-center w-[300px] h-[150px] bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800 p-4">
+                  <AlertCircle className="h-10 w-10 text-amber-500 mb-2" />
+                  <span className="text-sm text-amber-700 dark:text-amber-300 font-medium text-center">Imagem expirada</span>
+                  <span className="text-xs text-amber-600 dark:text-amber-400 text-center mt-1">Mídias do WhatsApp expiram após alguns dias</span>
+                </div>
+              ) : mediaLoading ? (
                 <div className="flex flex-col items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg border-2 border-dashed border-border">
                   <ImageIcon className="h-12 w-12 text-muted-foreground mb-2" />
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mb-1" />
@@ -353,7 +374,15 @@ function MessageItemComponent({
                 <Volume2 className="h-4 w-4" />
                 <span className="text-sm font-medium">Mensagem de áudio</span>
               </div>
-              {mediaLoading ? (
+              {mediaExpired ? (
+                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <AlertCircle className="h-5 w-5 text-amber-500" />
+                  <div className="flex flex-col">
+                    <span className="text-sm text-amber-700 dark:text-amber-300 font-medium">Áudio expirado</span>
+                    <span className="text-xs text-amber-600 dark:text-amber-400">Mídias do WhatsApp expiram após alguns dias</span>
+                  </div>
+                </div>
+              ) : mediaLoading ? (
                 <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span className="text-xs text-muted-foreground">Carregando áudio...</span>
@@ -466,7 +495,13 @@ function MessageItemComponent({
           {/* PDF Message - trata tanto tipo "pdf" quanto "document" com extensão .pdf */}
           {isPdfMessage(message) && (
             <div className="space-y-2 min-w-[250px]">
-              {mediaLoading ? (
+              {mediaExpired ? (
+                <div className="flex flex-col items-center justify-center p-6 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <AlertCircle className="h-10 w-10 text-amber-500 mb-2" />
+                  <span className="text-sm text-amber-700 dark:text-amber-300 font-medium text-center">PDF expirado</span>
+                  <span className="text-xs text-amber-600 dark:text-amber-400 text-center mt-1">Mídias do WhatsApp expiram após alguns dias</span>
+                </div>
+              ) : mediaLoading ? (
                 <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-lg bg-muted/50">
                   <FileText className="h-12 w-12 text-muted-foreground mb-2" />
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mb-1" />
@@ -536,7 +571,13 @@ function MessageItemComponent({
           {/* Video Message */}
           {message.type === "video" && (
             <div className="space-y-2">
-              {mediaLoading ? (
+              {mediaExpired ? (
+                <div className="flex flex-col items-center justify-center w-[300px] h-[150px] bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800 p-4">
+                  <AlertCircle className="h-10 w-10 text-amber-500 mb-2" />
+                  <span className="text-sm text-amber-700 dark:text-amber-300 font-medium text-center">Vídeo expirado</span>
+                  <span className="text-xs text-amber-600 dark:text-amber-400 text-center mt-1">Mídias do WhatsApp expiram após alguns dias</span>
+                </div>
+              ) : mediaLoading ? (
                 <div className="flex flex-col items-center justify-center w-[300px] h-[200px] bg-muted/50 rounded-lg border-2 border-dashed border-border">
                   <Video className="h-12 w-12 text-muted-foreground mb-2" />
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mb-1" />
