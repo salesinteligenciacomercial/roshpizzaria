@@ -484,13 +484,155 @@ serve(async (req) => {
     // Detectar origem do payload
     const isEvolutionAPI = isEvolutionAPIPayload(body);
     
-    // Ignorar eventos que não sejam mensagens novas
+    // ⚡ CORREÇÃO: Processar eventos de status (delivered, read) da Evolution API
     if (body.event === 'messages.update') {
-      console.log('⏭️ Ignorando evento de status:', body.event, body.data?.status);
-      return new Response(
-        JSON.stringify({ success: true, message: 'Evento de status ignorado' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.log('📊 [WEBHOOK] Evento de atualização de status recebido:', {
+        event: body.event,
+        instance: body.instance,
+        dataArray: body.data
+      });
+      
+      try {
+        // body.data pode ser um array de updates
+        const updates = Array.isArray(body.data) ? body.data : [body.data];
+        
+        for (const update of updates) {
+          const messageId = update.key?.id;
+          const status = update.status;
+          
+          if (!messageId || !status) {
+            console.log('⏭️ [WEBHOOK] Update sem messageId ou status:', update);
+            continue;
+          }
+          
+          console.log('📊 [WEBHOOK] Processando status update:', {
+            messageId,
+            status,
+            remoteJid: update.key?.remoteJid,
+            fromMe: update.key?.fromMe
+          });
+          
+          // Mapear status da Evolution API para nosso formato
+          // Status possíveis: PENDING (0), SENT (1), DELIVERY_ACK (2), READ (3), PLAYED (4)
+          let delivered = false;
+          let read = false;
+          
+          if (status === 'DELIVERY_ACK' || status === 2 || status === 'delivered') {
+            delivered = true;
+            read = false;
+          } else if (status === 'READ' || status === 3 || status === 'read' || 
+                     status === 'PLAYED' || status === 4 || status === 'played') {
+            delivered = true;
+            read = true;
+          }
+          
+          if (!delivered && !read) {
+            console.log('⏭️ [WEBHOOK] Status não requer atualização:', status);
+            continue;
+          }
+          
+          // Buscar mensagem no banco pelo messageId (pode estar em diferentes campos)
+          // O ID da mensagem pode estar em 'id' diretamente ou precisamos buscar
+          const { data: mensagens, error: searchError } = await supabase
+            .from('conversas')
+            .select('id, delivered, read')
+            .or(`id.eq.${messageId}`)
+            .limit(5);
+          
+          if (searchError) {
+            console.error('❌ [WEBHOOK] Erro ao buscar mensagem:', searchError);
+            continue;
+          }
+          
+          // Se não encontrou pela ID direta, tentar buscar pelo número + timestamp aproximado
+          if (!mensagens || mensagens.length === 0) {
+            console.log('⚠️ [WEBHOOK] Mensagem não encontrada pelo ID, tentando buscar pelo número...');
+            
+            // Extrair número do remoteJid
+            const remoteJid = update.key?.remoteJid || '';
+            const numero = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '').replace(/[^0-9]/g, '');
+            const numeroNormalizado = numero.startsWith('55') ? numero : `55${numero}`;
+            
+            // Buscar mensagens recentes enviadas (fromMe=true) para esse número
+            const { data: mensagensRecentes, error: recentError } = await supabase
+              .from('conversas')
+              .select('id, delivered, read')
+              .eq('fromme', true)
+              .or(`numero.eq.${numeroNormalizado},numero.eq.${numero},telefone_formatado.eq.${numeroNormalizado}`)
+              .order('created_at', { ascending: false })
+              .limit(10);
+            
+            if (recentError || !mensagensRecentes || mensagensRecentes.length === 0) {
+              console.log('⚠️ [WEBHOOK] Nenhuma mensagem encontrada para atualizar status');
+              continue;
+            }
+            
+            // Atualizar as mensagens encontradas que ainda não têm esse status
+            for (const msg of mensagensRecentes) {
+              // Só atualizar se o novo status for "melhor" que o atual
+              const shouldUpdate = (read && !msg.read) || (delivered && !msg.delivered && !msg.read);
+              
+              if (shouldUpdate) {
+                const updateData: any = {};
+                if (delivered) updateData.delivered = true;
+                if (read) updateData.read = true;
+                
+                const { error: updateError } = await supabase
+                  .from('conversas')
+                  .update(updateData)
+                  .eq('id', msg.id);
+                
+                if (updateError) {
+                  console.error('❌ [WEBHOOK] Erro ao atualizar status da mensagem:', updateError);
+                } else {
+                  console.log('✅ [WEBHOOK] Status atualizado:', {
+                    messageId: msg.id,
+                    delivered,
+                    read
+                  });
+                }
+              }
+            }
+          } else {
+            // Encontrou mensagem pelo ID direto
+            for (const msg of mensagens) {
+              const shouldUpdate = (read && !msg.read) || (delivered && !msg.delivered && !msg.read);
+              
+              if (shouldUpdate) {
+                const updateData: any = {};
+                if (delivered) updateData.delivered = true;
+                if (read) updateData.read = true;
+                
+                const { error: updateError } = await supabase
+                  .from('conversas')
+                  .update(updateData)
+                  .eq('id', msg.id);
+                
+                if (updateError) {
+                  console.error('❌ [WEBHOOK] Erro ao atualizar status:', updateError);
+                } else {
+                  console.log('✅ [WEBHOOK] Status atualizado:', {
+                    messageId: msg.id,
+                    delivered,
+                    read
+                  });
+                }
+              }
+            }
+          }
+        }
+        
+        return new Response(
+          JSON.stringify({ success: true, message: 'Status atualizado' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (statusError) {
+        console.error('❌ [WEBHOOK] Erro ao processar status update:', statusError);
+        return new Response(
+          JSON.stringify({ success: true, message: 'Erro ao processar status, mas OK' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
     
     console.log('📩 Webhook recebido:', {
