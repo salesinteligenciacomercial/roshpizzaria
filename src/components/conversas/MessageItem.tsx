@@ -643,24 +643,34 @@ END:VCARD`;
           )}
 
           {/* Timestamp and Status */}
-          <div className="flex items-center justify-end gap-1 mt-1">
+          <div className="flex items-center justify-end gap-1.5 mt-1">
             <span className="text-[10px] text-muted-foreground">
+              {message.timestamp.toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+              })}{" "}
               {message.timestamp.toLocaleTimeString("pt-BR", {
                 hour: "2-digit",
                 minute: "2-digit",
               })}
             </span>
             {message.sender === "user" && (
-              <div className="flex items-center gap-0.5" title={message.read ? 'Visualizado' : message.delivered ? 'Entregue' : 'Enviando'}>
+              <div className="flex items-center gap-0.5" title={message.read ? 'Visualizado' : message.delivered ? 'Entregue' : 'Enviado'}>
                 {message.read ? (
                   <>
                     <CheckCheck className="h-3.5 w-3.5 text-[#53bdeb]" />
-                    <span className="text-[9px] text-[#53bdeb] font-medium">Visto</span>
+                    <span className="text-[9px] text-[#53bdeb] font-medium ml-0.5">Visto</span>
                   </>
                 ) : message.delivered ? (
-                  <CheckCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                  <>
+                    <CheckCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-[9px] text-muted-foreground ml-0.5">Entregue</span>
+                  </>
                 ) : (
-                  <Check className="h-3.5 w-3.5 text-muted-foreground" />
+                  <>
+                    <Check className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-[9px] text-muted-foreground ml-0.5">Enviado</span>
+                  </>
                 )}
               </div>
             )}
