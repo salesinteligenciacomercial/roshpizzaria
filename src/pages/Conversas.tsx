@@ -7188,10 +7188,10 @@ function Conversas() {
       toast.error('Erro ao finalizar atendimento');
     }
   };
-  return <div className="flex h-screen w-full bg-background overflow-hidden">
+  return <div className="flex w-full bg-background overflow-hidden" style={{ height: 'calc(100vh - 80px)', maxHeight: 'calc(100vh - 80px)' }}>
       {/* Sidebar esquerda - tema cinza claro */}
       {/* No mobile: esconder quando uma conversa está selecionada */}
-      <div className={`${isMobile ? (selectedConv ? 'hidden' : 'w-full') : 'w-[380px]'} flex-shrink-0 bg-muted/30 border-r border-border flex flex-col`}>
+      <div className={`${isMobile ? (selectedConv ? 'hidden' : 'w-full') : 'w-[380px]'} flex-shrink-0 bg-muted/30 border-r border-border flex flex-col overflow-hidden`}>
         {/* Header - Fixo, não move com scroll */}
         <div className="px-3 py-4 bg-background border-b border-border flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
@@ -7569,12 +7569,14 @@ function Conversas() {
 
       {/* Chat Area - Estrutura com header e input fixos */}
       {/* No mobile: mostrar apenas quando uma conversa está selecionada */}
-      <div className={`${isMobile && !selectedConv ? 'hidden' : 'flex-1'} flex flex-col min-w-0 h-full`} style={{
+      <div className={`${isMobile && !selectedConv ? 'hidden' : 'flex-1'} flex flex-col min-w-0`} style={{
+        height: '100%',
+        maxHeight: '100vh',
         overflow: 'hidden'
       }}>
         {selectedConv ? <>
             {/* Header - FIXO NO TOPO */}
-            <div className="flex-shrink-0 bg-background border-b z-10">
+            <div className="flex-shrink-0 bg-background border-b z-10" style={{ minHeight: '56px', maxHeight: '60px' }}>
               <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onTransferAtendimento={() => setTransferDialogOpen(true)} onToggleAI={() => toggleAiMode(selectedConv.id)} isAIActive={aiMode[selectedConv.id] || false} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} showBackButton={isMobile} onBack={() => setSelectedConv(null)} />
             </div>
             
@@ -7630,14 +7632,15 @@ function Conversas() {
               </DialogContent>
             </Dialog>
 
-            {/* Container principal: mensagens + input */}
-            <div className="flex flex-1 min-h-0 overflow-hidden">
+            {/* Container principal: mensagens + input - usa flex-1 para ocupar espaço restante */}
+            <div className="flex flex-1 min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
               {/* Messages Area + Input */}
-              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
                 {/* Messages - ÚNICA ÁREA COM SCROLL */}
-                <div id="messages-scroll-container" className="flex-1 overflow-y-auto p-3 md:p-4 bg-[#e5ddd5] messages-scroll-area" style={{
+                <div id="messages-scroll-container" className="flex-1 overflow-y-auto p-2 md:p-3 bg-[#e5ddd5] messages-scroll-area" style={{
                   backgroundImage: "url('data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d9d9d9' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')",
-                  WebkitOverflowScrolling: 'touch'
+                  WebkitOverflowScrolling: 'touch',
+                  minHeight: 0
                 } as React.CSSProperties}>
                   {/* Indicador de histórico */}
                   {selectedConv.phoneNumber && historyStats[selectedConv.phoneNumber] && <div className="flex justify-center mb-4">
@@ -7671,7 +7674,7 @@ function Conversas() {
                 </div>
 
                 {/* Input Area - FIXO NO BOTTOM */}
-                <div className="bg-background border-t border-border p-2 md:p-3 flex-shrink-0">
+                <div className="bg-background border-t border-border p-2 flex-shrink-0" style={{ minHeight: '60px', maxHeight: '180px' }}>
                   {replyingTo && <div className="mb-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
                       <div className="flex items-center justify-between">
                         <div className="flex items-start gap-2 flex-1 min-w-0">

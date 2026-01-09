@@ -127,9 +127,9 @@ import { useEffect, useState } from "react";
    };
 
   return (
-    <div className="w-full bg-background border-b border-border shadow-sm">
+    <div className="w-full bg-background border-b border-border shadow-sm" style={{ maxHeight: '60px', overflow: 'hidden' }}>
        {/* Header compacto - tudo em uma linha */}
-       <div className="px-3 py-2 flex items-center justify-between gap-2">
+       <div className="px-2 py-1.5 flex items-center justify-between gap-2" style={{ height: '56px' }}>
          <div className="flex items-center gap-2 min-w-0 flex-1">
             {/* Botão Voltar (Mobile) */}
             {showBackButton && onBack && (
@@ -162,12 +162,22 @@ import { useEffect, useState } from "react";
                 <h2 className="font-bold text-sm md:text-base text-foreground truncate">
                   {contactName}
                 </h2>
-                {leadVinculado && (
+                {leadVinculado ? (
                   <Badge className="gap-0.5 bg-green-600 hover:bg-green-700 text-[10px] py-0 px-1.5 h-5 flex-shrink-0">
                     <Check className="h-2.5 w-2.5" />
                     <span className="hidden sm:inline">Lead</span>
                   </Badge>
-                )}
+                ) : (mostrarBotaoCriarLead && onCriarLead && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onCriarLead}
+                    className="h-5 text-[10px] gap-0.5 px-1.5 py-0"
+                  >
+                    <Plus className="h-2.5 w-2.5" />
+                    <span className="hidden sm:inline">Criar Lead</span>
+                  </Button>
+                ))}
                 {getSyncStatusBadge()}
               </div>
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -391,20 +401,7 @@ import { useEffect, useState } from "react";
             </div>
        </div>
           
-       {/* Botão criar lead (se não tiver lead vinculado) */}
-       {mostrarBotaoCriarLead && onCriarLead && !leadVinculado && (
-         <div className="px-3 pb-2">
-           <Button
-             variant="outline"
-             size="sm"
-             onClick={onCriarLead}
-             className="h-6 text-xs gap-1"
-           >
-             <Plus className="h-3 w-3" />
-             Criar Lead no CRM
-           </Button>
-         </div>
-       )}
+       {/* Botão criar lead - movido para dentro da mesma linha */}
     </div>
   );
   }
