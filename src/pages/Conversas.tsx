@@ -9336,9 +9336,14 @@ function Conversas() {
       
       {/* Modal de Visualização de Imagem */}
       <Dialog open={imageModalOpen} onOpenChange={setImageModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] p-0">
-          <div className="relative h-full">
-            <img src={selectedMedia?.url} alt={selectedMedia?.name || "Imagem"} className="w-full h-full object-contain rounded-lg" />
+        <DialogContent className="max-w-[95vw] max-h-[95vh] w-auto h-auto p-2 flex items-center justify-center">
+          <div className="relative flex items-center justify-center w-full h-full">
+            <img 
+              src={selectedMedia?.url} 
+              alt={selectedMedia?.name || "Imagem"} 
+              className="max-w-full max-h-[85vh] object-contain rounded-lg" 
+              style={{ maxWidth: '90vw', maxHeight: '85vh' }}
+            />
             <Button variant="secondary" size="sm" className="absolute bottom-4 right-4" onClick={() => selectedMedia && downloadMedia(selectedMedia.url, `${selectedMedia.name}.jpg`)}>
               <Download className="h-4 w-4 mr-2" />
               Baixar
