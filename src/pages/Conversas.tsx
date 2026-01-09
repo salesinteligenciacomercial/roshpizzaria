@@ -7567,12 +7567,12 @@ function Conversas() {
         </ScrollArea>
       </div>
 
-      {/* Chat Area - Estrutura fixa sem movimento vertical */}
+      {/* Chat Area - Estrutura com header e input fixos */}
       {/* No mobile: mostrar apenas quando uma conversa está selecionada */}
-      <div className={`${isMobile && !selectedConv ? 'hidden' : 'flex-1'} flex flex-col h-full overflow-hidden min-w-0 scrollbar-hide`} style={{
-      scrollbarWidth: 'none',
-      msOverflowStyle: 'none'
-    } as React.CSSProperties}>
+      <div className={`${isMobile && !selectedConv ? 'hidden' : 'flex-1'} flex flex-col overflow-hidden min-w-0`} style={{
+        height: '100%',
+        maxHeight: '100vh'
+      }}>
         {selectedConv ? <>
             {/* Header - ABSOLUTAMENTE FIXO */}
             <div className="flex-shrink-0 bg-background border-b">
@@ -7631,19 +7631,14 @@ function Conversas() {
               </DialogContent>
             </Dialog>
 
-            <div className="flex flex-1 overflow-hidden scrollbar-hide">
+            <div className="flex flex-1 overflow-hidden min-h-0">
               {/* Messages Area */}
-              <div className="flex-1 flex flex-col overflow-hidden scrollbar-hide" style={{
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none'
-          } as React.CSSProperties}>
+              <div className="flex-1 flex flex-col overflow-hidden min-h-0">
                 {/* Messages - ÚNICA ÁREA COM SCROLL */}
-                <div id="messages-scroll-container" className="flex-1 overflow-y-auto p-6 bg-[#e5ddd5] messages-scroll-area scrollbar-hide" style={{
-              backgroundImage: "url('data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d9d9d9' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')",
-              scrollbarWidth: 'none',
-              msOverflowStyle: 'none',
-              WebkitOverflowScrolling: 'touch'
-            } as React.CSSProperties}>
+                <div id="messages-scroll-container" className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#e5ddd5] messages-scroll-area min-h-0" style={{
+                  backgroundImage: "url('data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d9d9d9' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')",
+                  WebkitOverflowScrolling: 'touch'
+                } as React.CSSProperties}>
                   {/* Indicador de histórico */}
                   {selectedConv.phoneNumber && historyStats[selectedConv.phoneNumber] && <div className="flex justify-center mb-4">
                       <Badge variant="secondary" className="gap-2">
@@ -7655,7 +7650,7 @@ function Conversas() {
                       <span className="text-sm">Carregando histórico completo...</span>
                     </div>}
                   
-                  <div className="space-y-2 min-h-[200px]">
+                  <div className="space-y-2 pb-4">
                      {selectedConv.messages.length === 0 ? <div className="text-center text-muted-foreground py-8">
                         Nenhuma mensagem ainda
                       </div> : selectedConv.messages.map(msg => <MessageItem key={msg.id} message={msg as any} allMessages={selectedConv.messages as any} onDownload={downloadMedia} onTranscribe={transcreverAudio} onImageClick={(url, name) => {
@@ -7675,8 +7670,8 @@ function Conversas() {
                   </div>
                 </div>
 
-                {/* Input Area - ABSOLUTAMENTE FIXO NO BOTTOM */}
-                <div className="bg-background border-t border-border p-4 flex-shrink-0">
+                {/* Input Area - FIXO NO BOTTOM */}
+                <div className="bg-background border-t border-border p-3 md:p-4 flex-shrink-0" style={{ minHeight: 'auto' }}>
                   {replyingTo && <div className="mb-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
                       <div className="flex items-center justify-between">
                         <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -7808,9 +7803,7 @@ function Conversas() {
               </div>
 
               {/* Info Panel - COM SCROLL */}
-              {showInfoPanel && <div className="w-[340px] bg-background border-l border-border flex flex-col flex-shrink-0" style={{
-            height: 'calc(100vh - 64px)'
-          }}>
+              {showInfoPanel && <div className="w-[340px] bg-background border-l border-border flex flex-col flex-shrink-0 overflow-hidden">
                   <div className="p-6 space-y-6 flex-1 overflow-y-auto pb-32">
                     {/* Contact Info */}
                     <div className="text-center">
