@@ -7569,13 +7569,12 @@ function Conversas() {
 
       {/* Chat Area - Estrutura com header e input fixos */}
       {/* No mobile: mostrar apenas quando uma conversa está selecionada */}
-      <div className={`${isMobile && !selectedConv ? 'hidden' : 'flex-1'} flex flex-col overflow-hidden min-w-0`} style={{
-        height: '100%',
-        maxHeight: '100vh'
+      <div className={`${isMobile && !selectedConv ? 'hidden' : 'flex-1'} flex flex-col min-w-0 h-full`} style={{
+        overflow: 'hidden'
       }}>
         {selectedConv ? <>
-            {/* Header - ABSOLUTAMENTE FIXO */}
-            <div className="flex-shrink-0 bg-background border-b">
+            {/* Header - FIXO NO TOPO */}
+            <div className="flex-shrink-0 bg-background border-b z-10">
               <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onTransferAtendimento={() => setTransferDialogOpen(true)} onToggleAI={() => toggleAiMode(selectedConv.id)} isAIActive={aiMode[selectedConv.id] || false} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} showBackButton={isMobile} onBack={() => setSelectedConv(null)} />
             </div>
             
@@ -7631,11 +7630,12 @@ function Conversas() {
               </DialogContent>
             </Dialog>
 
-            <div className="flex flex-1 overflow-hidden min-h-0">
-              {/* Messages Area */}
-              <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+            {/* Container principal: mensagens + input */}
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+              {/* Messages Area + Input */}
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                 {/* Messages - ÚNICA ÁREA COM SCROLL */}
-                <div id="messages-scroll-container" className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#e5ddd5] messages-scroll-area min-h-0" style={{
+                <div id="messages-scroll-container" className="flex-1 overflow-y-auto p-3 md:p-4 bg-[#e5ddd5] messages-scroll-area" style={{
                   backgroundImage: "url('data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d9d9d9' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')",
                   WebkitOverflowScrolling: 'touch'
                 } as React.CSSProperties}>
@@ -7671,7 +7671,7 @@ function Conversas() {
                 </div>
 
                 {/* Input Area - FIXO NO BOTTOM */}
-                <div className="bg-background border-t border-border p-3 md:p-4 flex-shrink-0" style={{ minHeight: 'auto' }}>
+                <div className="bg-background border-t border-border p-2 md:p-3 flex-shrink-0">
                   {replyingTo && <div className="mb-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
                       <div className="flex items-center justify-between">
                         <div className="flex items-start gap-2 flex-1 min-w-0">

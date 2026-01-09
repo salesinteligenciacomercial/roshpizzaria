@@ -128,7 +128,7 @@ import { useEffect, useState } from "react";
 
   return (
     <div className="w-full bg-background border-b border-border shadow-sm backdrop-blur-sm">
-       <div className="p-4 space-y-3">
+       <div className="p-2 md:p-3 space-y-2">
          <div className="flex items-center justify-between">
            <div className="flex items-center gap-3">
               {/* Botão Voltar (Mobile) */}
@@ -145,19 +145,19 @@ import { useEffect, useState } from "react";
               )}
               {/* Avatar do Lead com Indicador de Status Online/Offline */}
               <div className="relative">
-                <Avatar className="h-14 w-14 border-2 border-primary/20">
+                <Avatar className="h-10 w-10 md:h-12 md:w-12 border-2 border-primary/20">
                   <AvatarImage src={avatarUrl} alt={contactName} />
-                  <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold text-lg">
+                  <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold text-sm md:text-base">
                     {getInitials(contactName)}
                   </AvatarFallback>
                 </Avatar>
                 {/* Badge da Rede Social */}
-                <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-1 border-2 border-background shadow-sm">
+                <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-0.5 border-2 border-background shadow-sm">
                   {getChannelIcon()}
                 </div>
                 {/* Indicador de Status Online/Offline */}
                 {onlineStatus !== 'unknown' && (
-                  <div className={`absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-background shadow-sm ${
+                  <div className={`absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background shadow-sm ${
                     onlineStatus === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
                   }`} title={onlineStatus === 'online' ? 'Online' : 'Offline'} />
                 )}
@@ -165,7 +165,7 @@ import { useEffect, useState } from "react";
               {/* Nome e Canal */}
               <div className="flex flex-col min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h2 className="font-bold text-lg text-foreground truncate">
+                  <h2 className="font-bold text-base md:text-lg text-foreground truncate">
                     {contactName}
                   </h2>
                   {getSyncStatusBadge()}
@@ -390,13 +390,14 @@ import { useEffect, useState } from "react";
             </div>
          </div>
          
-         {/* Lead Badge e botão criar lead - linha separada para mobile */}
+         {/* Lead Badge e botão criar lead - compacto no mobile */}
          {(leadVinculado || (mostrarBotaoCriarLead && onCriarLead)) && (
-           <div className="flex items-center gap-2 flex-wrap">
+           <div className="flex items-center gap-1.5 flex-wrap">
              {leadVinculado && (
-               <Badge className="gap-1 bg-green-600 hover:bg-green-700">
+               <Badge className="gap-1 bg-green-600 hover:bg-green-700 text-xs py-0.5 px-2">
                  <Check className="h-3 w-3" />
-                 Lead Cadastrado
+                 <span className="hidden md:inline">Lead Cadastrado</span>
+                 <span className="md:hidden">Lead</span>
                </Badge>
              )}
              {mostrarBotaoCriarLead && onCriarLead && (
@@ -407,14 +408,15 @@ import { useEffect, useState } from "react";
                  className="h-6 text-xs gap-1"
                >
                  <Plus className="h-3 w-3" />
-                 Criar Lead no CRM
+                 <span className="hidden md:inline">Criar Lead no CRM</span>
+                 <span className="md:hidden">Criar Lead</span>
                </Button>
              )}
           </div>
          )}
-         {/* Informações do Lead */}
+         {/* Informações do Lead - Ocultas no mobile para economizar espaço */}
          {(tags.length > 0 || funnelStage || produto || valor || responsavel) && (
-           <div className="space-y-2 pt-2 border-t border-border/50">
+           <div className="hidden md:block space-y-2 pt-2 border-t border-border/50">
              {/* Tags */}
              {tags.length > 0 && (
                <div className="flex flex-wrap gap-1.5">
