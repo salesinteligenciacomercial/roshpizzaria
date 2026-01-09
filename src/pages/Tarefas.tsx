@@ -578,6 +578,37 @@ export default function Tarefas() {
       const {
         data: columnsData
       } = await columnsQuery;
+      
+      // ✅ NOVO: Garantir que existe coluna "Ganho" em cada board
+      if (selectedBoard && columnsData) {
+        const hasGanhoColumn = columnsData.some(col => 
+          col.nome?.toLowerCase().includes('ganho') || 
+          col.nome?.toLowerCase().includes('concluído') ||
+          col.nome?.toLowerCase().includes('concluido') ||
+          col.nome?.includes('✅')
+        );
+        
+        if (!hasGanhoColumn) {
+          console.log('📦 [Tarefas] Criando coluna fixa "Ganho" para o board...');
+          const maxPosition = columnsData.reduce((max, col) => Math.max(max, col.posicao || 0), 0);
+          const { data: newColumn, error: createError } = await supabase
+            .from("task_columns")
+            .insert([{
+              nome: '✅ Ganho',
+              board_id: selectedBoard,
+              posicao: maxPosition + 1,
+              cor: '#22c55e'
+            }])
+            .select()
+            .single();
+          
+          if (!createError && newColumn) {
+            console.log('✅ [Tarefas] Coluna "Ganho" criada com sucesso');
+            columnsData.push(newColumn);
+          }
+        }
+      }
+      
       setColumns(columnsData || []);
 
       // ✅ OTIMIZAÇÃO: Limitar query inicial - só carregar tarefas do board selecionado e limitar quantidade
@@ -1012,12 +1043,25 @@ export default function Tarefas() {
       targetColumnName: targetColumn.nome
     });
 
+    // ✅ NOVO: Verificar se a coluna destino é "Ganho" para marcar como concluída
+    const isGanhoColumn = targetColumn.nome?.toLowerCase().includes('ganho') || 
+                          targetColumn.nome?.toLowerCase().includes('concluído') ||
+                          targetColumn.nome?.toLowerCase().includes('concluido') ||
+                          targetColumn.nome?.includes('✅');
+
     // ✅ MELHORADO: Atualização otimista com validação
     setTasks(prev => prev.map(t => {
       if (t.id === taskId) {
+        // Se for coluna Ganho, marcar todos os checklists como concluídos
+        const updatedChecklist = isGanhoColumn && t.checklist 
+          ? t.checklist.map(item => ({ ...item, done: true }))
+          : t.checklist;
+        
         return {
           ...t,
-          column_id: newColumnId!
+          column_id: newColumnId!,
+          checklist: updatedChecklist,
+          status: isGanhoColumn ? 'concluido' : t.status
         };
       }
       return t;
@@ -1032,7 +1076,8 @@ export default function Tarefas() {
         // Reverter atualização otimista
         setTasks(prev => prev.map(t => t.id === taskId ? {
           ...t,
-          column_id: oldColumnId
+          column_id: oldColumnId,
+          checklist: task.checklist // Reverter checklist
         } : t));
         toast.error("Não autenticado");
         setActiveTaskId(null);
@@ -1050,7 +1095,13 @@ export default function Tarefas() {
       if (response.error) {
         throw response.error;
       }
-      toast.success(`Tarefa movida para "${targetColumn.nome}"`);
+      
+      // ✅ Mostrar mensagem apropriada
+      if (isGanhoColumn) {
+        toast.success(`🏆 Tarefa concluída com sucesso!`);
+      } else {
+        toast.success(`Tarefa movida para "${targetColumn.nome}"`);
+      }
 
       // Emitir evento global para sincronização
       if (task) {
@@ -1059,7 +1110,7 @@ export default function Tarefas() {
           data: {
             ...task,
             column_id: newColumnId,
-            status: targetColumn.nome.toLowerCase() || 'unknown'
+            status: isGanhoColumn ? 'concluido' : targetColumn.nome.toLowerCase() || 'unknown'
           },
           source: 'Tarefas'
         });

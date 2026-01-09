@@ -28,7 +28,20 @@ export function DeletarColunaDialog({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // ✅ NOVO: Verificar se é coluna fixa "Ganho" (não pode ser deletada)
+  const isGanhoColumn = columnNome?.toLowerCase().includes('ganho') || 
+                        columnNome?.toLowerCase().includes('concluído') ||
+                        columnNome?.toLowerCase().includes('concluido') ||
+                        columnNome?.includes('✅');
+
   const handleDelete = async () => {
+    // ✅ PROTEÇÃO: Impedir exclusão de coluna Ganho
+    if (isGanhoColumn) {
+      toast.error('A coluna "Ganho/Concluído" é fixa e não pode ser excluída.');
+      setOpen(false);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -64,6 +77,11 @@ export function DeletarColunaDialog({
       setLoading(false);
     }
   };
+
+  // ✅ Se for coluna fixa, não mostrar o botão de deletar
+  if (isGanhoColumn) {
+    return null;
+  }
 
   return (
     <>

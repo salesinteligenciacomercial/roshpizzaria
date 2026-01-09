@@ -152,6 +152,25 @@ serve(async (req) => {
           );
         }
 
+        // ✅ NOVO: Criar coluna "Ganho" automaticamente (coluna fixa)
+        console.log('📦 [API-TAREFAS] Criando coluna fixa "Ganho" para o novo board...');
+        const { error: ganhoError } = await supabase
+          .from("task_columns")
+          .insert([{
+            nome: '✅ Ganho',
+            board_id: board.id,
+            posicao: 9999, // Alta posição para ficar no final
+            cor: '#22c55e', // Verde sucesso
+            company_id: companyId,
+            is_fixed: true // Marcador para coluna fixa
+          }]);
+        
+        if (ganhoError) {
+          console.warn('⚠️ [API-TAREFAS] Erro ao criar coluna Ganho (não bloqueante):', ganhoError);
+        } else {
+          console.log('✅ [API-TAREFAS] Coluna "Ganho" criada com sucesso');
+        }
+
         return new Response(JSON.stringify({ success: true, data: board }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -345,7 +364,7 @@ serve(async (req) => {
         // ✅ SEGURANÇA: Verificar se a tarefa pertence à mesma company_id
         const { data: existingTask, error: fetchError } = await supabase
           .from("tasks")
-          .select("id, company_id")
+          .select("id, company_id, checklist")
           .eq("id", validatedData.task_id)
           .single();
 
@@ -366,7 +385,7 @@ serve(async (req) => {
         // Verificar se a nova coluna pertence à mesma company_id
         const { data: column, error: columnError } = await supabase
           .from("task_columns")
-          .select("id, company_id")
+          .select("id, company_id, nome")
           .eq("id", validatedData.nova_coluna_id)
           .single();
 
@@ -384,9 +403,31 @@ serve(async (req) => {
           );
         }
 
+        // ✅ NOVO: Verificar se a coluna destino é "Ganho" para marcar tarefa como concluída
+        const isGanhoColumn = column.nome?.toLowerCase().includes('ganho') || 
+                              column.nome?.toLowerCase().includes('concluído') ||
+                              column.nome?.toLowerCase().includes('concluido') ||
+                              column.nome?.includes('✅');
+        
+        let updateData: any = { column_id: validatedData.nova_coluna_id };
+        
+        // Se for coluna de ganho, marcar todos os checklists como concluídos
+        if (isGanhoColumn && existingTask.checklist && Array.isArray(existingTask.checklist) && existingTask.checklist.length > 0) {
+          console.log('🏆 [API-TAREFAS] Tarefa movida para coluna Ganho - marcando todos checklists como concluídos');
+          const completedChecklist = existingTask.checklist.map((item: any) => ({
+            ...item,
+            done: true
+          }));
+          updateData.checklist = completedChecklist;
+          updateData.status = 'concluido'; // Marcar status como concluído
+        } else if (isGanhoColumn) {
+          // Se não tem checklist, apenas marcar status como concluído
+          updateData.status = 'concluido';
+        }
+
         const { error } = await supabase
           .from("tasks")
-          .update({ column_id: validatedData.nova_coluna_id })
+          .update(updateData)
           .eq("id", validatedData.task_id)
           .eq("company_id", companyId);
 
@@ -398,7 +439,7 @@ serve(async (req) => {
           );
         }
 
-        return new Response(JSON.stringify({ success: true }), {
+        return new Response(JSON.stringify({ success: true, isCompleted: isGanhoColumn }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
