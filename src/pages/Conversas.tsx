@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft } from "lucide-react";
+import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useLocation } from "react-router-dom";
@@ -172,6 +172,7 @@ const REMINDERS_KEY = "continuum_reminders";
 const SCHEDULED_MESSAGES_KEY = "continuum_scheduled_messages";
 const MEETINGS_KEY = "continuum_meetings";
 const AI_MODE_KEY = "continuum_ai_mode";
+const AUTO_CORRECT_KEY = "continuum_auto_correct_enabled"; // Chave para salvar preferência de correção automática
 const CACHE_MAX_AGE = 30 * 60 * 1000; // Cache válido por 30 minutos (carregamento instantâneo)
 
 const initialConversations: Conversation[] = [{
@@ -410,6 +411,13 @@ function Conversas() {
   // Estados para sincronização WhatsApp e restauração de conversas
   const [isContactInactive, setIsContactInactive] = useState(false);
   const [restoringConversation, setRestoringConversation] = useState(false);
+
+  // 🔤 Estado para correção automática de texto
+  const [autoCorrectEnabled, setAutoCorrectEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem(AUTO_CORRECT_KEY);
+    return saved !== null ? JSON.parse(saved) : true; // Habilitado por padrão
+  });
+  const [isCorrectingText, setIsCorrectingText] = useState(false); // Estado de loading durante correção
 
   // MELHORIA: Estados para sincronização realtime - Iniciar como conectado para UX instantânea
   const [realtimeConnectionStatus, setRealtimeConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting' | 'error'>('connected');
@@ -4570,8 +4578,35 @@ function Conversas() {
     return "waiting";
   };
   const handleSendMessage = async (content?: string, type: Message["type"] = "text") => {
-    const messageContent = content || messageInput.trim();
+    let messageContent = content || messageInput.trim();
     if (!messageContent || !selectedConv) return;
+    
+    // 🔤 CORREÇÃO AUTOMÁTICA: Aplicar correção se habilitada e for mensagem de texto
+    if (autoCorrectEnabled && type === "text" && messageContent.length >= 5 && !content) {
+      try {
+        setIsCorrectingText(true);
+        console.log('🔤 [CORREÇÃO] Iniciando correção automática do texto...');
+        
+        const { data, error } = await supabase.functions.invoke('corrigir-texto', {
+          body: { texto: messageContent }
+        });
+        
+        if (!error && data?.textoCorrigido) {
+          if (data.corrigido) {
+            console.log('✅ [CORREÇÃO] Texto corrigido:', data.textoCorrigido.substring(0, 50) + '...');
+          }
+          messageContent = data.textoCorrigido;
+        } else {
+          console.warn('⚠️ [CORREÇÃO] Erro ou sem resposta, usando texto original');
+        }
+      } catch (err) {
+        console.error('❌ [CORREÇÃO] Erro ao corrigir texto:', err);
+        // Continua com texto original em caso de erro
+      } finally {
+        setIsCorrectingText(false);
+      }
+    }
+    
     console.log('📤 [ENVIO] Iniciando envio de mensagem:', {
       conteudo: messageContent.substring(0, 50),
       tipo: type,
@@ -7721,6 +7756,26 @@ function Conversas() {
                 }} className="flex-1 min-h-[40px] max-h-[200px] resize-none overflow-y-auto" rows={1} />
                     <AudioRecorder onSendAudio={handleSendAudio} />
                     
+                    {/* Botão de Correção Automática */}
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className={`${autoCorrectEnabled ? 'text-green-600 hover:text-green-700 hover:bg-green-50 border-green-300 bg-green-50/50' : 'text-muted-foreground hover:text-foreground border-border'}`}
+                      title={autoCorrectEnabled ? "Correção automática ativada (clique para desativar)" : "Correção automática desativada (clique para ativar)"}
+                      onClick={() => {
+                        const newValue = !autoCorrectEnabled;
+                        setAutoCorrectEnabled(newValue);
+                        localStorage.setItem(AUTO_CORRECT_KEY, JSON.stringify(newValue));
+                        toast.success(newValue ? "Correção automática ativada" : "Correção automática desativada");
+                      }}
+                    >
+                      {isCorrectingText ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <SpellCheck className="h-5 w-5" />
+                      )}
+                    </Button>
+                    
                     {/* Botão de Respostas Rápidas */}
                     <Dialog open={showQuickRepliesPopup} onOpenChange={setShowQuickRepliesPopup}>
                       <DialogTrigger asChild>
@@ -7798,8 +7853,8 @@ function Conversas() {
                     <Button onClick={() => {
                   handleSendMessage();
                   setReplyingTo(null);
-                }} size="icon" className="bg-[#25D366] hover:bg-[#128C7E] text-white" disabled={!messageInput.trim()}>
-                      <Send className="h-5 w-5" />
+                }} size="icon" className="bg-[#25D366] hover:bg-[#128C7E] text-white" disabled={!messageInput.trim() || isCorrectingText}>
+                      {isCorrectingText ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                     </Button>
                   </div>
                 </div>

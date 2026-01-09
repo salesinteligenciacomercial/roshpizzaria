@@ -59,3 +59,6 @@ verify_jwt = true
 
 [functions.super-admin-login]
 verify_jwt = false
+
+[functions.corrigir-texto]
+verify_jwt = true
