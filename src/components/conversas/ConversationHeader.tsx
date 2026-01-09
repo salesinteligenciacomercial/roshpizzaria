@@ -127,54 +127,55 @@ import { useEffect, useState } from "react";
    };
 
   return (
-    <div className="w-full bg-background border-b border-border shadow-sm backdrop-blur-sm">
-       <div className="p-2 md:p-3 space-y-2">
-         <div className="flex items-center justify-between">
-           <div className="flex items-center gap-3">
-              {/* Botão Voltar (Mobile) */}
-              {showBackButton && onBack && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onBack}
-                  className="mr-1 md:hidden"
-                  title="Voltar"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-              )}
-              {/* Avatar do Lead com Indicador de Status Online/Offline */}
-              <div className="relative">
-                <Avatar className="h-10 w-10 md:h-12 md:w-12 border-2 border-primary/20">
-                  <AvatarImage src={avatarUrl} alt={contactName} />
-                  <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold text-sm md:text-base">
-                    {getInitials(contactName)}
-                  </AvatarFallback>
-                </Avatar>
-                {/* Badge da Rede Social */}
-                <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-0.5 border-2 border-background shadow-sm">
-                  {getChannelIcon()}
-                </div>
-                {/* Indicador de Status Online/Offline */}
-                {onlineStatus !== 'unknown' && (
-                  <div className={`absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background shadow-sm ${
-                    onlineStatus === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-                  }`} title={onlineStatus === 'online' ? 'Online' : 'Offline'} />
-                )}
+    <div className="w-full bg-background border-b border-border shadow-sm">
+       {/* Header compacto - tudo em uma linha */}
+       <div className="px-3 py-2 flex items-center justify-between gap-2">
+         <div className="flex items-center gap-2 min-w-0 flex-1">
+            {/* Botão Voltar (Mobile) */}
+            {showBackButton && onBack && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onBack}
+                className="h-8 w-8 md:hidden flex-shrink-0"
+                title="Voltar"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
+            {/* Avatar do Lead */}
+            <div className="relative flex-shrink-0">
+              <Avatar className="h-10 w-10 border-2 border-primary/20">
+                <AvatarImage src={avatarUrl} alt={contactName} />
+                <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold text-sm">
+                  {getInitials(contactName)}
+                </AvatarFallback>
+              </Avatar>
+              {/* Badge da Rede Social */}
+              <div className="absolute -bottom-0.5 -right-0.5 bg-background rounded-full p-0.5 border border-background shadow-sm">
+                {getChannelIcon()}
               </div>
-              {/* Nome e Canal */}
-              <div className="flex flex-col min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h2 className="font-bold text-base md:text-lg text-foreground truncate">
-                    {contactName}
-                  </h2>
-                  {getSyncStatusBadge()}
-                </div>
-                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                   <span className="capitalize font-medium">{channel}</span>
-                 </div>
-             </div>
-             </div>
+            </div>
+            {/* Nome, telefone e badge */}
+            <div className="flex flex-col min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h2 className="font-bold text-sm md:text-base text-foreground truncate">
+                  {contactName}
+                </h2>
+                {leadVinculado && (
+                  <Badge className="gap-0.5 bg-green-600 hover:bg-green-700 text-[10px] py-0 px-1.5 h-5 flex-shrink-0">
+                    <Check className="h-2.5 w-2.5" />
+                    <span className="hidden sm:inline">Lead</span>
+                  </Badge>
+                )}
+                {getSyncStatusBadge()}
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                {getChannelIcon()}
+                <span className="capitalize font-medium">{channel}</span>
+              </div>
+            </div>
+         </div>
               {/* Ações - Versão Desktop */}
               <div className="hidden md:flex items-center gap-1">
                {/* Botão Restaurar Conversa */}
@@ -388,80 +389,24 @@ import { useEffect, useState } from "react";
                 <Info className="h-4 w-4" />
               </Button>
             </div>
+       </div>
+          
+       {/* Botão criar lead (se não tiver lead vinculado) */}
+       {mostrarBotaoCriarLead && onCriarLead && !leadVinculado && (
+         <div className="px-3 pb-2">
+           <Button
+             variant="outline"
+             size="sm"
+             onClick={onCriarLead}
+             className="h-6 text-xs gap-1"
+           >
+             <Plus className="h-3 w-3" />
+             Criar Lead no CRM
+           </Button>
          </div>
-         
-         {/* Lead Badge e botão criar lead - compacto no mobile */}
-         {(leadVinculado || (mostrarBotaoCriarLead && onCriarLead)) && (
-           <div className="flex items-center gap-1.5 flex-wrap">
-             {leadVinculado && (
-               <Badge className="gap-1 bg-green-600 hover:bg-green-700 text-xs py-0.5 px-2">
-                 <Check className="h-3 w-3" />
-                 <span className="hidden md:inline">Lead Cadastrado</span>
-                 <span className="md:hidden">Lead</span>
-               </Badge>
-             )}
-             {mostrarBotaoCriarLead && onCriarLead && (
-               <Button
-                 variant="outline"
-                 size="sm"
-                 onClick={onCriarLead}
-                 className="h-6 text-xs gap-1"
-               >
-                 <Plus className="h-3 w-3" />
-                 <span className="hidden md:inline">Criar Lead no CRM</span>
-                 <span className="md:hidden">Criar Lead</span>
-               </Button>
-             )}
-          </div>
-         )}
-         {/* Informações do Lead - Ocultas no mobile para economizar espaço */}
-         {(tags.length > 0 || funnelStage || produto || valor || responsavel) && (
-           <div className="hidden md:block space-y-2 pt-2 border-t border-border/50">
-             {/* Tags */}
-             {tags.length > 0 && (
-               <div className="flex flex-wrap gap-1.5">
-                 {tags.map((tag, index) => (
-                   <Badge 
-                     key={index} 
-                     variant="secondary" 
-                     className="text-xs px-2 py-0.5"
-                   >
-                     {tag}
-                   </Badge>
-                 ))}
-               </div>
-             )}
-             {/* Dados do Lead */}
-             <div className="flex items-center gap-2 flex-wrap">
-               {funnelStage && (
-                 <div className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/10 rounded-md">
-                   <span className="text-xs font-medium text-purple-700">📊 {funnelStage}</span>
-                 </div>
-               )}
-               {produto && (
-                 <div className="flex items-center gap-1.5 px-2.5 py-1 bg-muted/50 rounded-md">
-                   <FileText className="h-3.5 w-3.5 text-primary" />
-                   <span className="text-xs font-medium text-foreground">{produto}</span>
-                 </div>
-               )}
-               {valor && (
-                 <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/10 rounded-md">
-                   <DollarSign className="h-3.5 w-3.5 text-green-600" />
-                   <span className="text-xs font-semibold text-green-700">{valor}</span>
-                 </div>
-               )}
-               {responsavel && (
-                 <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 rounded-md">
-                   <User className="h-3.5 w-3.5 text-blue-600" />
-                   <span className="text-xs font-medium text-blue-700">{responsavel}</span>
-                 </div>
-               )}
-             </div>
-           </div>
-          )}
-        </div>
-      </div>
-    );
+       )}
+    </div>
+  );
   }
 
 
