@@ -796,15 +796,20 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
   );
 
   // ✅ NOVO: Calcular progresso do checklist
+  // ✅ CORRIGIDO: Considerar task.status === 'concluido' como tarefa completa
   const checklistProgress = useMemo(() => {
+    // Se o status da tarefa é 'concluido', considerar como 100% completo
+    const isStatusComplete = task.status === 'concluido';
+    
     if (!localChecklist || localChecklist.length === 0) {
-      return { total: 0, completed: 0, percentage: 0, isComplete: false };
+      return { total: 0, completed: 0, percentage: isStatusComplete ? 100 : 0, isComplete: isStatusComplete };
     }
     const total = localChecklist.length;
     const completed = localChecklist.filter(i => i.done).length;
-    const percentage = Math.round((completed / total) * 100);
-    return { total, completed, percentage, isComplete: completed === total };
-  }, [localChecklist]);
+    const percentage = isStatusComplete ? 100 : Math.round((completed / total) * 100);
+    // Tarefa é completa se todos os itens do checklist estiverem done OU se status for 'concluido'
+    return { total, completed, percentage, isComplete: (completed === total) || isStatusComplete };
+  }, [localChecklist, task.status]);
 
   // ✅ NOVO: Calcular dias restantes e duração do prazo
   // ✅ IMPORTANTE: Considera se a tarefa está 100% concluída para não mostrar como atrasada
@@ -831,8 +836,9 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     let timeProgress = 0;
     let status: 'not_started' | 'in_progress' | 'overdue' | 'completed' = 'not_started';
     
-    // ✅ Verificar se a tarefa está 100% concluída (checklist completo)
-    const isTaskComplete = localChecklist && localChecklist.length > 0 && localChecklist.every(i => i.done);
+    // ✅ CORRIGIDO: Verificar se a tarefa está concluída via status OU checklist completo
+    const isTaskComplete = task.status === 'concluido' || 
+      (localChecklist && localChecklist.length > 0 && localChecklist.every(i => i.done));
     
     // Se a tarefa está concluída, marcar como completed independente da data
     if (isTaskComplete) {
@@ -894,7 +900,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       status,
       hasDeadline: !!(endDate && !isNaN(endDate.getTime()))
     };
-  }, [task.start_date, task.due_date, localChecklist]);
+  }, [task.start_date, task.due_date, task.status, localChecklist]);
 
   return (
     <Card
@@ -903,11 +909,17 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
       {...attributes}
       {...listeners}
       className={`group relative mb-3 border-0 shadow-card hover:shadow-lg transition-all duration-300 overflow-hidden cursor-grab active:cursor-grabbing ${
-        isOverdue ? 'ring-2 ring-red-500/50 border-red-200' : ''
-      } ${!isOwnTask ? 'opacity-40 saturate-50' : ''} ${
-        checklistProgress.isComplete ? 'ring-2 ring-green-500/60 shadow-green-500/20' : ''
-      }`}
+        checklistProgress.isComplete 
+          ? 'ring-2 ring-green-500 bg-green-50 dark:bg-green-950/30 border-green-300 dark:border-green-700' 
+          : isOverdue 
+            ? 'ring-2 ring-red-500/50 border-red-200' 
+            : ''
+      } ${!isOwnTask ? 'opacity-40 saturate-50' : ''}`}
     >
+      {/* ✅ NOVO: Indicador visual de tarefa concluída */}
+      {checklistProgress.isComplete && (
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-400 to-green-600" />
+      )}
       <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       
       <CardHeader className="relative pb-3">
@@ -1139,6 +1151,13 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
             <Badge className={`${getPriorityColor(task.priority)} border-0 text-white shadow-sm text-[10px] px-1.5 py-0`}>
               {task.priority}
             </Badge>
+            
+            {/* ✅ NOVO: Badge de status "Concluída" quando tarefa está completa */}
+            {checklistProgress.isComplete && (
+              <Badge className="bg-green-500 text-white border-0 shadow-sm text-[10px] px-1.5 py-0 animate-pulse">
+                concluída
+              </Badge>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -1274,8 +1293,18 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
         )}
         
         {Array.isArray(localChecklist) && localChecklist.length > 0 && (
-          <div className="text-xs text-muted-foreground">
-            {localChecklist.filter(i => i.done).length}/{localChecklist.length} checklist
+          <div className={`text-xs flex items-center gap-1 ${
+            checklistProgress.isComplete 
+              ? 'text-green-600 font-medium' 
+              : 'text-muted-foreground'
+          }`}>
+            {checklistProgress.isComplete && <CheckCircle2 className="h-3 w-3" />}
+            <span>
+              {checklistProgress.isComplete 
+                ? `✅ ${localChecklist.length}/${localChecklist.length} checklist (100%)`
+                : `${localChecklist.filter(i => i.done).length}/${localChecklist.length} checklist`
+              }
+            </span>
           </div>
         )}
 
