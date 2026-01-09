@@ -35,13 +35,14 @@ interface EditarQuadroDialogProps {
   boardId: string;
   boardNome: string;
   onUpdated: () => void;
+  onDeleted?: () => void; // ✅ NOVO: Callback específico para quando o quadro é excluído
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   openDeleteDialog?: boolean;
   onDeleteDialogChange?: (open: boolean) => void;
 }
 
-export function EditarQuadroDialog({ boardId, boardNome, onUpdated, open: controlledOpen, onOpenChange: controlledOnOpenChange, openDeleteDialog: controlledDeleteOpen, onDeleteDialogChange: controlledDeleteOnOpenChange }: EditarQuadroDialogProps) {
+export function EditarQuadroDialog({ boardId, boardNome, onUpdated, onDeleted, open: controlledOpen, onOpenChange: controlledOnOpenChange, openDeleteDialog: controlledDeleteOpen, onDeleteDialogChange: controlledDeleteOnOpenChange }: EditarQuadroDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [columns, setColumns] = useState<Column[]>([]);
   const [novoNomeQuadro, setNovoNomeQuadro] = useState(boardNome);
@@ -226,7 +227,12 @@ export function EditarQuadroDialog({ boardId, boardNome, onUpdated, open: contro
       } else if (controlledOnOpenChange) {
         controlledOnOpenChange(false);
       }
-      onUpdated();
+      // ✅ CORRIGIDO: Chamar onDeleted primeiro (para atualizar selectedBoard) e depois onUpdated
+      if (onDeleted) {
+        onDeleted();
+      } else {
+        onUpdated();
+      }
     } catch (error) {
       toast.error("Erro ao excluir quadro");
     }

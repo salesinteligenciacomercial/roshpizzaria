@@ -1459,6 +1459,20 @@ export default function Tarefas() {
       {selectedBoard && <EditarQuadroDialog boardId={selectedBoard} boardNome={boards.find(b => b.id === selectedBoard)?.nome || ""} onUpdated={() => {
         console.log('🔄 [Tarefas] Recarregando dados após atualização do quadro');
         carregarDados();
+      }} onDeleted={() => {
+        console.log('🗑️ [Tarefas] Quadro excluído, selecionando próximo quadro disponível');
+        // ✅ CORRIGIDO: Encontrar próximo quadro disponível e atualizar selectedBoard
+        const remainingBoards = boards.filter(b => b.id !== selectedBoard);
+        if (remainingBoards.length > 0) {
+          setSelectedBoard(remainingBoards[0].id);
+        } else {
+          setSelectedBoard("");
+        }
+        // Limpar colunas e tarefas do quadro excluído imediatamente
+        setColumns(prev => prev.filter(c => c.board_id !== selectedBoard));
+        setTasks(prev => prev.filter(t => t.board_id !== selectedBoard));
+        // Recarregar dados para garantir sincronização
+        setTimeout(() => carregarDados(), 100);
       }} open={editarQuadroOpen} onOpenChange={open => {
         console.log('📝 [Tarefas] Dialog de edição:', open ? 'aberto' : 'fechado');
         setEditarQuadroOpen(open);
