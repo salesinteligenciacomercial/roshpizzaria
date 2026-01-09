@@ -168,24 +168,26 @@ function ConversationListItemComponent({
               )}
             </div>
             
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {timestamp.toLocaleTimeString("pt-BR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-              {unread > 0 && (
-                <Badge className="bg-[#25D366] hover:bg-[#25D366] text-white text-xs h-5 min-w-5 rounded-full">
-                  {unread}
-                </Badge>
-              )}
-            </div>
           </div>
           
           <p className="text-sm text-muted-foreground truncate">
             {lastMessage || "Sem histórico de conversa"}
           </p>
+          
+          {/* Hora e notificação - abaixo do botão de 3 pontos */}
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              {timestamp.toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+            {unread > 0 && (
+              <Badge className="bg-[#25D366] hover:bg-[#25D366] text-white text-xs h-5 min-w-5 rounded-full">
+                {unread}
+              </Badge>
+            )}
+          </div>
           
           {/* Informações do Lead */}
           <div className="mt-2 space-y-1.5">
