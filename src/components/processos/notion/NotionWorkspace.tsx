@@ -212,14 +212,6 @@ export function NotionWorkspace({ companyId }: NotionWorkspaceProps) {
       );
     }
 
-    if (showCalendar) {
-      return (
-        <div className="p-4 h-full overflow-auto">
-          <ProcessCalendar companyId={companyId} />
-        </div>
-      );
-    }
-
     if (selectedPage) {
       return (
         <NotionPage 
