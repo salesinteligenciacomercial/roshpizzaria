@@ -18,15 +18,19 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Save, Play, Download, Upload, ArrowLeft } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Save, Play, Download, Upload, ArrowLeft, Settings2, Zap, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { TriggerNode } from './nodes/TriggerNode';
 import { ActionNode } from './nodes/ActionNode';
 import { ConditionNode } from './nodes/ConditionNode';
 import { IANode } from './nodes/IANode';
 import { DelayNode } from './nodes/DelayNode';
+import { MediaNode } from './nodes/MediaNode';
+import { AIAgentNode } from './nodes/AIAgentNode';
 import { NodePropertiesPanel } from './NodePropertiesPanel';
 import { NodesSidebar } from './NodesSidebar';
+import { FlowSettingsDialog } from './FlowSettingsDialog';
 import { supabase } from '@/integrations/supabase/client';
 
 interface AutomationFlow {
@@ -37,6 +41,25 @@ interface AutomationFlow {
   active: boolean;
   company_id?: string;
   owner_id?: string;
+  settings?: FlowSettings;
+}
+
+interface FlowSettings {
+  schedule?: {
+    enabled: boolean;
+    days: string[];
+    startTime: string;
+    endTime: string;
+  };
+  filters?: {
+    tags?: string[];
+    funnels?: string[];
+    stages?: string[];
+  };
+  limits?: {
+    maxExecutions?: number;
+    cooldownMinutes?: number;
+  };
 }
 
 const nodeTypes = {
@@ -45,6 +68,8 @@ const nodeTypes = {
   condition: ConditionNode,
   ia: IANode,
   delay: DelayNode,
+  media: MediaNode,
+  aiagent: AIAgentNode,
 };
 
 interface VisualFlowBuilderProps {
@@ -61,6 +86,10 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [flowName, setFlowName] = useState('Novo Fluxo');
+  const [flowActive, setFlowActive] = useState(false);
+  const [flowSettings, setFlowSettings] = useState<FlowSettings>({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
     if (fluxoId) {
@@ -82,6 +111,8 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
         setFlowName(flowData.name || 'Fluxo sem nome');
         setNodes(flowData.nodes || []);
         setEdges(flowData.edges || []);
+        setFlowActive(flowData.active || false);
+        setFlowSettings(flowData.settings || {});
       }
     } catch (error) {
       console.error('Erro ao carregar fluxo:', error);
@@ -90,21 +121,30 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
   };
 
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
+    (changes: NodeChange[]) => {
+      setNodes((nds) => applyNodeChanges(changes, nds));
+      setHasChanges(true);
+    },
     []
   );
 
   const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)),
+    (changes: EdgeChange[]) => {
+      setEdges((eds) => applyEdgeChanges(changes, eds));
+      setHasChanges(true);
+    },
     []
   );
 
   const onConnect = useCallback(
-    (connection: Connection) => setEdges((eds) => addEdge({
-      ...connection,
-      animated: true,
-      style: { stroke: '#64748b', strokeWidth: 2 },
-    }, eds)),
+    (connection: Connection) => {
+      setEdges((eds) => addEdge({
+        ...connection,
+        animated: true,
+        style: { stroke: '#64748b', strokeWidth: 2 },
+      }, eds));
+      setHasChanges(true);
+    },
     []
   );
 
@@ -153,6 +193,8 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
           case 'condition': return 'conditionType';
           case 'ia': return 'mode';
           case 'delay': return 'delayType';
+          case 'media': return 'mediaType';
+          case 'aiagent': return 'agentType';
           default: return 'type';
         }
       };
@@ -168,7 +210,8 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
       };
 
       setNodes((nds) => [...nds, newNode]);
-      toast.success(`${label || type} adicionado ao fluxo!`);
+      setHasChanges(true);
+      toast.success(`${label || type} adicionado!`);
     },
     [project]
   );
@@ -192,7 +235,8 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
         name: flowName,
         nodes: nodes as any,
         edges: edges as any,
-        active: true,
+        active: flowActive,
+        settings: flowSettings as any,
         company_id: userRoles.company_id,
         owner_id: user.id,
         updated_at: new Date().toISOString(),
@@ -213,6 +257,7 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
         if (error) throw error;
       }
 
+      setHasChanges(false);
       toast.success('Fluxo salvo com sucesso!');
       onSave?.();
     } catch (error: any) {
@@ -222,7 +267,7 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
   };
 
   const handleExportFlow = () => {
-    const flowData = { name: flowName, nodes, edges };
+    const flowData = { name: flowName, nodes, edges, settings: flowSettings };
     const dataStr = JSON.stringify(flowData, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
@@ -244,6 +289,8 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
         setFlowName(flowData.name || 'Fluxo Importado');
         setNodes(flowData.nodes || []);
         setEdges(flowData.edges || []);
+        setFlowSettings(flowData.settings || {});
+        setHasChanges(true);
         toast.success('Fluxo importado com sucesso!');
       } catch (error) {
         toast.error('Erro ao importar fluxo');
@@ -253,6 +300,17 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
   };
 
   const handleTestFlow = () => {
+    if (nodes.length === 0) {
+      toast.error('Adicione componentes ao fluxo antes de testar');
+      return;
+    }
+    
+    const hasTrigger = nodes.some(n => n.type === 'trigger');
+    if (!hasTrigger) {
+      toast.warning('Seu fluxo precisa de pelo menos um Gatilho');
+      return;
+    }
+    
     toast.info('Iniciando simulação do fluxo...');
   };
 
@@ -261,17 +319,63 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
       nds.map((n) => (n.id === updatedNode.id ? updatedNode : n))
     );
     setSelectedNode(updatedNode);
+    setHasChanges(true);
   }, []);
 
+  const toggleFlowActive = async () => {
+    const newStatus = !flowActive;
+    setFlowActive(newStatus);
+    setHasChanges(true);
+    
+    if (fluxoId) {
+      try {
+        await supabase
+          .from('automation_flows')
+          .update({ active: newStatus })
+          .eq('id', fluxoId);
+        toast.success(newStatus ? 'Fluxo ativado!' : 'Fluxo desativado');
+      } catch (error) {
+        toast.error('Erro ao atualizar status');
+      }
+    }
+  };
+
+  const getFlowValidation = () => {
+    const issues: string[] = [];
+    
+    if (nodes.length === 0) {
+      issues.push('Adicione componentes ao fluxo');
+    }
+    
+    const hasTrigger = nodes.some(n => n.type === 'trigger');
+    if (!hasTrigger && nodes.length > 0) {
+      issues.push('Adicione um Gatilho para iniciar');
+    }
+    
+    const orphanNodes = nodes.filter(n => {
+      if (n.type === 'trigger') return false;
+      const hasIncoming = edges.some(e => e.target === n.id);
+      return !hasIncoming;
+    });
+    
+    if (orphanNodes.length > 0) {
+      issues.push(`${orphanNodes.length} componente(s) não conectado(s)`);
+    }
+    
+    return issues;
+  };
+
+  const validationIssues = getFlowValidation();
+
   return (
-    <div className="flex h-[calc(100vh-10rem)] bg-slate-950 rounded-lg overflow-hidden border border-slate-800">
+    <div className="flex h-[calc(100vh-10rem)] bg-slate-950 rounded-xl overflow-hidden border border-slate-800 shadow-2xl">
       {/* Sidebar com nodes arrastáveis */}
       <NodesSidebar onDragStart={handleDragStart} />
 
       {/* Canvas Central */}
       <div className="flex-1 flex flex-col">
         {/* Toolbar Superior */}
-        <div className="flex items-center gap-3 p-3 bg-slate-900 border-b border-slate-800">
+        <div className="flex items-center gap-3 p-3 bg-slate-900/95 border-b border-slate-800 backdrop-blur-sm">
           {onBack && (
             <Button 
               onClick={onBack} 
@@ -284,17 +388,52 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
             </Button>
           )}
           
-          <Input
-            type="text"
-            value={flowName}
-            onChange={(e) => setFlowName(e.target.value)}
-            onFocus={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            className="max-w-[240px] bg-slate-800 text-white border-slate-700 font-semibold"
-            placeholder="Nome do Fluxo"
-          />
+          <div className="flex items-center gap-2">
+            <Zap className={`h-5 w-5 ${flowActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+            <Input
+              type="text"
+              value={flowName}
+              onChange={(e) => { setFlowName(e.target.value); setHasChanges(true); }}
+              onFocus={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="max-w-[200px] bg-slate-800 text-white border-slate-700 font-semibold"
+              placeholder="Nome do Fluxo"
+            />
+          </div>
+          
+          <Button
+            onClick={toggleFlowActive}
+            size="sm"
+            variant={flowActive ? "default" : "outline"}
+            className={flowActive ? "bg-emerald-600 hover:bg-emerald-700" : "border-slate-700"}
+          >
+            {flowActive ? "Ativo" : "Inativo"}
+          </Button>
+
+          {hasChanges && (
+            <Badge variant="outline" className="text-yellow-400 border-yellow-400/50">
+              Não salvo
+            </Badge>
+          )}
+
+          {validationIssues.length > 0 && (
+            <Badge variant="outline" className="text-orange-400 border-orange-400/50 flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              {validationIssues.length} aviso(s)
+            </Badge>
+          )}
           
           <div className="flex-1" />
+
+          <Button 
+            onClick={() => setSettingsOpen(true)} 
+            size="sm" 
+            variant="outline" 
+            className="border-slate-700 text-slate-300 hover:text-white"
+          >
+            <Settings2 className="h-4 w-4 mr-2" />
+            Regras
+          </Button>
           
           <Button onClick={handleSaveFlow} size="sm" className="bg-blue-600 hover:bg-blue-700">
             <Save className="h-4 w-4 mr-2" />
@@ -305,14 +444,12 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
             Testar
           </Button>
           <Button onClick={handleExportFlow} size="sm" variant="outline" className="border-slate-700 text-slate-300 hover:text-white">
-            <Download className="h-4 w-4 mr-2" />
-            Exportar
+            <Download className="h-4 w-4" />
           </Button>
           <label>
             <Button size="sm" variant="outline" className="border-slate-700 text-slate-300 hover:text-white cursor-pointer" asChild>
               <span>
-                <Upload className="h-4 w-4 mr-2" />
-                Importar
+                <Upload className="h-4 w-4" />
               </span>
             </Button>
             <input
@@ -360,6 +497,8 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
                   case 'condition': return '#8b5cf6';
                   case 'ia': return '#3b82f6';
                   case 'delay': return '#64748b';
+                  case 'media': return '#ec4899';
+                  case 'aiagent': return '#06b6d4';
                   default: return '#6b7280';
                 }
               }}
@@ -367,12 +506,31 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
             />
           </ReactFlow>
         </div>
+
+        {/* Status Bar */}
+        <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-t border-slate-800 text-xs text-slate-500">
+          <span>{nodes.length} componente(s) • {edges.length} conexão(ões)</span>
+          <span>Arraste componentes da sidebar para o canvas</span>
+        </div>
       </div>
 
       {/* Painel Lateral de Propriedades */}
       <NodePropertiesPanel 
         selectedNode={selectedNode} 
         onUpdate={handleUpdateNode}
+      />
+
+      {/* Dialog de Configurações */}
+      <FlowSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        settings={flowSettings}
+        onSave={(newSettings) => {
+          setFlowSettings(newSettings);
+          setHasChanges(true);
+          setSettingsOpen(false);
+          toast.success('Regras atualizadas!');
+        }}
       />
     </div>
   );
