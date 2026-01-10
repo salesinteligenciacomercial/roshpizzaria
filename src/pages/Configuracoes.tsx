@@ -32,8 +32,6 @@ import { LeadAdsFormsConfig } from "@/components/configuracoes/LeadAdsFormsConfi
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { UsuariosSubcontaDialog } from "@/components/configuracoes/UsuariosSubcontaDialog";
 import { supabase } from "@/integrations/supabase/client";
-import { FilaDialog } from "@/components/configuracoes/FilaDialog";
-import { FilaColaboradoresDialog } from "@/components/configuracoes/FilaColaboradoresDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Navigate } from "react-router-dom";
 import { EditarUsuarioDialog } from "@/components/configuracoes/EditarUsuarioDialog";
@@ -77,13 +75,6 @@ export default function Configuracoes() {
   const [manageUsersOpen, setManageUsersOpen] = useState(false);
   const [latestAnnouncement, setLatestAnnouncement] = useState<any | null>(null);
   
-  // Estados para Fila de Atendimento - MOVIDOS PARA CIMA DOS HOOKS
-  const [filas, setFilas] = useState<any[]>([]);
-  const [filasLoading, setFilasLoading] = useState<boolean>(false);
-  const [filaDialogOpen, setFilaDialogOpen] = useState<boolean>(false);
-  const [editingFila, setEditingFila] = useState<any | null>(null);
-  const [colaboradoresDialogOpen, setColaboradoresDialogOpen] = useState<boolean>(false);
-  const [filaSelecionada, setFilaSelecionada] = useState<any | null>(null);
   
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [editarUsuarioDialogOpen, setEditarUsuarioDialogOpen] = useState(false);
@@ -196,120 +187,6 @@ export default function Configuracoes() {
     loadAnnouncement();
   }, [currentCompany?.id]);
 
-  const carregarFilas = async () => {
-    try {
-      setFilasLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setFilas([]);
-        return;
-      }
-
-      // Tentar buscar por company_id primeiro (estrutura nova)
-      let data, error;
-      const companyId = currentCompany?.id;
-      
-      if (companyId) {
-        // Tentar com company_id primeiro
-        // @ts-ignore - Tipos complexos do Supabase causando erro de inferência
-        const resultCompany = await supabase
-          .from('filas_atendimento')
-          .select('*')
-          .eq('company_id', companyId)
-          .order('prioridade', { ascending: true });
-        
-        // Se der erro de coluna não encontrada, tentar com owner_id
-        if (resultCompany.error && resultCompany.error.message?.includes('company_id')) {
-          const resultOwner = await supabase
-            .from('filas_atendimento')
-            .select('*')
-            .eq('owner_id', user.id)
-            .order('prioridade', { ascending: true });
-          
-          data = resultOwner.data;
-          error = resultOwner.error;
-        } else {
-          data = resultCompany.data;
-          error = resultCompany.error;
-        }
-      } else {
-        // Fallback: buscar por owner_id (estrutura antiga)
-        const result = await supabase
-          .from('filas_atendimento')
-          .select('*')
-          .eq('owner_id', user.id)
-          .order('prioridade', { ascending: true });
-        
-        data = result.data;
-        error = result.error;
-      }
-
-      if (error) throw error;
-      setFilas(data || []);
-    } catch (e: any) {
-      console.error('Erro ao carregar filas:', e?.message || e);
-      console.error('Detalhes do erro:', JSON.stringify(e, null, 2));
-      toast({
-        variant: "destructive",
-        title: "Erro ao carregar filas",
-        description: e?.message || "Não foi possível carregar as filas de atendimento.",
-      });
-      setFilas([]);
-    } finally {
-      setFilasLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (currentCompany?.id) {
-      carregarFilas();
-    }
-  }, [currentCompany?.id]);
-
-  useEffect(() => {
-    carregarColaboradores();
-  }, [currentCompany?.id]);
-
-  const abrirNovaFila = () => {
-    setEditingFila(null);
-    setFilaDialogOpen(true);
-  };
-
-  const abrirEditarFila = (fila: any) => {
-    setEditingFila(fila);
-    setFilaDialogOpen(true);
-  };
-
-  const abrirGerenciarColaboradores = (fila: any) => {
-    setFilaSelecionada(fila);
-    setColaboradoresDialogOpen(true);
-  };
-
-  const fecharFilaDialog = (open: boolean) => {
-    setFilaDialogOpen(open);
-    if (!open) {
-      setEditingFila(null);
-    }
-  };
-
-  const fecharColaboradoresDialog = (open: boolean) => {
-    setColaboradoresDialogOpen(open);
-    if (!open) {
-      setFilaSelecionada(null);
-    }
-  };
-
-  const removerFila = async (id: string) => {
-    try {
-      const { error } = await (supabase as any).from('filas_atendimento').delete().eq('id', id);
-      if (error) throw error;
-      await carregarFilas();
-      toast({ title: 'Fila removida' });
-    } catch (e) {
-      console.error('Erro ao remover fila:', e);
-      toast({ variant: 'destructive', title: 'Erro ao remover fila' });
-    }
-  };
 
   const carregarColaboradores = async () => {
     try {
@@ -602,86 +479,6 @@ export default function Configuracoes() {
   const defaultTab = isMasterAccount ? "subcontas" : "team";
 
   // Seções unificadas da aba Equipe & Permissões
-  const FilasSection = () => (
-    <>
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Filas de Atendimento</CardTitle>
-                  <CardDescription>Gerencie as filas disponíveis no atendimento</CardDescription>
-                </div>
-                <Button onClick={abrirNovaFila}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nova Fila
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {filasLoading && (
-                  <div className="text-sm text-muted-foreground">Carregando filas...</div>
-                )}
-                {!filasLoading && filas.length === 0 && (
-                  <div className="text-sm text-muted-foreground">Nenhuma fila cadastrada.</div>
-                )}
-                {!filasLoading && filas.map((fila) => (
-                  <div key={fila.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <h4 className="font-semibold">{fila.nome}</h4>
-                        {fila.ativa ? (
-                          <Badge>Ativa</Badge>
-                        ) : (
-                          <Badge variant="secondary">Inativa</Badge>
-                        )}
-                        <Badge variant="outline">Prioridade {fila.prioridade ?? 0}</Badge>
-                      </div>
-                      {fila.descricao && (
-                        <p className="text-sm text-muted-foreground mt-1">{fila.descricao}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => abrirGerenciarColaboradores(fila)}
-                        title="Gerenciar colaboradores"
-                      >
-                        <UserCog className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => abrirEditarFila(fila)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => removerFila(fila.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <FilaDialog
-            open={filaDialogOpen}
-            onOpenChange={fecharFilaDialog}
-            fila={editingFila}
-            onSuccess={carregarFilas}
-          />
-
-          <FilaColaboradoresDialog
-            open={colaboradoresDialogOpen}
-            onOpenChange={fecharColaboradoresDialog}
-            filaId={filaSelecionada?.id || null}
-          />
-    </>
-  );
 
   const ColaboradoresSection = () => (
     <>
@@ -1180,8 +977,7 @@ export default function Configuracoes() {
         <TabsContent value="team" className="space-y-4">
           {/* Usuários do CRM (todas as empresas podem gerenciar seus usuários) */}
           {currentCompany && <UsuariosEquipeSection />}
-          {/* Filas de Atendimento e Colaboradores - disponíveis para todos */}
-          <FilasSection />
+          {/* Colaboradores - disponíveis para todos */}
           <ColaboradoresSection />
           {/* Permissões e Configurações de Equipe - reservado a administradores */}
           {(hasRole('admin') || hasRole('company_admin')) && <PermissoesSection />}
