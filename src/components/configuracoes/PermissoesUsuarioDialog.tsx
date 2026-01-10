@@ -243,7 +243,7 @@ export function PermissoesUsuarioDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
@@ -259,7 +259,7 @@ export function PermissoesUsuarioDialog({
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <ScrollArea className="max-h-[50vh] pr-4">
+          <ScrollArea className="h-[400px] pr-4 flex-1">
             <div className="space-y-6">
               {Object.entries(groupedPermissions).map(([module, perms]) => (
                 <div key={module} className="space-y-3">
