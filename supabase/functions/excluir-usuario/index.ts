@@ -48,7 +48,13 @@ serve(async (req) => {
     }
 
     const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE, {
-      auth: { autoRefreshToken: false, persistSession: false }
+      auth: { autoRefreshToken: false, persistSession: false },
+      db: { schema: 'public' },
+      global: {
+        headers: {
+          'x-supabase-bypass-rls': 'true'
+        }
+      }
     });
 
     // Verificar token
