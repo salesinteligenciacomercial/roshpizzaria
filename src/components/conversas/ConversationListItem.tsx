@@ -181,10 +181,13 @@ function ConversationListItemComponent({
             {lastMessage || "Sem histórico de conversa"}
           </p>
           
-          {/* Hora e notificação - abaixo do botão de 3 pontos */}
+          {/* Data, hora e notificação - abaixo do botão de 3 pontos */}
           <div className="flex items-center gap-2 mt-1">
             <span className="text-xs text-muted-foreground whitespace-nowrap">
-              {timestamp.toLocaleTimeString("pt-BR", {
+              {timestamp.toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+              })} às {timestamp.toLocaleTimeString("pt-BR", {
                 hour: "2-digit",
                 minute: "2-digit",
               })}
