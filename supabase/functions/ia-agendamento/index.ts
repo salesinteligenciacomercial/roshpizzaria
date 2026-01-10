@@ -7,13 +7,15 @@ const corsHeaders = {
 };
 
 // ========================
-// FERRAMENTAS DA IA DE AGENDAMENTO
+// IA DE AGENDAMENTO - VERSÃO MELHORADA
+// Com horários dinâmicos, multi-profissional e lembretes automáticos
 // ========================
 
 interface IATools {
-  buscar_horarios_disponiveis: (params: { data: string; profissional_id?: string; duracao_minutos?: number }) => Promise<any>;
+  buscar_horarios_disponiveis: (params: { data: string; agenda_id?: string; profissional_id?: string; duracao_minutos?: number; company_id: string }) => Promise<any>;
   listar_profissionais: (params: { especialidade?: string; company_id: string }) => Promise<any>;
-  criar_compromisso: (params: { lead_id: string; profissional_id?: string; data_hora: string; tipo_servico: string; duracao_minutos?: number; observacoes?: string; company_id: string; owner_id: string }) => Promise<any>;
+  listar_agendas: (params: { company_id: string }) => Promise<any>;
+  criar_compromisso: (params: { lead_id: string; agenda_id?: string; profissional_id?: string; data_hora: string; tipo_servico: string; duracao_minutos?: number; observacoes?: string; company_id: string; owner_id: string; telefone?: string }) => Promise<any>;
   alterar_compromisso: (params: { compromisso_id: string; novos_dados: any }) => Promise<any>;
   cancelar_compromisso: (params: { compromisso_id: string; motivo?: string }) => Promise<any>;
   buscar_compromissos_lead: (params: { lead_id: string }) => Promise<any>;
@@ -21,21 +23,96 @@ interface IATools {
 
 async function createTools(supabase: any): Promise<IATools> {
   return {
-    buscar_horarios_disponiveis: async ({ data, profissional_id, duracao_minutos = 30 }) => {
-      console.log('🔍 [TOOL] Buscando horários disponíveis:', { data, profissional_id, duracao_minutos });
+    buscar_horarios_disponiveis: async ({ data, agenda_id, profissional_id, duracao_minutos = 30, company_id }) => {
+      console.log('🔍 [TOOL] Buscando horários disponíveis:', { data, agenda_id, profissional_id, duracao_minutos });
+      
+      // Buscar configuração de horários da agenda
+      let horariosBase = [
+        '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+        '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
+      ];
+      
+      // Tentar buscar horários personalizados da agenda
+      if (agenda_id) {
+        const { data: agenda } = await supabase
+          .from('agendas')
+          .select('disponibilidade, tempo_medio_servico')
+          .eq('id', agenda_id)
+          .single();
+        
+        if (agenda?.disponibilidade) {
+          const diaSemana = new Date(data).toLocaleDateString('pt-BR', { weekday: 'long' }).toLowerCase();
+          const disponibilidadeDia = (agenda.disponibilidade as any)[diaSemana];
+          
+          if (disponibilidadeDia && disponibilidadeDia.ativo && disponibilidadeDia.horarios) {
+            // Gerar horários baseados na configuração da agenda
+            horariosBase = [];
+            for (const periodo of disponibilidadeDia.horarios) {
+              const [horaInicio] = periodo.inicio.split(':').map(Number);
+              const [horaFim] = periodo.fim.split(':').map(Number);
+              const intervalo = agenda.tempo_medio_servico || 30;
+              
+              for (let h = horaInicio; h < horaFim; h++) {
+                for (let m = 0; m < 60; m += intervalo) {
+                  if (h * 60 + m >= horaInicio * 60 && h * 60 + m < horaFim * 60) {
+                    horariosBase.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      // Verificar horário comercial padrão da empresa
+      if (horariosBase.length === 0 || !agenda_id) {
+        const { data: horarioComercial } = await supabase
+          .from('horarios_comerciais')
+          .select('*')
+          .eq('company_id', company_id)
+          .single();
+        
+        if (horarioComercial) {
+          const diaSemana = new Date(data).getDay();
+          const config = (horarioComercial.configuracao as any)?.[diaSemana];
+          
+          if (config && config.ativo) {
+            horariosBase = [];
+            const intervalo = 30;
+            
+            for (const periodo of (config.periodos || [])) {
+              const [horaInicio, minInicio] = periodo.inicio.split(':').map(Number);
+              const [horaFim, minFim] = periodo.fim.split(':').map(Number);
+              
+              let minutoAtual = horaInicio * 60 + minInicio;
+              const minutoFim = horaFim * 60 + minFim;
+              
+              while (minutoAtual < minutoFim) {
+                const hora = Math.floor(minutoAtual / 60);
+                const minuto = minutoAtual % 60;
+                horariosBase.push(`${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`);
+                minutoAtual += intervalo;
+              }
+            }
+          }
+        }
+      }
       
       const dataInicio = `${data}T00:00:00`;
       const dataFim = `${data}T23:59:59`;
       
       let query = supabase
         .from('compromissos')
-        .select('data_hora_inicio, data_hora_fim, profissional_id')
+        .select('data_hora_inicio, data_hora_fim, profissional_id, agenda_id')
         .gte('data_hora_inicio', dataInicio)
         .lte('data_hora_inicio', dataFim)
         .neq('status', 'cancelado');
       
       if (profissional_id) {
         query = query.eq('profissional_id', profissional_id);
+      }
+      if (agenda_id) {
+        query = query.eq('agenda_id', agenda_id);
       }
       
       const { data: compromissosExistentes, error } = await query;
@@ -45,17 +122,32 @@ async function createTools(supabase: any): Promise<IATools> {
         return { error: 'Erro ao buscar horários' };
       }
       
-      const horariosBase = [
-        '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-        '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
-      ];
-      
       const horariosOcupados = (compromissosExistentes || []).map((c: any) => {
-        const hora = new Date(c.data_hora_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const hora = new Date(c.data_hora_inicio).toLocaleTimeString('pt-BR', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          timeZone: 'America/Sao_Paulo'
+        });
         return hora;
       });
       
-      const horariosDisponiveis = horariosBase.filter(h => !horariosOcupados.includes(h));
+      // Filtrar horários passados se for hoje
+      const agora = new Date();
+      const dataConsulta = new Date(data);
+      const ehHoje = agora.toDateString() === dataConsulta.toDateString();
+      
+      let horariosDisponiveis = horariosBase.filter(h => {
+        if (horariosOcupados.includes(h)) return false;
+        
+        if (ehHoje) {
+          const [hora, minuto] = h.split(':').map(Number);
+          const horarioEmMinutos = hora * 60 + minuto;
+          const agoraEmMinutos = agora.getHours() * 60 + agora.getMinutes() + 30; // 30min de margem
+          return horarioEmMinutos > agoraEmMinutos;
+        }
+        
+        return true;
+      });
       
       return {
         data,
@@ -90,20 +182,56 @@ async function createTools(supabase: any): Promise<IATools> {
       };
     },
     
-    criar_compromisso: async ({ lead_id, profissional_id, data_hora, tipo_servico, duracao_minutos = 30, observacoes, company_id, owner_id }) => {
+    listar_agendas: async ({ company_id }) => {
+      console.log('🔍 [TOOL] Listando agendas:', { company_id });
+      
+      const { data: agendas, error } = await supabase
+        .from('agendas')
+        .select(`
+          id, 
+          nome, 
+          tipo,
+          tempo_medio_servico,
+          profissionais:responsavel_id (id, nome)
+        `)
+        .eq('company_id', company_id)
+        .eq('status', 'ativo');
+      
+      if (error) {
+        console.error('Erro ao buscar agendas:', error);
+        return { error: 'Erro ao buscar agendas' };
+      }
+      
+      return {
+        agendas: (agendas || []).map((a: any) => ({
+          id: a.id,
+          nome: a.nome,
+          tipo: a.tipo,
+          tempo_medio: a.tempo_medio_servico,
+          profissional: a.profissionais?.nome
+        })),
+        total: (agendas || []).length
+      };
+    },
+    
+    criar_compromisso: async ({ lead_id, agenda_id, profissional_id, data_hora, tipo_servico, duracao_minutos = 30, observacoes, company_id, owner_id, telefone }) => {
       console.log('📅 [TOOL] Criando compromisso:', { lead_id, data_hora, tipo_servico });
       
       const dataHoraInicio = new Date(data_hora);
       const dataHoraFim = new Date(dataHoraInicio.getTime() + duracao_minutos * 60 * 1000);
       
       // Verificar conflitos
-      const { data: conflitos } = await supabase
+      let conflictQuery = supabase
         .from('compromissos')
         .select('id')
         .gte('data_hora_inicio', dataHoraInicio.toISOString())
         .lt('data_hora_inicio', dataHoraFim.toISOString())
-        .neq('status', 'cancelado')
-        .limit(1);
+        .neq('status', 'cancelado');
+      
+      if (agenda_id) conflictQuery = conflictQuery.eq('agenda_id', agenda_id);
+      if (profissional_id) conflictQuery = conflictQuery.eq('profissional_id', profissional_id);
+      
+      const { data: conflitos } = await conflictQuery.limit(1);
       
       if (conflitos && conflitos.length > 0) {
         return { 
@@ -113,10 +241,28 @@ async function createTools(supabase: any): Promise<IATools> {
         };
       }
       
+      // Buscar nome do lead para preencher paciente
+      let nomePaciente = '';
+      let telefonePaciente = telefone || '';
+      
+      if (lead_id) {
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('name, telefone, phone')
+          .eq('id', lead_id)
+          .single();
+        
+        if (lead) {
+          nomePaciente = lead.name || '';
+          telefonePaciente = telefonePaciente || lead.telefone || lead.phone || '';
+        }
+      }
+      
       const { data: compromisso, error } = await supabase
         .from('compromissos')
         .insert({
           lead_id,
+          agenda_id,
           profissional_id,
           data_hora_inicio: dataHoraInicio.toISOString(),
           data_hora_fim: dataHoraFim.toISOString(),
@@ -125,7 +271,10 @@ async function createTools(supabase: any): Promise<IATools> {
           status: 'agendado',
           company_id,
           owner_id,
-          usuario_responsavel_id: owner_id
+          usuario_responsavel_id: owner_id,
+          paciente: nomePaciente,
+          telefone: telefonePaciente,
+          duracao: duracao_minutos
         })
         .select()
         .single();
@@ -135,12 +284,39 @@ async function createTools(supabase: any): Promise<IATools> {
         return { success: false, error: 'Erro ao criar compromisso' };
       }
       
+      // Criar lembretes automáticos (24h e 1h antes)
+      const lembretes = [
+        { horas_antecedencia: 24, mensagem: `Lembrete: Você tem um compromisso amanhã às ${dataHoraInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` },
+        { horas_antecedencia: 1, mensagem: `Lembrete: Seu compromisso é em 1 hora!` }
+      ];
+      
+      for (const lembrete of lembretes) {
+        const dataEnvio = new Date(dataHoraInicio.getTime() - lembrete.horas_antecedencia * 60 * 60 * 1000);
+        
+        if (dataEnvio > new Date()) {
+          await supabase
+            .from('lembretes')
+            .insert({
+              compromisso_id: compromisso.id,
+              company_id,
+              canal: 'whatsapp',
+              destinatario: telefonePaciente,
+              horas_antecedencia: lembrete.horas_antecedencia,
+              mensagem: lembrete.mensagem,
+              proxima_data_envio: dataEnvio.toISOString(),
+              status_envio: 'pendente',
+              ativo: true
+            });
+        }
+      }
+      
       return {
         success: true,
         compromisso_id: compromisso.id,
         data_hora_inicio: compromisso.data_hora_inicio,
         data_hora_fim: compromisso.data_hora_fim,
-        mensagem: `Compromisso agendado para ${dataHoraInicio.toLocaleDateString('pt-BR')} às ${dataHoraInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+        lembretes_criados: lembretes.length,
+        mensagem: `✅ Compromisso agendado para ${dataHoraInicio.toLocaleDateString('pt-BR')} às ${dataHoraInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}!`
       };
     },
     
@@ -170,7 +346,7 @@ async function createTools(supabase: any): Promise<IATools> {
         .from('compromissos')
         .update({
           status: 'cancelado',
-          observacoes: motivo ? `Cancelado: ${motivo}` : 'Cancelado',
+          observacoes: motivo ? `Cancelado: ${motivo}` : 'Cancelado pelo cliente',
           updated_at: new Date().toISOString()
         })
         .eq('id', compromisso_id);
@@ -180,6 +356,12 @@ async function createTools(supabase: any): Promise<IATools> {
         return { success: false, error: 'Erro ao cancelar compromisso' };
       }
       
+      // Desativar lembretes
+      await supabase
+        .from('lembretes')
+        .update({ ativo: false })
+        .eq('compromisso_id', compromisso_id);
+      
       return { success: true, mensagem: 'Compromisso cancelado com sucesso' };
     },
     
@@ -188,7 +370,11 @@ async function createTools(supabase: any): Promise<IATools> {
       
       const { data: compromissos, error } = await supabase
         .from('compromissos')
-        .select('*')
+        .select(`
+          *,
+          profissional:profissional_id (nome),
+          agenda:agenda_id (nome)
+        `)
         .eq('lead_id', lead_id)
         .order('data_hora_inicio', { ascending: true });
       
@@ -202,7 +388,11 @@ async function createTools(supabase: any): Promise<IATools> {
       const passados = (compromissos || []).filter((c: any) => new Date(c.data_hora_inicio) <= agora);
       
       return {
-        compromissos_futuros: futuros,
+        compromissos_futuros: futuros.map((c: any) => ({
+          ...c,
+          profissional_nome: c.profissional?.nome,
+          agenda_nome: c.agenda?.nome
+        })),
         compromissos_passados: passados,
         total: (compromissos || []).length
       };
@@ -211,7 +401,7 @@ async function createTools(supabase: any): Promise<IATools> {
 }
 
 // ========================
-// FUNÇÃO PRINCIPAL - PROMPT PERSONALIZADO
+// FUNÇÃO PRINCIPAL
 // ========================
 
 serve(async (req) => {
@@ -225,26 +415,31 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    const { conversationId, message, leadData, companyId, action } = await req.json();
+    const body = await req.json();
+    const { conversationId, message, leadData, companyId, action } = body;
     
     // Se for uma chamada direta de ferramenta
     if (action) {
       const tools = await createTools(supabase);
-      const bodyData = req.body ? await req.json() : {};
       
       switch (action) {
         case 'buscar_horarios':
-          const horarios = await tools.buscar_horarios_disponiveis(bodyData);
+          const horarios = await tools.buscar_horarios_disponiveis({ ...body, company_id: companyId });
           return new Response(JSON.stringify(horarios), { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           });
         case 'listar_profissionais':
-          const profissionais = await tools.listar_profissionais(bodyData);
+          const profissionais = await tools.listar_profissionais({ ...body, company_id: companyId });
           return new Response(JSON.stringify(profissionais), { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           });
+        case 'listar_agendas':
+          const agendas = await tools.listar_agendas({ company_id: companyId });
+          return new Response(JSON.stringify(agendas), { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          });
         case 'criar_compromisso':
-          const novoCompromisso = await tools.criar_compromisso(bodyData);
+          const novoCompromisso = await tools.criar_compromisso({ ...body, company_id: companyId });
           return new Response(JSON.stringify(novoCompromisso), { 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           });
@@ -259,10 +454,11 @@ serve(async (req) => {
     }
 
     // ========================================
-    // BUSCAR PROMPT PERSONALIZADO DA BASE DE DADOS
+    // BUSCAR CONFIGURAÇÕES
     // ========================================
     let promptPersonalizado = null;
     let agendasSelecionadas: string[] = [];
+    let knowledgeBase: any = null;
     
     if (companyId) {
       const { data: iaConfig } = await supabase
@@ -271,14 +467,16 @@ serve(async (req) => {
         .eq('company_id', companyId)
         .single();
       
-      // Buscar prompt específico para agente de agendamento
       if (iaConfig?.custom_prompts) {
         const customPrompts = iaConfig.custom_prompts as any;
-        promptPersonalizado = customPrompts.agendamento || customPrompts.default || null;
+        const agendamentoConfig = customPrompts.agendamento;
         
-        // Buscar agendas selecionadas para consulta
-        if (customPrompts.agendamento?.knowledge_base?.agendas_selecionadas) {
-          agendasSelecionadas = customPrompts.agendamento.knowledge_base.agendas_selecionadas;
+        if (typeof agendamentoConfig === 'string') {
+          promptPersonalizado = agendamentoConfig;
+        } else if (agendamentoConfig?.prompt) {
+          promptPersonalizado = agendamentoConfig.prompt;
+          knowledgeBase = agendamentoConfig.knowledge_base;
+          agendasSelecionadas = agendamentoConfig.knowledge_base?.agendas_selecionadas || [];
         }
       }
     }
@@ -291,20 +489,20 @@ DADOS DO CLIENTE:
 - Nome: ${leadData.name || 'Não informado'}
 - Telefone: ${leadData.phone || leadData.telefone || 'Não informado'}
 - Email: ${leadData.email || 'Não informado'}
-- Empresa: ${leadData.company || 'Não informado'}
 ` : '';
 
     // Buscar compromissos existentes do lead
     let compromissosContext = '';
+    const tools = await createTools(supabase);
+    
     if (leadData?.id) {
-      const tools = await createTools(supabase);
       const compromissos = await tools.buscar_compromissos_lead({ lead_id: leadData.id });
       
       if (compromissos.compromissos_futuros?.length > 0) {
         compromissosContext = `
-COMPROMISSOS AGENDADOS:
+COMPROMISSOS AGENDADOS DO CLIENTE:
 ${compromissos.compromissos_futuros.map((c: any) => 
-  `- ${new Date(c.data_hora_inicio).toLocaleDateString('pt-BR')} às ${new Date(c.data_hora_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - ${c.tipo_servico} (${c.status})`
+  `- ${new Date(c.data_hora_inicio).toLocaleDateString('pt-BR')} às ${new Date(c.data_hora_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - ${c.tipo_servico} ${c.profissional_nome ? `com ${c.profissional_nome}` : ''} (${c.status})`
 ).join('\n')}
 `;
       } else {
@@ -312,84 +510,114 @@ ${compromissos.compromissos_futuros.map((c: any) =>
       }
     }
 
-    // Buscar horários disponíveis de hoje e amanhã
+    // Buscar horários disponíveis de hoje e próximos dias
     const hoje = new Date().toISOString().split('T')[0];
     const amanha = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const depoisAmanha = new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0];
     
-    const tools = await createTools(supabase);
-    const horariosHoje = await tools.buscar_horarios_disponiveis({ data: hoje });
-    const horariosAmanha = await tools.buscar_horarios_disponiveis({ data: amanha });
+    const horariosHoje = await tools.buscar_horarios_disponiveis({ data: hoje, company_id: companyId });
+    const horariosAmanha = await tools.buscar_horarios_disponiveis({ data: amanha, company_id: companyId });
     
-    // Buscar agendas disponíveis para contexto
+    // Buscar agendas disponíveis
     let agendasContext = '';
-    if (agendasSelecionadas.length > 0) {
-      const { data: agendas } = await supabase
-        .from('agendas')
-        .select('id, nome, tipo')
-        .in('id', agendasSelecionadas)
-        .eq('status', 'ativo');
+    const agendasResult = await tools.listar_agendas({ company_id: companyId });
+    
+    if (agendasResult.agendas?.length > 0) {
+      // Filtrar por agendas selecionadas se configurado
+      const agendasFiltradas = agendasSelecionadas.length > 0 
+        ? agendasResult.agendas.filter((a: any) => agendasSelecionadas.includes(a.id))
+        : agendasResult.agendas;
       
-      if (agendas && agendas.length > 0) {
+      if (agendasFiltradas.length > 0) {
         agendasContext = `
-AGENDAS DISPONÍVEIS:
-${agendas.map((a: any) => `- ${a.nome} (${a.tipo === 'colaborador' ? 'Profissional' : 'Agenda Geral'})`).join('\n')}
+AGENDAS/PROFISSIONAIS DISPONÍVEIS:
+${agendasFiltradas.map((a: any) => `- ${a.nome}${a.profissional ? ` (${a.profissional})` : ''} - Tempo médio: ${a.tempo_medio || 30}min`).join('\n')}
 `;
       }
+    }
+
+    // Buscar profissionais
+    let profissionaisContext = '';
+    const profissionaisResult = await tools.listar_profissionais({ company_id: companyId });
+    
+    if (profissionaisResult.profissionais?.length > 0) {
+      profissionaisContext = `
+PROFISSIONAIS DISPONÍVEIS:
+${profissionaisResult.profissionais.map((p: any) => `- ${p.nome}${p.especialidade ? ` (${p.especialidade})` : ''}`).join('\n')}
+`;
     }
     
     const horariosContext = `
 HORÁRIOS DISPONÍVEIS:
-Hoje (${hoje}): ${horariosHoje.horarios_disponiveis?.slice(0, 5).join(', ') || 'Nenhum'} ${horariosHoje.horarios_disponiveis?.length > 5 ? `e mais ${horariosHoje.horarios_disponiveis.length - 5}` : ''}
-Amanhã (${amanha}): ${horariosAmanha.horarios_disponiveis?.slice(0, 5).join(', ') || 'Nenhum'} ${horariosAmanha.horarios_disponiveis?.length > 5 ? `e mais ${horariosAmanha.horarios_disponiveis.length - 5}` : ''}
-${agendasContext}`;
+📅 Hoje (${new Date(hoje).toLocaleDateString('pt-BR')}): ${horariosHoje.horarios_disponiveis?.length > 0 ? horariosHoje.horarios_disponiveis.slice(0, 6).join(', ') + (horariosHoje.horarios_disponiveis.length > 6 ? ` e mais ${horariosHoje.horarios_disponiveis.length - 6}` : '') : 'Sem vagas'}
+📅 Amanhã (${new Date(amanha).toLocaleDateString('pt-BR')}): ${horariosAmanha.horarios_disponiveis?.length > 0 ? horariosAmanha.horarios_disponiveis.slice(0, 6).join(', ') + (horariosAmanha.horarios_disponiveis.length > 6 ? ` e mais ${horariosAmanha.horarios_disponiveis.length - 6}` : '') : 'Sem vagas'}
+${agendasContext}
+${profissionaisContext}`;
+
+    // Adicionar base de conhecimento
+    let knowledgeContext = '';
+    if (knowledgeBase?.empresa) {
+      knowledgeContext = `
+INFORMAÇÕES DA EMPRESA:
+- Nome: ${knowledgeBase.empresa.nome || ''}
+- Endereço: ${knowledgeBase.empresa.endereco || ''}
+- Horário: ${knowledgeBase.empresa.horario || ''}
+`;
+    }
 
     // ========================================
     // CONSTRUIR PROMPT FINAL
     // ========================================
     let systemPrompt = '';
     
-    // Se tem prompt personalizado, usar SOMENTE ele + contexto dinâmico
     if (promptPersonalizado && promptPersonalizado.trim()) {
-      // Substituir variáveis no prompt personalizado
       let promptComVariaveis = promptPersonalizado
         .replace(/{lead\.name}/g, leadData?.name || 'Cliente')
         .replace(/{lead\.phone}/g, leadData?.phone || leadData?.telefone || '')
         .replace(/{lead\.email}/g, leadData?.email || '')
-        .replace(/{lead\.company}/g, leadData?.company || '')
-        .replace(/{company\.name}/g, 'Empresa');
+        .replace(/{company\.name}/g, knowledgeBase?.empresa?.nome || 'Empresa');
       
       systemPrompt = `${promptComVariaveis}
 
 ${leadContext}
 ${compromissosContext}
 ${horariosContext}
+${knowledgeContext}
 
 AÇÕES DISPONÍVEIS (inclua no final da resposta entre colchetes, se aplicável):
-- [VERIFICAR_HORARIOS:YYYY-MM-DD] - para verificar horários de uma data
-- [AGENDAR:YYYY-MM-DDTHH:MM|TIPO_SERVICO] - para confirmar agendamento
-- [ALTERAR:COMPROMISSO_ID|NOVOS_DADOS] - para alterar compromisso
+- [VERIFICAR_HORARIOS:YYYY-MM-DD] - para verificar horários de uma data específica
+- [AGENDAR:YYYY-MM-DDTHH:MM|TIPO_SERVICO|PROFISSIONAL_OPCIONAL] - para confirmar agendamento
+- [ALTERAR:COMPROMISSO_ID|NOVA_DATA] - para alterar compromisso existente
 - [CANCELAR:COMPROMISSO_ID] - para cancelar compromisso
 - [TRANSFERIR_HUMANO] - para transferir para atendente humano`;
     } else {
-      // Se NÃO tem prompt personalizado, usar prompt padrão básico
-      systemPrompt = `Você é uma assistente especializada em agendamentos. Ajude clientes a agendar, alterar ou cancelar compromissos.
+      systemPrompt = `Você é uma assistente especializada em agendamentos. Ajude clientes a agendar, alterar ou cancelar compromissos de forma simpática e eficiente.
+
+DIRETRIZES:
+- Seja proativa e sugira horários disponíveis
+- Confirme todos os dados antes de agendar (data, horário, serviço)
+- Use emojis para deixar a conversa mais amigável
+- Se o cliente pedir uma data específica, verifique a disponibilidade
+- Sempre confirme o agendamento com todos os detalhes
 
 ${leadContext}
 ${compromissosContext}
 ${horariosContext}
+${knowledgeContext}
 
 AÇÕES DISPONÍVEIS (inclua no final da resposta entre colchetes, se aplicável):
-- [VERIFICAR_HORARIOS:YYYY-MM-DD] - para verificar horários de uma data
+- [VERIFICAR_HORARIOS:YYYY-MM-DD] - para verificar horários de uma data específica
 - [AGENDAR:YYYY-MM-DDTHH:MM|TIPO_SERVICO] - para confirmar agendamento
-- [ALTERAR:COMPROMISSO_ID|NOVOS_DADOS] - para alterar compromisso
+- [ALTERAR:COMPROMISSO_ID|NOVA_DATA] - para alterar compromisso existente
 - [CANCELAR:COMPROMISSO_ID] - para cancelar compromisso
 - [TRANSFERIR_HUMANO] - para transferir para atendente humano`;
     }
 
     console.log('📅 IA Agendamento - Processando:', { 
       conversationId, 
-      message: message.substring(0, 50),
-      hasCustomPrompt: !!promptPersonalizado
+      message: message?.substring(0, 50),
+      hasCustomPrompt: !!promptPersonalizado,
+      agendasDisponiveis: agendasResult.total
     });
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -404,7 +632,7 @@ AÇÕES DISPONÍVEIS (inclua no final da resposta entre colchetes, se aplicável
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message }
         ],
-        max_tokens: 600,
+        max_tokens: 800,
       }),
     });
 
@@ -430,7 +658,7 @@ AÇÕES DISPONÍVEIS (inclua no final da resposta entre colchetes, se aplicável
     const aiResponse = data.choices[0].message.content;
 
     // Extrair e executar ações
-    const actionPattern = /\[(VERIFICAR_HORARIOS|AGENDAR|ALTERAR|CANCELAR|TRANSFERIR_HUMANO|CONFIRMAR_DADOS)(:([^\]]+))?\]/;
+    const actionPattern = /\[(VERIFICAR_HORARIOS|AGENDAR|ALTERAR|CANCELAR|TRANSFERIR_HUMANO)(:([^\]]+))?\]/;
     const actionMatch = aiResponse.match(actionPattern);
     
     const actionType = actionMatch ? actionMatch[1] : null;
@@ -440,7 +668,7 @@ AÇÕES DISPONÍVEIS (inclua no final da resposta entre colchetes, se aplicável
 
     let actionResult = null;
 
-    if (actionType && leadData?.id && companyId) {
+    if (actionType && companyId) {
       const { data: user } = await supabase
         .from('user_roles')
         .select('user_id')
@@ -453,74 +681,84 @@ AÇÕES DISPONÍVEIS (inclua no final da resposta entre colchetes, se aplicável
       switch (actionType) {
         case 'VERIFICAR_HORARIOS':
           if (actionParams) {
-            const horariosData = await tools.buscar_horarios_disponiveis({ data: actionParams });
+            const horariosData = await tools.buscar_horarios_disponiveis({ 
+              data: actionParams,
+              company_id: companyId 
+            });
             actionResult = horariosData;
           }
           break;
           
         case 'AGENDAR':
-          if (actionParams && ownerId) {
-            const [dataHora, tipoServico] = actionParams.split('|');
-            if (dataHora && tipoServico) {
-              const resultado = await tools.criar_compromisso({
-                lead_id: leadData.id,
-                data_hora: dataHora,
-                tipo_servico: tipoServico,
-                company_id: companyId,
-                owner_id: ownerId
-              });
-              actionResult = resultado;
-            }
+          if (actionParams && ownerId && leadData?.id) {
+            const parts = actionParams.split('|');
+            const dataHora = parts[0];
+            const tipoServico = parts[1] || 'Consulta';
+            
+            const resultado = await tools.criar_compromisso({
+              lead_id: leadData.id,
+              data_hora: dataHora,
+              tipo_servico: tipoServico,
+              company_id: companyId,
+              owner_id: ownerId,
+              telefone: leadData.telefone || leadData.phone
+            });
+            actionResult = resultado;
           }
           break;
           
         case 'CANCELAR':
           if (actionParams) {
-            const resultado = await tools.cancelar_compromisso({ compromisso_id: actionParams });
-            actionResult = resultado;
+            const cancelResult = await tools.cancelar_compromisso({ 
+              compromisso_id: actionParams 
+            });
+            actionResult = cancelResult;
           }
           break;
       }
     }
 
-    // Log da interação para aprendizado
+    // Registrar interação para aprendizado
     try {
-      await supabase.functions.invoke('ia-aprendizado', {
-        body: {
-          companyId,
-          agentType: 'agendamento',
-          inputMessage: message,
-          aiResponse: cleanResponse,
-          action: actionType,
-          actionParams,
-          actionResult,
-          leadId: leadData?.id
-        }
-      });
+      await supabase
+        .from('ia_training_data')
+        .insert({
+          company_id: companyId,
+          agent_type: 'agendamento',
+          conversation_id: conversationId,
+          lead_id: leadData?.id,
+          input_message: message,
+          ai_response: cleanResponse,
+          context_data: {
+            action: actionType,
+            actionParams,
+            actionResult
+          }
+        });
     } catch (e) {
       console.warn('⚠️ Erro ao registrar aprendizado:', e);
     }
 
-    const executionTime = Date.now() - startTime;
-    console.log(`✅ IA Agendamento - Concluído em ${executionTime}ms`);
+    const execTime = Date.now() - startTime;
+    console.log(`✅ IA Agendamento - Concluído em ${execTime}ms`);
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         response: cleanResponse,
         action: actionType,
         actionParams,
         actionResult,
-        executionTime
+        executionTime: execTime
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Erro na IA Agendamento:', error);
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
-        response: 'Desculpe, tive um problema técnico. Um atendente humano irá te ajudar.'
+        error: error.message,
+        response: 'Desculpe, estou com dificuldades técnicas. Um atendente irá te ajudar em breve.'
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

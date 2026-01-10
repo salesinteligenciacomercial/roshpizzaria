@@ -7,7 +7,8 @@ const corsHeaders = {
 };
 
 // ========================
-// IA DE ATENDIMENTO - PROMPT PERSONALIZADO
+// IA DE ATENDIMENTO - VERSÃO MELHORADA
+// Com processamento de mídias, integração com agendamento e base de conhecimento
 // ========================
 
 serve(async (req) => {
@@ -29,7 +30,87 @@ serve(async (req) => {
     }
 
     // ========================================
-    // PROCESSAR ARQUIVOS (IMAGENS, PDFs, etc)
+    // BUSCAR CONFIGURAÇÕES DA IA
+    // ========================================
+    let iaConfig: any = null;
+    let promptPersonalizado: string | null = typeof customPrompt === 'string' ? customPrompt : null;
+    let knowledgeBase: any = null;
+    let blockedTags: string[] = [];
+    let blockedFunnels: string[] = [];
+    let blockedStages: string[] = [];
+    
+    if (companyId) {
+      const { data: config } = await supabase
+        .from('ia_configurations')
+        .select('*')
+        .eq('company_id', companyId)
+        .single();
+      
+      iaConfig = config;
+      
+      if (config?.custom_prompts) {
+        const customPrompts = config.custom_prompts as any;
+        const prompt = customPrompts.atendimento?.prompt || customPrompts.atendimento || customPrompts.default || null;
+        promptPersonalizado = typeof prompt === 'string' ? prompt : null;
+        
+        // Extrair base de conhecimento
+        knowledgeBase = customPrompts.atendimento?.knowledge_base || null;
+      }
+      
+      // Carregar configurações de bloqueio
+      blockedTags = config?.blocked_tags || [];
+      blockedFunnels = config?.blocked_funnels || [];
+      blockedStages = config?.blocked_stages || [];
+    }
+
+    // ========================================
+    // VERIFICAR BLOQUEIOS
+    // ========================================
+    if (leadData) {
+      // Verificar bloqueio por tags
+      if (blockedTags.length > 0 && leadData.tags) {
+        const hasBlockedTag = leadData.tags.some((tag: string) => blockedTags.includes(tag));
+        if (hasBlockedTag) {
+          console.log('⛔ Lead bloqueado por tag');
+          return new Response(
+            JSON.stringify({ 
+              blocked: true, 
+              reason: 'Tag bloqueada',
+              response: null 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+      
+      // Verificar bloqueio por funil/etapa
+      if (blockedFunnels.length > 0 && leadData.funil_id && blockedFunnels.includes(leadData.funil_id)) {
+        console.log('⛔ Lead bloqueado por funil');
+        return new Response(
+          JSON.stringify({ 
+            blocked: true, 
+            reason: 'Funil bloqueado',
+            response: null 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      if (blockedStages.length > 0 && leadData.etapa_id && blockedStages.includes(leadData.etapa_id)) {
+        console.log('⛔ Lead bloqueado por etapa');
+        return new Response(
+          JSON.stringify({ 
+            blocked: true, 
+            reason: 'Etapa bloqueada',
+            response: null 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // ========================================
+    // PROCESSAR ARQUIVOS (IMAGENS, PDFs, ÁUDIOS, VÍDEOS)
     // ========================================
     let filesContent: any[] = [];
     let filesDescription = '';
@@ -46,46 +127,44 @@ serve(async (req) => {
               url: `data:${fileData.mimeType};base64,${fileData.base64}`
             }
           });
-          filesDescription += `\n[Imagem anexada: ${fileData.name}]`;
+          filesDescription += `\n[Imagem anexada: ${fileData.name}] - Analise esta imagem e descreva o que você vê.`;
         } else if (fileData.type === 'pdf') {
-          // PDFs: adicionar descrição (modelo não lê PDFs nativamente)
-          filesDescription += `\n[PDF anexado: ${fileData.name}] - Por favor, descreva o que você espera encontrar neste documento.`;
+          // PDFs: tentar extrair texto se possível
+          filesDescription += `\n[PDF anexado: ${fileData.name}] - O cliente enviou um documento PDF. Pergunte sobre o conteúdo ou solicite informações específicas.`;
         } else if (fileData.type === 'audio') {
-          // Áudios: adicionar descrição
-          filesDescription += `\n[Áudio anexado: ${fileData.name}] - O áudio precisa ser transcrito para análise.`;
+          // Áudios: chamar transcrição se disponível
+          filesDescription += `\n[Áudio anexado: ${fileData.name}] - O cliente enviou um áudio. Se necessário, solicite que transcreva ou repita por texto.`;
+          
+          // Tentar transcrever o áudio
+          try {
+            const { data: transcricao } = await supabase.functions.invoke('transcrever-audio', {
+              body: { 
+                audioBase64: fileData.base64,
+                mimeType: fileData.mimeType
+              }
+            });
+            
+            if (transcricao?.text) {
+              filesDescription = filesDescription.replace(
+                `[Áudio anexado: ${fileData.name}]`,
+                `[Áudio transcrito: "${transcricao.text}"]`
+              );
+            }
+          } catch (e) {
+            console.warn('⚠️ Erro na transcrição:', e);
+          }
         } else if (fileData.type === 'video') {
-          // Vídeos: adicionar descrição
-          filesDescription += `\n[Vídeo anexado: ${fileData.name}] - O vídeo precisa ser processado para análise.`;
+          filesDescription += `\n[Vídeo anexado: ${fileData.name}] - O cliente enviou um vídeo. Pergunte sobre o conteúdo.`;
         }
       }
     }
 
     // ========================================
-    // BUSCAR PROMPT PERSONALIZADO DA BASE DE DADOS
-    // ========================================
-    let promptPersonalizado: string | null = typeof customPrompt === 'string' ? customPrompt : null;
-    
-    if (!promptPersonalizado && companyId) {
-      const { data: iaConfig } = await supabase
-        .from('ia_configurations')
-        .select('custom_prompts')
-        .eq('company_id', companyId)
-        .single();
-      
-      // Buscar prompt específico para agente de atendimento
-      if (iaConfig?.custom_prompts) {
-        const customPrompts = iaConfig.custom_prompts as any;
-        const prompt = customPrompts.atendimento || customPrompts.default || null;
-        // Garantir que é uma string
-        promptPersonalizado = typeof prompt === 'string' ? prompt : null;
-      }
-    }
-
-    // ========================================
-    // MONTAR CONTEXTO DINÂMICO (DADOS DO LEAD)
+    // MONTAR CONTEXTO DINÂMICO (DADOS DO LEAD + BASE DE CONHECIMENTO)
     // ========================================
     let contextoDinamico = '';
     
+    // Contexto do lead
     if (leadData) {
       contextoDinamico += `
 DADOS DO CLIENTE:
@@ -132,35 +211,94 @@ TAREFAS PENDENTES:
 ${tarefas.map((t: any) => `- ${t.title} (${t.priority}) - ${t.status}`).join('\n')}
 `;
         }
+        
+        // Buscar compromissos do lead
+        const { data: compromissos } = await supabase
+          .from('compromissos')
+          .select('data_hora_inicio, tipo_servico, status')
+          .eq('lead_id', leadData.id)
+          .gte('data_hora_inicio', new Date().toISOString())
+          .neq('status', 'cancelado')
+          .limit(3);
+        
+        if (compromissos && compromissos.length > 0) {
+          contextoDinamico += `
+COMPROMISSOS AGENDADOS:
+${compromissos.map((c: any) => `- ${new Date(c.data_hora_inicio).toLocaleDateString('pt-BR')} às ${new Date(c.data_hora_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - ${c.tipo_servico}`).join('\n')}
+`;
+        }
+      }
+    }
+
+    // Adicionar base de conhecimento ao contexto
+    if (knowledgeBase) {
+      if (knowledgeBase.empresa) {
+        contextoDinamico += `
+INFORMAÇÕES DA EMPRESA:
+- Nome: ${knowledgeBase.empresa.nome || 'Não informado'}
+- Descrição: ${knowledgeBase.empresa.descricao || 'Não informada'}
+- Segmento: ${knowledgeBase.empresa.segmento || 'Não informado'}
+- Horário: ${knowledgeBase.empresa.horario || 'Não informado'}
+- Endereço: ${knowledgeBase.empresa.endereco || 'Não informado'}
+- Contato: ${knowledgeBase.empresa.contato || 'Não informado'}
+`;
+      }
+      
+      if (knowledgeBase.produtos && knowledgeBase.produtos.length > 0) {
+        contextoDinamico += `
+PRODUTOS/SERVIÇOS DISPONÍVEIS:
+${knowledgeBase.produtos.map((p: any) => `- ${p.nome}: ${p.descricao} ${p.preco ? `(${p.preco})` : ''}`).join('\n')}
+`;
+      }
+      
+      if (knowledgeBase.faqs && knowledgeBase.faqs.length > 0) {
+        contextoDinamico += `
+PERGUNTAS FREQUENTES:
+${knowledgeBase.faqs.map((f: any) => `P: ${f.pergunta}\nR: ${f.resposta}`).join('\n\n')}
+`;
+      }
+      
+      if (knowledgeBase.informacoes_extras) {
+        contextoDinamico += `
+INFORMAÇÕES ADICIONAIS:
+${knowledgeBase.informacoes_extras}
+`;
       }
     }
 
     // Buscar histórico recente da conversa
-    if (conversationId && companyId && leadData) {
+    const historyCount = iaConfig?.history_messages_count || 10;
+    if (conversationId && companyId && leadData && iaConfig?.read_conversation_history !== false) {
       const { data: historico } = await supabase
         .from('conversas')
         .select('mensagem, fromme, created_at')
         .eq('telefone_formatado', leadData?.telefone || leadData?.phone)
         .eq('company_id', companyId)
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(historyCount);
       
       if (historico && historico.length > 1) {
         contextoDinamico += `
-HISTÓRICO RECENTE DA CONVERSA:
+HISTÓRICO RECENTE DA CONVERSA (últimas ${historico.length - 1} mensagens):
 ${historico.slice(1).reverse().map((h: any) => 
-  `${h.fromme ? 'Você' : 'Cliente'}: ${h.mensagem?.substring(0, 150)}`
+  `${h.fromme ? '[Você]' : '[Cliente]'}: ${h.mensagem?.substring(0, 200)}`
 ).join('\n')}
 `;
       }
     }
 
     // ========================================
+    // DETECTAR INTENÇÃO DE AGENDAMENTO
+    // ========================================
+    const msgLower = message?.toLowerCase() || '';
+    const agendamentoKeywords = ['agendar', 'marcar', 'horário', 'horario', 'consulta', 'disponível', 'disponivel', 'vaga', 'quando posso', 'quero marcar'];
+    const isAgendamentoIntent = agendamentoKeywords.some(k => msgLower.includes(k));
+
+    // ========================================
     // CONSTRUIR PROMPT FINAL
     // ========================================
     let systemPrompt = '';
     
-    // Se tem prompt personalizado, usar SOMENTE ele + contexto dinâmico
     if (promptPersonalizado && promptPersonalizado.trim()) {
       // Substituir variáveis no prompt personalizado
       let promptComVariaveis = promptPersonalizado
@@ -168,7 +306,7 @@ ${historico.slice(1).reverse().map((h: any) =>
         .replace(/{lead\.phone}/g, leadData?.phone || leadData?.telefone || '')
         .replace(/{lead\.email}/g, leadData?.email || '')
         .replace(/{lead\.company}/g, leadData?.company || '')
-        .replace(/{company\.name}/g, 'Empresa');
+        .replace(/{company\.name}/g, knowledgeBase?.empresa?.nome || 'Empresa');
       
       systemPrompt = `${promptComVariaveis}
 
@@ -179,13 +317,20 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
 - [ADICIONAR_TAG:nome] - para adicionar tag ao lead
 - [MOVER_FUNIL:etapa] - para mover lead no funil
 - [CRIAR_TAREFA:titulo] - para criar tarefa de follow-up
-- [AGENDAR] - quando cliente quiser marcar horário
-- [TRANSFERIR_HUMANO] - para transferir para atendente humano`;
+- [AGENDAR] - quando cliente quiser marcar horário (inicia fluxo de agendamento)
+- [TRANSFERIR_HUMANO] - para transferir para atendente humano
+- [QUALIFICAR] - para marcar lead como qualificado`;
     } else {
-      // Se NÃO tem prompt personalizado, usar prompt padrão básico
-      systemPrompt = `Você é uma assistente de atendimento. Responda de forma cordial e profissional.
+      systemPrompt = `Você é uma assistente de atendimento virtual. Responda de forma cordial, profissional e objetiva.
 
 ${contextoDinamico}
+
+DIRETRIZES:
+- Seja prestativo e empático
+- Responda de forma concisa (máximo 3 parágrafos)
+- Use emojis com moderação para criar conexão
+- Se não souber responder algo, admita e ofereça encaminhar para um humano
+- Se o cliente quiser agendar algo, use a ação [AGENDAR]
 
 AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se aplicável):
 - [COLETAR_DADOS:campo=valor] - para coletar CPF, email, telefone, empresa
@@ -193,7 +338,8 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
 - [MOVER_FUNIL:etapa] - para mover lead no funil
 - [CRIAR_TAREFA:titulo] - para criar tarefa de follow-up
 - [AGENDAR] - quando cliente quiser marcar horário
-- [TRANSFERIR_HUMANO] - para transferir para atendente humano`;
+- [TRANSFERIR_HUMANO] - para transferir para atendente humano
+- [QUALIFICAR] - para marcar lead como qualificado`;
     }
 
     console.log('🤖 IA Atendimento - Processando:', { 
@@ -201,20 +347,20 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
       message: message?.substring(0, 50),
       hasLead: !!leadData,
       hasCustomPrompt: !!promptPersonalizado,
-      hasFiles: filesContent.length > 0
+      hasFiles: filesContent.length > 0,
+      hasKnowledgeBase: !!knowledgeBase,
+      isAgendamentoIntent
     });
 
     // Construir conteúdo da mensagem (texto + arquivos multimodais)
     let userContent: any;
     
     if (filesContent.length > 0) {
-      // Formato multimodal com imagens
       userContent = [
         { type: 'text', text: (message || 'Analise este arquivo.') + filesDescription },
         ...filesContent
       ];
     } else {
-      // Apenas texto
       userContent = message + filesDescription;
     }
 
@@ -230,7 +376,7 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent }
         ],
-        max_tokens: 800,
+        max_tokens: 1000,
       }),
     });
 
@@ -308,7 +454,6 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
           
         case 'MOVER_FUNIL':
           if (actionParams && companyId) {
-            // Buscar etapa por nome
             const { data: etapa } = await supabase
               .from('etapas')
               .select('id, funil_id')
@@ -358,23 +503,50 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
             }
           }
           break;
+          
+        case 'QUALIFICAR':
+          const { error: qualError } = await supabase
+            .from('leads')
+            .update({ 
+              status: 'qualificado',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', leadData.id);
+          
+          actionResult = { success: !qualError };
+          console.log('✨ Lead qualificado');
+          break;
+          
+        case 'AGENDAR':
+          // Sinalizar que deve transferir para IA de agendamento
+          actionResult = { 
+            success: true, 
+            nextAgent: 'agendamento',
+            message: 'Transferindo para agendamento...' 
+          };
+          console.log('📅 Iniciando fluxo de agendamento');
+          break;
       }
     }
 
-    // Log da interação para aprendizado
+    // Registrar interação para aprendizado
     try {
-      await supabase.functions.invoke('ia-aprendizado', {
-        body: {
-          companyId,
-          agentType: 'atendimento',
-          inputMessage: message,
-          aiResponse: cleanResponse,
-          action,
-          actionParams,
-          actionResult,
-          leadId: leadData?.id
-        }
-      });
+      await supabase
+        .from('ia_training_data')
+        .insert({
+          company_id: companyId,
+          agent_type: 'atendimento',
+          conversation_id: conversationId,
+          lead_id: leadData?.id,
+          input_message: message,
+          ai_response: cleanResponse,
+          context_data: {
+            hasFiles: files?.length > 0,
+            action,
+            actionParams,
+            hasKnowledgeBase: !!knowledgeBase
+          }
+        });
     } catch (e) {
       console.warn('⚠️ Erro ao registrar aprendizado:', e);
     }
@@ -388,7 +560,8 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
         action,
         actionParams,
         actionResult,
-        executionTime
+        executionTime,
+        nextAgent: action === 'AGENDAR' ? 'agendamento' : undefined
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
