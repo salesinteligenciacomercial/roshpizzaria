@@ -20,7 +20,8 @@ import {
   Pencil,
   Plus,
   UserCog,
-  Target
+  Target,
+  Shield
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -35,6 +36,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Navigate } from "react-router-dom";
 import { EditarUsuarioDialog } from "@/components/configuracoes/EditarUsuarioDialog";
+import { PermissoesUsuarioDialog } from "@/components/configuracoes/PermissoesUsuarioDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -82,6 +84,8 @@ export default function Configuracoes() {
   const [excluirDialogOpen, setExcluirDialogOpen] = useState(false);
   const [colaboradorParaExcluir, setColaboradorParaExcluir] = useState<Colaborador | null>(null);
   const [excluindoUsuario, setExcluindoUsuario] = useState(false);
+  const [permissoesDialogOpen, setPermissoesDialogOpen] = useState(false);
+  const [colaboradorParaPermissoes, setColaboradorParaPermissoes] = useState<Colaborador | null>(null);
   
   const [novoColaborador, setNovoColaborador] = useState({
     nome: "",
@@ -363,6 +367,11 @@ export default function Configuracoes() {
     setExcluirDialogOpen(true);
   };
 
+  const abrirPermissoes = (colaborador: Colaborador) => {
+    setColaboradorParaPermissoes(colaborador);
+    setPermissoesDialogOpen(true);
+  };
+
   const confirmarExcluirUsuario = async () => {
     if (!colaboradorParaExcluir?.userId) return;
     
@@ -522,6 +531,14 @@ export default function Configuracoes() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        onClick={() => abrirPermissoes(colaborador)}
+                        title="Gerenciar permissões"
+                      >
+                        <Shield className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => abrirEditarUsuario(colaborador)}
                         title="Editar usuário"
                       >
@@ -580,6 +597,15 @@ export default function Configuracoes() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          <PermissoesUsuarioDialog
+            open={permissoesDialogOpen}
+            onOpenChange={setPermissoesDialogOpen}
+            userId={colaboradorParaPermissoes?.userId || null}
+            userName={colaboradorParaPermissoes?.nome || ''}
+            companyId={currentCompany?.id || ''}
+            onSuccess={carregarColaboradores}
+          />
     </>
   );
 
