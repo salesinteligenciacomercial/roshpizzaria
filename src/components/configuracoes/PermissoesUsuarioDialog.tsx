@@ -13,8 +13,6 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Shield } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
 
 interface Permission {
   id: string;
@@ -266,11 +264,11 @@ export function PermissoesUsuarioDialog({
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <ScrollArea className="h-[400px] pr-4 flex-1">
-            <div className="space-y-6">
+          <div className="overflow-y-auto max-h-[60vh] pr-2">
+            <div className="space-y-6 pb-4">
               {Object.entries(groupedPermissions).map(([module, perms]) => (
                 <div key={module} className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between sticky top-0 bg-background py-2 z-10">
                     <h4 className="font-semibold text-sm">
                       {moduleLabels[module] || module}
                     </h4>
@@ -315,7 +313,7 @@ export function PermissoesUsuarioDialog({
                 </div>
               ))}
             </div>
-          </ScrollArea>
+          </div>
         )}
 
         <DialogFooter className="mt-4">
