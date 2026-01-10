@@ -191,6 +191,11 @@ export default function Configuracoes() {
     loadAnnouncement();
   }, [currentCompany?.id]);
 
+  useEffect(() => {
+    if (currentCompany?.id) {
+      carregarColaboradores();
+    }
+  }, [currentCompany?.id]);
 
   const carregarColaboradores = async () => {
     try {
