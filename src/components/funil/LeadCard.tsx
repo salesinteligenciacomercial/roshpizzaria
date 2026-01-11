@@ -701,9 +701,9 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
 
         {/* Valor Estimado - SEMPRE VISÍVEL */}
         {lead.value !== undefined && lead.value > 0 && (
-          <div className="flex items-center justify-between pt-2 border-t border-border/50">
+          <div className="flex flex-col pt-2 border-t border-border/50">
             <span className="text-xs text-muted-foreground font-medium">Valor Estimado</span>
-            <Badge className="font-semibold bg-gradient-success text-success-foreground shadow-sm">
+            <Badge className="font-semibold bg-gradient-success text-success-foreground shadow-sm mt-1 w-fit">
               R$ {lead.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </Badge>
           </div>
