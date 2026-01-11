@@ -661,13 +661,6 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                 <DropdownMenuItem onClick={(e) => { handleDelete(e as any); }}>Excluir</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            {/* Valor Estimado ao lado do botão expandir */}
-            {lead.value !== undefined && lead.value > 0 && (
-              <Badge className="font-semibold bg-gradient-success text-success-foreground shadow-sm text-xs">
-                R$ {lead.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </Badge>
-            )}
-            
             <Button
               variant="ghost"
               size="sm"
@@ -685,6 +678,16 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
             </Button>
           </div>
         </div>
+
+        {/* Valor Estimado - ABAIXO do botão expandir */}
+        {lead.value !== undefined && lead.value > 0 && (
+          <div className="flex flex-col pt-2 border-t border-border/50">
+            <span className="text-xs text-muted-foreground font-medium">Valor Estimado</span>
+            <Badge className="font-semibold bg-gradient-success text-success-foreground shadow-sm mt-1 w-fit">
+              R$ {lead.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </Badge>
+          </div>
+        )}
 
         {/* Telefone - SEMPRE VISÍVEL */}
         {lead.telefone && (
