@@ -4167,7 +4167,9 @@ function Conversas() {
           company_id: userRole?.company_id,
           owner_id: user?.id,
           sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
-          fromme: true
+          fromme: true,
+          delivered: true,
+          read: false
         }]);
       }
     } catch (err) {
@@ -4340,7 +4342,9 @@ function Conversas() {
         company_id: userRole?.company_id,
         owner_id: userId,
         sent_by: userProfile?.full_name,
-        fromme: true
+        fromme: true,
+        delivered: true,
+        read: false
       }).select('id, midia_url').single();
 
       // ⚡ Log detalhado para debugging
@@ -4562,7 +4566,9 @@ function Conversas() {
         company_id: userRole?.company_id,
         owner_id: user?.id,
         sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
-        fromme: true
+        fromme: true,
+        delivered: true,
+        read: false
       }]).select('id, midia_url').single();
       if (dbError) {
         console.error('❌ Erro ao salvar mensagem no banco:', dbError);
@@ -4786,7 +4792,9 @@ function Conversas() {
             sent_by: sentByName,
             // ⚡ NOVO: Salvar nome do usuário permanentemente
             fromme: true,
-            replied_to_message: repliedMessage || null
+            replied_to_message: repliedMessage || null,
+            delivered: true,
+            read: false
           }]);
           if (!dbError) {
             mensagemSalva = true;
@@ -4890,7 +4898,9 @@ function Conversas() {
                 sent_by: sentByName,
                 // ⚡ CORREÇÃO: Salvar nome do usuário permanentemente
                 fromme: true,
-                replied_to_message: repliedMessage || null
+                replied_to_message: repliedMessage || null,
+                delivered: true,
+                read: false
               }]);
               if (!dbError) {
                 mensagemSalva = true;
@@ -5854,7 +5864,9 @@ function Conversas() {
                     lead_id: leadVinculado.id,
                     owner_id: user?.id,
                     sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
-                    fromme: true
+                    fromme: true,
+                    delivered: true,
+                    read: false
                   }]);
                   if (dbError) {
                     console.error('❌ [CONFIRMAÇÃO] Erro ao salvar mensagem no banco:', dbError);
@@ -7283,7 +7295,9 @@ function Conversas() {
         company_id: userRole?.company_id,
         owner_id: user?.id,
         sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
-        fromme: true // ⚡ CRÍTICO: Marcar como mensagem enviada para aparecer no lado direito
+        fromme: true, // ⚡ CRÍTICO: Marcar como mensagem enviada para aparecer no lado direito
+        delivered: true,
+        read: false
       }]);
 
       // CORREÇÃO: Atualizar TODAS as mensagens anteriores desta conversa para status Resolvida
@@ -7370,7 +7384,9 @@ function Conversas() {
                   owner_id: user.id,
                   fromme: true,
                   status: 'Enviada',
-                  origem: 'WhatsApp'
+                  origem: 'WhatsApp',
+                  delivered: true,
+                  read: false
                 });
                 if (insertError) {
                   console.error('Erro ao salvar conversa:', insertError);

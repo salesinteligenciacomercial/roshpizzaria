@@ -1553,7 +1553,9 @@ export default function Agenda() {
                     lead_id: formData.lead_id,
                     owner_id: user?.id,
                     sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
-                    fromme: true
+                    fromme: true,
+                    delivered: true,
+                    read: false
                   }]);
                   if (dbError) {
                     console.error('❌ [CONFIRMAÇÃO] Erro ao salvar mensagem no banco:', dbError);
@@ -1796,7 +1798,9 @@ export default function Agenda() {
                         owner_id: user?.id,
                         sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
                         fromme: true,
-                        created_at: new Date().toISOString()
+                        created_at: new Date().toISOString(),
+                        delivered: true,
+                        read: false
                       });
                       console.log('✅ Mensagem de cancelamento salva no CRM');
                     } catch (dbError) {
