@@ -2,7 +2,7 @@ import React, { useEffect, useState, memo, useCallback } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus, Paperclip } from "lucide-react";
+import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus, Paperclip, Clock } from "lucide-react";
 import { AgendaModal } from "@/components/agenda/AgendaModal";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -33,7 +33,7 @@ interface LeadCardProps {
     id: string;
     nome: string;
     telefone?: string;
-      phone?: string;
+    phone?: string;
     email?: string;
     value?: number;
     company?: string;
@@ -43,7 +43,8 @@ interface LeadCardProps {
     etapa_id?: string;
     notes?: string | null;
     responsavel_id?: string | null;
-      avatar_url?: string | null;
+    avatar_url?: string | null;
+    created_at?: string;
   };
   onDelete: (leadId: string) => void;
   onLeadMoved?: () => void;
@@ -67,6 +68,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [attachmentsCount, setAttachmentsCount] = useState(0);
   const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const [diasNoFunil, setDiasNoFunil] = useState<number | null>(null);
   const [userCompanyId, setUserCompanyId] = useState<string | null>(null);
 
   const normalizePhoneBR = (raw?: string): string | null => {
@@ -310,6 +312,20 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
     }
   }, [lead.id]);
 
+  // Calcular dias no funil
+  useEffect(() => {
+    const calcularDiasNoFunil = () => {
+      if (lead.created_at) {
+        const dataEntrada = new Date(lead.created_at);
+        const hoje = new Date();
+        const diffTime = Math.abs(hoje.getTime() - dataEntrada.getTime());
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        setDiasNoFunil(diffDays);
+      }
+    };
+    calcularDiasNoFunil();
+  }, [lead.created_at]);
+
   useEffect(() => {
     if (lead.id) {
       carregarProximasAtividades();
@@ -472,6 +488,38 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
 
           {/* Ações (menu) + agenda + expandir */}
           <div className="flex items-center gap-1">
+            {/* Dias no funil */}
+            {diasNoFunil !== null && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge 
+                      variant="outline" 
+                      className={`text-xs cursor-default ${
+                        diasNoFunil <= 7 
+                          ? 'bg-success/10 border-success/20 text-success' 
+                          : diasNoFunil <= 30 
+                            ? 'bg-warning/10 border-warning/20 text-warning' 
+                            : 'bg-destructive/10 border-destructive/20 text-destructive'
+                      }`}
+                    >
+                      <Clock className="h-2.5 w-2.5 mr-1" />
+                      {diasNoFunil}d
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="font-medium">
+                      {diasNoFunil === 0 
+                        ? 'Entrou hoje no funil' 
+                        : diasNoFunil === 1 
+                          ? '1 dia no funil' 
+                          : `${diasNoFunil} dias no funil`}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
             {/* Indicador de anexos/prontuário */}
             {attachmentsCount > 0 && (
               <TooltipProvider>
