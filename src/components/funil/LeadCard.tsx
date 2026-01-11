@@ -688,13 +688,12 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
             </div>
             <Button
               variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-success hover:text-success hover:bg-success/10 transition-all"
+              size="icon"
+              className="h-7 w-7 text-success hover:text-success hover:bg-success/10 transition-all"
               onClick={abrirConversa}
               title="Ver histórico de conversas"
             >
-              <MessageCircle className="h-3.5 w-3.5 mr-1" />
-              <span className="text-xs font-medium">Ver Conversas</span>
+              <MessageCircle className="h-4 w-4" />
             </Button>
           </div>
         )}
