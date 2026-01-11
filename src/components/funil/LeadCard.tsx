@@ -497,22 +497,20 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
     >
       <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
-      {/* Indicador visual do criador no topo */}
-      {creatorName && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div 
-                className="absolute top-0 right-0 w-3 h-3 rounded-bl-md cursor-default"
-                style={{ backgroundColor: creatorColor }}
-              />
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">Criado por: <span className="font-medium">{creatorName}</span></p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
+      {/* Indicador visual do criador no topo direito - SEMPRE VISÍVEL */}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div 
+              className="absolute top-2 right-2 w-4 h-4 rounded-full cursor-default shadow-sm border border-white/50"
+              style={{ backgroundColor: creatorColor }}
+            />
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="text-xs">Criado por: <span className="font-medium">{creatorName || 'Não identificado'}</span></p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       <div className="relative space-y-2">
         {/* Header sempre visível */}
