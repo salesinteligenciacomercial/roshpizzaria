@@ -140,13 +140,24 @@ export function LeadAttachments({ leadId, companyId, leadName, open, onOpenChang
     return acc;
   }, {} as Record<string, LeadAttachment[]>);
 
-  const getFileIcon = (fileType: string) => {
-    switch (fileType) {
-      case 'image': return <Image className="h-5 w-5" />;
-      case 'video': return <Video className="h-5 w-5" />;
-      case 'audio': return <Music className="h-5 w-5" />;
-      default: return <FileText className="h-5 w-5" />;
-    }
+  const getFileIcon = (fileType: string, mimeType?: string | null) => {
+    const type = fileType?.toLowerCase() || '';
+    const mime = mimeType?.toLowerCase() || '';
+    
+    if (type === 'image' || mime.startsWith('image/')) return <Image className="h-5 w-5" />;
+    if (type === 'video' || mime.startsWith('video/')) return <Video className="h-5 w-5" />;
+    if (type === 'audio' || mime.startsWith('audio/')) return <Music className="h-5 w-5" />;
+    return <FileText className="h-5 w-5" />;
+  };
+
+  const getFileCategory = (attachment: LeadAttachment): 'image' | 'video' | 'audio' | 'document' => {
+    const type = attachment.file_type?.toLowerCase() || '';
+    const mime = attachment.mime_type?.toLowerCase() || '';
+    
+    if (type === 'image' || mime.startsWith('image/')) return 'image';
+    if (type === 'video' || mime.startsWith('video/')) return 'video';
+    if (type === 'audio' || mime.startsWith('audio/')) return 'audio';
+    return 'document';
   };
 
   const getCategoryColor = (category: string | null) => {
@@ -222,25 +233,34 @@ export function LeadAttachments({ leadId, companyId, leadName, open, onOpenChang
                         {treatment}
                       </h3>
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {files.map(attachment => (
+                        {files.map(attachment => {
+                          const category = getFileCategory(attachment);
+                          return (
                           <Card key={attachment.id} className="overflow-hidden group hover:shadow-md transition-shadow">
-                            <div className="relative aspect-square bg-muted">
-                              {attachment.file_type === 'image' ? (
+                            <div className="relative aspect-square bg-muted cursor-pointer" onClick={() => handleView(attachment)}>
+                              {category === 'image' ? (
                                 <img
                                   src={attachment.file_url}
                                   alt={attachment.file_name}
                                   className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
+                                  }}
                                 />
-                              ) : attachment.file_type === 'video' ? (
+                              ) : category === 'video' ? (
                                 <video
                                   src={attachment.file_url}
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
-                                  {getFileIcon(attachment.file_type)}
+                                  {getFileIcon(attachment.file_type, attachment.mime_type)}
                                 </div>
                               )}
+                              <div className="fallback-icon hidden w-full h-full flex items-center justify-center absolute inset-0">
+                                {getFileIcon(attachment.file_type, attachment.mime_type)}
+                              </div>
                               
                               {/* Category Badge */}
                               {attachment.category && (
@@ -294,7 +314,8 @@ export function LeadAttachments({ leadId, companyId, leadName, open, onOpenChang
                               </div>
                             </CardContent>
                           </Card>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   ))}

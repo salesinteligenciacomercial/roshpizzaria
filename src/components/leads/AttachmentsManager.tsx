@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Paperclip, Search, FileText, Image, Video, File, Users, Eye, Download, Trash2, Calendar, Tag } from "lucide-react";
+import { Paperclip, Search, FileText, Image, Video, File, Users, Eye, Download, Trash2, Calendar, Tag, Music } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -160,10 +160,14 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
     setAllAttachments(attachmentsWithLead);
   };
 
-  const getFileIcon = (fileType: string) => {
-    if (fileType.startsWith("image/")) return <Image className="h-4 w-4" />;
-    if (fileType.startsWith("video/")) return <Video className="h-4 w-4" />;
-    if (fileType === "application/pdf") return <FileText className="h-4 w-4" />;
+  const getFileIcon = (fileType: string, mimeType?: string | null) => {
+    const type = fileType?.toLowerCase() || '';
+    const mime = mimeType?.toLowerCase() || '';
+    
+    if (type === 'image' || mime.startsWith("image/")) return <Image className="h-4 w-4" />;
+    if (type === 'video' || mime.startsWith("video/")) return <Video className="h-4 w-4" />;
+    if (type === 'audio' || mime.startsWith("audio/")) return <Music className="h-4 w-4" />;
+    if (type === 'pdf' || mime === "application/pdf") return <FileText className="h-4 w-4" />;
     return <File className="h-4 w-4" />;
   };
 
@@ -354,7 +358,7 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
                       <CardContent className="p-4">
                         <div className="flex items-start gap-3">
                           <div className="w-10 h-10 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                            {getFileIcon(att.file_type)}
+                            {getFileIcon(att.file_type, att.mime_type)}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">

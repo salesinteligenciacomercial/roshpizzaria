@@ -9,7 +9,8 @@ import {
   ZoomIn, 
   ZoomOut,
   Calendar,
-  FileText
+  FileText,
+  ExternalLink
 } from 'lucide-react';
 import { useState } from 'react';
 import { format } from 'date-fns';
@@ -25,6 +26,21 @@ interface AttachmentViewerProps {
   onNavigate: (attachment: LeadAttachment) => void;
 }
 
+// Helper function to determine file type from file_type or mime_type
+const getFileCategory = (attachment: LeadAttachment): 'image' | 'video' | 'audio' | 'pdf' | 'document' => {
+  const fileType = attachment.file_type?.toLowerCase() || '';
+  const mimeType = attachment.mime_type?.toLowerCase() || '';
+  const fileName = attachment.file_name?.toLowerCase() || '';
+  
+  // Check simplified type first
+  if (fileType === 'image' || mimeType.startsWith('image/')) return 'image';
+  if (fileType === 'video' || mimeType.startsWith('video/')) return 'video';
+  if (fileType === 'audio' || mimeType.startsWith('audio/')) return 'audio';
+  if (fileType === 'pdf' || mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return 'pdf';
+  
+  return 'document';
+};
+
 export function AttachmentViewer({
   open,
   onOpenChange,
@@ -33,14 +49,18 @@ export function AttachmentViewer({
   onNavigate
 }: AttachmentViewerProps) {
   const [zoom, setZoom] = useState(1);
+  const [pdfError, setPdfError] = useState(false);
   const currentIndex = allAttachments.findIndex(a => a.id === attachment.id);
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < allAttachments.length - 1;
+  
+  const fileCategory = getFileCategory(attachment);
 
   const handlePrev = () => {
     if (hasPrev) {
       onNavigate(allAttachments[currentIndex - 1]);
       setZoom(1);
+      setPdfError(false);
     }
   };
 
@@ -48,6 +68,7 @@ export function AttachmentViewer({
     if (hasNext) {
       onNavigate(allAttachments[currentIndex + 1]);
       setZoom(1);
+      setPdfError(false);
     }
   };
 
@@ -69,10 +90,108 @@ export function AttachmentViewer({
     downloadFile(attachment.file_url, attachment.file_name);
   };
 
+  const handleOpenInNewTab = () => {
+    window.open(attachment.file_url, '_blank');
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowLeft') handlePrev();
     if (e.key === 'ArrowRight') handleNext();
     if (e.key === 'Escape') onOpenChange(false);
+  };
+
+  const renderContent = () => {
+    switch (fileCategory) {
+      case 'image':
+        return (
+          <img
+            src={attachment.file_url}
+            alt={attachment.file_name}
+            className="max-w-full max-h-[80vh] object-contain transition-transform"
+            style={{ transform: `scale(${zoom})` }}
+            onError={(e) => {
+              console.error('Error loading image:', attachment.file_url);
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        );
+      
+      case 'video':
+        return (
+          <video
+            src={attachment.file_url}
+            controls
+            autoPlay
+            className="max-w-full max-h-[80vh]"
+          />
+        );
+      
+      case 'audio':
+        return (
+          <div className="p-8">
+            <audio src={attachment.file_url} controls autoPlay className="w-80" />
+          </div>
+        );
+      
+      case 'pdf':
+        if (pdfError) {
+          return (
+            <div className="p-8 text-center text-white">
+              <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
+              <p className="mb-4">{attachment.file_name}</p>
+              <p className="text-sm text-white/70 mb-4">
+                Não foi possível exibir o PDF no navegador
+              </p>
+              <div className="flex gap-2 justify-center">
+                <Button onClick={handleOpenInNewTab} variant="secondary">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Abrir em Nova Aba
+                </Button>
+                <Button onClick={handleDownload}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Baixar
+                </Button>
+              </div>
+            </div>
+          );
+        }
+        
+        return (
+          <div className="w-full h-[80vh] bg-white">
+            <object
+              data={attachment.file_url}
+              type="application/pdf"
+              className="w-full h-full"
+              onError={() => setPdfError(true)}
+            >
+              <iframe
+                src={`https://docs.google.com/viewer?url=${encodeURIComponent(attachment.file_url)}&embedded=true`}
+                className="w-full h-full border-0"
+                title={attachment.file_name}
+                onError={() => setPdfError(true)}
+              />
+            </object>
+          </div>
+        );
+      
+      default:
+        return (
+          <div className="p-8 text-center text-white">
+            <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
+            <p className="mb-4">{attachment.file_name}</p>
+            <div className="flex gap-2 justify-center">
+              <Button onClick={handleOpenInNewTab} variant="secondary">
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Abrir em Nova Aba
+              </Button>
+              <Button onClick={handleDownload}>
+                <Download className="h-4 w-4 mr-2" />
+                Baixar Arquivo
+              </Button>
+            </div>
+          </div>
+        );
+    }
   };
 
   return (
@@ -93,7 +212,7 @@ export function AttachmentViewer({
               <span className="font-medium">{attachment.file_name}</span>
             </div>
             <div className="flex items-center gap-2">
-              {attachment.file_type === 'image' && (
+              {fileCategory === 'image' && (
                 <>
                   <Button
                     size="icon"
@@ -114,6 +233,15 @@ export function AttachmentViewer({
                   </Button>
                 </>
               )}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 text-white hover:bg-white/20"
+                onClick={handleOpenInNewTab}
+                title="Abrir em nova aba"
+              >
+                <ExternalLink className="h-4 w-4" />
+              </Button>
               <Button
                 size="icon"
                 variant="ghost"
@@ -158,34 +286,7 @@ export function AttachmentViewer({
 
         {/* Content */}
         <div className="flex items-center justify-center min-h-[500px] bg-black/90 overflow-auto">
-          {attachment.file_type === 'image' ? (
-            <img
-              src={attachment.file_url}
-              alt={attachment.file_name}
-              className="max-w-full max-h-[80vh] object-contain transition-transform"
-              style={{ transform: `scale(${zoom})` }}
-            />
-          ) : attachment.file_type === 'video' ? (
-            <video
-              src={attachment.file_url}
-              controls
-              autoPlay
-              className="max-w-full max-h-[80vh]"
-            />
-          ) : attachment.file_type === 'audio' ? (
-            <div className="p-8">
-              <audio src={attachment.file_url} controls autoPlay className="w-80" />
-            </div>
-          ) : (
-            <div className="p-8 text-center text-white">
-              <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
-              <p className="mb-4">{attachment.file_name}</p>
-              <Button onClick={handleDownload}>
-                <Download className="h-4 w-4 mr-2" />
-                Baixar Arquivo
-              </Button>
-            </div>
-          )}
+          {renderContent()}
         </div>
 
         {/* Footer */}
