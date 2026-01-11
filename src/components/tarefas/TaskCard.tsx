@@ -902,18 +902,102 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     };
   }, [task.start_date, task.due_date, task.status, localChecklist]);
 
+  // ✅ NOVO: Calcular cor do card baseado na proximidade do vencimento
+  const urgencyStyle = useMemo(() => {
+    // Se concluído, não aplicar estilo de urgência
+    if (checklistProgress.isComplete || deadlineInfo.status === 'completed') {
+      return {
+        backgroundColor: undefined,
+        borderColor: undefined,
+        urgencyLevel: 'completed' as const
+      };
+    }
+    
+    // Se não tem prazo, não aplicar estilo
+    if (!deadlineInfo.hasDeadline) {
+      return {
+        backgroundColor: undefined,
+        borderColor: undefined,
+        urgencyLevel: 'normal' as const
+      };
+    }
+    
+    const daysRemaining = deadlineInfo.daysRemaining;
+    
+    // Atrasado - vermelho intenso
+    if (daysRemaining < 0) {
+      return {
+        backgroundColor: 'rgba(239, 68, 68, 0.15)', // red-500 com 15% opacidade
+        borderColor: 'rgb(239, 68, 68)', // red-500
+        urgencyLevel: 'overdue' as const
+      };
+    }
+    
+    // Vence hoje - vermelho médio
+    if (daysRemaining === 0) {
+      return {
+        backgroundColor: 'rgba(239, 68, 68, 0.12)', // red-500 com 12% opacidade
+        borderColor: 'rgb(239, 68, 68)', // red-500
+        urgencyLevel: 'today' as const
+      };
+    }
+    
+    // Vence amanhã - laranja/vermelho
+    if (daysRemaining === 1) {
+      return {
+        backgroundColor: 'rgba(249, 115, 22, 0.12)', // orange-500 com 12% opacidade
+        borderColor: 'rgb(249, 115, 22)', // orange-500
+        urgencyLevel: 'tomorrow' as const
+      };
+    }
+    
+    // Vence em 2-3 dias - laranja
+    if (daysRemaining <= 3) {
+      return {
+        backgroundColor: 'rgba(251, 146, 60, 0.10)', // orange-400 com 10% opacidade
+        borderColor: 'rgb(251, 146, 60)', // orange-400
+        urgencyLevel: 'soon' as const
+      };
+    }
+    
+    // Vence em 4-7 dias - amarelo leve
+    if (daysRemaining <= 7) {
+      return {
+        backgroundColor: 'rgba(234, 179, 8, 0.08)', // yellow-500 com 8% opacidade
+        borderColor: 'rgb(234, 179, 8)', // yellow-500
+        urgencyLevel: 'week' as const
+      };
+    }
+    
+    // Mais de 7 dias - normal
+    return {
+      backgroundColor: undefined,
+      borderColor: undefined,
+      urgencyLevel: 'normal' as const
+    };
+  }, [deadlineInfo, checklistProgress.isComplete]);
+
   return (
     <Card
       ref={setNodeRef}
-      style={style}
+      style={{
+        ...style,
+        backgroundColor: urgencyStyle.backgroundColor,
+        borderLeftWidth: urgencyStyle.borderColor ? '4px' : undefined,
+        borderLeftColor: urgencyStyle.borderColor,
+      }}
       {...attributes}
       {...listeners}
       className={`group relative mb-3 border-0 shadow-card hover:shadow-lg transition-all duration-300 overflow-hidden cursor-grab active:cursor-grabbing ${
         checklistProgress.isComplete 
           ? 'ring-2 ring-green-500 bg-green-50 dark:bg-green-950/30 border-green-300 dark:border-green-700' 
-          : isOverdue 
-            ? 'ring-2 ring-red-500/50 border-red-200' 
-            : ''
+          : urgencyStyle.urgencyLevel === 'overdue'
+            ? 'ring-2 ring-red-500/50' 
+            : urgencyStyle.urgencyLevel === 'today'
+              ? 'ring-1 ring-red-400/50'
+              : urgencyStyle.urgencyLevel === 'tomorrow'
+                ? 'ring-1 ring-orange-400/50'
+                : ''
       } ${!isOwnTask ? 'opacity-40 saturate-50' : ''}`}
     >
       {/* ✅ NOVO: Indicador visual de tarefa concluída */}
