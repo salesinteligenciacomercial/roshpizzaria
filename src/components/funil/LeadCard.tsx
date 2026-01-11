@@ -411,13 +411,13 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
           setIsExpanded(!isExpanded);
         }
       }}
-      className={`group relative p-4 mb-3 cursor-grab active:cursor-grabbing border-0 shadow-card hover:shadow-lg transition-all duration-300 bg-card overflow-hidden ${
+      className={`group relative p-4 mb-3 cursor-grab active:cursor-grabbing border-0 shadow-card hover:shadow-lg transition-all duration-300 bg-card overflow-hidden min-h-[120px] ${
         isDragging ? 'shadow-2xl scale-105 z-50 ring-2 ring-primary/50 bg-gradient-to-br from-card to-primary/5' : ''
       }`}
     >
       <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
-      <div className="relative space-y-3">
+      <div className="relative space-y-2">
         {/* Header sempre visível */}
         <div className="flex justify-between items-start gap-2">
           <div className="flex items-start gap-2 flex-1" {...(modifiedListeners as any)}>
@@ -552,11 +552,42 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
           </div>
         </div>
 
+        {/* Telefone + Ver Conversas - SEMPRE VISÍVEL */}
+        {lead.telefone && (
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/50" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Phone className="h-3 w-3" />
+              <span>{lead.telefone}</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-success hover:text-success hover:bg-success/10 transition-all"
+              onClick={abrirConversa}
+              title="Ver histórico de conversas"
+            >
+              <MessageCircle className="h-3.5 w-3.5 mr-1" />
+              <span className="text-xs font-medium">Ver Conversas</span>
+            </Button>
+          </div>
+        )}
+
+        {/* Valor Estimado - SEMPRE VISÍVEL */}
+        {lead.value !== undefined && lead.value > 0 && (
+          <div className="flex items-center justify-between pt-2 border-t border-border/50">
+            <span className="text-xs text-muted-foreground font-medium">Valor Estimado</span>
+            <Badge className="font-semibold bg-gradient-success text-success-foreground shadow-sm">
+              R$ {lead.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </Badge>
+          </div>
+        )}
+
         {/* Conteúdo expandido */}
         {isExpanded && (
           <div className="space-y-3 border-t pt-3" onClick={(e) => e.stopPropagation()}>
+            {/* Botões de ação */}
             <div
-              className="flex gap-1"
+              className="flex gap-1 flex-wrap"
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             >
@@ -640,6 +671,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
               }}
             />
 
+            {/* Informações adicionais - só no modo expandido */}
             {lead.company && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-2 py-1.5 rounded-md">
                 <Building2 className="h-3 w-3" />
@@ -647,40 +679,10 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
               </div>
             )}
 
-            {lead.telefone && (
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Phone className="h-3 w-3" />
-                  <span>{lead.telefone}</span>
-                </div>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-success hover:text-success hover:bg-success/10 transition-all"
-                    onClick={abrirConversa}
-                    title="Ver histórico de conversas"
-                  >
-                    <MessageCircle className="h-3.5 w-3.5 mr-1" />
-                    <span className="text-xs font-medium">Ver Conversas</span>
-                  </Button>
-                </div>
-              </div>
-            )}
-
             {lead.email && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 px-2 py-1.5 rounded-md">
                 <Mail className="h-3 w-3" />
                 <span className="truncate">{lead.email}</span>
-              </div>
-            )}
-
-            {lead.value !== undefined && lead.value > 0 && (
-              <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                <span className="text-xs text-muted-foreground font-medium">Valor Estimado</span>
-                <Badge className="font-semibold bg-gradient-success text-success-foreground shadow-sm">
-                  R$ {lead.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </Badge>
               </div>
             )}
 
