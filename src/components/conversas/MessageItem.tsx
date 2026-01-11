@@ -271,8 +271,8 @@ function MessageItemComponent({
         <div
           className={`max-w-[500px] min-w-[100px] w-fit rounded-lg px-3 py-2 shadow-sm relative group ${
             message.sender === "user"
-              ? "bg-[#d9fdd3] text-foreground"
-              : "bg-white text-foreground"
+              ? "bg-[#d9fdd3] dark:bg-primary/20 text-foreground"
+              : "bg-white dark:bg-card text-foreground"
           }`}
         >
           {/* Nome do responsável que enviou (SEMPRE exibir para mensagens enviadas pela equipe) */}
