@@ -1286,6 +1286,61 @@ function Conversas() {
           console.warn('⚠️ [REALTIME-MULTIUSER] Telefone inválido ignorado:', telefone);
           return;
         }
+        
+        // ⚡ CORREÇÃO: Se for UPDATE, verificar se é apenas atualização de status (read/delivered)
+        if (payload.eventType === 'UPDATE') {
+          const oldData = payload.old as any;
+          const isStatusUpdate = (novaMensagem.read !== oldData?.read) || (novaMensagem.delivered !== oldData?.delivered);
+          
+          if (isStatusUpdate) {
+            console.log('👁️ [REALTIME] Atualizando status de leitura:', {
+              id: novaMensagem.id,
+              read: novaMensagem.read,
+              delivered: novaMensagem.delivered
+            });
+            
+            // Atualizar status de leitura na conversa selecionada
+            setSelectedConv(prevSelected => {
+              if (!prevSelected) return prevSelected;
+              
+              const mensagemIndex = prevSelected.messages.findIndex(m => m.id === novaMensagem.id);
+              if (mensagemIndex !== -1) {
+                const novasMensagens = [...prevSelected.messages];
+                novasMensagens[mensagemIndex] = {
+                  ...novasMensagens[mensagemIndex],
+                  read: novaMensagem.read === true,
+                  delivered: novaMensagem.delivered === true
+                };
+                return {
+                  ...prevSelected,
+                  messages: novasMensagens
+                };
+              }
+              return prevSelected;
+            });
+            
+            // Atualizar status de leitura na lista de conversas
+            setConversations(prev => prev.map(conv => {
+              const mensagemIndex = conv.messages.findIndex(m => m.id === novaMensagem.id);
+              if (mensagemIndex !== -1) {
+                const novasMensagens = [...conv.messages];
+                novasMensagens[mensagemIndex] = {
+                  ...novasMensagens[mensagemIndex],
+                  read: novaMensagem.read === true,
+                  delivered: novaMensagem.delivered === true
+                };
+                return {
+                  ...conv,
+                  messages: novasMensagens
+                };
+              }
+              return conv;
+            }));
+            
+            return; // Apenas atualização de status, não processar como nova mensagem
+          }
+        }
+        
         const isFromMe = novaMensagem.fromme === true || String(novaMensagem.fromme) === 'true';
 
         // ⚡ MULTI-USER: Buscar sent_by do banco - CRÍTICO para saber qual colega enviou
@@ -2535,7 +2590,8 @@ function Conversas() {
       const MESSAGES_TO_FETCH = append ? 1000 : 500;
 
       // ⚡ OTIMIZAÇÃO: Query com campos essenciais (midia_url necessário para exibir mídias)
-      let query = supabase.from('conversas').select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme, sent_by, owner_id, arquivo_nome, midia_url').eq('company_id', companyId).order('created_at', {
+      // ⚡ CORREÇÃO: Incluir campos read e delivered para exibir status de visualização
+      let query = supabase.from('conversas').select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme, sent_by, owner_id, arquivo_nome, midia_url, read, delivered').eq('company_id', companyId).order('created_at', {
         ascending: false
       });
 
