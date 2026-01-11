@@ -1379,6 +1379,9 @@ serve(async (req) => {
       is_group: isGroup,
       fromme: validatedData.fromMe === true, // CORREÇÃO: fromme minúsculo (PostgreSQL converte para lowercase)
       origem_api: 'evolution', // 🔥 IDENTIFICAÇÃO: Marcar como Evolution API (não oficial)
+      // ⚡ CORREÇÃO: Inicializar campos de status de entrega/leitura
+      delivered: validatedData.fromMe === true ? true : false, // Mensagens enviadas começam como entregues
+      read: false, // Mensagens começam como não lidas
     };
     
     // ⚡ CORREÇÃO DEFINITIVA: Se mensagem foi enviada (fromMe = true), verificar se já existe no banco
