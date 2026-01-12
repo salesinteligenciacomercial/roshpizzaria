@@ -108,11 +108,7 @@ export default function ProcessosComerciais() {
           </TabsTrigger>
           <TabsTrigger value="kpis" className="flex items-center gap-2 py-2">
             <TrendingUp className="h-4 w-4" />
-            <span className="hidden md:inline">KPIs</span>
-          </TabsTrigger>
-          <TabsTrigger value="relatorios" className="flex items-center gap-2 py-2">
-            <FileBarChart className="h-4 w-4" />
-            <span className="hidden md:inline">Relatórios</span>
+            <span className="hidden md:inline">KPIs & Relatórios</span>
           </TabsTrigger>
           <TabsTrigger value="sugestoes" className="flex items-center gap-2 py-2 relative">
             <Brain className="h-4 w-4" />
@@ -134,31 +130,12 @@ export default function ProcessosComerciais() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-orange-500" />
-                KPIs & Conversões
+                KPIs & Relatórios
               </CardTitle>
-              <CardDescription>Dashboard com métricas de conversão e desempenho do time</CardDescription>
+              <CardDescription>Dashboard com métricas de conversão, desempenho e insights do time</CardDescription>
             </CardHeader>
             <CardContent>
               <KPIsDashboard companyId={companyId} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="relatorios" className="space-y-4">
-          <Card className="border-border/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileBarChart className="h-5 w-5 text-red-500" />
-                Relatórios de Processos
-              </CardTitle>
-              <CardDescription>Insights automáticos da IA sobre gargalos e oportunidades de melhoria</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12 text-muted-foreground">
-                <FileBarChart className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-medium">Nenhum relatório gerado ainda</p>
-                <p className="text-sm">A IA de Processos analisará seus dados e gerará insights</p>
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
