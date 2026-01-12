@@ -24,6 +24,7 @@ export interface AggregatedNotification {
   referencia_tipo?: string;
   created_at: string;
   lida: boolean;
+  severity?: 'high' | 'medium' | 'low';
 }
 
 export function useNotifications() {

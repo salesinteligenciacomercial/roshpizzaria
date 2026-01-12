@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, MessageSquare, Calendar, Bot, Settings, LogOut, MessagesSquare, Video, PhoneCall, Target, Lock, X } from "lucide-react";
+import { LayoutDashboard, Users, MessageSquare, Calendar, Bot, Settings, LogOut, MessagesSquare, Video, PhoneCall, Target, Lock, X, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -66,7 +66,8 @@ const navigation = [{
   name: "Processos Comerciais",
   href: "/processos",
   icon: Target,
-  menuKey: "processos"
+  menuKey: "processos",
+  showAIBadge: true
 }, {
   name: "Configurações",
   href: "/configuracoes",
@@ -99,6 +100,35 @@ export function Sidebar({
     getTotalUnread
   } = useInternalChat();
   const totalUnread = getTotalUnread();
+  
+  // AI Insights count from database
+  const [aiInsightsCount, setAiInsightsCount] = useState(0);
+  
+  useEffect(() => {
+    const loadAIInsights = async () => {
+      const { data } = await supabase.rpc('get_my_company_id');
+      if (data) {
+        const { count } = await supabase
+          .from('ai_process_suggestions')
+          .select('id', { count: 'exact', head: true })
+          .eq('company_id', data)
+          .eq('status', 'pending');
+        setAiInsightsCount(count || 0);
+      }
+    };
+    
+    loadAIInsights();
+    
+    // Refresh on changes
+    const channel = supabase
+      .channel('sidebar-ai-suggestions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ai_process_suggestions' }, loadAIInsights)
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Módulos premium que requerem liberação
   const premiumModules = ['automacao', 'chat-equipe', 'reunioes', 'discador', 'processos'];
@@ -226,6 +256,11 @@ export function Sidebar({
                               {totalUnread > 99 ? '99+' : totalUnread}
                             </Badge>
                           )}
+                          {item.showAIBadge && aiInsightsCount > 0 && effectiveCollapsed && !isLocked && (
+                            <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-orange-500 text-white">
+                              {aiInsightsCount > 99 ? '99+' : aiInsightsCount}
+                            </Badge>
+                          )}
                         </div>
                         {!effectiveCollapsed && (
                           <span className="flex-1 flex items-center justify-between">
@@ -238,6 +273,12 @@ export function Sidebar({
                                 {totalUnread > 99 ? '99+' : totalUnread}
                               </Badge>
                             )}
+                            {item.showAIBadge && aiInsightsCount > 0 && !isLocked && (
+                              <Badge className="ml-2 text-xs bg-orange-500 hover:bg-orange-600 text-white gap-1">
+                                <Brain className="h-3 w-3" />
+                                {aiInsightsCount}
+                              </Badge>
+                            )}
                           </span>
                         )}
                       </>
@@ -246,7 +287,7 @@ export function Sidebar({
                 </TooltipTrigger>
                 {effectiveCollapsed && (
                   <TooltipContent side="right" className="font-medium">
-                    {item.name} {isLocked ? "(Bloqueado)" : item.showBadge && totalUnread > 0 ? `(${totalUnread})` : ""}
+                    {item.name} {isLocked ? "(Bloqueado)" : item.showBadge && totalUnread > 0 ? `(${totalUnread})` : item.showAIBadge && aiInsightsCount > 0 ? `(${aiInsightsCount} IA)` : ""}
                   </TooltipContent>
                 )}
               </Tooltip>
