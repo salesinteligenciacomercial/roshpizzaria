@@ -171,7 +171,7 @@ export function SlashCommandMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 w-80 rounded-lg border border-border bg-popover shadow-lg"
+      className="fixed z-50 w-80 max-h-[80vh] rounded-lg border border-border bg-popover shadow-lg flex flex-col"
       style={position ? { top: position.top, left: position.left } : undefined}
       onKeyDown={handleKeyDown}
     >
@@ -191,7 +191,7 @@ export function SlashCommandMenu({
       </div>
 
       {/* Commands */}
-      <ScrollArea className="max-h-[320px]">
+      <ScrollArea className="flex-1 max-h-[60vh]">
         <div className="p-1">
           {categories.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">
