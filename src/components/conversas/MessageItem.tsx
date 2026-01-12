@@ -24,6 +24,7 @@ import { PDFPreview } from "./PDFPreview";
 import { PdfViewerDialog } from "./PdfViewerDialog";
 import { toast } from "@/hooks/use-toast";
 import { getMediaUrl, isPermanentUrl } from "@/utils/mediaLoader";
+import { TextWithLinks } from "./LinkPreview";
 
 interface Message {
   id: string;
@@ -300,10 +301,10 @@ function MessageItemComponent({
               onReact={onReact}
             />
           </div>
-          {/* Text Message */}
+          {/* Text Message com Link Preview */}
           {message.type === "text" && (
             <div className="max-w-full">
-              <p className="text-sm break-words overflow-wrap-anywhere whitespace-pre-wrap">{message.content}</p>
+              <TextWithLinks text={message.content} />
               {message.edited && (
                 <span className="text-[10px] text-muted-foreground italic"> (editado)</span>
               )}
