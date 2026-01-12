@@ -8,7 +8,8 @@ import {
   MessageSquare,
   Check,
   X,
-  Loader2
+  Loader2,
+  Brain
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +37,8 @@ const getNotificationIcon = (tipo: string) => {
       return <Bell className="h-4 w-4 text-purple-500" />;
     case 'mensagem_nova':
       return <MessageSquare className="h-4 w-4 text-cyan-500" />;
+    case 'ia_insight':
+      return <Brain className="h-4 w-4 text-orange-500" />;
     default:
       return <Bell className="h-4 w-4 text-muted-foreground" />;
   }
@@ -55,6 +58,8 @@ const getNotificationLabel = (tipo: string) => {
       return 'Lembrete';
     case 'mensagem_nova':
       return 'Nova mensagem';
+    case 'ia_insight':
+      return 'Insight da IA';
     default:
       return 'Notificação';
   }
@@ -62,6 +67,7 @@ const getNotificationLabel = (tipo: string) => {
 
 const groupNotifications = (notifications: AggregatedNotification[]) => {
   const groups: Record<string, AggregatedNotification[]> = {
+    ia: [],
     tarefas: [],
     compromissos: [],
     lembretes: [],
@@ -70,7 +76,9 @@ const groupNotifications = (notifications: AggregatedNotification[]) => {
   };
 
   notifications.forEach(n => {
-    if (n.tipo.startsWith('tarefa')) {
+    if (n.tipo === 'ia_insight') {
+      groups.ia.push(n);
+    } else if (n.tipo.startsWith('tarefa')) {
       groups.tarefas.push(n);
     } else if (n.tipo === 'compromisso_hoje') {
       groups.compromissos.push(n);
@@ -249,6 +257,19 @@ export function NotificationCenter() {
             </div>
           ) : hasNotifications ? (
             <div className="p-2 space-y-2">
+              {/* IA Insights first */}
+              <NotificationGroup
+                title="Insights da IA"
+                icon={<Brain className="h-4 w-4 text-orange-500" />}
+                notifications={groups.ia}
+                onMarkAsRead={markAsRead}
+                onDelete={deleteNotification}
+              />
+              
+              {groups.ia.length > 0 && groups.tarefas.length > 0 && (
+                <Separator className="my-2" />
+              )}
+              
               <NotificationGroup
                 title="Tarefas"
                 icon={<CheckSquare className="h-4 w-4 text-blue-500" />}

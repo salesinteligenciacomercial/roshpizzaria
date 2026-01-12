@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   AlertTriangle, 
   Filter, 
@@ -14,12 +15,16 @@ import {
   RefreshCw,
   ArrowRight,
   CheckCircle2,
-  XCircle,
-  Lightbulb
+  Lightbulb,
+  MessageSquare,
+  Calendar,
+  CheckSquare,
+  GitBranch
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
+import { useAIWatcher, AIInsight } from "@/hooks/useAIWatcher";
 
 interface ProcessInsightsReportProps {
   companyId: string | null;
@@ -78,7 +83,31 @@ export function ProcessInsightsReport({ companyId, onSuggestionsGenerated }: Pro
   const [bottlenecks, setBottlenecks] = useState<Bottleneck[]>([]);
   const [stageMetrics, setStageMetrics] = useState<StageMetrics[]>([]);
   const [pendingSuggestions, setPendingSuggestions] = useState(0);
+  const [activeTab, setActiveTab] = useState("funnel");
   const { toast } = useToast();
+  
+  // Real-time AI monitoring
+  const { insights, unseenCount, refresh: refreshInsights, markAsSeen } = useAIWatcher();
+  
+  const getInsightIcon = (type: string) => {
+    switch (type) {
+      case 'conversation': return <MessageSquare className="h-4 w-4" />;
+      case 'agenda': return <Calendar className="h-4 w-4" />;
+      case 'task': return <CheckSquare className="h-4 w-4" />;
+      case 'funnel': return <GitBranch className="h-4 w-4" />;
+      default: return <Brain className="h-4 w-4" />;
+    }
+  };
+  
+  const getInsightTypeLabel = (type: string) => {
+    switch (type) {
+      case 'conversation': return 'Conversas';
+      case 'agenda': return 'Agenda';
+      case 'task': return 'Tarefas';
+      case 'funnel': return 'Funil';
+      default: return 'Geral';
+    }
+  };
 
   useEffect(() => {
     if (companyId) {
