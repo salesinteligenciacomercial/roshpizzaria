@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, Users, Target, Clock, ArrowUpRight, Filter } from "lucide-react";
+import { TrendingUp, Users, Target, Clock, ArrowUpRight, Filter, BarChart3 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface KPIsDashboardProps {
@@ -32,8 +32,7 @@ export function KPIsDashboard({ companyId }: KPIsDashboardProps) {
   const [kpis, setKpis] = useState<KPIs | null>(null);
   const [loading, setLoading] = useState(true);
   const [funis, setFunis] = useState<Funil[]>([]);
-  const [etapas, setEtapas] = useState<Etapa[]>([]);
-  const [selectedFunilId, setSelectedFunilId] = useState<string>("");
+  const [selectedFunilId, setSelectedFunilId] = useState<string>("all");
 
   useEffect(() => {
     if (companyId) {
@@ -42,11 +41,10 @@ export function KPIsDashboard({ companyId }: KPIsDashboardProps) {
   }, [companyId]);
 
   useEffect(() => {
-    if (selectedFunilId) {
-      loadEtapas();
+    if (companyId) {
       loadKPIs();
     }
-  }, [selectedFunilId]);
+  }, [selectedFunilId, companyId]);
 
   const loadFunis = async () => {
     if (!companyId) return;
@@ -59,64 +57,71 @@ export function KPIsDashboard({ companyId }: KPIsDashboardProps) {
     
     if (data && data.length > 0) {
       setFunis(data);
-      // Selecionar primeiro funil automaticamente
-      if (!selectedFunilId) {
-        setSelectedFunilId(data[0].id);
-      }
-    } else {
-      setLoading(false);
     }
-  };
-
-  const loadEtapas = async () => {
-    if (!selectedFunilId) return;
-    
-    const { data } = await supabase
-      .from('etapas')
-      .select('id, nome, cor, posicao')
-      .eq('funil_id', selectedFunilId)
-      .order('posicao');
-    
-    setEtapas(data || []);
+    // Carregar KPIs com "todos" selecionado por padrão
+    loadKPIs();
   };
 
   const loadKPIs = async () => {
-    if (!companyId || !selectedFunilId) return;
+    if (!companyId) return;
     setLoading(true);
 
     try {
-      // Total leads no funil selecionado
-      const { count: totalLeads } = await supabase
+      const isAllFunis = selectedFunilId === "all";
+      
+      // Total leads
+      let totalLeadsQuery = supabase
         .from('leads')
         .select('*', { count: 'exact', head: true })
-        .eq('company_id', companyId)
-        .eq('funil_id', selectedFunilId);
+        .eq('company_id', companyId);
+      
+      if (!isAllFunis) {
+        totalLeadsQuery = totalLeadsQuery.eq('funil_id', selectedFunilId);
+      }
+      
+      const { count: totalLeads } = await totalLeadsQuery;
 
-      // Leads this month no funil
+      // Leads this month
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
 
-      const { count: leadsThisMonth } = await supabase
+      let leadsThisMonthQuery = supabase
         .from('leads')
         .select('*', { count: 'exact', head: true })
         .eq('company_id', companyId)
-        .eq('funil_id', selectedFunilId)
         .gte('created_at', startOfMonth.toISOString());
+      
+      if (!isAllFunis) {
+        leadsThisMonthQuery = leadsThisMonthQuery.eq('funil_id', selectedFunilId);
+      }
+      
+      const { count: leadsThisMonth } = await leadsThisMonthQuery;
 
-      // Buscar etapas do funil
-      const { data: etapasData } = await supabase
+      // Buscar etapas
+      let etapasQuery = supabase
         .from('etapas')
-        .select('id, nome, cor, posicao')
-        .eq('funil_id', selectedFunilId)
+        .select('id, nome, cor, posicao, funil_id')
+        .eq('company_id', companyId)
         .order('posicao');
+      
+      if (!isAllFunis) {
+        etapasQuery = etapasQuery.eq('funil_id', selectedFunilId);
+      }
+      
+      const { data: etapasData } = await etapasQuery;
 
       // Leads por etapa
-      const { data: leadsData } = await supabase
+      let leadsQuery = supabase
         .from('leads')
         .select('etapa_id')
-        .eq('company_id', companyId)
-        .eq('funil_id', selectedFunilId);
+        .eq('company_id', companyId);
+      
+      if (!isAllFunis) {
+        leadsQuery = leadsQuery.eq('funil_id', selectedFunilId);
+      }
+      
+      const { data: leadsData } = await leadsQuery;
 
       const etapaCountMap: Record<string, number> = {};
       leadsData?.forEach(lead => {
@@ -135,7 +140,7 @@ export function KPIsDashboard({ companyId }: KPIsDashboardProps) {
         stageId: etapa.id,
         count: etapaCountMap[etapa.id] || 0,
         color: etapa.cor || stageColors[index % stageColors.length]
-      }));
+      })).filter(item => item.count > 0 || !isAllFunis); // Mostrar etapas sem leads apenas se funil específico
 
       // Taxa de conversão (última etapa)
       const lastEtapa = etapasData?.[etapasData.length - 1];
@@ -169,14 +174,20 @@ export function KPIsDashboard({ companyId }: KPIsDashboardProps) {
   return (
     <div className="space-y-6">
       {/* Seletor de Funil */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg">
         <Filter className="h-5 w-5 text-muted-foreground" />
-        <span className="text-sm font-medium">Selecionar Funil:</span>
+        <span className="text-sm font-medium">Filtrar por Funil:</span>
         <Select value={selectedFunilId} onValueChange={setSelectedFunilId}>
-          <SelectTrigger className="w-[250px]">
-            <SelectValue placeholder="Selecione um funil" />
+          <SelectTrigger className="w-[280px]">
+            <SelectValue placeholder="Todos os Funis" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="all">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" />
+                Todos os Funis
+              </div>
+            </SelectItem>
             {funis.map((funil) => (
               <SelectItem key={funil.id} value={funil.id}>
                 {funil.nome}
