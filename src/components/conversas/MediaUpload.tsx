@@ -29,14 +29,8 @@ export function MediaUpload({ onFileSelected }: MediaUploadProps) {
       return;
     }
 
-    // ⚡ VALIDAÇÃO: Limite de tamanho (50MB)
-    const MAX_FILE_SIZE_MB = 50;
-    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      console.error('❌ [MEDIA-UPLOAD] Arquivo muito grande:', file.size);
-      alert(`O arquivo é muito grande. Tamanho máximo: ${MAX_FILE_SIZE_MB}MB`);
-      event.target.value = '';
-      return;
-    }
+    // ⚡ NOTA: Sem limite de tamanho no frontend - o limite é definido pelo WhatsApp API
+    console.log('📊 [MEDIA-UPLOAD] Tamanho do arquivo:', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
     setUploading(true);
     try {
