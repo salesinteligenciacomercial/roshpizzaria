@@ -4177,9 +4177,21 @@ function Conversas() {
   const handleSendMedia = async (file: File, caption: string, type: string) => {
     if (!selectedConv) return;
     setSyncStatus('syncing');
+    
+    // ⚡ CORREÇÃO: Sanitizar nome do arquivo imediatamente para evitar erro InvalidKey
+    const sanitizeFileName = (name: string): string => {
+      const withoutAccents = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return withoutAccents.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
+    };
+    const sanitizedFileName = sanitizeFileName(file.name);
+    
+    // Criar novo File com nome sanitizado
+    const sanitizedFile = new File([file], sanitizedFileName, { type: file.type });
+    
     try {
       console.log('🚀 [INICIO] Processo de envio de mídia:', {
         fileName: file.name,
+        sanitizedFileName: sanitizedFileName,
         fileSize: file.size,
         fileType: type,
         mimeType: file.type
@@ -4254,22 +4266,13 @@ function Conversas() {
       console.log('📤 [FASE 3] Fazendo upload para Storage...');
       const timestamp = Date.now();
       
-      // ⚡ CORREÇÃO: Sanitizar nome do arquivo para evitar erro InvalidKey
-      const sanitizeFileName = (name: string): string => {
-        // Remove acentos
-        const withoutAccents = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        // Substitui caracteres especiais por underscore, mantém pontos e hífens
-        return withoutAccents.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
-      };
-      
-      const sanitizedFileName = sanitizeFileName(file.name);
       console.log('📝 [FASE 3] Nome sanitizado:', { original: file.name, sanitizado: sanitizedFileName });
       
       const filePath = `${userRole?.company_id}/${userId}/${timestamp}_${sanitizedFileName}`;
       const {
         data: uploadData,
         error: uploadError
-      } = await supabase.storage.from('conversation-media').upload(filePath, file, {
+      } = await supabase.storage.from('conversation-media').upload(filePath, sanitizedFile, {
         cacheControl: '3600',
         upsert: false
       });
