@@ -4253,7 +4253,19 @@ function Conversas() {
       // FASE 3: Upload para Supabase Storage
       console.log('📤 [FASE 3] Fazendo upload para Storage...');
       const timestamp = Date.now();
-      const filePath = `${userRole?.company_id}/${userId}/${timestamp}_${file.name}`;
+      
+      // ⚡ CORREÇÃO: Sanitizar nome do arquivo para evitar erro InvalidKey
+      const sanitizeFileName = (name: string): string => {
+        // Remove acentos
+        const withoutAccents = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        // Substitui caracteres especiais por underscore, mantém pontos e hífens
+        return withoutAccents.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_');
+      };
+      
+      const sanitizedFileName = sanitizeFileName(file.name);
+      console.log('📝 [FASE 3] Nome sanitizado:', { original: file.name, sanitizado: sanitizedFileName });
+      
+      const filePath = `${userRole?.company_id}/${userId}/${timestamp}_${sanitizedFileName}`;
       const {
         data: uploadData,
         error: uploadError
