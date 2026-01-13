@@ -1087,6 +1087,7 @@ export default function KanbanPage() {
                     <LeadCard
                       key={lead.id}
                       lead={lead}
+                      etapas={etapasFiltradas}
                       onDelete={async (id) => {
                         try {
                           // Remover do funil sem deletar o lead (evita falha por relacionamentos)

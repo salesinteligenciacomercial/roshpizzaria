@@ -2,7 +2,7 @@ import React, { useEffect, useState, memo, useCallback } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus, Paperclip, Clock } from "lucide-react";
+import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus, Paperclip, Clock, MoveHorizontal } from "lucide-react";
 import { AgendaModal } from "@/components/agenda/AgendaModal";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -28,6 +28,12 @@ import { LeadAttachments } from "@/components/leads/LeadAttachments";
  * 2. LeadComments recebe initialNotes={lead.notes ?? null}
  */
 
+interface Etapa {
+  id: string;
+  nome: string;
+  cor?: string;
+}
+
 interface LeadCardProps {
   lead: {
     id: string;
@@ -49,9 +55,10 @@ interface LeadCardProps {
   onDelete: (leadId: string) => void;
   onLeadMoved?: () => void;
   isDragging?: boolean;
+  etapas?: Etapa[]; // Lista de etapas disponíveis para mover
 }
 
-export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, isDragging: externalIsDragging }: LeadCardProps) {
+export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, isDragging: externalIsDragging, etapas = [] }: LeadCardProps) {
   const navigate = useNavigate();
   const [agendaModalOpen, setAgendaModalOpen] = useState(false);
   const [tarefaModalOpen, setTarefaModalOpen] = useState(false);
@@ -482,6 +489,26 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
     setTarefaModalOpen(true);
   }, [lead.id]);
 
+  // Mover lead para outra etapa manualmente
+  const handleMoverEtapa = useCallback(async (novaEtapaId: string) => {
+    if (novaEtapaId === lead.etapa_id) return;
+    
+    try {
+      const { error } = await supabase
+        .from("leads")
+        .update({ etapa_id: novaEtapaId })
+        .eq("id", lead.id);
+
+      if (error) throw error;
+
+      toast.success("Lead movido para outra etapa!");
+      onLeadMoved?.();
+    } catch (error) {
+      console.error("Erro ao mover lead:", error);
+      toast.error("Erro ao mover lead");
+    }
+  }, [lead.id, lead.etapa_id, onLeadMoved]);
+
   return (
     <Card
       ref={setNodeRef}
@@ -724,6 +751,51 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+            )}
+
+            {/* Botão Mover Etapa - Dropdown com etapas disponíveis */}
+            {etapas.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-100"
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <MoveHorizontal className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent 
+                  align="end" 
+                  className="max-h-60 overflow-y-auto z-[9999] bg-popover"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                    Mover para etapa:
+                  </div>
+                  <DropdownMenuSeparator />
+                  {etapas.filter(e => e.id !== lead.etapa_id).map((etapa) => (
+                    <DropdownMenuItem 
+                      key={etapa.id}
+                      onClick={() => handleMoverEtapa(etapa.id)}
+                      className="cursor-pointer"
+                    >
+                      <div 
+                        className="w-2 h-2 rounded-full mr-2" 
+                        style={{ backgroundColor: etapa.cor || '#6b7280' }}
+                      />
+                      {etapa.nome}
+                    </DropdownMenuItem>
+                  ))}
+                  {etapas.filter(e => e.id !== lead.etapa_id).length === 0 && (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      Nenhuma outra etapa disponível
+                    </div>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
 
             <div onClick={(e) => e.stopPropagation()}>
