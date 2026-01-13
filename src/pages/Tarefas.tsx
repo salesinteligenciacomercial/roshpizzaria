@@ -267,6 +267,7 @@ export default function Tarefas() {
   const activeColumnIdRef = useRef<string | null>(null); // ✅ Ref para acessar no realtime
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMovingRef = useRef(false); // ✅ NOVO: Bloquear operações concorrentes
+  const lastOverColumnRef = useRef<string | null>(null); // ✅ NOVO: Rastrear última coluna sobre a qual passou
   const scrollContainerRef = useRef<HTMLDivElement>(null); // 🎯 Ref para navegação horizontal
 
   const TASKS_PER_PAGE = 20; // ✅ OTIMIZAÇÃO: Aumentado de 10 para 20
@@ -982,21 +983,40 @@ export default function Tarefas() {
     // ✅ MELHORADO: Validação robusta com múltiplos fallbacks
     let newColumnId: string | null = null;
 
-    // Prioridade 1: Se over.id é o ID de uma coluna válida
+    // Prioridade 1: Se over.id é o ID de uma coluna válida (soltou na área da coluna)
     const isValidColumnId = columnsFiltradas.some(c => c.id === overId);
     if (isValidColumnId) {
       newColumnId = overId;
       console.log('[Drag&Drop] ✅ Usando over.id como columnId (área vazia):', newColumnId);
     }
-    // Prioridade 2: columnId direto do droppable data
+    // Prioridade 2: columnId direto do droppable data (DroppableColumnContainer)
     else if (overData?.columnId && typeof overData.columnId === 'string') {
       newColumnId = overData.columnId;
       console.log('[Drag&Drop] ✅ Usando columnId do droppable data:', newColumnId);
     }
-    // Prioridade 3: containerId do sortable (quando solta sobre outra tarefa)
+    // Prioridade 3: Se soltou sobre uma tarefa, pegar a coluna dessa tarefa
+    else if (overData?.type === 'task' && overData?.task?.column_id) {
+      newColumnId = overData.task.column_id;
+      console.log('[Drag&Drop] ✅ Usando column_id da tarefa destino:', newColumnId);
+    }
+    // Prioridade 4: containerId do sortable (quando solta sobre outra tarefa)
     else if (overData?.sortable?.containerId && typeof overData.sortable.containerId === 'string') {
       newColumnId = overData.sortable.containerId;
       console.log('[Drag&Drop] ✅ Usando containerId do sortable (sobre tarefa):', newColumnId);
+    }
+    // Prioridade 5: Se over é uma tarefa, buscar a coluna dessa tarefa na lista
+    else {
+      const overTask = tasks.find(t => t.id === overId);
+      if (overTask?.column_id) {
+        newColumnId = overTask.column_id;
+        console.log('[Drag&Drop] ✅ Usando column_id da tarefa encontrada:', newColumnId);
+      }
+    }
+    
+    // Prioridade 6: Usar última coluna rastreada pelo onDragOver (fallback final)
+    if (!newColumnId && lastOverColumnRef.current) {
+      newColumnId = lastOverColumnRef.current;
+      console.log('[Drag&Drop] ✅ Usando lastOverColumnRef (fallback):', newColumnId);
     }
 
     // ✅ MELHORADO: Validação detalhada antes de atualizar
@@ -1005,10 +1025,12 @@ export default function Tarefas() {
         overId,
         overData,
         activeId: active.id,
-        availableColumns: columnsFiltradas.map(c => c.id)
+        availableColumns: columnsFiltradas.map(c => c.id),
+        lastOverColumn: lastOverColumnRef.current
       });
       toast.error("Não foi possível identificar a coluna destino");
       setActiveTaskId(null);
+      lastOverColumnRef.current = null;
       return;
     }
 
@@ -1144,11 +1166,48 @@ export default function Tarefas() {
       carregarDados();
     }
     setActiveTaskId(null);
+    lastOverColumnRef.current = null; // ✅ Limpar ref após drag
   };
   const handleDragStart = useCallback((event: any) => {
     setActiveTaskId(event.active?.id ?? null);
   }, []);
-  const handleDragCancel = useCallback(() => setActiveTaskId(null), []);
+  const handleDragCancel = useCallback(() => {
+    setActiveTaskId(null);
+    lastOverColumnRef.current = null;
+  }, []);
+
+  // ✅ NOVO: Handler para rastrear a última coluna sobre a qual passou
+  const handleDragOver = useCallback((event: any) => {
+    const { over } = event;
+    if (!over) return;
+    
+    const overId = String(over.id);
+    const overData = over.data?.current || {};
+    
+    // Tentar identificar a coluna destino
+    let columnId: string | null = null;
+    
+    // Prioridade 1: Se over.id é uma coluna válida
+    if (columnsFiltradas.some(c => c.id === overId)) {
+      columnId = overId;
+    }
+    // Prioridade 2: columnId no data (DroppableColumnContainer)
+    else if (overData?.columnId) {
+      columnId = overData.columnId;
+    }
+    // Prioridade 3: Se é uma tarefa, pegar a coluna dela
+    else if (overData?.type === 'task' && overData?.task?.column_id) {
+      columnId = overData.task.column_id;
+    }
+    // Prioridade 4: containerId do sortable
+    else if (overData?.sortable?.containerId) {
+      columnId = overData.sortable.containerId;
+    }
+    
+    if (columnId && columnsFiltradas.some(c => c.id === columnId)) {
+      lastOverColumnRef.current = columnId;
+    }
+  }, [columnsFiltradas]);
 
   // 🎯 Navegação horizontal suave (scroll das colunas)
   const scrollHorizontal = useCallback((direction: 'left' | 'right') => {
@@ -1603,7 +1662,7 @@ export default function Tarefas() {
             </p> : <p className="text-sm text-muted-foreground">
               Entre em contato com o administrador para criar colunas
             </p>}
-        </div> : <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
+        </div> : <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
           <SortableContext items={columnsFiltradas.map(c => c.id)} strategy={horizontalListSortingStrategy}>
             <div ref={scrollContainerRef} className="flex overflow-x-auto gap-4 pb-4 min-h-[500px] scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-muted/20 hover:scrollbar-thumb-primary/50 scroll-smooth">
               {columnsFiltradas.map(column => <SortableColumn key={column.id} column={column} tasksByColumn={tasksByColumn} tasksPerColumn={tasksPerColumn} taskCountsByColumn={taskCountsByColumn} TASKS_PER_PAGE={TASKS_PER_PAGE} tasks={tasks} loadingMore={loadingMore} carregarDados={carregarDados} loadMoreTasks={loadMoreTasks} selectedBoard={selectedBoard} emitGlobalEvent={emitGlobalEvent} />)}
