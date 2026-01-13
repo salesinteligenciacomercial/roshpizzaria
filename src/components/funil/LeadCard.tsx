@@ -468,13 +468,19 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
     }
   }, [lead.id, onDelete]);
 
-  const handleAgendaModal = useCallback(() => {
+  const handleAgendaModal = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log("🗓️ Abrindo modal de agenda para lead:", lead.id);
     setAgendaModalOpen(true);
-  }, []);
+  }, [lead.id]);
 
-  const handleTarefaModal = useCallback(() => {
+  const handleTarefaModal = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log("📋 Abrindo modal de tarefa para lead:", lead.id);
     setTarefaModalOpen(true);
-  }, []);
+  }, [lead.id]);
 
   return (
     <Card
@@ -738,6 +744,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                     size="icon"
                     className="h-7 w-7"
                     onClick={handleAgendaModal}
+                    onMouseDown={(e) => e.stopPropagation()}
                   >
                     <Calendar className="h-3.5 w-3.5" />
                   </Button>
@@ -757,6 +764,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                     size="icon"
                     className="h-7 w-7"
                     onClick={handleTarefaModal}
+                    onMouseDown={(e) => e.stopPropagation()}
                   >
                     <CheckSquare className="h-3.5 w-3.5" />
                   </Button>
