@@ -639,7 +639,14 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id });
+  } = useSortable({ 
+    id: task.id,
+    data: {
+      type: 'task',
+      task,
+      columnId: task.column_id // ✅ CRÍTICO: Passa a coluna atual da tarefa
+    }
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
