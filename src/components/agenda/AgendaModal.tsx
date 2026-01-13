@@ -29,6 +29,8 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
   const [horarioComercial, setHorarioComercial] = useState<HorarioComercial>(criarHorarioPadrao());
   const [compromissosExistentes, setCompromissosExistentes] = useState<any[]>([]);
   const [agendaSelecionada, setAgendaSelecionada] = useState<any>(null);
+  const [todasAgendas, setTodasAgendas] = useState<any[]>([]);
+  const [agendaIdSelecionada, setAgendaIdSelecionada] = useState<string>("");
   
   const [formData, setFormData] = useState({
     descricao: "",
@@ -47,129 +49,166 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
     destinatario_lembrete: "lead" as "lead" | "responsavel" | "ambos"
   });
 
-  // Carregar horário comercial e compromissos quando a data mudar
+  // Carregar todas as agendas quando o modal abrir
   useEffect(() => {
-    if (formData.data) {
-      carregarHorarioComercial();
-      carregarCompromissos();
+    if (open) {
+      carregarTodasAgendas();
     }
-  }, [formData.data]);
+  }, [open]);
 
-  const carregarHorarioComercial = async () => {
+  // Carregar horário comercial e compromissos quando a data ou agenda mudar
+  useEffect(() => {
+    if (formData.data && agendaIdSelecionada) {
+      carregarHorarioComercialPorAgenda(agendaIdSelecionada);
+      carregarCompromissosPorAgenda(agendaIdSelecionada);
+    }
+  }, [formData.data, agendaIdSelecionada]);
+
+  const carregarTodasAgendas = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: agendas } = await supabase
-        .from("agendas")
-        .select("*")
-        .eq("owner_id", user.id)
-        .eq("tipo", "principal")
+      // Buscar company_id do usuário
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
         .single();
 
-      if (agendas && agendas.disponibilidade && typeof agendas.disponibilidade === 'object') {
-        setAgendaSelecionada(agendas);
-        
-        // Atualizar duração do compromisso com o tempo_medio_servico configurado
-        if (agendas.tempo_medio_servico && agendas.tempo_medio_servico > 0) {
-          setFormData(prev => ({
-            ...prev,
-            duracao_minutos: agendas.tempo_medio_servico.toString()
-          }));
-          console.log('✅ [AgendaModal] Duração atualizada para:', agendas.tempo_medio_servico, 'minutos');
-        }
-        
-        const disp = agendas.disponibilidade as any;
-        
-        // O horário comercial é salvo em disponibilidade.periodos
-        const periodos = disp.periodos || disp;
-        
-        // Verificar se está no formato novo (com períodos manha, tarde, noite)
-        if (periodos.manha && periodos.tarde) {
-          // Formato novo - usar diretamente
-          setHorarioComercial({
-            manha: {
-              inicio: periodos.manha.inicio || "08:00",
-              fim: periodos.manha.fim || "12:00",
-              ativo: periodos.manha.ativo !== false,
-            },
-            tarde: {
-              inicio: periodos.tarde.inicio || "14:00",
-              fim: periodos.tarde.fim || "18:00",
-              ativo: periodos.tarde.ativo !== false,
-            },
-            noite: {
-              inicio: periodos.noite?.inicio || "19:00",
-              fim: periodos.noite?.fim || "23:00",
-              ativo: periodos.noite?.ativo === true,
-            },
-            intervalo_almoco: {
-              inicio: periodos.intervalo_almoco?.inicio || "12:00",
-              fim: periodos.intervalo_almoco?.fim || "14:00",
-              ativo: periodos.intervalo_almoco?.ativo !== false,
-            },
-          });
-        } else {
-          // Formato antigo - converter
-          setHorarioComercial({
-            manha: {
-              inicio: disp.horario_inicio || "08:00",
-              fim: "12:00",
-              ativo: true,
-            },
-            tarde: {
-              inicio: "14:00",
-              fim: disp.horario_fim || "18:00",
-              ativo: true,
-            },
-            noite: {
-              inicio: "19:00",
-              fim: "23:00",
-              ativo: false,
-            },
-            intervalo_almoco: {
-              inicio: "12:00",
-              fim: "14:00",
-              ativo: true,
-            },
-          });
-        }
+      if (!userRole?.company_id) return;
+
+      // Buscar todas as agendas da empresa
+      const { data: agendas, error } = await supabase
+        .from("agendas")
+        .select("id, nome, tipo, responsavel_id, tempo_medio_servico, disponibilidade, permite_simultaneo, capacidade_simultanea")
+        .eq("company_id", userRole.company_id)
+        .order("tipo", { ascending: false }) // Principal primeiro
+        .order("nome", { ascending: true });
+
+      if (error) {
+        console.error("Erro ao carregar agendas:", error);
+        return;
       }
+
+      console.log('📅 [AgendaModal] Agendas carregadas:', agendas?.length || 0);
+      setTodasAgendas(agendas || []);
+
+      // Selecionar agenda principal por padrão
+      const agendaPrincipal = agendas?.find(a => a.tipo === 'principal');
+      if (agendaPrincipal) {
+        setAgendaIdSelecionada(agendaPrincipal.id);
+      } else if (agendas && agendas.length > 0) {
+        setAgendaIdSelecionada(agendas[0].id);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar agendas:", error);
+    }
+  };
+
+  const carregarHorarioComercialPorAgenda = async (agendaId: string) => {
+    try {
+      const agenda = todasAgendas.find(a => a.id === agendaId);
+      
+      if (!agenda) {
+        // Se não encontrar na lista, buscar do banco
+        const { data: agendaDB } = await supabase
+          .from("agendas")
+          .select("*")
+          .eq("id", agendaId)
+          .single();
+        
+        if (agendaDB) {
+          processarAgenda(agendaDB);
+        }
+        return;
+      }
+
+      processarAgenda(agenda);
     } catch (error) {
       console.error("Erro ao carregar horário comercial:", error);
     }
   };
 
-  const carregarCompromissos = async () => {
+  const processarAgenda = (agenda: any) => {
+    setAgendaSelecionada(agenda);
+    
+    // Atualizar duração do compromisso com o tempo_medio_servico configurado
+    if (agenda.tempo_medio_servico && agenda.tempo_medio_servico > 0) {
+      setFormData(prev => ({
+        ...prev,
+        duracao_minutos: agenda.tempo_medio_servico.toString()
+      }));
+      console.log('✅ [AgendaModal] Duração atualizada para:', agenda.tempo_medio_servico, 'minutos');
+    }
+
+    if (agenda.disponibilidade && typeof agenda.disponibilidade === 'object') {
+      const disp = agenda.disponibilidade as any;
+      const periodos = disp.periodos || disp;
+      
+      if (periodos.manha && periodos.tarde) {
+        setHorarioComercial({
+          manha: {
+            inicio: periodos.manha.inicio || "08:00",
+            fim: periodos.manha.fim || "12:00",
+            ativo: periodos.manha.ativo !== false,
+          },
+          tarde: {
+            inicio: periodos.tarde.inicio || "14:00",
+            fim: periodos.tarde.fim || "18:00",
+            ativo: periodos.tarde.ativo !== false,
+          },
+          noite: {
+            inicio: periodos.noite?.inicio || "19:00",
+            fim: periodos.noite?.fim || "23:00",
+            ativo: periodos.noite?.ativo === true,
+          },
+          intervalo_almoco: {
+            inicio: periodos.intervalo_almoco?.inicio || "12:00",
+            fim: periodos.intervalo_almoco?.fim || "14:00",
+            ativo: periodos.intervalo_almoco?.ativo !== false,
+          },
+        });
+      } else {
+        setHorarioComercial({
+          manha: {
+            inicio: disp.horario_inicio || "08:00",
+            fim: "12:00",
+            ativo: true,
+          },
+          tarde: {
+            inicio: "14:00",
+            fim: disp.horario_fim || "18:00",
+            ativo: true,
+          },
+          noite: {
+            inicio: "19:00",
+            fim: "23:00",
+            ativo: false,
+          },
+          intervalo_almoco: {
+            inicio: "12:00",
+            fim: "14:00",
+            ativo: true,
+          },
+        });
+      }
+    }
+  };
+
+  const carregarCompromissosPorAgenda = async (agendaId: string) => {
     try {
       const dataInicio = new Date(formData.data + "T00:00:00");
       const dataFim = new Date(formData.data + "T23:59:59");
 
-      // Buscar apenas compromissos da agenda principal do usuário
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: agendaPrincipal } = await supabase
-        .from("agendas")
-        .select("id")
-        .eq("owner_id", user.id)
-        .eq("tipo", "principal")
-        .single();
-
-      let query = supabase
+      const { data: compromissos } = await supabase
         .from("compromissos")
         .select("id, data_hora_inicio, data_hora_fim, agenda_id")
         .gte("data_hora_inicio", dataInicio.toISOString())
-        .lte("data_hora_inicio", dataFim.toISOString());
-
-      // Filtrar pela agenda principal ou compromissos sem agenda
-      if (agendaPrincipal) {
-        query = query.or(`agenda_id.eq.${agendaPrincipal.id},agenda_id.is.null`);
-      }
-
-      const { data: compromissos } = await query;
+        .lte("data_hora_inicio", dataFim.toISOString())
+        .or(`agenda_id.eq.${agendaId},agenda_id.is.null`);
       
-      console.log('📅 [AgendaModal] Compromissos carregados para agenda principal:', compromissos?.length || 0);
+      console.log('📅 [AgendaModal] Compromissos carregados para agenda:', agendaId, compromissos?.length || 0);
       setCompromissosExistentes(compromissos || []);
     } catch (error) {
       console.error("Erro ao carregar compromissos:", error);
@@ -250,6 +289,7 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
             lead_id: lead.id,
             usuario_responsavel_id: session.user.id,
             owner_id: session.user.id,
+            agenda_id: agendaIdSelecionada || null,
             data_hora_inicio: inicioISO,
             data_hora_fim: fimISO,
             tipo_servico: formData.tipo_servico,
@@ -459,6 +499,31 @@ export function AgendaModal({ open, onOpenChange, lead, onAgendamentoCriado }: A
           <DialogTitle>Agendar Compromisso - {lead.nome}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Seletor de Agenda */}
+          {todasAgendas.length > 1 && (
+            <div>
+              <Label htmlFor="agenda" className="text-sm">Agenda *</Label>
+              <Select
+                value={agendaIdSelecionada}
+                onValueChange={(value) => {
+                  setAgendaIdSelecionada(value);
+                  setFormData(prev => ({ ...prev, hora_inicio: "" })); // Limpar horário ao trocar agenda
+                }}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Selecione uma agenda" />
+                </SelectTrigger>
+                <SelectContent>
+                  {todasAgendas.map((agenda) => (
+                    <SelectItem key={agenda.id} value={agenda.id}>
+                      {agenda.nome} {agenda.tipo === 'principal' ? '(Principal)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="tipo_servico" className="text-sm">Tipo de Serviço *</Label>
