@@ -1615,6 +1615,8 @@ function Conversas() {
   });
   const [meetingCompromissosExistentes, setMeetingCompromissosExistentes] = useState<any[]>([]);
   const [meetingAgendaSelecionada, setMeetingAgendaSelecionada] = useState<any>(null);
+  const [meetingTodasAgendas, setMeetingTodasAgendas] = useState<any[]>([]);
+  const [meetingAgendaIdSelecionada, setMeetingAgendaIdSelecionada] = useState<string>("");
   const [enviarConfirmacaoReuniao, setEnviarConfirmacaoReuniao] = useState(true); // ⚡ Enviar confirmação por padrão
   const [enviarLembreteReuniao, setEnviarLembreteReuniao] = useState(true); // ⚡ Enviar lembrete por padrão
   const [horasAntecedenciaReuniaoHoras, setHorasAntecedenciaReuniaoHoras] = useState("1"); // ⚡ 1 hora padrão
@@ -5641,109 +5643,155 @@ function Conversas() {
 
   // Carregar horário comercial e compromissos quando a data mudar
   useEffect(() => {
-    if (meetingData && reunioesDialogOpen) {
-      carregarMeetingHorarioComercial();
-      carregarMeetingCompromissos();
+    if (reunioesDialogOpen) {
+      carregarMeetingTodasAgendas();
     }
-  }, [meetingData, reunioesDialogOpen]);
-  const carregarMeetingHorarioComercial = async () => {
+  }, [reunioesDialogOpen]);
+
+  // Carregar horário comercial e compromissos quando a data ou agenda selecionada mudar
+  useEffect(() => {
+    if (meetingData && meetingAgendaIdSelecionada) {
+      carregarMeetingHorarioComercialPorAgenda(meetingAgendaIdSelecionada);
+      carregarMeetingCompromissosPorAgenda(meetingAgendaIdSelecionada);
+    }
+  }, [meetingData, meetingAgendaIdSelecionada]);
+
+  const carregarMeetingTodasAgendas = async () => {
     try {
-      const {
-        data: {
-          user
-        }
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const {
-        data: agendas
-      } = await supabase.from("agendas").select("*").eq("owner_id", user.id).eq("tipo", "principal").single();
-      if (agendas && agendas.disponibilidade && typeof agendas.disponibilidade === 'object') {
-        setMeetingAgendaSelecionada(agendas);
-        const disp = agendas.disponibilidade as any;
 
-        // O horário comercial é salvo em disponibilidade.periodos
-        const periodos = disp.periodos || disp;
+      // Buscar company_id do usuário
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .single();
 
-        // Verificar se está no formato novo (com períodos manha, tarde, noite)
-        if (periodos.manha && periodos.tarde) {
-          // Formato novo - usar diretamente
-          setMeetingHorarioComercial({
-            manha: {
-              inicio: periodos.manha.inicio || "08:00",
-              fim: periodos.manha.fim || "12:00",
-              ativo: periodos.manha.ativo !== false
-            },
-            tarde: {
-              inicio: periodos.tarde.inicio || "14:00",
-              fim: periodos.tarde.fim || "18:00",
-              ativo: periodos.tarde.ativo !== false
-            },
-            noite: {
-              inicio: periodos.noite?.inicio || "19:00",
-              fim: periodos.noite?.fim || "23:00",
-              ativo: periodos.noite?.ativo === true
-            },
-            intervalo_almoco: {
-              inicio: periodos.intervalo_almoco?.inicio || "12:00",
-              fim: periodos.intervalo_almoco?.fim || "14:00",
-              ativo: periodos.intervalo_almoco?.ativo !== false
-            }
-          });
-        } else {
-          // Formato antigo - converter
-          setMeetingHorarioComercial({
-            manha: {
-              inicio: disp.horario_inicio || "08:00",
-              fim: "12:00",
-              ativo: true
-            },
-            tarde: {
-              inicio: "14:00",
-              fim: disp.horario_fim || "18:00",
-              ativo: true
-            },
-            noite: {
-              inicio: "19:00",
-              fim: "23:00",
-              ativo: false
-            },
-            intervalo_almoco: {
-              inicio: "12:00",
-              fim: "14:00",
-              ativo: true
-            }
-          });
-        }
+      if (!userRole?.company_id) return;
+
+      // Buscar todas as agendas da empresa
+      const { data: agendas, error } = await supabase
+        .from("agendas")
+        .select("id, nome, tipo, responsavel_id, tempo_medio_servico, disponibilidade, permite_simultaneo, capacidade_simultanea")
+        .eq("company_id", userRole.company_id)
+        .order("tipo", { ascending: false }) // Principal primeiro
+        .order("nome", { ascending: true });
+
+      if (error) {
+        console.error("Erro ao carregar agendas:", error);
+        return;
       }
+
+      console.log('📅 [Conversas] Agendas carregadas:', agendas?.length || 0);
+      setMeetingTodasAgendas(agendas || []);
+
+      // Selecionar agenda principal por padrão
+      const agendaPrincipal = agendas?.find(a => a.tipo === 'principal');
+      if (agendaPrincipal) {
+        setMeetingAgendaIdSelecionada(agendaPrincipal.id);
+      } else if (agendas && agendas.length > 0) {
+        setMeetingAgendaIdSelecionada(agendas[0].id);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar agendas:", error);
+    }
+  };
+
+  const carregarMeetingHorarioComercialPorAgenda = async (agendaId: string) => {
+    try {
+      const agenda = meetingTodasAgendas.find(a => a.id === agendaId);
+      
+      if (!agenda) {
+        // Se não encontrar na lista, buscar do banco
+        const { data: agendaDB } = await supabase
+          .from("agendas")
+          .select("*")
+          .eq("id", agendaId)
+          .single();
+        
+        if (agendaDB) {
+          processarMeetingAgenda(agendaDB);
+        }
+        return;
+      }
+
+      processarMeetingAgenda(agenda);
     } catch (error) {
       console.error("Erro ao carregar horário comercial:", error);
     }
   };
-  const carregarMeetingCompromissos = async () => {
+
+  const processarMeetingAgenda = (agenda: any) => {
+    setMeetingAgendaSelecionada(agenda);
+    
+    if (agenda.disponibilidade && typeof agenda.disponibilidade === 'object') {
+      const disp = agenda.disponibilidade as any;
+      const periodos = disp.periodos || disp;
+      
+      if (periodos.manha && periodos.tarde) {
+        setMeetingHorarioComercial({
+          manha: {
+            inicio: periodos.manha.inicio || "08:00",
+            fim: periodos.manha.fim || "12:00",
+            ativo: periodos.manha.ativo !== false
+          },
+          tarde: {
+            inicio: periodos.tarde.inicio || "14:00",
+            fim: periodos.tarde.fim || "18:00",
+            ativo: periodos.tarde.ativo !== false
+          },
+          noite: {
+            inicio: periodos.noite?.inicio || "19:00",
+            fim: periodos.noite?.fim || "23:00",
+            ativo: periodos.noite?.ativo === true
+          },
+          intervalo_almoco: {
+            inicio: periodos.intervalo_almoco?.inicio || "12:00",
+            fim: periodos.intervalo_almoco?.fim || "14:00",
+            ativo: periodos.intervalo_almoco?.ativo !== false
+          }
+        });
+      } else {
+        setMeetingHorarioComercial({
+          manha: {
+            inicio: disp.horario_inicio || "08:00",
+            fim: "12:00",
+            ativo: true
+          },
+          tarde: {
+            inicio: "14:00",
+            fim: disp.horario_fim || "18:00",
+            ativo: true
+          },
+          noite: {
+            inicio: "19:00",
+            fim: "23:00",
+            ativo: false
+          },
+          intervalo_almoco: {
+            inicio: "12:00",
+            fim: "14:00",
+            ativo: true
+          }
+        });
+      }
+    }
+  };
+
+  const carregarMeetingCompromissosPorAgenda = async (agendaId: string) => {
     try {
       const dataInicio = new Date(meetingData + "T00:00:00");
       const dataFim = new Date(meetingData + "T23:59:59");
 
-      // Buscar apenas compromissos da agenda principal do usuário
-      const {
-        data: {
-          user
-        }
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      const {
-        data: agendaPrincipal
-      } = await supabase.from("agendas").select("id").eq("owner_id", user.id).eq("tipo", "principal").single();
-      let query = supabase.from("compromissos").select("id, data_hora_inicio, data_hora_fim, agenda_id").gte("data_hora_inicio", dataInicio.toISOString()).lte("data_hora_inicio", dataFim.toISOString());
-
-      // Filtrar pela agenda principal ou compromissos sem agenda
-      if (agendaPrincipal) {
-        query = query.or(`agenda_id.eq.${agendaPrincipal.id},agenda_id.is.null`);
-      }
-      const {
-        data: compromissos
-      } = await query;
-      console.log('📅 [Conversas] Compromissos carregados para agenda principal:', compromissos?.length || 0);
+      const { data: compromissos } = await supabase
+        .from("compromissos")
+        .select("id, data_hora_inicio, data_hora_fim, agenda_id")
+        .gte("data_hora_inicio", dataInicio.toISOString())
+        .lte("data_hora_inicio", dataFim.toISOString())
+        .or(`agenda_id.eq.${agendaId},agenda_id.is.null`);
+      
+      console.log('📅 [Conversas] Compromissos carregados para agenda:', agendaId, compromissos?.length || 0);
       setMeetingCompromissosExistentes(compromissos || []);
     } catch (error) {
       console.error("Erro ao carregar compromissos:", error);
@@ -5792,6 +5840,7 @@ function Conversas() {
         usuario_responsavel_id: user.id,
         owner_id: user.id,
         company_id: companyId,
+        agenda_id: meetingAgendaIdSelecionada || null,
         data_hora_inicio: dataHoraInicio.toISOString(),
         data_hora_fim: dataHoraFim.toISOString(),
         tipo_servico: meetingTipoServico,
@@ -9001,6 +9050,31 @@ function Conversas() {
                               </TabsList>
 
                               <TabsContent value="criar" className="space-y-4">
+                                {/* Seletor de Agenda */}
+                                {meetingTodasAgendas.length > 0 && (
+                                  <div>
+                                    <Label htmlFor="agenda">Agenda *</Label>
+                                    <Select
+                                      value={meetingAgendaIdSelecionada}
+                                      onValueChange={(value) => {
+                                        setMeetingAgendaIdSelecionada(value);
+                                        setMeetingHoraInicio(""); // Limpar horário ao trocar agenda
+                                      }}
+                                    >
+                                      <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="Selecione uma agenda" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {meetingTodasAgendas.map((agenda) => (
+                                          <SelectItem key={agenda.id} value={agenda.id}>
+                                            {agenda.nome} {agenda.tipo === 'principal' ? '(Principal)' : ''}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                )}
+
                                 <div className="grid grid-cols-2 gap-3">
                                   <div>
                                     <Label htmlFor="tipo_servico">Tipo de Serviço *</Label>
