@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { User, Calendar as CalendarIcon, Trash2, ExternalLink, MessageSquare, Plus, GripVertical, Bell, Play, Pause, Clock, Paperclip, Link, FileText, Image, ChevronDown, ChevronUp, Pencil, X, Check, CheckCircle2, Copy } from "lucide-react";
+import { User, Calendar as CalendarIcon, Trash2, ExternalLink, MessageSquare, Plus, GripVertical, Bell, Play, Pause, Clock, Paperclip, Link, FileText, Image, ChevronDown, ChevronUp, Pencil, X, Check, CheckCircle2, Copy, MoveHorizontal } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { EditarTarefaDialog } from "./EditarTarefaDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -79,13 +79,21 @@ interface Task {
   tags?: string[];
 }
 
+interface Column {
+  id: string;
+  nome: string;
+  cor?: string;
+}
+
 interface TaskCardProps {
   task: Task;
   onDelete: (id: string) => void;
   onUpdate: () => void;
+  columns?: Column[];
+  onMove?: (taskId: string, newColumnId: string) => void;
 }
 
-export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate }: TaskCardProps) {
+export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate, columns = [], onMove }: TaskCardProps) {
   const navigate = useNavigate();
   const [localChecklist, setLocalChecklist] = useState(task.checklist || []);
   const [newItem, setNewItem] = useState("");
@@ -112,6 +120,46 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const [pdfViewerUrl, setPdfViewerUrl] = useState("");
   const [pdfViewerName, setPdfViewerName] = useState("");
+  const [movingTask, setMovingTask] = useState(false);
+
+  // Função para mover tarefa manualmente
+  const handleMoveTask = useCallback(async (newColumnId: string) => {
+    if (!newColumnId || newColumnId === task.column_id) return;
+    
+    setMovingTask(true);
+    try {
+      if (onMove) {
+        onMove(task.id, newColumnId);
+      } else {
+        // Fallback: chamar edge function diretamente
+        const response = await supabase.functions.invoke("api-tarefas", {
+          body: {
+            action: "mover_tarefa",
+            data: {
+              task_id: task.id,
+              nova_coluna_id: newColumnId
+            }
+          }
+        });
+        
+        if (response.error) {
+          throw response.error;
+        }
+        
+        if (response.data?.error) {
+          throw new Error(response.data.error);
+        }
+        
+        toast.success("Tarefa movida com sucesso!");
+        onUpdate();
+      }
+    } catch (error: any) {
+      console.error("Erro ao mover tarefa:", error);
+      toast.error(error?.message || "Erro ao mover tarefa");
+    } finally {
+      setMovingTask(false);
+    }
+  }, [task.id, task.column_id, onMove, onUpdate]);
 
   // ✅ MELHORADO: Usar hook useTaskTimer para gerenciar timer
   const {
@@ -1658,6 +1706,54 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate 
               <MessageSquare className="h-3.5 w-3.5" />
             </Button>
           )}
+          
+          {/* ✅ NOVO: Botão de mover tarefa para outra coluna */}
+          {columns && columns.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 flex-shrink-0"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  title="Mover para outra coluna"
+                  disabled={movingTask}
+                >
+                  {movingTask ? (
+                    <div className="h-3.5 w-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <MoveHorizontal className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent 
+                align="start" 
+                className="w-48 z-50"
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                {columns
+                  .filter(col => col.id !== task.column_id) // Não mostrar coluna atual
+                  .map(col => (
+                    <DropdownMenuItem
+                      key={col.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMoveTask(col.id);
+                      }}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <div 
+                        className="w-3 h-3 rounded-full flex-shrink-0" 
+                        style={{ backgroundColor: col.cor || '#6b7280' }}
+                      />
+                      <span className="truncate">{col.nome}</span>
+                    </DropdownMenuItem>
+                  ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          
           <Button
             variant="ghost"
             size="sm"

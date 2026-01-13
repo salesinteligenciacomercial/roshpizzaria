@@ -126,7 +126,9 @@ const SortableColumn = React.memo(function SortableColumn({
   carregarDados,
   loadMoreTasks,
   selectedBoard,
-  emitGlobalEvent
+  emitGlobalEvent,
+  allColumns,
+  onMoveTask
 }: {
   column: Column;
   tasksByColumn: Record<string, Task[]>;
@@ -139,6 +141,8 @@ const SortableColumn = React.memo(function SortableColumn({
   loadMoreTasks: (columnId: string) => void;
   selectedBoard: string;
   emitGlobalEvent: (event: any) => void;
+  allColumns: Column[];
+  onMoveTask: (taskId: string, newColumnId: string) => void;
 }) {
   const {
     attributes,
@@ -194,24 +198,31 @@ const SortableColumn = React.memo(function SortableColumn({
       <SortableContext id={column.id} items={(tasksByColumn[column.id] || []).slice(0, tasksPerColumn[column.id] || TASKS_PER_PAGE).map(t => t.id)} strategy={verticalListSortingStrategy}>
         <DroppableColumnContainer columnId={column.id}>
           <NovaTarefaDialog columnId={column.id} boardId={selectedBoard} onTaskCreated={carregarDados} />
-          {(tasksByColumn[column.id] || []).slice(0, tasksPerColumn[column.id] || TASKS_PER_PAGE).map(task => <TaskCard key={task.id} task={task} onDelete={async id => {
-          const taskToDelete = tasks.find(t => t.id === id);
-          await supabase.functions.invoke("api-tarefas", {
-            body: {
-              action: "deletar_tarefa",
-              data: {
-                task_id: id
+          {(tasksByColumn[column.id] || []).slice(0, tasksPerColumn[column.id] || TASKS_PER_PAGE).map(task => <TaskCard 
+            key={task.id} 
+            task={task} 
+            columns={allColumns}
+            onMove={onMoveTask}
+            onDelete={async id => {
+              const taskToDelete = tasks.find(t => t.id === id);
+              await supabase.functions.invoke("api-tarefas", {
+                body: {
+                  action: "deletar_tarefa",
+                  data: {
+                    task_id: id
+                  }
+                }
+              });
+              if (taskToDelete) {
+                emitGlobalEvent({
+                  type: 'task-deleted',
+                  data: taskToDelete,
+                  source: 'Tarefas'
+                });
               }
-            }
-          });
-          if (taskToDelete) {
-            emitGlobalEvent({
-              type: 'task-deleted',
-              data: taskToDelete,
-              source: 'Tarefas'
-            });
-          }
-        }} onUpdate={() => {}} />)}
+            }} 
+            onUpdate={carregarDados} 
+          />)}
 
           {(() => {
           const totalTasksInColumn = taskCountsByColumn[column.id] || 0;
@@ -1665,7 +1676,30 @@ export default function Tarefas() {
         </div> : <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
           <SortableContext items={columnsFiltradas.map(c => c.id)} strategy={horizontalListSortingStrategy}>
             <div ref={scrollContainerRef} className="flex overflow-x-auto gap-4 pb-4 min-h-[500px] scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-muted/20 hover:scrollbar-thumb-primary/50 scroll-smooth">
-              {columnsFiltradas.map(column => <SortableColumn key={column.id} column={column} tasksByColumn={tasksByColumn} tasksPerColumn={tasksPerColumn} taskCountsByColumn={taskCountsByColumn} TASKS_PER_PAGE={TASKS_PER_PAGE} tasks={tasks} loadingMore={loadingMore} carregarDados={carregarDados} loadMoreTasks={loadMoreTasks} selectedBoard={selectedBoard} emitGlobalEvent={emitGlobalEvent} />)}
+              {columnsFiltradas.map(column => <SortableColumn key={column.id} column={column} tasksByColumn={tasksByColumn} tasksPerColumn={tasksPerColumn} taskCountsByColumn={taskCountsByColumn} TASKS_PER_PAGE={TASKS_PER_PAGE} tasks={tasks} loadingMore={loadingMore} carregarDados={carregarDados} loadMoreTasks={loadMoreTasks} selectedBoard={selectedBoard} emitGlobalEvent={emitGlobalEvent} allColumns={columnsFiltradas} onMoveTask={async (taskId, newColumnId) => {
+                try {
+                  // Atualização otimista
+                  setTasks(prev => prev.map(t => t.id === taskId ? { ...t, column_id: newColumnId } : t));
+                  
+                  const response = await supabase.functions.invoke("api-tarefas", {
+                    body: {
+                      action: "mover_tarefa",
+                      data: { task_id: taskId, nova_coluna_id: newColumnId }
+                    }
+                  });
+                  
+                  if (response.error || response.data?.error) {
+                    throw new Error(response.data?.error || response.error?.message);
+                  }
+                  
+                  const targetColumn = columnsFiltradas.find(c => c.id === newColumnId);
+                  toast.success(`Tarefa movida para "${targetColumn?.nome || 'coluna'}"`);
+                } catch (error: any) {
+                  console.error("Erro ao mover tarefa:", error);
+                  toast.error(error?.message || "Erro ao mover tarefa");
+                  carregarDados(); // Recarregar para reverter
+                }
+              }} />)}
             {/* Botão para adicionar nova coluna - apenas admin pode criar colunas */}
             {(isAdmin || canManageTaskStructure) && <div className="min-w-[380px] flex-shrink-0">
                 <AdicionarColunaDialog boardId={selectedBoard} currentColumnsCount={columnsFiltradas.length} onColumnAdded={carregarDados} />
