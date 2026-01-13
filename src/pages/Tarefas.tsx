@@ -569,11 +569,11 @@ export default function Tarefas() {
       }
 
       // ✅ CRÍTICO: Ordenar colunas por posição - filtrar por board selecionado
-      const columnsQuery = supabase.from("task_columns").select("*").order("posicao", {
+      let columnsQuery = supabase.from("task_columns").select("*").order("posicao", {
         ascending: true
       });
       if (selectedBoard) {
-        columnsQuery.eq("board_id", selectedBoard);
+        columnsQuery = columnsQuery.eq("board_id", selectedBoard);
       }
       const {
         data: columnsData
@@ -1092,8 +1092,18 @@ export default function Tarefas() {
           }
         }
       });
+      
+      console.log('[Drag&Drop] Resposta da API:', response);
+      
       if (response.error) {
+        console.error('[Drag&Drop] Erro da edge function:', response.error);
         throw response.error;
+      }
+      
+      // Verificar se houve erro no corpo da resposta
+      if (response.data?.error) {
+        console.error('[Drag&Drop] Erro no corpo da resposta:', response.data);
+        throw new Error(response.data.error);
       }
       
       // ✅ Mostrar mensagem apropriada
