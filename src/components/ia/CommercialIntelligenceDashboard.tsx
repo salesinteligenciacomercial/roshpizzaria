@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CadenceManager } from "./CadenceManager";
 import { 
   Brain, 
   TrendingUp, 
@@ -27,7 +28,8 @@ import {
   BarChart3,
   Users,
   Clock,
-  ThermometerSun
+  ThermometerSun,
+  FileText
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -374,8 +376,12 @@ export const CommercialIntelligenceDashboard: React.FC = () => {
       </div>
 
       {/* Tabs de Conteúdo */}
-      <Tabs defaultValue="leads" className="space-y-4">
-        <TabsList>
+      <Tabs defaultValue="scripts" className="space-y-4">
+        <TabsList className="flex flex-wrap">
+          <TabsTrigger value="scripts" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Scripts & Cadências
+          </TabsTrigger>
           <TabsTrigger value="leads" className="flex items-center gap-2">
             <ThermometerSun className="h-4 w-4" />
             Leads por Temperatura
@@ -398,6 +404,11 @@ export const CommercialIntelligenceDashboard: React.FC = () => {
             Objeções
           </TabsTrigger>
         </TabsList>
+
+        {/* Tab: Scripts & Cadências */}
+        <TabsContent value="scripts">
+          <CadenceManager />
+        </TabsContent>
 
         {/* Tab: Leads por Temperatura */}
         <TabsContent value="leads">
