@@ -1661,10 +1661,12 @@ function Conversas() {
   const [etapasFiltradas, setEtapasFiltradas] = useState<any[]>([]);
   const funnelStages = ["Novo", "Qualificado", "Em Negociação", "Fechado", "Perdido"];
 
-  // Carregar funis e etapas ao montar o componente
+  // Carregar funis e etapas ao montar o componente e quando userCompanyId mudar
   useEffect(() => {
-    carregarFunisEEtapas();
-  }, []);
+    if (userCompanyId) {
+      carregarFunisEEtapas();
+    }
+  }, [userCompanyId]);
 
   // ⚡ CORREÇÃO: Verificar e atualizar lead vinculado quando a conversa selecionada mudar
   useEffect(() => {

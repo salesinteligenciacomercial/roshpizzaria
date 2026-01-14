@@ -126,12 +126,10 @@ export function EditarLeadDialog({
   const carregarDados = async () => {
     try {
       setInitialLoading(true);
-      const { data: funisData, error: funisError } = await supabase.from("funis").select("*").order("criado_em");
-      const { data: etapasData, error: etapasError } = await supabase.from("etapas").select("*").order("posicao");
-
-      // Buscar usuários da empresa (responsáveis)
-      let companyIdForUsers = lead.company_id;
-      if (!companyIdForUsers) {
+      
+      // Buscar company_id do lead ou do usuário atual
+      let companyIdForData = lead.company_id;
+      if (!companyIdForData) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
           const { data: role } = await supabase
@@ -139,15 +137,38 @@ export function EditarLeadDialog({
             .select('company_id')
             .eq('user_id', session.user.id)
             .maybeSingle();
-          companyIdForUsers = role?.company_id;
+          companyIdForData = role?.company_id;
         }
       }
+
+      if (!companyIdForData) {
+        console.error('❌ [EditarLeadDialog] company_id não encontrado');
+        toast.error("Empresa não encontrada");
+        return;
+      }
+
+      console.log('📊 [EditarLeadDialog] Carregando funis para company_id:', companyIdForData);
+
+      // Carregar funis e etapas FILTRADOS pelo company_id
+      const { data: funisData, error: funisError } = await supabase
+        .from("funis")
+        .select("*")
+        .eq("company_id", companyIdForData)
+        .order("criado_em");
+        
+      const { data: etapasData, error: etapasError } = await supabase
+        .from("etapas")
+        .select("*")
+        .eq("company_id", companyIdForData)
+        .order("posicao");
+
+      // Buscar usuários da empresa (responsáveis)
       let responsaveisList: any[] = [];
-      if (companyIdForUsers) {
+      if (companyIdForData) {
         const { data: responsaveisData } = await supabase
           .from("user_roles")
           .select("user_id, profiles(id, full_name, email)")
-          .eq("company_id", companyIdForUsers);
+          .eq("company_id", companyIdForData);
         responsaveisList = responsaveisData?.map(r => ({
           id: r.user_id,
           name: (r.profiles as any)?.full_name || (r.profiles as any)?.email || "Sem nome"
@@ -157,9 +178,12 @@ export function EditarLeadDialog({
       if (funisError) throw funisError;
       if (etapasError) throw etapasError;
 
+      console.log('📊 [EditarLeadDialog] Funis carregados:', funisData?.length || 0);
+      console.log('📍 [EditarLeadDialog] Etapas carregadas:', etapasData?.length || 0);
+
       setFunis(funisData || []);
       setEtapas(etapasData || []);
-      setUserCompanyId(companyIdForUsers || null);
+      setUserCompanyId(companyIdForData || null);
       setResponsaveis(responsaveisList);
     } catch (error) {
       console.error("Erro ao carregar dados do funil:", error);

@@ -455,23 +455,50 @@ export function ConversaPopup({
     setLoadingFunis(true);
     try {
       const companyId = await getCompanyId();
-      if (!companyId) return;
+      if (!companyId) {
+        console.log('⚠️ [ConversaPopup] company_id não encontrado para carregar funis');
+        return;
+      }
       
-      const { data: funisData } = await supabase
+      console.log('📊 [ConversaPopup] Carregando funis para company_id:', companyId);
+      
+      // Carregar funis
+      const { data: funisData, error: funisError } = await supabase
         .from('funis')
-        .select('id, nome, etapas:etapas_funil(id, nome, ordem)')
+        .select('id, nome')
         .eq('company_id', companyId)
-        .order('created_at');
+        .order('criado_em');
+      
+      if (funisError) {
+        console.error('❌ [ConversaPopup] Erro ao carregar funis:', funisError);
+        return;
+      }
+      
+      // Carregar etapas separadamente
+      const { data: etapasData, error: etapasError } = await supabase
+        .from('etapas')
+        .select('id, nome, funil_id, posicao')
+        .eq('company_id', companyId)
+        .order('posicao');
+      
+      if (etapasError) {
+        console.error('❌ [ConversaPopup] Erro ao carregar etapas:', etapasError);
+      }
+      
+      console.log('📊 [ConversaPopup] Funis carregados:', funisData?.length || 0);
+      console.log('📍 [ConversaPopup] Etapas carregadas:', etapasData?.length || 0);
       
       if (funisData) {
         setFunis(funisData.map((f: any) => ({
           id: f.id,
           nome: f.nome,
-          etapas: (f.etapas || []).sort((a: any, b: any) => a.ordem - b.ordem)
+          etapas: (etapasData || [])
+            .filter((e: any) => e.funil_id === f.id)
+            .sort((a: any, b: any) => (a.posicao || 0) - (b.posicao || 0))
         })));
       }
     } catch (err) {
-      console.error('Erro ao carregar funis:', err);
+      console.error('❌ [ConversaPopup] Erro ao carregar funis:', err);
     } finally {
       setLoadingFunis(false);
     }

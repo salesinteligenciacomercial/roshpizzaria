@@ -241,14 +241,17 @@ export function EditarInformacoesLeadDialog({
 
       if (leadId) {
         // Atualizar lead existente
+        // ⚠️ IMPORTANTE: Não sobrescrever company_id, owner_id, status e stage de leads existentes
+        const { company_id, owner_id, status, stage, ...updateData } = leadDataToSave;
+        
         console.log('🔄 Atualizando lead:', leadId, {
-          tags: leadDataToSave.tags,
-          totalTags: leadDataToSave.tags?.length || 0
+          tags: updateData.tags,
+          totalTags: updateData.tags?.length || 0
         });
         
         const { error } = await supabase
           .from("leads")
-          .update(leadDataToSave)
+          .update(updateData)
           .eq("id", leadId);
 
         if (error) {
