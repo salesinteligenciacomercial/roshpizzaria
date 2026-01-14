@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Pencil, Paperclip, Download, X, ExternalLink, Check, Upload, Image as ImageIcon, FileText, Link as LinkIcon } from "lucide-react";
+import { Pencil, Paperclip, Download, X, ExternalLink, Check, Upload, Image as ImageIcon, FileText, Link as LinkIcon, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -754,21 +754,57 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
                 )}
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <Label>Lead Relacionado</Label>
-                <Select value={leadId} onValueChange={setLeadId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um lead" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {leads.map((lead) => (
-                      <SelectItem key={lead.id} value={lead.id}>
-                        {lead.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between font-normal"
+                    >
+                      {leadId && leadId !== "none" 
+                        ? leads.find(l => l.id === leadId)?.name || "Selecione um lead"
+                        : "Nenhum"}
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[350px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar lead..." />
+                      <CommandList className="max-h-[300px]">
+                        <CommandEmpty>Nenhum lead encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="none"
+                            onSelect={() => setLeadId("none")}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${
+                                leadId === "none" ? "opacity-100" : "opacity-0"
+                              }`}
+                            />
+                            Nenhum
+                          </CommandItem>
+                          {leads.map((lead) => (
+                            <CommandItem
+                              key={lead.id}
+                              value={lead.name}
+                              onSelect={() => setLeadId(lead.id)}
+                            >
+                              <Check
+                                className={`mr-2 h-4 w-4 ${
+                                  leadId === lead.id ? "opacity-100" : "opacity-0"
+                                }`}
+                              />
+                              {lead.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </TabsContent>
 
