@@ -279,6 +279,8 @@ export default function Tarefas() {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMovingRef = useRef(false); // ✅ NOVO: Bloquear operações concorrentes
   const lastOverColumnRef = useRef<string | null>(null); // ✅ NOVO: Rastrear última coluna sobre a qual passou
+  const lastDragOverTimeRef = useRef<number>(0); // ✅ NOVO: Timestamp para evitar atualizações incorretas
+  const confirmedTargetColumnRef = useRef<string | null>(null); // ✅ NOVO: Coluna destino confirmada
   const scrollContainerRef = useRef<HTMLDivElement>(null); // 🎯 Ref para navegação horizontal
 
   const TASKS_PER_PAGE = 20; // ✅ OTIMIZAÇÃO: Aumentado de 10 para 20
@@ -1082,15 +1084,25 @@ export default function Tarefas() {
     // em vez da coluna onde o cursor realmente estava
     let newColumnId: string | null = null;
 
+    // ✅ PRIORIDADE MÁXIMA: Usar coluna destino confirmada pelo handleDragOver
+    // Esta é a coluna DIFERENTE da original que foi detectada visualmente
+    if (confirmedTargetColumnRef.current && 
+        confirmedTargetColumnRef.current !== task.column_id &&
+        columnsFiltradas.some(c => c.id === confirmedTargetColumnRef.current)) {
+      newColumnId = confirmedTargetColumnRef.current;
+      console.log('[Drag&Drop] ✅ Usando confirmedTargetColumnRef (coluna confirmada):', newColumnId);
+    }
     // Prioridade 1: Se over.id é o ID de uma coluna válida (soltou diretamente na área da coluna)
-    const isValidColumnId = columnsFiltradas.some(c => c.id === overId);
-    if (isValidColumnId) {
-      newColumnId = overId;
-      console.log('[Drag&Drop] ✅ Usando over.id como columnId (área vazia):', newColumnId);
+    else {
+      const isValidColumnId = columnsFiltradas.some(c => c.id === overId);
+      if (isValidColumnId) {
+        newColumnId = overId;
+        console.log('[Drag&Drop] ✅ Usando over.id como columnId (área vazia):', newColumnId);
+      }
     }
     // Prioridade 2: CRÍTICO - Usar última coluna rastreada pelo onDragOver
     // Isso é mais confiável pois rastreia a coluna VISUAL onde o cursor está
-    else if (lastOverColumnRef.current) {
+    if (!newColumnId && lastOverColumnRef.current) {
       newColumnId = lastOverColumnRef.current;
       console.log('[Drag&Drop] ✅ Usando lastOverColumnRef (rastreamento visual):', newColumnId);
     }
@@ -1293,10 +1305,16 @@ export default function Tarefas() {
     }
     setActiveTaskId(null);
     lastOverColumnRef.current = null; // ✅ Limpar ref após drag
+    confirmedTargetColumnRef.current = null; // ✅ Limpar ref após drag
+    lastDragOverTimeRef.current = 0; // ✅ Limpar timestamp
   };
   const handleDragStart = useCallback((event: any) => {
     const activeId = event.active?.id;
     setActiveTaskId(activeId ?? null);
+    
+    // ✅ CRÍTICO: Resetar refs de rastreamento
+    confirmedTargetColumnRef.current = null;
+    lastDragOverTimeRef.current = 0;
     
     // ✅ CRÍTICO: Inicializar lastOverColumnRef com a coluna da tarefa sendo arrastada
     // Isso garante que temos um valor válido se o onDragOver não detectar corretamente
@@ -1311,16 +1329,23 @@ export default function Tarefas() {
   const handleDragCancel = useCallback(() => {
     setActiveTaskId(null);
     lastOverColumnRef.current = null;
+    confirmedTargetColumnRef.current = null;
+    lastDragOverTimeRef.current = 0;
   }, []);
 
   // ✅ CORRIGIDO: Handler para rastrear a última coluna sobre a qual passou
-  // Agora prioriza o containerId do SortableContext que é confiável
+  // Usa timestamp para evitar atualizações incorretas perto do momento do drop
   const handleDragOver = useCallback((event: any) => {
-    const { over } = event;
-    if (!over) return;
+    const { over, active } = event;
+    if (!over || !active) return;
     
     const overId = String(over.id);
     const overData = over.data?.current || {};
+    const activeId = String(active.id);
+    
+    // Obter a coluna atual da tarefa sendo arrastada
+    const activeTask = tasks.find(t => t.id === activeId);
+    const activeTaskColumnId = activeTask?.column_id;
     
     // Tentar identificar a coluna destino visualmente correta
     let columnId: string | null = null;
@@ -1337,30 +1362,64 @@ export default function Tarefas() {
         columnId = containerId;
       }
     }
-    // Prioridade 3: Tentar encontrar via DOM - buscar o data-column-id mais próximo
-    else if (typeof document !== 'undefined' && over.rect) {
-      // Buscar elemento da coluna via posição do mouse
-      const element = document.elementFromPoint(
-        over.rect.left + over.rect.width / 2,
-        over.rect.top + over.rect.height / 2
-      );
-      if (element) {
-        const columnElement = element.closest('[data-column-id]');
-        if (columnElement) {
-          const foundColumnId = columnElement.getAttribute('data-column-id');
-          if (foundColumnId && columnsFiltradas.some(c => c.id === foundColumnId)) {
-            columnId = foundColumnId;
+    // Prioridade 3: Tentar encontrar via DOM usando posição do mouse do EVENTO
+    // Isso é mais confiável que usar over.rect que pode estar desatualizado
+    else if (typeof document !== 'undefined') {
+      // Usar posição do pointer do dnd-kit se disponível
+      const pointerPosition = (event as any).activatorEvent?.clientX !== undefined
+        ? { x: (event as any).activatorEvent.clientX, y: (event as any).activatorEvent.clientY }
+        : null;
+      
+      // Fallback: usar centro do over.rect
+      const rect = over.rect;
+      const x = pointerPosition?.x ?? (rect ? rect.left + rect.width / 2 : null);
+      const y = pointerPosition?.y ?? (rect ? rect.top + rect.height / 2 : null);
+      
+      if (x !== null && y !== null) {
+        const element = document.elementFromPoint(x, y);
+        if (element) {
+          const columnElement = element.closest('[data-column-id]');
+          if (columnElement) {
+            const foundColumnId = columnElement.getAttribute('data-column-id');
+            if (foundColumnId && columnsFiltradas.some(c => c.id === foundColumnId)) {
+              columnId = foundColumnId;
+            }
           }
         }
       }
     }
     
-    // ✅ Atualizar ref apenas se encontramos uma coluna válida
+    // ✅ CRÍTICO: Atualizar ref apenas se:
+    // 1. Encontramos uma coluna válida E
+    // 2. A coluna é DIFERENTE da coluna original da tarefa OU
+    // 3. Ainda não temos uma coluna confirmada diferente da original
     if (columnId) {
-      lastOverColumnRef.current = columnId;
-      console.log('[Drag&Drop] 📍 onDragOver atualizou lastOverColumn:', columnId);
+      const now = Date.now();
+      
+      // Se a coluna detectada é diferente da coluna original, confirmar como destino
+      if (columnId !== activeTaskColumnId) {
+        confirmedTargetColumnRef.current = columnId;
+        lastOverColumnRef.current = columnId;
+        lastDragOverTimeRef.current = now;
+        console.log('[Drag&Drop] 📍 onDragOver CONFIRMOU coluna destino:', columnId);
+      } 
+      // Se voltou para a coluna original MAS já temos um destino confirmado recentemente (< 500ms)
+      // Ignorar para evitar flicker
+      else if (confirmedTargetColumnRef.current && 
+               confirmedTargetColumnRef.current !== activeTaskColumnId &&
+               now - lastDragOverTimeRef.current < 500) {
+        console.log('[Drag&Drop] 📍 onDragOver ignorando retorno à coluna original (destino confirmado recentemente):', 
+                    confirmedTargetColumnRef.current);
+        // Manter o lastOverColumnRef no destino confirmado
+        lastOverColumnRef.current = confirmedTargetColumnRef.current;
+      }
+      // Caso contrário, atualizar normalmente
+      else {
+        lastOverColumnRef.current = columnId;
+        console.log('[Drag&Drop] 📍 onDragOver atualizou lastOverColumn:', columnId);
+      }
     }
-  }, [columnsFiltradas]);
+  }, [columnsFiltradas, tasks]);
 
   // 🎯 Navegação horizontal suave (scroll das colunas)
   const scrollHorizontal = useCallback((direction: 'left' | 'right') => {
