@@ -151,7 +151,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
         }
         
         toast.success("Tarefa movida com sucesso!");
-        onUpdate();
+        // ✅ OTIMIZADO: Não chamar onUpdate() - Realtime cuida da atualização
       }
     } catch (error: any) {
       console.error("Erro ao mover tarefa:", error);
@@ -159,7 +159,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
     } finally {
       setMovingTask(false);
     }
-  }, [task.id, task.column_id, onMove, onUpdate]);
+  }, [task.id, task.column_id, onMove]);
 
   // ✅ MELHORADO: Usar hook useTaskTimer para gerenciar timer
   const {
@@ -673,12 +673,12 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
       if (error) throw error;
 
       toast.success('Tarefa duplicada com sucesso!', { id: 'duplicate-task' });
-      onUpdate();
+      // ✅ OTIMIZADO: Não chamar onUpdate() - Realtime cuida da atualização via INSERT
     } catch (error) {
       console.error('Erro ao duplicar tarefa:', error);
       toast.error('Erro ao duplicar tarefa', { id: 'duplicate-task' });
     }
-  }, [task, onUpdate]);
+  }, [task]);
 
   const {
     attributes,

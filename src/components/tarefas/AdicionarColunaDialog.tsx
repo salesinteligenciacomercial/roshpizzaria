@@ -80,7 +80,8 @@ export function AdicionarColunaDialog({
       setNome("");
       setCor(CORES_PADRAO[0]);
       setOpen(false);
-      onColumnAdded();
+      // ✅ OTIMIZADO: Não chamar carregarDados() - o Realtime já atualiza automaticamente
+      console.log('✅ [AdicionarColunaDialog] Coluna criada - Realtime irá atualizar automaticamente');
     } catch (error: any) {
       console.error("Erro ao criar coluna:", error);
       toast.error(error.message || "Erro ao criar coluna");

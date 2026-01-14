@@ -128,7 +128,8 @@ const SortableColumn = React.memo(function SortableColumn({
   selectedBoard,
   emitGlobalEvent,
   allColumns,
-  onMoveTask
+  onMoveTask,
+  setTasks
 }: {
   column: Column;
   tasksByColumn: Record<string, Task[]>;
@@ -143,6 +144,7 @@ const SortableColumn = React.memo(function SortableColumn({
   emitGlobalEvent: (event: any) => void;
   allColumns: Column[];
   onMoveTask: (taskId: string, newColumnId: string) => void;
+  setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
 }) {
   const {
     attributes,
@@ -197,7 +199,10 @@ const SortableColumn = React.memo(function SortableColumn({
       </div>
       <SortableContext id={column.id} items={(tasksByColumn[column.id] || []).slice(0, tasksPerColumn[column.id] || TASKS_PER_PAGE).map(t => t.id)} strategy={verticalListSortingStrategy}>
         <DroppableColumnContainer columnId={column.id}>
-          <NovaTarefaDialog columnId={column.id} boardId={selectedBoard} onTaskCreated={carregarDados} />
+          <NovaTarefaDialog columnId={column.id} boardId={selectedBoard} onTaskCreated={() => {
+            // ✅ OTIMIZADO: Não recarregar - Realtime cuida da atualização
+            console.log('✅ [Tarefas] Tarefa criada - Realtime irá atualizar automaticamente');
+          }} />
           {(tasksByColumn[column.id] || []).slice(0, tasksPerColumn[column.id] || TASKS_PER_PAGE).map(task => <TaskCard 
             key={task.id} 
             task={task} 
@@ -205,23 +210,38 @@ const SortableColumn = React.memo(function SortableColumn({
             onMove={onMoveTask}
             onDelete={async id => {
               const taskToDelete = tasks.find(t => t.id === id);
-              await supabase.functions.invoke("api-tarefas", {
-                body: {
-                  action: "deletar_tarefa",
-                  data: {
-                    task_id: id
+              // ✅ OTIMIZADO: Remover otimisticamente antes da chamada API
+              setTasks(prev => prev.filter(t => t.id !== id));
+              
+              try {
+                await supabase.functions.invoke("api-tarefas", {
+                  body: {
+                    action: "deletar_tarefa",
+                    data: {
+                      task_id: id
+                    }
                   }
-                }
-              });
-              if (taskToDelete) {
-                emitGlobalEvent({
-                  type: 'task-deleted',
-                  data: taskToDelete,
-                  source: 'Tarefas'
                 });
+                if (taskToDelete) {
+                  emitGlobalEvent({
+                    type: 'task-deleted',
+                    data: taskToDelete,
+                    source: 'Tarefas'
+                  });
+                }
+              } catch (error) {
+                console.error('Erro ao deletar tarefa:', error);
+                // Reverter se falhar
+                if (taskToDelete) {
+                  setTasks(prev => [...prev, taskToDelete]);
+                }
+                toast.error('Erro ao excluir tarefa');
               }
             }} 
-            onUpdate={carregarDados} 
+            onUpdate={() => {
+              // ✅ OTIMIZADO: Não recarregar - Realtime cuida da atualização
+              console.log('✅ [Tarefas] Tarefa atualizada - Realtime irá atualizar automaticamente');
+            }} 
           />)}
 
           {(() => {
@@ -1930,7 +1950,7 @@ export default function Tarefas() {
         </div> : <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
           <SortableContext items={columnsFiltradas.map(c => c.id)} strategy={horizontalListSortingStrategy}>
             <div ref={scrollContainerRef} className="flex overflow-x-auto gap-4 pb-4 min-h-[500px] scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-muted/20 hover:scrollbar-thumb-primary/50 scroll-smooth">
-              {columnsFiltradas.map(column => <SortableColumn key={column.id} column={column} tasksByColumn={tasksByColumn} tasksPerColumn={tasksPerColumn} taskCountsByColumn={taskCountsByColumn} TASKS_PER_PAGE={TASKS_PER_PAGE} tasks={tasks} loadingMore={loadingMore} carregarDados={carregarDados} loadMoreTasks={loadMoreTasks} selectedBoard={selectedBoard} emitGlobalEvent={emitGlobalEvent} allColumns={columnsFiltradas} onMoveTask={async (taskId, newColumnId) => {
+              {columnsFiltradas.map(column => <SortableColumn key={column.id} column={column} tasksByColumn={tasksByColumn} tasksPerColumn={tasksPerColumn} taskCountsByColumn={taskCountsByColumn} TASKS_PER_PAGE={TASKS_PER_PAGE} tasks={tasks} loadingMore={loadingMore} carregarDados={carregarDados} loadMoreTasks={loadMoreTasks} selectedBoard={selectedBoard} emitGlobalEvent={emitGlobalEvent} allColumns={columnsFiltradas} setTasks={setTasks} onMoveTask={async (taskId, newColumnId) => {
                 // 🔒 CRÍTICO: Bloquear realtime durante a operação para evitar race condition
                 console.log('[onMoveTask] 🔒 Bloqueando realtime durante movimentação manual...');
                 isMovingRef.current = true;
