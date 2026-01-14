@@ -64,6 +64,7 @@ export function WhatsAppTemplatesManager({ companyId }: TemplatesManagerProps) {
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [metaNotConfigured, setMetaNotConfigured] = useState(false);
 
   // Form state
   const [newTemplate, setNewTemplate] = useState({
@@ -81,6 +82,7 @@ export function WhatsAppTemplatesManager({ companyId }: TemplatesManagerProps) {
     try {
       if (sync) setSyncing(true);
       else setLoading(true);
+      setMetaNotConfigured(false);
 
       const session = await supabase.auth.getSession();
       const response = await fetch(
@@ -96,6 +98,12 @@ export function WhatsAppTemplatesManager({ companyId }: TemplatesManagerProps) {
       const result = await response.json();
 
       if (!response.ok) {
+        // Verificar se é erro de conexão não configurada
+        if (result.error?.includes('não configurada') || result.error?.includes('not configured')) {
+          setMetaNotConfigured(true);
+          setTemplates([]);
+          return;
+        }
         throw new Error(result.error || 'Erro ao carregar templates');
       }
 
@@ -112,11 +120,17 @@ export function WhatsAppTemplatesManager({ companyId }: TemplatesManagerProps) {
       }
     } catch (error: any) {
       console.error('Erro ao carregar templates:', error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao carregar templates",
-        description: error.message
-      });
+      // Verificar se é erro de conexão
+      if (error.message?.includes('não configurada') || error.message?.includes('not configured')) {
+        setMetaNotConfigured(true);
+        setTemplates([]);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Erro ao carregar templates",
+          description: error.message
+        });
+      }
     } finally {
       setLoading(false);
       setSyncing(false);
@@ -360,6 +374,38 @@ export function WhatsAppTemplatesManager({ companyId }: TemplatesManagerProps) {
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
+    );
+  }
+
+  // Mostrar mensagem quando Meta não está configurada
+  if (metaNotConfigured) {
+    return (
+      <Card className="border-yellow-500/30 bg-yellow-500/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-yellow-700">
+            <AlertCircle className="h-5 w-5" />
+            Conexão Meta não Configurada
+          </CardTitle>
+          <CardDescription>
+            Para gerenciar templates da API oficial do WhatsApp, você precisa configurar a conexão com a Meta API primeiro.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-sm text-muted-foreground space-y-2">
+            <p>Para configurar:</p>
+            <ol className="list-decimal list-inside space-y-1 ml-2">
+              <li>Acesse a aba <strong>"Canais"</strong> nas configurações</li>
+              <li>Encontre a seção <strong>"Meta API (WhatsApp Business)"</strong></li>
+              <li>Configure o <strong>Phone Number ID</strong> e o <strong>Access Token</strong> da sua conta Meta Business</li>
+              <li>Salve as configurações e volte aqui</li>
+            </ol>
+          </div>
+          <Button variant="outline" onClick={() => loadTemplates()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Verificar Novamente
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 

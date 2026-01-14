@@ -69,10 +69,12 @@ export function WhatsAppDashboard({ companyId }: DashboardProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [period, setPeriod] = useState("week");
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [metaNotConfigured, setMetaNotConfigured] = useState(false);
 
   const loadAnalytics = async () => {
     try {
       setRefreshing(true);
+      setMetaNotConfigured(false);
       
       const session = await supabase.auth.getSession();
       const accessToken = session.data.session?.access_token;
@@ -94,17 +96,28 @@ export function WhatsAppDashboard({ companyId }: DashboardProps) {
       const result = await response.json();
 
       if (!response.ok) {
+        // Verificar se é erro de conexão não configurada
+        if (result.error?.includes('não configurada') || result.error?.includes('not configured')) {
+          setMetaNotConfigured(true);
+          setAnalytics(null);
+          return;
+        }
         throw new Error(result.error || 'Erro ao carregar analytics');
       }
 
       setAnalytics(result);
     } catch (error: any) {
       console.error('Erro ao carregar analytics:', error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao carregar métricas",
-        description: error.message
-      });
+      if (error.message?.includes('não configurada') || error.message?.includes('not configured')) {
+        setMetaNotConfigured(true);
+        setAnalytics(null);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Erro ao carregar métricas",
+          description: error.message
+        });
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -136,6 +149,38 @@ export function WhatsAppDashboard({ companyId }: DashboardProps) {
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
+    );
+  }
+
+  // Mostrar mensagem quando Meta não está configurada
+  if (metaNotConfigured) {
+    return (
+      <Card className="border-yellow-500/30 bg-yellow-500/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-yellow-700">
+            <XCircle className="h-5 w-5" />
+            Conexão Meta não Configurada
+          </CardTitle>
+          <CardDescription>
+            Para visualizar métricas da API oficial do WhatsApp, configure a conexão com a Meta API primeiro.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-sm text-muted-foreground space-y-2">
+            <p>Para configurar:</p>
+            <ol className="list-decimal list-inside space-y-1 ml-2">
+              <li>Acesse a aba <strong>"Canais"</strong> nas configurações</li>
+              <li>Encontre a seção <strong>"Meta API (WhatsApp Business)"</strong></li>
+              <li>Configure o <strong>Phone Number ID</strong> e o <strong>Access Token</strong></li>
+              <li>Salve as configurações e volte aqui</li>
+            </ol>
+          </div>
+          <Button variant="outline" onClick={loadAnalytics}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Verificar Novamente
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
