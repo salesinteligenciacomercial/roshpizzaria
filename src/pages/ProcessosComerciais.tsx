@@ -6,23 +6,26 @@ import {
   Target,
   Brain,
   FileText,
-  AlertTriangle
+  AlertTriangle,
+  Zap
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ProcessInsightsReport } from "@/components/processos/ProcessInsightsReport";
 import { SugestoesIAList } from "@/components/processos/SugestoesIAList";
 import { NotionWorkspace } from "@/components/processos/notion/NotionWorkspace";
+import { CommercialIntelligenceDashboard } from "@/components/ia/CommercialIntelligenceDashboard";
 
 interface Stats {
   playbooks: number;
   routines: number;
   stages: number;
   suggestions: number;
+  alerts: number;
 }
 
 export default function ProcessosComerciais() {
-  const [activeTab, setActiveTab] = useState("workspace");
-  const [stats, setStats] = useState<Stats>({ playbooks: 0, routines: 0, stages: 0, suggestions: 0 });
+  const [activeTab, setActiveTab] = useState("intelligence");
+  const [stats, setStats] = useState<Stats>({ playbooks: 0, routines: 0, stages: 0, suggestions: 0, alerts: 0 });
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<any[]>([]);
 
@@ -43,7 +46,7 @@ export default function ProcessosComerciais() {
 
   const loadAllData = async () => {
     if (!companyId) return;
-    await Promise.all([loadStats(), loadSuggestions()]);
+    await Promise.all([loadStats(), loadSuggestions(), loadAlerts()]);
   };
 
   const loadStats = async () => {
@@ -63,6 +66,18 @@ export default function ProcessosComerciais() {
     }));
   };
 
+  const loadAlerts = async () => {
+    if (!companyId) return;
+    
+    const { count } = await supabase
+      .from('ia_commercial_alerts')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('status', 'pending');
+
+    setStats(prev => ({ ...prev, alerts: count || 0 }));
+  };
+
   const loadSuggestions = async () => {
     const { data } = await supabase
       .from('ai_process_suggestions')
@@ -74,12 +89,6 @@ export default function ProcessosComerciais() {
     setStats(prev => ({ ...prev, suggestions: pending }));
   };
 
-  const sections = [
-    { id: "workspace", title: "Workspace", description: "Páginas, Tarefas, Calendário, Playbooks, Cadências e Etapas", icon: FileText, color: "text-primary", bgColor: "bg-primary/10", count: null },
-    { id: "insights", title: "Insights & Gargalos", description: "Análise automática de gargalos e pontos de melhoria", icon: AlertTriangle, color: "text-orange-500", bgColor: "bg-orange-500/10", count: null },
-    { id: "sugestoes", title: "Sugestões da IA", description: "Aprovação de melhorias sugeridas pela IA de Processos", icon: Brain, color: "text-cyan-500", bgColor: "bg-cyan-500/10", count: stats.suggestions }
-  ];
-
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -90,12 +99,21 @@ export default function ProcessosComerciais() {
             </div>
             Processos Comerciais
           </h1>
-          <p className="text-muted-foreground mt-1">Gerencie documentos, tarefas, playbooks, cadências e processos do seu time comercial</p>
+          <p className="text-muted-foreground mt-1">Inteligência comercial, documentos, playbooks, cadências e processos do seu time</p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="flex flex-wrap gap-2 h-auto p-1 bg-muted/50">
+          <TabsTrigger value="intelligence" className="flex items-center gap-2 py-2 relative">
+            <Zap className="h-4 w-4" />
+            <span className="hidden md:inline">Inteligência Comercial</span>
+            {stats.alerts > 0 && (
+              <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                {stats.alerts}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="workspace" className="flex items-center gap-2 py-2">
             <FileText className="h-4 w-4" />
             <span className="hidden md:inline">Workspace</span>
@@ -114,6 +132,10 @@ export default function ProcessosComerciais() {
             )}
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="intelligence">
+          <CommercialIntelligenceDashboard />
+        </TabsContent>
 
         <TabsContent value="workspace">
           <NotionWorkspace companyId={companyId} />
