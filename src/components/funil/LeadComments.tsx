@@ -48,14 +48,60 @@ function parseComments(notes?: string | null): Comment[] {
     }
   } catch {
     // Se não for JSON válido, trata como texto simples (comentário histórico)
-    return [{
-      id: generateId(),
-      comment: notes,
-      created_at: new Date().toISOString(),
-      user_id: "",
-      user_name: "Histórico",
-      user_email: null,
-    }];
+    // Limpar o texto de códigos JSON embutidos
+    let cleanText = notes;
+    
+    // Remover blocos JSON do texto (ex: { "fonte": "...", ... })
+    cleanText = cleanText.replace(/\s*---\s*\{[^}]+\}/g, '');
+    cleanText = cleanText.replace(/\{[^}]*"fonte"[^}]*\}/g, '');
+    cleanText = cleanText.replace(/\s*---\s*$/g, '');
+    cleanText = cleanText.trim();
+    
+    // Separar múltiplos comentários por "---" se houver
+    const parts = cleanText.split(/\s*---\s*/).filter(p => p.trim());
+    
+    if (parts.length > 1) {
+      return parts.map((part, index) => {
+        // Tentar extrair data/hora do formato "QUALIFICAÇÃO IA (DD/MM/YYYY, HH:MM:SS)"
+        const dateMatch = part.match(/\((\d{2}\/\d{2}\/\d{4}),?\s*(\d{2}:\d{2}:\d{2})\)/);
+        let createdAt = new Date().toISOString();
+        let userName = "Histórico";
+        let commentText = part.trim();
+        
+        if (dateMatch) {
+          const [, datePart, timePart] = dateMatch;
+          const [day, month, year] = datePart.split('/');
+          createdAt = new Date(`${year}-${month}-${day}T${timePart}`).toISOString();
+          
+          // Verificar se é qualificação IA
+          if (part.includes('QUALIFICAÇÃO IA')) {
+            userName = "IA";
+            commentText = part.replace(/QUALIFICAÇÃO IA\s*\([^)]+\)\s*/, '').trim();
+          }
+        }
+        
+        return {
+          id: generateId(),
+          comment: commentText || part.trim(),
+          created_at: createdAt,
+          user_id: "",
+          user_name: userName,
+          user_email: null,
+        };
+      });
+    }
+    
+    // Comentário único
+    if (cleanText) {
+      return [{
+        id: generateId(),
+        comment: cleanText,
+        created_at: new Date().toISOString(),
+        user_id: "",
+        user_name: "Histórico",
+        user_email: null,
+      }];
+    }
   }
   return [];
 }
@@ -181,7 +227,7 @@ export function LeadComments({ leadId, initialNotes, onCommentAdded }: LeadComme
       </Button>
 
       {showComments && (
-        <Card className="p-3 space-y-3">
+        <Card className="p-3 space-y-3 w-full">
           <form onSubmit={addComment} className="flex gap-2">
             <Input
               value={newComment}
@@ -199,32 +245,32 @@ export function LeadComments({ leadId, initialNotes, onCommentAdded }: LeadComme
             </Button>
           </form>
 
-          <div className="space-y-2 max-h-40 overflow-y-auto">
+          <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
             {comments.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-2">
                 Nenhum comentário ainda
               </p>
             ) : (
               comments.map((comment) => (
-                <div key={comment.id} className="flex gap-2 p-2 bg-muted/50 rounded-md">
+                <div key={comment.id} className="flex gap-2 p-2 bg-muted/50 rounded-md w-full">
                   <div className="flex-shrink-0">
                     <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center">
                       <User className="h-3 w-3 text-primary" />
                     </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-medium truncate">
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-xs font-medium">
                         {comment.user_name || "Usuário"}
                       </span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
                         {formatDistanceToNow(new Date(comment.created_at), {
                           addSuffix: true,
                           locale: ptBR,
                         })}
                       </span>
                     </div>
-                    <p className="text-xs text-foreground break-words">
+                    <p className="text-xs text-foreground break-words whitespace-pre-wrap overflow-hidden">
                       {comment.comment}
                     </p>
                   </div>
