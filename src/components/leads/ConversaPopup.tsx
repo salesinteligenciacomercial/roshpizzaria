@@ -80,6 +80,8 @@ export function ConversaPopup({
   const [scheduledDatetime, setScheduledDatetime] = useState("");
   const [scheduledList, setScheduledList] = useState<any[]>([]);
   const [editLeadOpen, setEditLeadOpen] = useState(false);
+  const [valorVendaOpen, setValorVendaOpen] = useState(false);
+  const [valorVendaInput, setValorVendaInput] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   // ⚡ CORREÇÃO: Mensagens rápidas agora carregadas do banco de dados
   const [quickMessages, setQuickMessages] = useState<Array<{ id: string; title: string; content: string; category: string }>>([]);
@@ -399,6 +401,32 @@ export function ConversaPopup({
     } catch (err) {
       console.error('Erro ao excluir lead:', err);
       toast.error('Erro ao excluir lead');
+    }
+  };
+
+  // ✅ NOVO: Salvar valor da venda rapidamente
+  const handleSalvarValorVenda = async () => {
+    if (!leadVinculado?.id) {
+      toast.error('Salve o lead no CRM primeiro');
+      return;
+    }
+    
+    const valorNumerico = valorVendaInput ? parseFloat(valorVendaInput.replace(/[^\d.,]/g, '').replace(',', '.')) : 0;
+    
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({ value: valorNumerico })
+        .eq('id', leadVinculado.id);
+      
+      if (error) throw error;
+      
+      setLeadVinculado({ ...leadVinculado, value: valorNumerico });
+      setValorVendaOpen(false);
+      toast.success('Valor atualizado com sucesso!');
+    } catch (err) {
+      console.error('Erro ao salvar valor:', err);
+      toast.error('Erro ao salvar valor');
     }
   };
 
@@ -1342,13 +1370,23 @@ export function ConversaPopup({
                       }}
                     />
                     
+                    {/* ✅ NOVO: Botão rápido para adicionar valor da venda */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full mb-2 gap-2"
+                      onClick={() => {
+                        setValorVendaInput(leadVinculado?.value?.toString() || "");
+                        setValorVendaOpen(true);
+                      }}
+                      disabled={!leadVinculado}
+                    >
+                      <DollarSign className="h-3 w-3 text-green-600" />
+                      {leadVinculado?.value ? `Valor: R$ ${Number(leadVinculado.value).toLocaleString("pt-BR")}` : "Adicionar Valor da Venda"}
+                    </Button>
+                    
                     {leadVinculado && (
                       <>
-                        {leadVinculado.value && (
-                          <p className="text-sm text-success font-medium mt-2">
-                            <strong>Valor:</strong> R$ {Number(leadVinculado.value).toLocaleString("pt-BR")}
-                          </p>
-                        )}
                         {leadVinculado.company && (
                           <p className="text-sm text-muted-foreground mt-2">
                             <strong>Empresa:</strong> {leadVinculado.company}
@@ -1733,6 +1771,49 @@ export function ConversaPopup({
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </UIDialogContent>
+      </UIDialog>
+
+      {/* Dialog: Valor da Venda Rápido */}
+      <UIDialog open={valorVendaOpen} onOpenChange={setValorVendaOpen}>
+        <UIDialogContent className="max-w-sm">
+          <UIDialogHeader>
+            <UIDialogTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-green-600" />
+              Valor da Venda / Negociação
+            </UIDialogTitle>
+          </UIDialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <Label htmlFor="valorVenda">Valor (R$)</Label>
+              <Input
+                id="valorVenda"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0,00"
+                value={valorVendaInput}
+                onChange={(e) => setValorVendaInput(e.target.value)}
+                className="text-lg font-medium"
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Digite o valor estimado ou fechado da negociação
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setValorVendaOpen(false)}>
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleSalvarValorVenda}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Salvar Valor
+              </Button>
             </div>
           </div>
         </UIDialogContent>
