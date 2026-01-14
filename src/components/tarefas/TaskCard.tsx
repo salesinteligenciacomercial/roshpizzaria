@@ -1046,6 +1046,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
         borderLeftWidth: urgencyStyle.borderColor ? '4px' : undefined,
         borderLeftColor: urgencyStyle.borderColor,
       }}
+      data-task-id={task.id}
       {...attributes}
       {...listeners}
       className={`group relative mb-3 border-0 shadow-card hover:shadow-lg transition-all duration-300 overflow-hidden cursor-grab active:cursor-grabbing ${

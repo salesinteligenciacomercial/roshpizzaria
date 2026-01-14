@@ -1077,43 +1077,63 @@ export default function Tarefas() {
       taskCurrentColumn: task.column_id
     });
 
-    // ✅ MELHORADO: Validação robusta com múltiplos fallbacks
+    // ✅ CORRIGIDO: Validação robusta com prioridades corretas
+    // O problema anterior era que ao soltar sobre outra tarefa, pegava a coluna DESSA tarefa
+    // em vez da coluna onde o cursor realmente estava
     let newColumnId: string | null = null;
 
-    // Prioridade 1: Se over.id é o ID de uma coluna válida (soltou na área da coluna)
+    // Prioridade 1: Se over.id é o ID de uma coluna válida (soltou diretamente na área da coluna)
     const isValidColumnId = columnsFiltradas.some(c => c.id === overId);
     if (isValidColumnId) {
       newColumnId = overId;
       console.log('[Drag&Drop] ✅ Usando over.id como columnId (área vazia):', newColumnId);
     }
-    // Prioridade 2: columnId direto do droppable data (DroppableColumnContainer)
-    else if (overData?.columnId && typeof overData.columnId === 'string') {
-      newColumnId = overData.columnId;
-      console.log('[Drag&Drop] ✅ Usando columnId do droppable data:', newColumnId);
+    // Prioridade 2: CRÍTICO - Usar última coluna rastreada pelo onDragOver
+    // Isso é mais confiável pois rastreia a coluna VISUAL onde o cursor está
+    else if (lastOverColumnRef.current) {
+      newColumnId = lastOverColumnRef.current;
+      console.log('[Drag&Drop] ✅ Usando lastOverColumnRef (rastreamento visual):', newColumnId);
     }
-    // Prioridade 3: Se soltou sobre uma tarefa, pegar a coluna dessa tarefa
-    else if (overData?.type === 'task' && overData?.task?.column_id) {
-      newColumnId = overData.task.column_id;
-      console.log('[Drag&Drop] ✅ Usando column_id da tarefa destino:', newColumnId);
-    }
-    // Prioridade 4: containerId do sortable (quando solta sobre outra tarefa)
+    // Prioridade 3: containerId do sortable (quando solta sobre outra tarefa)
+    // NOTA: Isso é confiável pois o SortableContext usa o column.id como ID
     else if (overData?.sortable?.containerId && typeof overData.sortable.containerId === 'string') {
-      newColumnId = overData.sortable.containerId;
-      console.log('[Drag&Drop] ✅ Usando containerId do sortable (sobre tarefa):', newColumnId);
+      const containerId = overData.sortable.containerId;
+      // Verificar se o containerId é uma coluna válida
+      if (columnsFiltradas.some(c => c.id === containerId)) {
+        newColumnId = containerId;
+        console.log('[Drag&Drop] ✅ Usando containerId do sortable:', newColumnId);
+      }
     }
-    // Prioridade 5: Se over é uma tarefa, buscar a coluna dessa tarefa na lista
-    else {
-      const overTask = tasks.find(t => t.id === overId);
-      if (overTask?.column_id) {
-        newColumnId = overTask.column_id;
-        console.log('[Drag&Drop] ✅ Usando column_id da tarefa encontrada:', newColumnId);
+    // Prioridade 4: Tentar identificar via DOM - mais confiável quando há inconsistência
+    else if (typeof document !== 'undefined') {
+      // Buscar o elemento sobre o qual está o mouse
+      const overElement = document.querySelector(`[data-task-id="${overId}"]`) || 
+                          document.getElementById(overId);
+      if (overElement) {
+        const columnElement = overElement.closest('[data-column-id]');
+        if (columnElement) {
+          const foundColumnId = columnElement.getAttribute('data-column-id');
+          if (foundColumnId && columnsFiltradas.some(c => c.id === foundColumnId)) {
+            newColumnId = foundColumnId;
+            console.log('[Drag&Drop] ✅ Usando column_id via DOM:', newColumnId);
+          }
+        }
       }
     }
     
-    // Prioridade 6: Usar última coluna rastreada pelo onDragOver (fallback final)
-    if (!newColumnId && lastOverColumnRef.current) {
-      newColumnId = lastOverColumnRef.current;
-      console.log('[Drag&Drop] ✅ Usando lastOverColumnRef (fallback):', newColumnId);
+    // Prioridade 5: Se soltou sobre uma tarefa, buscar a coluna dessa tarefa na lista local
+    // IMPORTANTE: Usar a lista local (tasks) que pode estar mais atualizada que overData.task
+    if (!newColumnId) {
+      const overTask = tasks.find(t => t.id === overId);
+      if (overTask?.column_id) {
+        newColumnId = overTask.column_id;
+        console.log('[Drag&Drop] ✅ Usando column_id da tarefa na lista local:', newColumnId);
+      }
+      // Fallback: usar overData se não encontrar na lista local
+      else if (overData?.type === 'task' && overData?.task?.column_id) {
+        newColumnId = overData.task.column_id;
+        console.log('[Drag&Drop] ⚠️ Usando column_id do overData.task (fallback):', newColumnId);
+      }
     }
 
     // ✅ MELHORADO: Validação detalhada antes de atualizar
@@ -1275,14 +1295,26 @@ export default function Tarefas() {
     lastOverColumnRef.current = null; // ✅ Limpar ref após drag
   };
   const handleDragStart = useCallback((event: any) => {
-    setActiveTaskId(event.active?.id ?? null);
-  }, []);
+    const activeId = event.active?.id;
+    setActiveTaskId(activeId ?? null);
+    
+    // ✅ CRÍTICO: Inicializar lastOverColumnRef com a coluna da tarefa sendo arrastada
+    // Isso garante que temos um valor válido se o onDragOver não detectar corretamente
+    if (activeId) {
+      const activeTask = tasks.find(t => t.id === activeId);
+      if (activeTask?.column_id) {
+        lastOverColumnRef.current = activeTask.column_id;
+        console.log('[Drag&Drop] 🚀 handleDragStart - iniciando com column_id:', activeTask.column_id);
+      }
+    }
+  }, [tasks]);
   const handleDragCancel = useCallback(() => {
     setActiveTaskId(null);
     lastOverColumnRef.current = null;
   }, []);
 
-  // ✅ NOVO: Handler para rastrear a última coluna sobre a qual passou
+  // ✅ CORRIGIDO: Handler para rastrear a última coluna sobre a qual passou
+  // Agora prioriza o containerId do SortableContext que é confiável
   const handleDragOver = useCallback((event: any) => {
     const { over } = event;
     if (!over) return;
@@ -1290,28 +1322,43 @@ export default function Tarefas() {
     const overId = String(over.id);
     const overData = over.data?.current || {};
     
-    // Tentar identificar a coluna destino
+    // Tentar identificar a coluna destino visualmente correta
     let columnId: string | null = null;
     
-    // Prioridade 1: Se over.id é uma coluna válida
+    // Prioridade 1: Se over.id é uma coluna válida (passou sobre área vazia da coluna)
     if (columnsFiltradas.some(c => c.id === overId)) {
       columnId = overId;
     }
-    // Prioridade 2: columnId no data (DroppableColumnContainer)
-    else if (overData?.columnId) {
-      columnId = overData.columnId;
-    }
-    // Prioridade 3: Se é uma tarefa, pegar a coluna dela
-    else if (overData?.type === 'task' && overData?.task?.column_id) {
-      columnId = overData.task.column_id;
-    }
-    // Prioridade 4: containerId do sortable
+    // Prioridade 2: containerId do sortable - Este é o ID do SortableContext
+    // que é definido com column.id, portanto é a coluna VISUAL correta
     else if (overData?.sortable?.containerId) {
-      columnId = overData.sortable.containerId;
+      const containerId = overData.sortable.containerId;
+      if (columnsFiltradas.some(c => c.id === containerId)) {
+        columnId = containerId;
+      }
+    }
+    // Prioridade 3: Tentar encontrar via DOM - buscar o data-column-id mais próximo
+    else if (typeof document !== 'undefined' && over.rect) {
+      // Buscar elemento da coluna via posição do mouse
+      const element = document.elementFromPoint(
+        over.rect.left + over.rect.width / 2,
+        over.rect.top + over.rect.height / 2
+      );
+      if (element) {
+        const columnElement = element.closest('[data-column-id]');
+        if (columnElement) {
+          const foundColumnId = columnElement.getAttribute('data-column-id');
+          if (foundColumnId && columnsFiltradas.some(c => c.id === foundColumnId)) {
+            columnId = foundColumnId;
+          }
+        }
+      }
     }
     
-    if (columnId && columnsFiltradas.some(c => c.id === columnId)) {
+    // ✅ Atualizar ref apenas se encontramos uma coluna válida
+    if (columnId) {
       lastOverColumnRef.current = columnId;
+      console.log('[Drag&Drop] 📍 onDragOver atualizou lastOverColumn:', columnId);
     }
   }, [columnsFiltradas]);
 
