@@ -1883,7 +1883,7 @@ export default function Tarefas() {
           </Button>
         </div>}
 
-      {viewMode === 'calendar' ? <TarefaCalendar /> : viewMode === 'dashboard' ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {viewMode === 'calendar' ? <TarefaCalendar tasks={tasks} /> : viewMode === 'dashboard' ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Total de Tarefas */}
           <div className="bg-card p-6 rounded-lg border shadow-sm">
             <div className="flex items-center justify-between">
