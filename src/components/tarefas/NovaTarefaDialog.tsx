@@ -247,9 +247,9 @@ export function NovaTarefaDialog({
       setResponsaveis([]);
       setTags([]);
       
-      // Chamar callback para atualizar lista
-      console.log('✅ [NovaTarefaDialog] Chamando onTaskCreated para atualizar lista');
-      onTaskCreated();
+      // ✅ OTIMIZADO: Não chamar carregarDados() - o Realtime já atualiza automaticamente
+      // A tarefa será adicionada via subscription 'postgres_changes' INSERT
+      console.log('✅ [NovaTarefaDialog] Tarefa criada - Realtime irá atualizar automaticamente');
     } catch (error) {
       console.error("Erro ao criar tarefa:", error);
       toast.error("Erro ao criar tarefa");

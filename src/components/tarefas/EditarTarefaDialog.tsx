@@ -304,7 +304,9 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
         console.warn("Erro ao criar/atualizar compromisso:", compromissoError);
         // Não bloquear o fluxo se falhar ao criar compromisso
       }
-      onTaskUpdated();
+      // ✅ OTIMIZADO: Não chamar carregarDados() - o Realtime já atualiza automaticamente
+      // A tarefa será atualizada via subscription 'postgres_changes' UPDATE
+      console.log('✅ [EditarTarefaDialog] Tarefa atualizada - Realtime irá atualizar automaticamente');
     } catch (error: any) {
       console.error("Erro ao atualizar tarefa:", error);
       const errorMessage = error?.message || error?.error?.message || "Erro ao atualizar tarefa. Tente novamente.";

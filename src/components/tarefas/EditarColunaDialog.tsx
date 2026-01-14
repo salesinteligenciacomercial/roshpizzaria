@@ -78,7 +78,8 @@ export function EditarColunaDialog({
 
       toast.success(`Coluna "${nomeFormatado}" atualizada com sucesso!`);
       setOpen(false);
-      onColumnUpdated();
+      // ✅ OTIMIZADO: Não chamar carregarDados() - o Realtime já atualiza automaticamente
+      console.log('✅ [EditarColunaDialog] Coluna atualizada - Realtime irá atualizar automaticamente');
     } catch (error: any) {
       console.error("Erro ao atualizar coluna:", error);
       toast.error(error.message || "Erro ao atualizar coluna");

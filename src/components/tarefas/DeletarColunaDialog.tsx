@@ -69,7 +69,8 @@ export function DeletarColunaDialog({
 
       toast.success(`Coluna "${columnNome}" excluída com sucesso!`);
       setOpen(false);
-      onColumnDeleted();
+      // ✅ OTIMIZADO: Não chamar carregarDados() - o Realtime já atualiza automaticamente
+      console.log('✅ [DeletarColunaDialog] Coluna excluída - Realtime irá atualizar automaticamente');
     } catch (error: any) {
       console.error("Erro ao deletar coluna:", error);
       toast.error(error.message || "Erro ao deletar coluna");
