@@ -490,9 +490,41 @@ export default function Analytics() {
       setCommunicationLoading(true);
 
       // ✅ BUSCA DADOS REAIS DE CONVERSAS (usando colunas corretas da tabela)
-      const {
-        data: conversasData
-      } = await supabase.from("conversas").select("id, numero, telefone_formatado, origem, status, created_at, updated_at, fromme, read, delivered");
+      let conversasQuery = supabase.from("conversas").select("id, numero, telefone_formatado, origem, status, created_at, updated_at, fromme, read, delivered");
+
+      // ✅ FIX: Aplicar filtro de período
+      if (globalFilters.period !== 'all') {
+        const now = new Date();
+        let startDate: Date;
+        switch (globalFilters.period) {
+          case 'today':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            break;
+          case 'week':
+            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case 'month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+          case 'quarter':
+            const quarterStart = Math.floor(now.getMonth() / 3) * 3;
+            startDate = new Date(now.getFullYear(), quarterStart, 1);
+            break;
+          case 'year':
+            startDate = new Date(now.getFullYear(), 0, 1);
+            break;
+          default:
+            startDate = new Date(0);
+        }
+        conversasQuery = conversasQuery.gte('created_at', startDate.toISOString());
+      }
+
+      // Aplicar filtro de empresa se disponível
+      if (userCompanyId) {
+        conversasQuery = conversasQuery.eq('company_id', userCompanyId);
+      }
+
+      const { data: conversasData } = await conversasQuery;
 
       // ✅ CORREÇÃO: Contar CONVERSAS ÚNICAS (números únicos), não mensagens
       const numerosUnicos = new Set<string>();
@@ -568,7 +600,7 @@ export default function Analytics() {
         }
       });
       const satisfacao = totalConversas > 0 ? Math.round(numerosComLeitura.size / totalConversas * 100 * 10) / 10 : 0;
-      console.log(`📊 [Analytics] Conversas únicas: ${totalConversas} (de ${conversasData?.length || 0} mensagens)`);
+      console.log(`📊 [Analytics] Conversas únicas: ${totalConversas} (de ${conversasData?.length || 0} mensagens) - Período: ${globalFilters.period}`);
       setCommunicationStats({
         totalConversas,
         taxaResposta: Math.min(taxaResposta, 100),
@@ -586,10 +618,37 @@ export default function Analytics() {
     try {
       setProductivityLoading(true);
 
+      // ✅ FIX: Calcular data de início baseada no período
+      let startDate: Date | null = null;
+      if (globalFilters.period !== 'all') {
+        const now = new Date();
+        switch (globalFilters.period) {
+          case 'today':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            break;
+          case 'week':
+            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case 'month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+          case 'quarter':
+            const quarterStart = Math.floor(now.getMonth() / 3) * 3;
+            startDate = new Date(now.getFullYear(), quarterStart, 1);
+            break;
+          case 'year':
+            startDate = new Date(now.getFullYear(), 0, 1);
+            break;
+        }
+      }
+
       // ✅ TAREFAS - Buscar dados reais com datas para cálculo de tempo
-      const {
-        data: tarefasData
-      } = await supabase.from("tasks").select("status, created_at, updated_at, due_date");
+      let tarefasQuery = supabase.from("tasks").select("status, created_at, updated_at, due_date");
+      if (startDate) {
+        tarefasQuery = tarefasQuery.gte('created_at', startDate.toISOString());
+      }
+      const { data: tarefasData } = await tarefasQuery;
+
       const tarefasCriadas = tarefasData?.length || 0;
       const tarefasConcluidas = tarefasData?.filter((t: any) => t.status === "completed" || t.status === "done").length || 0;
       const tarefasEmAndamento = tarefasData?.filter((t: any) => t.status === "in_progress" || t.status === "doing").length || 0;
@@ -616,14 +675,17 @@ export default function Analytics() {
         tempoMedioTarefa = Math.round(tempoTotal / tarefasComDatas.length / (1000 * 60 * 60) * 10) / 10; // em horas
       }
 
-      // ✅ COMPROMISSOS - Buscar dados reais
-      const {
-        data: compromissosData
-      } = await supabase.from("compromissos").select("status, data_hora_inicio, data_hora_fim");
+      // ✅ COMPROMISSOS - Buscar dados reais com filtro de período
+      let compromissosQuery = supabase.from("compromissos").select("status, data_hora_inicio, data_hora_fim");
+      if (startDate) {
+        compromissosQuery = compromissosQuery.gte('data_hora_inicio', startDate.toISOString());
+      }
+      const { data: compromissosData } = await compromissosQuery;
+
       const compromissosAgendados = compromissosData?.length || 0;
       const compromissosRealizados = compromissosData?.filter((c: any) => c.status === "realizado" || c.status === "concluido").length || 0;
       const taxaComparecimento = compromissosAgendados > 0 ? compromissosRealizados / compromissosAgendados * 100 : 0;
-      console.log(`📊 [Analytics] Tarefas: ${tarefasCriadas} total, ${tarefasConcluidas} concluídas, ${tarefasEmAndamento} em andamento, ${tarefasPendentes} pendentes, ${tarefasAtrasadas} atrasadas`);
+      console.log(`📊 [Analytics] Tarefas: ${tarefasCriadas} total, ${tarefasConcluidas} concluídas - Período: ${globalFilters.period}`);
       setProductivityStats({
         tarefasCriadas,
         tarefasConcluidas,
