@@ -472,11 +472,43 @@ export default function Tarefas() {
   });
   useEffect(() => {
     carregarDados();
+    // ✅ CORRIGIDO: Buscar apenas usuários da empresa atual (não de subcontas)
     (async () => {
-      const {
-        data
-      } = await supabase.from('profiles').select('id, full_name').order('full_name');
-      setAllUsers(data as any || []);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        // Buscar company_id do usuário atual
+        const { data: userRole } = await supabase
+          .from("user_roles")
+          .select("company_id")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+
+        if (!userRole?.company_id) {
+          console.warn("[Tarefas] Company ID não encontrado");
+          return;
+        }
+
+        // Buscar apenas usuários vinculados à mesma empresa
+        const { data: companyUserRoles } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("company_id", userRole.company_id);
+
+        const userIds = (companyUserRoles || []).map((ur: any) => ur.user_id);
+
+        if (userIds.length > 0) {
+          const { data } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in("id", userIds)
+            .order('full_name');
+          setAllUsers(data as any || []);
+        }
+      } catch (error) {
+        console.error("[Tarefas] Erro ao carregar usuários:", error);
+      }
     })();
 
     // Realtime: tasks (atualizações incrementais)
