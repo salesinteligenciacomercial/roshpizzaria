@@ -6248,27 +6248,45 @@ function Conversas() {
     try {
       setSyncStatus('syncing');
 
-      // Buscar lead existente (não criar automaticamente)
-      const leadData = await findLead(selectedConv);
-      if (leadData) {
-        // Atualizar funil e etapa no Supabase
-        const {
-          error
-        } = await supabase.from('leads').update({
-          funil_id: selectedFunilId,
-          etapa_id: selectedFunnel
-        }).eq('id', leadData.id);
-        if (error) {
-          console.error('Erro ao atualizar funil no Supabase:', error);
+      // Buscar lead existente
+      let leadData = await findLead(selectedConv);
+      
+      // ✅ CORREÇÃO: Se não encontrou lead, criar automaticamente
+      if (!leadData) {
+        console.log('📝 [addToFunnel] Lead não encontrado - criando automaticamente...');
+        leadData = await createLeadManually(selectedConv);
+        if (!leadData) {
           setSyncStatus('error');
-          toast.error('Erro ao salvar no funil');
+          toast.error('Erro ao criar lead no CRM. Tente salvar o lead primeiro.');
           setTimeout(() => setSyncStatus('idle'), 2000);
           return;
         }
-        console.log('✅ Lead adicionado ao funil no Supabase');
-        setSyncStatus('synced');
-        setTimeout(() => setSyncStatus('idle'), 1000);
+        console.log('✅ [addToFunnel] Lead criado automaticamente:', leadData.id);
       }
+      
+      // Atualizar funil e etapa no Supabase
+      console.log('[addToFunnel] Atualizando lead:', {
+        leadId: leadData.id,
+        funilId: selectedFunilId,
+        etapaId: selectedFunnel
+      });
+      
+      const { error } = await supabase.from('leads').update({
+        funil_id: selectedFunilId,
+        etapa_id: selectedFunnel
+      }).eq('id', leadData.id);
+      
+      if (error) {
+        console.error('Erro ao atualizar funil no Supabase:', error);
+        setSyncStatus('error');
+        toast.error('Erro ao salvar no funil');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
+      }
+      
+      console.log('✅ Lead adicionado ao funil no Supabase');
+      setSyncStatus('synced');
+      setTimeout(() => setSyncStatus('idle'), 1000);
 
       // Buscar nome da etapa para exibição local
       const etapaSelecionada = etapas.find(e => e.id === selectedFunnel);
@@ -6289,7 +6307,7 @@ function Conversas() {
 
       // Recarregar dados do lead vinculado
       await recarregarLeadVinculado(selectedConv.id);
-      toast.success(`Lead adicionado ao funil!`);
+      toast.success(`Lead adicionado ao funil com sucesso!`);
     } catch (error) {
       console.error('Erro ao adicionar ao funil:', error);
       setSyncStatus('error');
