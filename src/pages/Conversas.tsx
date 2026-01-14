@@ -6052,37 +6052,51 @@ function Conversas() {
       setSyncStatus('syncing');
 
       // Buscar lead existente (não criar automaticamente)
-      const leadData = await findLead(selectedConv);
-      if (leadData) {
-        // Atualizar tags no Supabase
-        const updatedTags = [...(leadData.tags || []), newTag.trim()];
-        const {
-          error
-        } = await supabase.from('leads').update({
-          tags: updatedTags
-        }).eq('id', leadData.id);
-        if (error) {
-          console.error('Erro ao atualizar tags no Supabase:', error);
-          setSyncStatus('error');
-          toast.error('Erro ao salvar tag');
-          setTimeout(() => setSyncStatus('idle'), 2000);
-          return;
-        }
-        console.log('✅ Tag adicionada no Supabase');
-        setSyncStatus('synced');
-        setTimeout(() => setSyncStatus('idle'), 1000);
+      const leadData = leadVinculado || await findLead(selectedConv);
+      
+      // 🔒 CORREÇÃO: Tags só podem ser adicionadas a leads vinculados
+      if (!leadData) {
+        setSyncStatus('error');
+        toast.error('Crie o lead no CRM antes de adicionar tags');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
       }
+      
+      // Atualizar tags no Supabase
+      const updatedTags = [...(leadData.tags || []), newTag.trim()];
+      const {
+        error
+      } = await supabase.from('leads').update({
+        tags: updatedTags
+      }).eq('id', leadData.id);
+      if (error) {
+        console.error('Erro ao atualizar tags no Supabase:', error);
+        setSyncStatus('error');
+        toast.error('Erro ao salvar tag');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
+      }
+      console.log('✅ Tag adicionada no Supabase');
+      setSyncStatus('synced');
+      setTimeout(() => setSyncStatus('idle'), 1000);
 
       // Atualizar localmente (será sincronizado via realtime)
       const updatedConversations = conversations.map(conv => conv.id === selectedConv.id ? {
         ...conv,
-        tags: [...(conv.tags || []), newTag.trim()]
+        tags: updatedTags
       } : conv);
       saveConversations(updatedConversations);
       setSelectedConv({
         ...selectedConv,
-        tags: [...(selectedConv.tags || []), newTag.trim()]
+        tags: updatedTags
       });
+      
+      // Atualizar lead vinculado
+      setLeadVinculado({
+        ...leadData,
+        tags: updatedTags
+      });
+      
       setNewTag("");
       await refreshTags(); // Atualizar lista de tags disponíveis
       toast.success("Tag adicionada!");
@@ -6104,45 +6118,51 @@ function Conversas() {
       setSyncStatus('syncing');
 
       // Buscar lead existente (não criar automaticamente)
-      const leadData = await findLead(selectedConv);
-      if (leadData) {
-        // Atualizar tags no Supabase
-        const updatedTags = [...(leadData.tags || []), tag];
-        const {
-          error
-        } = await supabase.from('leads').update({
-          tags: updatedTags
-        }).eq('id', leadData.id);
-        if (error) {
-          console.error('Erro ao atualizar tags no Supabase:', error);
-          setSyncStatus('error');
-          toast.error('Erro ao salvar tag');
-          setTimeout(() => setSyncStatus('idle'), 2000);
-          return;
-        }
-        console.log('✅ Tag adicionada no Supabase');
-        setSyncStatus('synced');
-        setTimeout(() => setSyncStatus('idle'), 1000);
+      const leadData = leadVinculado || await findLead(selectedConv);
+      
+      // 🔒 CORREÇÃO: Tags só podem ser adicionadas a leads vinculados
+      if (!leadData) {
+        setSyncStatus('error');
+        toast.error('Crie o lead no CRM antes de adicionar tags');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
       }
+      
+      // Atualizar tags no Supabase
+      const updatedTags = [...(leadData.tags || []), tag];
+      const {
+        error
+      } = await supabase.from('leads').update({
+        tags: updatedTags
+      }).eq('id', leadData.id);
+      if (error) {
+        console.error('Erro ao atualizar tags no Supabase:', error);
+        setSyncStatus('error');
+        toast.error('Erro ao salvar tag');
+        setTimeout(() => setSyncStatus('idle'), 2000);
+        return;
+      }
+      console.log('✅ Tag adicionada no Supabase');
+      setSyncStatus('synced');
+      setTimeout(() => setSyncStatus('idle'), 1000);
 
       // Atualizar localmente
       const updatedConversations = conversations.map(conv => conv.id === selectedConv.id ? {
         ...conv,
-        tags: [...(conv.tags || []), tag]
+        tags: updatedTags
       } : conv);
       saveConversations(updatedConversations);
       setSelectedConv({
         ...selectedConv,
-        tags: [...(selectedConv.tags || []), tag]
+        tags: updatedTags
       });
 
-      // Atualizar lead vinculado se existir
-      if (leadVinculado) {
-        setLeadVinculado({
-          ...leadVinculado,
-          tags: updatedConversations.find(c => c.id === selectedConv.id)?.tags || []
-        });
-      }
+      // Atualizar lead vinculado
+      setLeadVinculado({
+        ...leadData,
+        tags: updatedTags
+      });
+      
       toast.success("Tag adicionada!");
     } catch (error) {
       console.error('Erro ao adicionar tag:', error);
@@ -6156,8 +6176,9 @@ function Conversas() {
     try {
       setSyncStatus('syncing');
 
-      // Buscar lead existente
-      const leadData = await findLead(selectedConv);
+      // Usar leadVinculado primeiro para evitar nova busca
+      const leadData = leadVinculado || await findLead(selectedConv);
+      
       if (leadData) {
         // Remover tag do array
         const updatedTags = (leadData.tags || []).filter(t => t !== tag);
@@ -6176,28 +6197,40 @@ function Conversas() {
         console.log('✅ Tag removida no Supabase');
         setSyncStatus('synced');
         setTimeout(() => setSyncStatus('idle'), 1000);
-      }
-
-      // Atualizar localmente
-      const updatedTags = (selectedConv.tags || []).filter(t => t !== tag);
-      const updatedConversations = conversations.map(conv => conv.id === selectedConv.id ? {
-        ...conv,
-        tags: updatedTags
-      } : conv);
-      saveConversations(updatedConversations);
-      setSelectedConv({
-        ...selectedConv,
-        tags: updatedTags
-      });
-
-      // Atualizar lead vinculado se existir
-      if (leadVinculado) {
-        setLeadVinculado({
-          ...leadVinculado,
+        
+        // Atualizar localmente
+        const updatedConversations = conversations.map(conv => conv.id === selectedConv.id ? {
+          ...conv,
+          tags: updatedTags
+        } : conv);
+        saveConversations(updatedConversations);
+        setSelectedConv({
+          ...selectedConv,
           tags: updatedTags
         });
+
+        // Atualizar lead vinculado
+        setLeadVinculado({
+          ...leadData,
+          tags: updatedTags
+        });
+        
+        toast.success("Tag removida!");
+      } else {
+        // Se não há lead, remover apenas localmente (não deveria acontecer)
+        const updatedTags = (selectedConv.tags || []).filter(t => t !== tag);
+        const updatedConversations = conversations.map(conv => conv.id === selectedConv.id ? {
+          ...conv,
+          tags: updatedTags
+        } : conv);
+        saveConversations(updatedConversations);
+        setSelectedConv({
+          ...selectedConv,
+          tags: updatedTags
+        });
+        setSyncStatus('synced');
+        setTimeout(() => setSyncStatus('idle'), 1000);
       }
-      toast.success("Tag removida!");
     } catch (error) {
       console.error('Erro ao remover tag:', error);
       setSyncStatus('error');
