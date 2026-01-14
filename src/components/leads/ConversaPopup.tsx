@@ -542,34 +542,66 @@ export function ConversaPopup({
     }
   };
 
-  // ✅ NOVO: Mover lead para funil/etapa
+  // ✅ CORRIGIDO: Mover lead para funil/etapa - buscar company_id de forma robusta
   const handleMoverParaFunil = async (funilId: string, etapaId: string) => {
     if (!leadVinculado?.id) {
       toast.error('Salve o lead antes de mover para um funil');
       return;
     }
+    
+    // Validar que temos funilId e etapaId válidos
+    if (!funilId || !etapaId) {
+      console.error('[handleMoverParaFunil] funilId ou etapaId inválidos:', { funilId, etapaId });
+      toast.error('Selecione um funil válido');
+      return;
+    }
+    
     try {
+      // Buscar company_id de forma robusta - do lead ou da sessão
+      let companyIdToUse = leadVinculado.company_id;
+      if (!companyIdToUse) {
+        companyIdToUse = await getCompanyId();
+      }
+      
+      if (!companyIdToUse) {
+        toast.error('Não foi possível identificar a empresa');
+        return;
+      }
+      
+      console.log('[handleMoverParaFunil] Atualizando lead:', { 
+        leadId: leadVinculado.id, 
+        funilId, 
+        etapaId, 
+        companyId: companyIdToUse 
+      });
+      
       const { error } = await supabase
         .from('leads')
         .update({ 
           funil_id: funilId, 
           etapa_id: etapaId,
-          company_id: leadVinculado.company_id // Preservar company_id
+          company_id: companyIdToUse // Garantir company_id sempre presente
         })
         .eq('id', leadVinculado.id);
       
-      if (error) throw error;
+      if (error) {
+        console.error('[handleMoverParaFunil] Erro do Supabase:', error);
+        throw error;
+      }
       
-      // Atualizar estado local
+      // Atualizar estado local com company_id garantido
       setLeadVinculado((prev: any) => ({
         ...prev,
         funil_id: funilId,
-        etapa_id: etapaId
+        etapa_id: etapaId,
+        company_id: companyIdToUse
       }));
-      toast.success('Lead movido para o funil');
+      
+      console.log('[handleMoverParaFunil] ✅ Lead movido com sucesso para funil:', funilId);
+      toast.success('Lead adicionado ao funil com sucesso!');
     } catch (err) {
-      console.error('Erro ao mover lead:', err);
-      toast.error('Erro ao mover lead para funil');
+      console.error('[handleMoverParaFunil] Erro ao mover lead:', err);
+      toast.error('Erro ao adicionar lead ao funil');
     }
   };
 
@@ -1522,28 +1554,32 @@ export function ConversaPopup({
                           Não está em nenhum funil
                         </p>
                         {leadVinculado ? (
-                          funis.length > 0 ? (
+                          funis.filter(f => f.etapas && f.etapas.length > 0).length > 0 ? (
                             <Select onValueChange={(value) => {
                               const [funilId, etapaId] = value.split('|');
+                              if (!etapaId) {
+                                toast.error('Este funil não possui etapas configuradas');
+                                return;
+                              }
                               handleMoverParaFunil(funilId, etapaId);
                             }}>
                               <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Adicionar ao Funil" />
                               </SelectTrigger>
                               <SelectContent className="z-[9999]">
-                                {funis.map((funil) => (
+                                {funis.filter(f => f.etapas && f.etapas.length > 0).map((funil) => (
                                   <SelectItem 
                                     key={funil.id} 
-                                    value={`${funil.id}|${funil.etapas[0]?.id || ''}`}
+                                    value={`${funil.id}|${funil.etapas[0]?.id}`}
                                   >
-                                    {funil.nome}
+                                    {funil.nome} ({funil.etapas.length} etapas)
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           ) : (
                             <p className="text-xs text-muted-foreground">
-                              {loadingFunis ? "Carregando funis..." : "Nenhum funil disponível"}
+                              {loadingFunis ? "Carregando funis..." : "Nenhum funil com etapas disponível"}
                             </p>
                           )
                         ) : (
