@@ -2,7 +2,9 @@ import React, { useEffect, useState, memo, useCallback } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus, Paperclip, Clock, MoveHorizontal } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus, Paperclip, Clock, MoveHorizontal, DollarSign, Save, Loader2, Pencil } from "lucide-react";
 import { AgendaModal } from "@/components/agenda/AgendaModal";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -79,6 +81,10 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
   const [creatorColor, setCreatorColor] = useState<string>('#6366f1');
   const [creatorName, setCreatorName] = useState<string | null>(null);
   const [userCompanyId, setUserCompanyId] = useState<string | null>(null);
+  const [valorDialogOpen, setValorDialogOpen] = useState(false);
+  const [valorInput, setValorInput] = useState("");
+  const [salvandoValor, setSalvandoValor] = useState(false);
+  const [leadValue, setLeadValue] = useState(lead.value);
 
   // Função para gerar cor consistente baseada no ID do usuário
   const generateColorFromId = (id: string): string => {
@@ -509,6 +515,41 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
     }
   }, [lead.id, lead.etapa_id, onLeadMoved]);
 
+  // Salvar valor da venda rapidamente
+  const handleSalvarValor = useCallback(async () => {
+    setSalvandoValor(true);
+    const valorNumerico = valorInput ? parseFloat(valorInput.replace(/[^\d.,]/g, '').replace(',', '.')) : 0;
+    
+    try {
+      // Preservar company_id
+      const { data: leadData } = await supabase
+        .from("leads")
+        .select("company_id")
+        .eq("id", lead.id)
+        .single();
+
+      const { error } = await supabase
+        .from("leads")
+        .update({ 
+          value: valorNumerico,
+          company_id: leadData?.company_id
+        })
+        .eq("id", lead.id);
+      
+      if (error) throw error;
+      
+      setLeadValue(valorNumerico);
+      setValorDialogOpen(false);
+      toast.success("Valor atualizado com sucesso!");
+      onLeadMoved?.();
+    } catch (err) {
+      console.error("Erro ao salvar valor:", err);
+      toast.error("Erro ao salvar valor");
+    } finally {
+      setSalvandoValor(false);
+    }
+  }, [lead.id, valorInput, onLeadMoved]);
+
   return (
     <Card
       ref={setNodeRef}
@@ -718,17 +759,39 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          {/* Valor Estimado à esquerda */}
-          {lead.value !== undefined && lead.value > 0 ? (
-            <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground font-medium">Valor Estimado</span>
-              <Badge className="font-semibold bg-gradient-success text-success-foreground shadow-sm mt-0.5 w-fit text-xs">
-                R$ {lead.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </Badge>
-            </div>
-          ) : (
-            <div />
-          )}
+          {/* Valor Estimado à esquerda - CLICÁVEL PARA EDITAR */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setValorInput(leadValue?.toString() || "");
+                    setValorDialogOpen(true);
+                  }}
+                  className="flex flex-col items-start hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors group/valor cursor-pointer text-left"
+                >
+                  <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                    Valor Estimado
+                    <Pencil className="h-2.5 w-2.5 opacity-0 group-hover/valor:opacity-100 transition-opacity" />
+                  </span>
+                  {leadValue !== undefined && leadValue > 0 ? (
+                    <Badge className="font-semibold bg-gradient-success text-success-foreground shadow-sm mt-0.5 w-fit text-xs">
+                      R$ {leadValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                      <DollarSign className="h-3 w-3" />
+                      Adicionar valor
+                    </span>
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Clique para {leadValue ? 'editar' : 'adicionar'} o valor</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
 
           {/* Botões de ação à direita */}
           <div className="flex items-center gap-0.5">
@@ -1006,6 +1069,59 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
             leadName={lead.nome}
           />
         )}
+
+        {/* Dialog: Editar Valor da Venda */}
+        <Dialog open={valorDialogOpen} onOpenChange={setValorDialogOpen}>
+          <DialogContent className="max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-green-600" />
+                Valor da Venda / Negociação
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div>
+                <Label htmlFor="valorLead">Valor (R$)</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">R$</span>
+                  <Input
+                    id="valorLead"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="1.500,00"
+                    value={valorInput}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^\d.,]/g, '');
+                      setValorInput(value);
+                    }}
+                    className="text-lg font-medium pl-10"
+                    autoFocus
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Digite o valor estimado ou fechado da negociação
+                </p>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setValorDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={handleSalvarValor}
+                  className="bg-green-600 hover:bg-green-700"
+                  disabled={salvandoValor}
+                >
+                  {salvandoValor ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Salvar Valor
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </Card>
   );
