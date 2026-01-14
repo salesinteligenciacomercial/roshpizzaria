@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff, Camera, X, User } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface Colaborador {
   id: string;
@@ -28,6 +29,7 @@ interface Colaborador {
   email: string;
   setor?: string;
   funcao?: string;
+  avatar_url?: string;
 }
 
 interface EditarUsuarioDialogProps {
@@ -48,6 +50,8 @@ export function EditarUsuarioDialog({
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState({
     nome: "",
@@ -55,19 +59,154 @@ export function EditarUsuarioDialog({
     telefone: "",
     funcao: "",
     password: "",
+    avatar_url: "",
   });
 
   useEffect(() => {
-    if (colaborador) {
-      setFormData({
-        nome: colaborador.nome || "",
-        email: colaborador.email || "",
-        telefone: "",
-        funcao: colaborador.funcao || "vendedor",
-        password: "",
-      });
+    const loadUserData = async () => {
+      if (colaborador) {
+        // Buscar avatar_url do profile
+        let avatarUrl = "";
+        if (colaborador.userId) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("avatar_url")
+            .eq("id", colaborador.userId)
+            .maybeSingle();
+          avatarUrl = profile?.avatar_url || "";
+        }
+        
+        setFormData({
+          nome: colaborador.nome || "",
+          email: colaborador.email || "",
+          telefone: "",
+          funcao: colaborador.funcao || "vendedor",
+          password: "",
+          avatar_url: avatarUrl,
+        });
+      }
+    };
+    
+    if (open && colaborador) {
+      loadUserData();
     }
-  }, [colaborador]);
+  }, [colaborador, open]);
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !colaborador?.userId) return;
+
+    // Validar tipo de arquivo
+    if (!file.type.startsWith('image/')) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Por favor, selecione uma imagem válida",
+      });
+      return;
+    }
+
+    // Validar tamanho (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "A imagem deve ter no máximo 2MB",
+      });
+      return;
+    }
+
+    setUploadingAvatar(true);
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${colaborador.userId}/avatar.${fileExt}`;
+      
+      // Fazer upload para o bucket user-avatars
+      const { error: uploadError } = await supabase.storage
+        .from('user-avatars')
+        .upload(fileName, file, { 
+          upsert: true,
+          contentType: file.type
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Obter URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('user-avatars')
+        .getPublicUrl(fileName);
+
+      // Adicionar timestamp para evitar cache
+      const avatarUrlWithTimestamp = `${publicUrl}?t=${Date.now()}`;
+
+      // Atualizar profile com a nova URL
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: avatarUrlWithTimestamp })
+        .eq('id', colaborador.userId);
+
+      if (updateError) throw updateError;
+
+      setFormData(prev => ({ ...prev, avatar_url: avatarUrlWithTimestamp }));
+
+      toast({
+        title: "Sucesso",
+        description: "Foto de perfil atualizada",
+      });
+    } catch (error: any) {
+      console.error('Erro ao fazer upload:', error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao atualizar foto",
+        description: error.message || "Ocorreu um erro ao fazer upload da imagem",
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!colaborador?.userId) return;
+
+    setUploadingAvatar(true);
+
+    try {
+      // Remover arquivo do storage
+      const { error: deleteError } = await supabase.storage
+        .from('user-avatars')
+        .remove([`${colaborador.userId}/avatar.jpg`, `${colaborador.userId}/avatar.png`, `${colaborador.userId}/avatar.webp`]);
+
+      // Ignorar erro se arquivo não existir
+      if (deleteError && !deleteError.message.includes('Not found')) {
+        throw deleteError;
+      }
+
+      // Atualizar profile removendo avatar_url
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: null })
+        .eq('id', colaborador.userId);
+
+      if (updateError) throw updateError;
+
+      setFormData(prev => ({ ...prev, avatar_url: "" }));
+
+      toast({
+        title: "Foto removida",
+        description: "Foto de perfil removida com sucesso",
+      });
+    } catch (error: any) {
+      console.error('Erro ao remover foto:', error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao remover foto",
+        description: error.message || "Ocorreu um erro ao remover a foto",
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!colaborador?.userId) {
@@ -165,6 +304,15 @@ export function EditarUsuarioDialog({
     }
   };
 
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
@@ -176,6 +324,60 @@ export function EditarUsuarioDialog({
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
+          {/* Upload de Foto de Perfil */}
+          <div className="flex flex-col items-center gap-3">
+            <Label>Foto de Perfil</Label>
+            <div className="relative group">
+              <Avatar className="h-24 w-24 border-2 border-border">
+                <AvatarImage src={formData.avatar_url} alt={formData.nome} />
+                <AvatarFallback className="text-lg bg-primary/10 text-primary">
+                  {formData.nome ? getInitials(formData.nome) : <User className="h-8 w-8" />}
+                </AvatarFallback>
+              </Avatar>
+              
+              {uploadingAvatar && (
+                <div className="absolute inset-0 bg-background/80 rounded-full flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              )}
+              
+              <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-white hover:bg-white/20"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                >
+                  <Camera className="h-4 w-4" />
+                </Button>
+                {formData.avatar_url && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-white hover:bg-white/20"
+                    onClick={handleRemoveAvatar}
+                    disabled={uploadingAvatar}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarUpload}
+            />
+            <p className="text-xs text-muted-foreground">
+              Clique na foto para alterar (max 2MB)
+            </p>
+          </div>
+
           <div className="grid gap-2">
             <Label htmlFor="edit-nome">Nome Completo *</Label>
             <Input

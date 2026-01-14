@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Key,
   Webhook,
@@ -26,7 +27,8 @@ import {
   BarChart3,
   FileText,
   Send,
-  DollarSign
+  DollarSign,
+  User
 } from "lucide-react";
 import { WhatsAppDashboard } from "@/components/whatsapp/WhatsAppDashboard";
 import { WhatsAppTemplatesManager } from "@/components/whatsapp/WhatsAppTemplatesManager";
@@ -66,6 +68,7 @@ interface Colaborador {
   atendimentosAtivos: number;
   capacidadeMaxima: number;
   status: "disponivel" | "ocupado" | "ausente";
+  avatar_url?: string | null;
 }
 
 export default function Configuracoes() {
@@ -230,7 +233,7 @@ export default function Configuracoes() {
       const userIds = userRoles.map((ur: any) => ur.user_id);
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, avatar_url')
         .in('id', userIds);
 
       if (profilesError) throw profilesError;
@@ -248,6 +251,7 @@ export default function Configuracoes() {
           atendimentosAtivos: 0,
           capacidadeMaxima: 10,
           status: "disponivel" as const,
+          avatar_url: profile?.avatar_url || null,
         };
       });
       
@@ -520,15 +524,21 @@ export default function Configuracoes() {
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10 border">
+                          <AvatarImage src={colaborador.avatar_url || undefined} alt={colaborador.nome} />
+                          <AvatarFallback className="bg-primary/10 text-primary">
+                            {colaborador.nome ? colaborador.nome.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : <User className="h-4 w-4" />}
+                          </AvatarFallback>
+                        </Avatar>
                         <div>
                           <h4 className="font-semibold">{colaborador.nome}</h4>
                           <p className="text-sm text-muted-foreground">{colaborador.email}</p>
                         </div>
                         {getStatusBadge(colaborador.status)}
                       </div>
-                      <div className="mt-2 flex gap-4 text-sm text-muted-foreground">
+                      <div className="mt-2 ml-13 flex gap-4 text-sm text-muted-foreground">
                         <span>
-                          <strong>Setor:</strong> {colaborador.setor}
+                          <strong>Setor:</strong> {colaborador.setor || "—"}
                         </span>
                         <span>
                           <strong>Função:</strong> {colaborador.funcao || "—"}

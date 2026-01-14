@@ -71,6 +71,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
   const [conversaOpen, setConversaOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [responsaveisNomes, setResponsaveisNomes] = useState<string[]>([]);
+  const [responsaveisData, setResponsaveisData] = useState<{id: string; nome: string; avatar_url?: string | null}[]>([]);
   const [responsavelDialogOpen, setResponsavelDialogOpen] = useState(false);
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [responsaveisSelecionados, setResponsaveisSelecionados] = useState<string[]>([]);
@@ -217,6 +218,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
       
       if (!leadData) {
         setResponsaveisNomes([]);
+        setResponsaveisData([]);
         setResponsaveisSelecionados([]);
         return;
       }
@@ -237,17 +239,23 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
       
       if (todosResponsaveis.length === 0) {
         setResponsaveisNomes([]);
+        setResponsaveisData([]);
         return;
       }
       
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, full_name, email")
+        .select("id, full_name, email, avatar_url")
         .in("id", todosResponsaveis);
       
       if (profiles) {
         const nomes = profiles.map(p => p.full_name || p.email || "Sem nome");
         setResponsaveisNomes(nomes);
+        setResponsaveisData(profiles.map(p => ({
+          id: p.id,
+          nome: p.full_name || p.email || "Sem nome",
+          avatar_url: p.avatar_url
+        })));
       }
     } catch (error) {
       console.error("Erro ao carregar responsáveis:", error);
@@ -614,14 +622,28 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
             <div className="flex-1 min-w-0">
               <h4 className="font-semibold text-sm text-foreground mb-1">{lead.nome}</h4>
               
-              {/* Responsáveis (múltiplos) */}
-              {responsaveisNomes.length > 0 && (
+              {/* Responsáveis (múltiplos) com foto */}
+              {responsaveisData.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1 mb-1">
-                  {responsaveisNomes.map((nome, index) => (
-                    <Badge key={index} variant="outline" className="text-xs bg-primary/5 border-primary/20">
-                      <User className="h-2.5 w-2.5 mr-1" />
-                      {nome}
-                    </Badge>
+                  {responsaveisData.map((resp) => (
+                    <TooltipProvider key={resp.id} delayDuration={100}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center gap-1 bg-primary/5 border border-primary/20 rounded-full pr-2 pl-0.5 py-0.5">
+                            <Avatar className="h-5 w-5">
+                              <AvatarImage src={resp.avatar_url || undefined} alt={resp.nome} />
+                              <AvatarFallback className="text-[8px] bg-primary/20 text-primary">
+                                {resp.nome.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs text-foreground truncate max-w-[60px]">{resp.nome.split(' ')[0]}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="z-[9999]">
+                          <p className="font-medium">{resp.nome}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   ))}
                 </div>
               )}
