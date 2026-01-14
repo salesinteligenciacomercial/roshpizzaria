@@ -135,21 +135,32 @@ export function AdicionarLeadExistenteDialog({ funilId, etapaInicial, onLeadAdde
     setLoading(true);
 
     try {
-      // 🔒 Buscar lead para preservar company_id
+      // Buscar sessão do usuário atual
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // 🔒 Buscar lead para preservar company_id e verificar owner_id
       const { data: leadData } = await supabase
         .from("leads")
-        .select("company_id")
+        .select("company_id, owner_id")
         .eq("id", selectedLead)
         .single();
 
+      // Se o lead não tem owner_id, atribuir o usuário atual
+      const updateData: any = {
+        funil_id: funilId,
+        etapa_id: etapaInicial.id,
+        status: "ativo",
+        company_id: leadData?.company_id // 🔒 Preservar company_id
+      };
+
+      // Atribuir owner_id se não existir e houver usuário logado
+      if (!leadData?.owner_id && session?.user?.id) {
+        updateData.owner_id = session.user.id;
+      }
+
       const { error } = await supabase
         .from("leads")
-        .update({
-          funil_id: funilId,
-          etapa_id: etapaInicial.id,
-          status: "ativo",
-          company_id: leadData?.company_id // 🔒 Preservar company_id
-        })
+        .update(updateData)
         .eq("id", selectedLead);
 
       if (error) throw error;

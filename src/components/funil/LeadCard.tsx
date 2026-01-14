@@ -373,23 +373,32 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
       try {
         const { data: leadData } = await supabase
           .from("leads")
-          .select("owner_id")
+          .select("owner_id, responsavel_id")
           .eq("id", lead.id)
           .maybeSingle();
         
-        if (leadData?.owner_id) {
-          setCreatorColor(generateColorFromId(leadData.owner_id));
+        // Tentar primeiro o owner_id, se não existir, usar responsavel_id
+        const creatorId = leadData?.owner_id || leadData?.responsavel_id;
+        
+        if (creatorId) {
+          setCreatorColor(generateColorFromId(creatorId));
           
           // Buscar nome do criador
           const { data: profile } = await supabase
             .from("profiles")
             .select("full_name, email")
-            .eq("id", leadData.owner_id)
+            .eq("id", creatorId)
             .maybeSingle();
           
           if (profile) {
             setCreatorName(profile.full_name || profile.email || null);
+          } else {
+            setCreatorName(null);
           }
+        } else {
+          // Se não há criador identificado, usar cor padrão e indicar como "Sistema"
+          setCreatorColor('#94a3b8'); // Cor cinza para leads sem criador identificado
+          setCreatorName(null);
         }
       } catch (error) {
         console.error("Erro ao carregar criador:", error);
