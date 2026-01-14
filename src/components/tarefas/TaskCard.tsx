@@ -713,6 +713,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
   }, []);
 
   // ✅ CORRIGIDO: Usa campo real checklist, sem fallback para descrição
+  // ✅ FIX: Removido onUpdate() para evitar recarregamento da página - estado local já foi atualizado
   const toggleChecklist = useCallback(async (itemId: string, checked: boolean) => {
     const updated = (localChecklist || []).map((i) => (i.id === itemId ? { ...i, done: checked } : i));
     setLocalChecklist(updated);
@@ -723,16 +724,18 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
         .update({ checklist: updated })
         .eq('id', task.id);
       if (error) throw error;
-      onUpdate();
+      // ✅ NÃO chamar onUpdate() aqui - o estado local já foi atualizado
+      // e o realtime do Supabase sincronizará com outros componentes se necessário
     } catch (e) {
       // Reverter estado local em caso de erro
       setLocalChecklist(task.checklist || []);
       console.error('Erro ao atualizar checklist:', e);
       toast.error('Erro ao atualizar checklist');
     }
-  }, [localChecklist, task.id, task.checklist, onUpdate]);
+  }, [localChecklist, task.id, task.checklist]);
 
   // ✅ CORRIGIDO: Usa campo real checklist, sem fallback para descrição
+  // ✅ FIX: Removido onUpdate() para evitar recarregamento da página
   const addChecklistItem = useCallback(async () => {
     const text = newItem.trim();
     if (!text) return;
@@ -746,14 +749,14 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
         .update({ checklist: updated })
         .eq('id', task.id);
       if (error) throw error;
-      onUpdate();
+      // ✅ NÃO chamar onUpdate() - estado local já atualizado
     } catch (e) {
       // Reverter estado local em caso de erro
       console.error("Erro ao adicionar item ao checklist:", e);
       setLocalChecklist(task.checklist || []);
       toast.error('Erro ao adicionar item ao checklist');
     }
-  }, [newItem, localChecklist, task.id, task.checklist, onUpdate]);
+  }, [newItem, localChecklist, task.id, task.checklist]);
 
   // ✅ NOVO: Função para editar texto de item do checklist
   const startEditingItem = useCallback((itemId: string, currentText: string) => {
@@ -766,6 +769,7 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
     setEditingText("");
   }, []);
 
+  // ✅ FIX: Removido onUpdate() para evitar recarregamento da página
   const saveEditedItem = useCallback(async () => {
     const text = editingText.trim();
     if (!text) {
@@ -787,16 +791,17 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
         .update({ checklist: updated })
         .eq('id', task.id);
       if (error) throw error;
-      onUpdate();
+      // ✅ NÃO chamar onUpdate() - estado local já atualizado
       toast.success("Item do checklist atualizado");
     } catch (e) {
       console.error("Erro ao editar item do checklist:", e);
       setLocalChecklist(task.checklist || []);
       toast.error('Erro ao editar item do checklist');
     }
-  }, [editingText, editingItemId, localChecklist, task.id, task.checklist, onUpdate]);
+  }, [editingText, editingItemId, localChecklist, task.id, task.checklist]);
 
   // ✅ NOVO: Função para excluir item do checklist
+  // ✅ FIX: Removido onUpdate() para evitar recarregamento da página
   const removeChecklistItem = useCallback(async (itemId: string) => {
     const updated = (localChecklist || []).filter((i) => i.id !== itemId);
     setLocalChecklist(updated);
@@ -808,14 +813,14 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
         .update({ checklist: updated })
         .eq('id', task.id);
       if (error) throw error;
-      onUpdate();
+      // ✅ NÃO chamar onUpdate() - estado local já atualizado
       toast.success("Item do checklist removido");
     } catch (e) {
       console.error("Erro ao remover item do checklist:", e);
       setLocalChecklist(task.checklist || []);
       toast.error('Erro ao remover item do checklist');
     }
-  }, [localChecklist, task.id, task.checklist, onUpdate]);
+  }, [localChecklist, task.id, task.checklist]);
 
   const sendReminderNow = useCallback(async () => {
     try {
