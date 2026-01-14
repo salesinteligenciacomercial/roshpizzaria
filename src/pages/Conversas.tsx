@@ -9667,17 +9667,23 @@ function Conversas() {
           <div className="space-y-4 pt-2">
             <div>
               <Label htmlFor="valorVendaConversas">Valor (R$)</Label>
-              <Input
-                id="valorVendaConversas"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0,00"
-                value={valorVendaInput}
-                onChange={(e) => setValorVendaInput(e.target.value)}
-                className="text-lg font-medium"
-                autoFocus
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">R$</span>
+                <Input
+                  id="valorVendaConversas"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="1.500,00"
+                  value={valorVendaInput}
+                  onChange={(e) => {
+                    // Permitir apenas números, vírgula e ponto
+                    const value = e.target.value.replace(/[^\d.,]/g, '');
+                    setValorVendaInput(value);
+                  }}
+                  className="text-lg font-medium pl-10"
+                  autoFocus
+                />
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Digite o valor estimado ou fechado da negociação
               </p>
