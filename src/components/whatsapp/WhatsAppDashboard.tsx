@@ -74,17 +74,18 @@ export function WhatsAppDashboard({ companyId }: DashboardProps) {
     try {
       setRefreshing(true);
       
-      const { data, error } = await supabase.functions.invoke('whatsapp-analytics', {
-        body: {},
-        headers: {}
-      });
+      const session = await supabase.auth.getSession();
+      const accessToken = session.data.session?.access_token;
+      
+      if (!accessToken) {
+        throw new Error('Usuário não autenticado');
+      }
 
-      // Usar query params via URL manual já que functions.invoke não suporta bem
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-analytics?company_id=${companyId}&period=${period}`,
         {
           headers: {
-            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json'
           }
         }
