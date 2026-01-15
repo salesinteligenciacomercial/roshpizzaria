@@ -23,7 +23,7 @@ import { MessageActions } from "./MessageActions";
 import { PDFPreview } from "./PDFPreview";
 import { PdfViewerDialog } from "./PdfViewerDialog";
 import { toast } from "@/hooks/use-toast";
-import { getMediaUrl, isPermanentUrl } from "@/utils/mediaLoader";
+import { getMediaUrl, isPermanentUrl, MediaExpiredError } from "@/utils/mediaLoader";
 import { TextWithLinks } from "./LinkPreview";
 
 interface Message {
@@ -163,7 +163,7 @@ function MessageItemComponent({
           setMediaUrl(url);
           setMediaLoading(false);
         })
-        .catch((error) => {
+        .catch((error: any) => {
           console.error('❌ [MESSAGE-ITEM] Erro ao carregar mídia:', {
             id: message.id,
             type: message.type,
@@ -171,23 +171,17 @@ function MessageItemComponent({
             mediaUrlPreview: message.mediaUrl?.substring(0, 50)
           });
           
-          // ⚡ Detectar mídia expirada
-          if (error?.message === 'MEDIA_EXPIRED') {
+          // ⚡ Detectar mídia expirada (qualquer erro de mídia resulta em expirado para não quebrar UI)
+          if (error?.message === 'MEDIA_EXPIRED' || error instanceof MediaExpiredError) {
             console.warn('⚠️ [MESSAGE-ITEM] Mídia expirada:', message.id);
             setMediaExpired(true);
             setMediaLoading(false);
             return;
           }
           
-          // ⚡ FALLBACK: Se falhar e URL original é permanente, usar
-          if (message.mediaUrl && isPermanentUrl(message.mediaUrl)) {
-            console.log('⚠️ [MESSAGE-ITEM] Usando URL original permanente como fallback');
-            setMediaUrl(message.mediaUrl);
-          } else if (message.mediaUrl && !message.mediaUrl.startsWith('blob:')) {
-            // URL não é blob, tentar usar mesmo assim
-            console.log('⚠️ [MESSAGE-ITEM] Usando URL original como fallback:', message.mediaUrl.substring(0, 50));
-            setMediaUrl(message.mediaUrl);
-          }
+          // ⚡ FALLBACK: Para qualquer outro erro, marcar como expirado para não quebrar UI
+          console.warn('⚠️ [MESSAGE-ITEM] Erro desconhecido, marcando como expirada:', message.id);
+          setMediaExpired(true);
           setMediaLoading(false);
         });
     } else {

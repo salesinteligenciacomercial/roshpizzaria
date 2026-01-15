@@ -114,6 +114,14 @@ async function saveMediaToStorage(
   }
 }
 
+// Erro especial para mídia expirada (não quebra a UI)
+export class MediaExpiredError extends Error {
+  constructor(message = 'Mídia expirada ou indisponível') {
+    super('MEDIA_EXPIRED');
+    this.name = 'MediaExpiredError';
+  }
+}
+
 export async function getMediaUrl(messageId: string, type?: string): Promise<string> {
   try {
     // Verificar cache primeiro
@@ -126,15 +134,20 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
     console.log('🔄 [MEDIA-LOADER] Carregando mídia:', { messageId, type });
     
     // Primeiro, buscar a mídia do banco
-    const { data: message } = await supabase
+    const { data: message, error: queryError } = await supabase
       .from('conversas')
       .select('midia_url, tipo_mensagem, company_id')
       .eq('id', messageId)
       .single();
 
+    if (queryError) {
+      console.error('❌ [MEDIA-LOADER] Erro ao buscar mensagem:', queryError);
+      throw new MediaExpiredError();
+    }
+
     if (!message?.midia_url) {
       console.error('❌ [MEDIA-LOADER] Mídia não encontrada no banco');
-      throw new Error('Mídia não encontrada');
+      throw new MediaExpiredError();
     }
 
     console.log('📦 [MEDIA-LOADER] Dados da mídia:', {
@@ -372,9 +385,16 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
     }
 
     throw new Error('Não foi possível carregar a mídia');
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ [MEDIA-LOADER] Erro geral:', error);
-    throw error;
+    
+    // Sempre converter para MediaExpiredError para evitar quebrar a UI
+    if (error?.message === 'MEDIA_EXPIRED' || error instanceof MediaExpiredError) {
+      throw new MediaExpiredError();
+    }
+    
+    // Erros de rede ou outros também resultam em mídia indisponível
+    throw new MediaExpiredError();
   }
 }
 
