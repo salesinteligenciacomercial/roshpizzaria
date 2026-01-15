@@ -865,10 +865,13 @@ export type Database = {
       }
       ia_commercial_alerts: {
         Row: {
+          action_buttons: Json | null
           action_data: Json | null
           actioned_at: string | null
           actioned_by: string | null
           alert_type: string
+          auto_action_data: Json | null
+          auto_action_type: string | null
           company_id: string
           conversation_id: string | null
           created_at: string | null
@@ -883,10 +886,13 @@ export type Database = {
           title: string
         }
         Insert: {
+          action_buttons?: Json | null
           action_data?: Json | null
           actioned_at?: string | null
           actioned_by?: string | null
           alert_type: string
+          auto_action_data?: Json | null
+          auto_action_type?: string | null
           company_id: string
           conversation_id?: string | null
           created_at?: string | null
@@ -901,10 +907,13 @@ export type Database = {
           title: string
         }
         Update: {
+          action_buttons?: Json | null
           action_data?: Json | null
           actioned_at?: string | null
           actioned_by?: string | null
           alert_type?: string
+          auto_action_data?: Json | null
+          auto_action_type?: string | null
           company_id?: string
           conversation_id?: string | null
           created_at?: string | null
@@ -1321,11 +1330,13 @@ export type Database = {
       ia_scripts: {
         Row: {
           company_id: string
+          conversion_count: number | null
           created_at: string | null
           description: string | null
           example_usage: string | null
           id: string
           is_active: boolean | null
+          last_used_at: string | null
           name: string
           script_template: string
           success_count: number | null
@@ -1340,11 +1351,13 @@ export type Database = {
         }
         Insert: {
           company_id: string
+          conversion_count?: number | null
           created_at?: string | null
           description?: string | null
           example_usage?: string | null
           id?: string
           is_active?: boolean | null
+          last_used_at?: string | null
           name: string
           script_template: string
           success_count?: number | null
@@ -1359,11 +1372,13 @@ export type Database = {
         }
         Update: {
           company_id?: string
+          conversion_count?: number | null
           created_at?: string | null
           description?: string | null
           example_usage?: string | null
           id?: string
           is_active?: boolean | null
+          last_used_at?: string | null
           name?: string
           script_template?: string
           success_count?: number | null
@@ -1692,6 +1707,91 @@ export type Database = {
           },
           {
             foreignKeyName: "lead_attachments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_cadence_progress: {
+        Row: {
+          assigned_to: string | null
+          cadence_name: string
+          cadence_rule_id: string | null
+          company_id: string
+          completed_at: string | null
+          completed_steps: Json | null
+          created_at: string
+          current_step: number
+          id: string
+          lead_id: string
+          next_action_at: string | null
+          next_action_channel: string | null
+          next_action_description: string | null
+          notes: string | null
+          started_at: string
+          status: string
+          total_steps: number
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          cadence_name: string
+          cadence_rule_id?: string | null
+          company_id: string
+          completed_at?: string | null
+          completed_steps?: Json | null
+          created_at?: string
+          current_step?: number
+          id?: string
+          lead_id: string
+          next_action_at?: string | null
+          next_action_channel?: string | null
+          next_action_description?: string | null
+          notes?: string | null
+          started_at?: string
+          status?: string
+          total_steps?: number
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          cadence_name?: string
+          cadence_rule_id?: string | null
+          company_id?: string
+          completed_at?: string | null
+          completed_steps?: Json | null
+          created_at?: string
+          current_step?: number
+          id?: string
+          lead_id?: string
+          next_action_at?: string | null
+          next_action_channel?: string | null
+          next_action_description?: string | null
+          notes?: string | null
+          started_at?: string
+          status?: string
+          total_steps?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_cadence_progress_cadence_rule_id_fkey"
+            columns: ["cadence_rule_id"]
+            isOneToOne: false
+            referencedRelation: "ia_cadence_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_cadence_progress_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_cadence_progress_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"

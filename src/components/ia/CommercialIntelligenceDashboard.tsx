@@ -7,8 +7,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CadenceManager } from "./CadenceManager";
+import { CadenceProgressTracker } from "./CadenceProgressTracker";
+import { ActionableAlerts } from "./ActionableAlerts";
+import { ScriptsLibrary } from "./ScriptsLibrary";
 import { 
-  Brain, 
+  Brain,
   TrendingUp, 
   TrendingDown, 
   AlertTriangle, 
@@ -376,28 +379,28 @@ export const CommercialIntelligenceDashboard: React.FC = () => {
       </div>
 
       {/* Tabs de Conteúdo */}
-      <Tabs defaultValue="scripts" className="space-y-4">
+      <Tabs defaultValue="cadences" className="space-y-4">
         <TabsList className="flex flex-wrap">
+          <TabsTrigger value="cadences" className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Cadências Ativas
+          </TabsTrigger>
           <TabsTrigger value="scripts" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
-            Scripts & Cadências
-          </TabsTrigger>
-          <TabsTrigger value="leads" className="flex items-center gap-2">
-            <ThermometerSun className="h-4 w-4" />
-            Leads por Temperatura
+            Scripts
           </TabsTrigger>
           <TabsTrigger value="alerts" className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
             Alertas
             {(stats?.pendingAlerts || 0) > 0 && (
-              <Badge variant="secondary" className="ml-1">
+              <Badge variant="destructive" className="ml-1">
                 {stats?.pendingAlerts}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="actions" className="flex items-center gap-2">
-            <Zap className="h-4 w-4" />
-            Ações Recomendadas
+          <TabsTrigger value="leads" className="flex items-center gap-2">
+            <ThermometerSun className="h-4 w-4" />
+            Leads
           </TabsTrigger>
           <TabsTrigger value="objections" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
@@ -405,9 +408,19 @@ export const CommercialIntelligenceDashboard: React.FC = () => {
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab: Scripts & Cadências */}
+        {/* Tab: Cadências Ativas */}
+        <TabsContent value="cadences">
+          <CadenceProgressTracker />
+        </TabsContent>
+
+        {/* Tab: Scripts */}
         <TabsContent value="scripts">
-          <CadenceManager />
+          <ScriptsLibrary />
+        </TabsContent>
+
+        {/* Tab: Alertas Acionáveis */}
+        <TabsContent value="alerts">
+          <ActionableAlerts />
         </TabsContent>
 
         {/* Tab: Leads por Temperatura */}
