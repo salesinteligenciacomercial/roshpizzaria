@@ -21,6 +21,7 @@ import PublicMeeting from "./pages/PublicMeeting";
 import Discador from "./pages/Discador";
 import ProcessosComerciais from "./pages/ProcessosComerciais";
 import OAuthCallback from "./pages/OAuthCallback";
+import GmailCallback from "./pages/GmailCallback";
 import { MainLayout } from "./components/layout/MainLayout";
 import NotFound from "./pages/NotFound";
 import { Component, ErrorInfo, ReactNode } from 'react';
@@ -67,6 +68,7 @@ const App = () => (
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/oauth/callback" element={<OAuthCallback />} />
+            <Route path="/oauth/gmail/callback" element={<GmailCallback />} />
             <Route path="/agenda/:slug" element={<AgendaPublica />} />
             <Route path="/meeting/:meetingId" element={<PublicMeeting />} />
             <Route path="/" element={<MainLayout />}>

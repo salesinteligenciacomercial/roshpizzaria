@@ -3194,6 +3194,11 @@ export type Database = {
           ad_account_id: string | null
           company_id: string
           created_at: string | null
+          gmail_access_token: string | null
+          gmail_email: string | null
+          gmail_refresh_token: string | null
+          gmail_status: string | null
+          gmail_token_expires_at: string | null
           granted_permissions: string[] | null
           id: string
           instagram_ig_id: string | null
@@ -3220,6 +3225,11 @@ export type Database = {
           ad_account_id?: string | null
           company_id: string
           created_at?: string | null
+          gmail_access_token?: string | null
+          gmail_email?: string | null
+          gmail_refresh_token?: string | null
+          gmail_status?: string | null
+          gmail_token_expires_at?: string | null
           granted_permissions?: string[] | null
           id?: string
           instagram_ig_id?: string | null
@@ -3246,6 +3256,11 @@ export type Database = {
           ad_account_id?: string | null
           company_id?: string
           created_at?: string | null
+          gmail_access_token?: string | null
+          gmail_email?: string | null
+          gmail_refresh_token?: string | null
+          gmail_status?: string | null
+          gmail_token_expires_at?: string | null
           granted_permissions?: string[] | null
           id?: string
           instagram_ig_id?: string | null
