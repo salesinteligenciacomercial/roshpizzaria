@@ -40,6 +40,7 @@ import { MetaApiConfig } from "@/components/configuracoes/MetaApiConfig";
 import { MetaIntegrationsConfig } from "@/components/configuracoes/MetaIntegrationsConfig";
 import { SubcontasManager } from "@/components/configuracoes/SubcontasManager";
 import { LeadAdsFormsConfig } from "@/components/configuracoes/LeadAdsFormsConfig";
+import { GmailConfig } from "@/components/configuracoes/GmailConfig";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { UsuariosSubcontaDialog } from "@/components/configuracoes/UsuariosSubcontaDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -1041,6 +1042,9 @@ export default function Configuracoes() {
           <WhatsAppQRCode />
           {currentCompany?.id && <MetaApiConfig companyId={currentCompany.id} />}
           {currentCompany?.id && <MetaIntegrationsConfig companyId={currentCompany.id} />}
+          
+          {/* Gmail Integration */}
+          {currentCompany?.id && <GmailConfig companyId={currentCompany.id} />}
 
           {/* Lead Ads Forms - Rastreamento de Tráfego Pago */}
           <Card>
