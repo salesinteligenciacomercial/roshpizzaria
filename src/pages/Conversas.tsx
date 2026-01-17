@@ -14,7 +14,8 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck } from "lucide-react";
+import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle } from "lucide-react";
+import { FinalizarNegociacaoDialog } from "@/components/leads/FinalizarNegociacaoDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useLocation } from "react-router-dom";
@@ -399,6 +400,8 @@ function Conversas() {
   const [valorVendaDialogOpen, setValorVendaDialogOpen] = useState(false);
   const [valorVendaInput, setValorVendaInput] = useState("");
   const [salvandoValor, setSalvandoValor] = useState(false);
+  const [finalizarNegociacaoOpen, setFinalizarNegociacaoOpen] = useState(false);
+  const [finalizarNegociacaoAction, setFinalizarNegociacaoAction] = useState<'ganho' | 'perdido'>('ganho');
   const [cleaningHistory, setCleaningHistory] = useState(false);
   const [cleaningProgress, setCleaningProgress] = useState(0);
   const [cleaningStats, setCleaningStats] = useState({
@@ -8202,6 +8205,34 @@ function Conversas() {
                                 ? `Valor: R$ ${Number(leadVinculado.value).toLocaleString("pt-BR")}` 
                                 : "Adicionar Valor da Venda"}
                             </Button>
+                            
+                            {/* Botões de Finalizar Negociação - Ganho/Perdido */}
+                            <div className="flex gap-2 mt-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1 gap-1 text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700"
+                                onClick={() => {
+                                  setFinalizarNegociacaoAction('ganho');
+                                  setFinalizarNegociacaoOpen(true);
+                                }}
+                              >
+                                <Trophy className="h-3 w-3" />
+                                Ganho
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1 gap-1 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                                onClick={() => {
+                                  setFinalizarNegociacaoAction('perdido');
+                                  setFinalizarNegociacaoOpen(true);
+                                }}
+                              >
+                                <XCircle className="h-3 w-3" />
+                                Perdido
+                              </Button>
+                            </div>
                           </> : <div className="space-y-2">
                             <Badge variant="outline" className="w-full justify-center gap-2 py-2 bg-amber-500/10 text-amber-600 border-amber-500/20">
                               <AlertCircle className="h-3 w-3" />
@@ -9761,6 +9792,35 @@ function Conversas() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog: Finalizar Negociação (Ganho/Perdido) */}
+      {leadVinculado && (
+        <FinalizarNegociacaoDialog
+          lead={{
+            id: leadVinculado.id,
+            name: leadVinculado.name || selectedConv?.contactName,
+            value: leadVinculado.value,
+            status: leadVinculado.status
+          }}
+          open={finalizarNegociacaoOpen}
+          onOpenChange={setFinalizarNegociacaoOpen}
+          defaultAction={finalizarNegociacaoAction}
+          onUpdated={async () => {
+            // Recarregar informações do lead após atualização
+            if (selectedConv && (selectedConv.phoneNumber || selectedConv.id)) {
+              const telefoneFormatado = safeFormatPhoneNumber(selectedConv.phoneNumber || selectedConv.id);
+              const { data: leadAtualizado } = await supabase
+                .from('leads')
+                .select('*')
+                .or(`phone.eq.${telefoneFormatado},telefone.eq.${telefoneFormatado}`)
+                .maybeSingle();
+              if (leadAtualizado) {
+                setLeadVinculado(leadAtualizado);
+              }
+            }
+          }}
+        />
+      )}
     </div>;
 }
 export default Conversas;
