@@ -108,6 +108,7 @@ const PublicMeeting = () => {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [remoteIsScreenSharing, setRemoteIsScreenSharing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [callDuration, setCallDuration] = useState(0);
@@ -327,6 +328,10 @@ const PublicMeeting = () => {
               setWaitingForGuests(false);
             } else if (signal.signal_type === 'call-end') {
               handleEndCall();
+            } else if (signal.signal_type === 'screen-share-status') {
+              const shareData = signal.signal_data as { isSharing: boolean };
+              setRemoteIsScreenSharing(shareData.isSharing);
+              console.log('[Host] Remote screen share status:', shareData.isSharing);
             }
           }
         )
@@ -504,6 +509,10 @@ const PublicMeeting = () => {
               }
             } else if (signal.signal_type === 'call-end') {
               handleEndCall();
+            } else if (signal.signal_type === 'screen-share-status') {
+              const shareData = signal.signal_data as { isSharing: boolean };
+              setRemoteIsScreenSharing(shareData.isSharing);
+              console.log('Remote screen share status:', shareData.isSharing);
             }
           }
         )
@@ -650,6 +659,16 @@ const PublicMeeting = () => {
           localVideoRef.current.srcObject = new MediaStream([...audioTracks, videoTrack]);
         }
         
+        // Notify remote participant that screen share stopped
+        const targetUser = isHost ? 'guest' : 'host';
+        await supabase.from('meeting_signals').insert([{
+          meeting_id: meetingId!,
+          from_user: isHost ? 'host' : guestIdRef.current,
+          to_user: targetUser,
+          signal_type: 'screen-share-status',
+          signal_data: { isSharing: false },
+        }]);
+        
         setIsScreenSharing(false);
       } else {
         // Start screen share
@@ -665,6 +684,16 @@ const PublicMeeting = () => {
         screenTrack.onended = () => {
           toggleScreenShare();
         };
+        
+        // Notify remote participant that screen share started
+        const targetUser = isHost ? 'guest' : 'host';
+        await supabase.from('meeting_signals').insert([{
+          meeting_id: meetingId!,
+          from_user: isHost ? 'host' : guestIdRef.current,
+          to_user: targetUser,
+          signal_type: 'screen-share-status',
+          signal_data: { isSharing: true },
+        }]);
         
         setIsScreenSharing(true);
       }
@@ -1095,8 +1124,16 @@ const PublicMeeting = () => {
           ref={remoteVideoRef}
           autoPlay
           playsInline
-          className="absolute inset-0 w-full h-full object-cover"
+          className={`absolute inset-0 w-full h-full ${remoteIsScreenSharing ? 'object-contain bg-black' : 'object-cover'}`}
         />
+        
+        {/* Screen share indicator for receiver */}
+        {remoteIsScreenSharing && (
+          <div className="absolute top-4 left-4 bg-primary/90 text-primary-foreground text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 z-10">
+            <Monitor className="h-4 w-4" />
+            <span>{isHost ? guestName : hostName} está compartilhando a tela</span>
+          </div>
+        )}
 
         {!remoteStream && (
           <div className="absolute inset-0 flex items-center justify-center">
