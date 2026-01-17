@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus, Paperclip, Clock, MoveHorizontal, DollarSign, Save, Loader2, Pencil, Trophy, XCircle } from "lucide-react";
 import { FinalizarNegociacaoDialog } from "@/components/leads/FinalizarNegociacaoDialog";
+import { LeadValueEditor } from "@/components/leads/LeadValueEditor";
 import { AgendaModal } from "@/components/agenda/AgendaModal";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1135,58 +1136,34 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
           />
         )}
 
-        {/* Dialog: Editar Valor da Venda */}
-        <Dialog open={valorDialogOpen} onOpenChange={setValorDialogOpen}>
-          <DialogContent className="max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-green-600" />
-                Valor da Venda / Negociação
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 pt-2">
-              <div>
-                <Label htmlFor="valorLead">Valor (R$)</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">R$</span>
-                  <Input
-                    id="valorLead"
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="1.500,00"
-                    value={valorInput}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/[^\d.,]/g, '');
-                      setValorInput(value);
-                    }}
-                    className="text-lg font-medium pl-10"
-                    autoFocus
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Digite o valor estimado ou fechado da negociação
-                </p>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => setValorDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button 
-                  onClick={handleSalvarValor}
-                  className="bg-green-600 hover:bg-green-700"
-                  disabled={salvandoValor}
-                >
-                  {salvandoValor ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4 mr-2" />
-                  )}
-                  Salvar Valor
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Dialog: Editar Valor da Venda com Produto */}
+        <LeadValueEditor
+          lead={{
+            id: lead.id,
+            name: lead.nome,
+            value: leadValue,
+            status: leadStatus,
+            probability: (lead as any).probability,
+            expected_close_date: (lead as any).expected_close_date,
+            loss_reason: (lead as any).loss_reason,
+            produto_id: (lead as any).produto_id,
+            company_id: userCompanyId || undefined
+          }}
+          open={valorDialogOpen}
+          onOpenChange={setValorDialogOpen}
+          onUpdated={() => {
+            // Refetch lead value
+            supabase
+              .from("leads")
+              .select("value")
+              .eq("id", lead.id)
+              .single()
+              .then(({ data }) => {
+                if (data) setLeadValue(data.value);
+              });
+            onLeadMoved?.();
+          }}
+        />
 
         {/* Dialog para Finalizar Negociação (Ganho/Perdido) */}
         <FinalizarNegociacaoDialog

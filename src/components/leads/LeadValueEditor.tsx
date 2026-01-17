@@ -13,9 +13,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, DollarSign, Percent, TrendingUp, TrendingDown, History } from "lucide-react";
+import { CalendarIcon, DollarSign, Percent, TrendingUp, TrendingDown, History, Package, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LeadValueHistory } from "./LeadValueHistory";
+
+interface Product {
+  id: string;
+  nome: string;
+  preco_sugerido: number | null;
+}
 
 interface LeadValueEditorProps {
   lead: {
@@ -26,6 +32,8 @@ interface LeadValueEditorProps {
     probability?: number;
     expected_close_date?: string;
     loss_reason?: string;
+    produto_id?: string;
+    company_id?: string;
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -46,12 +54,15 @@ const LOSS_REASONS = [
 export function LeadValueEditor({ lead, open, onOpenChange, onUpdated }: LeadValueEditorProps) {
   const [loading, setLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   const [formData, setFormData] = useState({
     value: lead.value?.toString() || "0",
     probability: lead.probability || 50,
     expected_close_date: lead.expected_close_date ? new Date(lead.expected_close_date) : undefined as Date | undefined,
     loss_reason: lead.loss_reason || "",
-    custom_loss_reason: ""
+    custom_loss_reason: "",
+    produto_id: lead.produto_id || ""
   });
 
   // Reset form when lead changes
@@ -61,9 +72,57 @@ export function LeadValueEditor({ lead, open, onOpenChange, onUpdated }: LeadVal
       probability: lead.probability || 50,
       expected_close_date: lead.expected_close_date ? new Date(lead.expected_close_date) : undefined,
       loss_reason: lead.loss_reason || "",
-      custom_loss_reason: ""
+      custom_loss_reason: "",
+      produto_id: lead.produto_id || ""
     });
   }, [lead]);
+
+  // Fetch products when dialog opens
+  useEffect(() => {
+    if (open && lead.company_id) {
+      fetchProducts();
+    }
+  }, [open, lead.company_id]);
+
+  const fetchProducts = async () => {
+    if (!lead.company_id) return;
+    
+    setLoadingProducts(true);
+    try {
+      const { data, error } = await supabase
+        .from("produtos_servicos")
+        .select("id, nome, preco_sugerido")
+        .eq("company_id", lead.company_id)
+        .eq("ativo", true)
+        .order("nome");
+
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar produtos:", error);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  const handleProductChange = (productId: string) => {
+    if (productId === "__none__") {
+      setFormData({ ...formData, produto_id: "" });
+      return;
+    }
+    
+    const product = products.find(p => p.id === productId);
+    if (product) {
+      // Se tiver preço sugerido e valor atual for 0, aplicar o preço sugerido
+      const currentValue = parseFloat(formData.value) / 100;
+      if (product.preco_sugerido && currentValue === 0) {
+        const newValue = (product.preco_sugerido * 100).toString();
+        setFormData({ ...formData, produto_id: productId, value: newValue });
+      } else {
+        setFormData({ ...formData, produto_id: productId });
+      }
+    }
+  };
 
   const formatCurrency = (value: string) => {
     const numericValue = parseFloat(value.replace(/\D/g, "")) / 100;
@@ -94,8 +153,17 @@ export function LeadValueEditor({ lead, open, onOpenChange, onUpdated }: LeadVal
         expected_close_date: formData.expected_close_date 
           ? format(formData.expected_close_date, "yyyy-MM-dd") 
           : null,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        produto_id: formData.produto_id || null
       };
+
+      // Se selecionou um produto, também salvar o nome no campo servico
+      if (formData.produto_id) {
+        const product = products.find(p => p.id === formData.produto_id);
+        if (product) {
+          updateData.servico = product.nome;
+        }
+      }
 
       // Adicionar motivo de perda se status for perdido
       if (lead.status === 'perdido') {
@@ -152,6 +220,50 @@ export function LeadValueEditor({ lead, open, onOpenChange, onUpdated }: LeadVal
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Produto/Serviço */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Package className="h-4 w-4" />
+                Produto/Serviço
+              </Label>
+              {loadingProducts ? (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando produtos...
+                </div>
+              ) : products.length > 0 ? (
+                <Select
+                  value={formData.produto_id || "__none__"}
+                  onValueChange={handleProductChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o produto/serviço" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <span className="text-muted-foreground">Sem produto vinculado</span>
+                    </SelectItem>
+                    {products.map((product) => (
+                      <SelectItem key={product.id} value={product.id}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span>{product.nome}</span>
+                          {product.preco_sugerido && product.preco_sugerido > 0 && (
+                            <Badge variant="secondary" className="text-xs ml-2">
+                              {product.preco_sugerido.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                            </Badge>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm text-muted-foreground py-2">
+                  Nenhum produto cadastrado. Cadastre em Analytics → Produtos.
+                </p>
+              )}
+            </div>
+
             {/* Valor da Negociação */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
