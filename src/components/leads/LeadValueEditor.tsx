@@ -59,7 +59,7 @@ export function LeadValueEditor({ lead, open, onOpenChange, onUpdated }: LeadVal
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [formData, setFormData] = useState({
     value: lead.value?.toString() || "0",
-    probability: lead.probability || 50,
+    probability: lead.probability ?? 0,
     expected_close_date: lead.expected_close_date ? new Date(lead.expected_close_date) : undefined as Date | undefined,
     loss_reason: lead.loss_reason || "",
     custom_loss_reason: "",
@@ -70,7 +70,7 @@ export function LeadValueEditor({ lead, open, onOpenChange, onUpdated }: LeadVal
   useEffect(() => {
     setFormData({
       value: lead.value?.toString() || "0",
-      probability: lead.probability ?? 50,
+      probability: lead.probability ?? 0,
       expected_close_date: lead.expected_close_date ? new Date(lead.expected_close_date) : undefined,
       loss_reason: lead.loss_reason || "",
       custom_loss_reason: "",
