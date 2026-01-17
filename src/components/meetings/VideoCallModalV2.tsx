@@ -157,11 +157,12 @@ export const VideoCallModalV2 = ({
     }
   }, [open, role, callType, startSession]);
 
-  // ========== SET LOCAL VIDEO ==========
+  // ========== REFS FOR SCREEN SHARE ==========
+  const screenVideoRef = useRef<HTMLVideoElement>(null);
+
+  // ========== SET LOCAL VIDEO (Camera only) ==========
   useEffect(() => {
-    const stream = isScreenSharing && screenStream ? screenStream : localStream;
-    
-    if (!stream) {
+    if (!localStream) {
       console.log('[VideoCall] No local stream available yet');
       return;
     }
@@ -171,8 +172,8 @@ export const VideoCallModalV2 = ({
       
       const videoEl = localVideoRef.current;
       if (videoEl) {
-        console.log('[VideoCall] Setting local video source, tracks:', stream.getTracks().length);
-        videoEl.srcObject = stream;
+        console.log('[VideoCall] Setting local video source, tracks:', localStream.getTracks().length);
+        videoEl.srcObject = localStream;
         videoEl.play()
           .then(() => {
             console.log('[VideoCall] Local video playing');
@@ -192,7 +193,32 @@ export const VideoCallModalV2 = ({
     };
 
     setVideoSource();
-  }, [localStream, screenStream, isScreenSharing]);
+  }, [localStream]);
+
+  // ========== SET SCREEN SHARE VIDEO ==========
+  useEffect(() => {
+    if (!screenStream || !isScreenSharing) return;
+
+    const setScreenVideoSource = (retryCount = 0) => {
+      if (!isMountedRef.current) return;
+      
+      const videoEl = screenVideoRef.current;
+      if (videoEl) {
+        console.log('[VideoCall] Setting screen share video source');
+        videoEl.srcObject = screenStream;
+        videoEl.play().catch((err) => {
+          console.warn('[VideoCall] Screen share play failed, retrying...', err);
+          if (retryCount < 5 && isMountedRef.current) {
+            setTimeout(() => setScreenVideoSource(retryCount + 1), 200);
+          }
+        });
+      } else if (retryCount < 10 && isMountedRef.current) {
+        setTimeout(() => setScreenVideoSource(retryCount + 1), 100);
+      }
+    };
+
+    setScreenVideoSource();
+  }, [screenStream, isScreenSharing]);
 
   // ========== SET REMOTE VIDEO ==========
   useEffect(() => {
@@ -585,61 +611,110 @@ export const VideoCallModalV2 = ({
 
         {/* Video Area */}
         <div className="flex-1 relative bg-muted/50 overflow-hidden">
-          {/* Remote Video */}
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-
-          {/* Placeholder */}
-          {showRemotePlaceholder && (
-            <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
-              <div className="text-center">
-                <div className="h-24 w-24 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-                  <span className="text-4xl font-semibold text-primary">
-                    {remoteUserName.charAt(0).toUpperCase()}
-                  </span>
+          {/* Main Video Area - Shows screen share when active, otherwise remote video */}
+          {isScreenSharing && screenStream ? (
+            <>
+              {/* Screen Share as Main Video */}
+              <video
+                ref={screenVideoRef}
+                autoPlay
+                playsInline
+                className="absolute inset-0 w-full h-full object-contain bg-black"
+              />
+              
+              {/* Remote Video PiP (top right) */}
+              {remoteStream && !showRemotePlaceholder && (
+                <div className="absolute top-4 right-4 w-40 h-28 rounded-lg overflow-hidden shadow-lg border border-border bg-background z-10">
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
                 </div>
-                <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span>{getStatusText()}</span>
-                </div>
+              )}
+              
+              {/* Local Camera PiP (bottom right) */}
+              <div className="absolute bottom-4 right-4 w-32 h-24 rounded-lg overflow-hidden shadow-lg border border-border bg-background z-10">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                  style={{ transform: 'scaleX(-1)' }}
+                />
+                {!localVideoReady && localStream && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  </div>
+                )}
+                {(!localStream || !isVideoEnabled) && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                    <VideoOff className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                )}
               </div>
-            </div>
+              
+              {/* Screen Share Indicator */}
+              <div className="absolute top-4 left-4 bg-primary/90 text-primary-foreground text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 z-10">
+                <Monitor className="h-4 w-4" />
+                <span>Compartilhando tela</span>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Remote Video */}
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+
+              {/* Placeholder */}
+              {showRemotePlaceholder && (
+                <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
+                  <div className="text-center">
+                    <div className="h-24 w-24 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
+                      <span className="text-4xl font-semibold text-primary">
+                        {remoteUserName.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <span>{getStatusText()}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Local Video (PiP) */}
+              <div className="absolute bottom-4 right-4 w-48 h-36 rounded-lg overflow-hidden shadow-lg border border-border bg-background">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                  style={{ transform: 'scaleX(-1)' }}
+                />
+                
+                {/* Loading state for local video */}
+                {!localVideoReady && localStream && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                )}
+                
+                {(!localStream || !isVideoEnabled) && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                    <VideoOff className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+            </>
           )}
-
-          {/* Local Video (PiP) */}
-          <div className="absolute bottom-4 right-4 w-48 h-36 rounded-lg overflow-hidden shadow-lg border border-border bg-background">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-              style={{ transform: 'scaleX(-1)' }}
-            />
-            
-            {/* Loading state for local video */}
-            {!localVideoReady && localStream && (
-              <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            )}
-            
-            {!isScreenSharing && (!localStream || !isVideoEnabled) && (
-              <div className="absolute inset-0 flex items-center justify-center bg-muted">
-                <VideoOff className="h-8 w-8 text-muted-foreground" />
-              </div>
-            )}
-            
-            {isScreenSharing && (
-              <div className="absolute bottom-1 left-1 bg-primary/80 text-primary-foreground text-xs px-2 py-0.5 rounded">
-                Compartilhando
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Controls */}
