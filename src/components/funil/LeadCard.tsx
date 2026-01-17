@@ -55,6 +55,10 @@ interface LeadCardProps {
     responsavel_id?: string | null;
     avatar_url?: string | null;
     created_at?: string;
+    expected_close_date?: string | null;
+    probability?: number;
+    produto_id?: string | null;
+    status?: string;
   };
   onDelete: (leadId: string) => void;
   onLeadMoved?: () => void;
@@ -90,7 +94,9 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
   const [leadValue, setLeadValue] = useState(lead.value);
   const [finalizarDialogOpen, setFinalizarDialogOpen] = useState(false);
   const [finalizarDefaultAction, setFinalizarDefaultAction] = useState<'ganho' | 'perdido'>('ganho');
-  const [leadStatus, setLeadStatus] = useState<string | undefined>((lead as any).status);
+  const [leadStatus, setLeadStatus] = useState<string | undefined>(lead.status);
+  const [expectedCloseDate, setExpectedCloseDate] = useState<string | null>(lead.expected_close_date || null);
+  const [leadProbability, setLeadProbability] = useState<number | undefined>(lead.probability);
 
   // Função para gerar cor consistente baseada no ID do usuário
   const generateColorFromId = (id: string): string => {
@@ -761,6 +767,31 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                 </Tooltip>
               </TooltipProvider>
             )}
+
+            {/* Data Prevista de Fechamento */}
+            {expectedCloseDate && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge 
+                      variant="outline" 
+                      className="text-xs bg-primary/10 border-primary/20 text-primary cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setValorDialogOpen(true);
+                      }}
+                    >
+                      <Calendar className="h-2.5 w-2.5 mr-1" />
+                      {new Date(expectedCloseDate).toLocaleDateString('pt-BR')}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="font-medium">Previsão de fechamento</p>
+                    <p className="text-xs text-muted-foreground">Clique para editar</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -841,16 +872,32 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                     Valor Estimado
                     <Pencil className="h-2.5 w-2.5 opacity-0 group-hover/valor:opacity-100 transition-opacity" />
                   </span>
-                  {leadValue !== undefined && leadValue > 0 ? (
-                    <Badge className="font-semibold bg-gradient-success text-success-foreground shadow-sm mt-0.5 w-fit text-xs">
-                      R$ {leadValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </Badge>
-                  ) : (
-                    <span className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                      <DollarSign className="h-3 w-3" />
-                      Adicionar valor
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {leadValue !== undefined && leadValue > 0 ? (
+                      <Badge className="font-semibold bg-gradient-success text-success-foreground shadow-sm w-fit text-xs">
+                        R$ {leadValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <DollarSign className="h-3 w-3" />
+                        Adicionar valor
+                      </span>
+                    )}
+                    {leadProbability !== undefined && leadProbability > 0 && (
+                      <Badge 
+                        variant="outline" 
+                        className={`text-[10px] px-1.5 ${
+                          leadProbability >= 70 
+                            ? 'bg-green-500/10 border-green-500/30 text-green-600' 
+                            : leadProbability >= 40 
+                              ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-600' 
+                              : 'bg-red-500/10 border-red-500/30 text-red-600'
+                        }`}
+                      >
+                        {leadProbability}%
+                      </Badge>
+                    )}
+                  </div>
                 </button>
               </TooltipTrigger>
               <TooltipContent>
@@ -1143,23 +1190,27 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
             name: lead.nome,
             value: leadValue,
             status: leadStatus,
-            probability: (lead as any).probability,
-            expected_close_date: (lead as any).expected_close_date,
-            loss_reason: (lead as any).loss_reason,
-            produto_id: (lead as any).produto_id,
+            probability: leadProbability,
+            expected_close_date: expectedCloseDate || undefined,
+            loss_reason: lead.status === 'perdido' ? (lead as any).loss_reason : undefined,
+            produto_id: lead.produto_id || undefined,
             company_id: userCompanyId || undefined
           }}
           open={valorDialogOpen}
           onOpenChange={setValorDialogOpen}
           onUpdated={() => {
-            // Refetch lead value
+            // Refetch lead data
             supabase
               .from("leads")
-              .select("value")
+              .select("value, expected_close_date, probability")
               .eq("id", lead.id)
               .single()
               .then(({ data }) => {
-                if (data) setLeadValue(data.value);
+                if (data) {
+                  setLeadValue(data.value);
+                  setExpectedCloseDate(data.expected_close_date);
+                  setLeadProbability(data.probability);
+                }
               });
             onLeadMoved?.();
           }}
