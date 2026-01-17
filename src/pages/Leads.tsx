@@ -1066,8 +1066,26 @@ export default function Leads() {
       </div>
 
       {filteredLeads.length === 0 && !loading && <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <p className="text-muted-foreground">Nenhum lead encontrado</p>
+          <CardContent className="flex flex-col items-center justify-center py-12 gap-3">
+            {selectedStatus === 'ganho' ? (
+              <>
+                <Trophy className="h-12 w-12 text-green-500 opacity-50" />
+                <p className="text-muted-foreground font-medium">Nenhum lead marcado como ganho</p>
+                <p className="text-sm text-muted-foreground text-center max-w-md">
+                  Para marcar um lead como ganho, clique no menu de ações (•••) do lead e selecione "Marcar como Ganho".
+                </p>
+              </>
+            ) : selectedStatus === 'perdido' ? (
+              <>
+                <XCircle className="h-12 w-12 text-red-500 opacity-50" />
+                <p className="text-muted-foreground font-medium">Nenhum lead marcado como perdido</p>
+                <p className="text-sm text-muted-foreground text-center max-w-md">
+                  Para marcar um lead como perdido, clique no menu de ações (•••) do lead e selecione "Marcar como Perdido".
+                </p>
+              </>
+            ) : (
+              <p className="text-muted-foreground">Nenhum lead encontrado</p>
+            )}
           </CardContent>
         </Card>}
 
