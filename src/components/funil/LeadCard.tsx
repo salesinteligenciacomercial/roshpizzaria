@@ -97,6 +97,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
   const [leadStatus, setLeadStatus] = useState<string | undefined>(lead.status);
   const [expectedCloseDate, setExpectedCloseDate] = useState<string | null>(lead.expected_close_date || null);
   const [leadProbability, setLeadProbability] = useState<number | undefined>(lead.probability);
+  const [leadProdutoId, setLeadProdutoId] = useState<string | null>(lead.produto_id || null);
 
   // Função para gerar cor consistente baseada no ID do usuário
   const generateColorFromId = (id: string): string => {
@@ -1193,16 +1194,16 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
             probability: leadProbability,
             expected_close_date: expectedCloseDate || undefined,
             loss_reason: lead.status === 'perdido' ? (lead as any).loss_reason : undefined,
-            produto_id: lead.produto_id || undefined,
+            produto_id: leadProdutoId || undefined,
             company_id: userCompanyId || undefined
           }}
           open={valorDialogOpen}
           onOpenChange={setValorDialogOpen}
           onUpdated={() => {
-            // Refetch lead data
+            // Refetch lead data including produto_id
             supabase
               .from("leads")
-              .select("value, expected_close_date, probability")
+              .select("value, expected_close_date, probability, produto_id")
               .eq("id", lead.id)
               .single()
               .then(({ data }) => {
@@ -1210,6 +1211,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                   setLeadValue(data.value);
                   setExpectedCloseDate(data.expected_close_date);
                   setLeadProbability(data.probability);
+                  setLeadProdutoId(data.produto_id);
                 }
               });
             onLeadMoved?.();
