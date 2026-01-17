@@ -159,6 +159,7 @@ export const VideoCallModalV2 = ({
 
   // ========== REFS FOR SCREEN SHARE ==========
   const screenVideoRef = useRef<HTMLVideoElement>(null);
+  const remotePipVideoRef = useRef<HTMLVideoElement>(null);
 
   // ========== SET LOCAL VIDEO (Camera only) ==========
   useEffect(() => {
@@ -227,9 +228,10 @@ export const VideoCallModalV2 = ({
     const setRemoteVideoSource = (retryCount = 0) => {
       if (!isMountedRef.current) return;
       
+      // Set main remote video ref
       const videoEl = remoteVideoRef.current;
       if (videoEl) {
-        console.log('[VideoCall] Setting remote video source');
+        console.log('[VideoCall] Setting remote video source (main)');
         videoEl.srcObject = remoteStream;
         videoEl.play().catch((err) => {
           console.warn('[VideoCall] Remote play failed, retrying...', err);
@@ -247,10 +249,20 @@ export const VideoCallModalV2 = ({
       } else if (retryCount < 10 && isMountedRef.current) {
         setTimeout(() => setRemoteVideoSource(retryCount + 1), 100);
       }
+      
+      // Also set the PiP remote video ref for screen sharing mode
+      const pipVideoEl = remotePipVideoRef.current;
+      if (pipVideoEl) {
+        console.log('[VideoCall] Setting remote video source (PiP)');
+        pipVideoEl.srcObject = remoteStream;
+        pipVideoEl.play().catch((err) => {
+          console.warn('[VideoCall] Remote PiP play failed', err);
+        });
+      }
     };
 
     setRemoteVideoSource();
-  }, [remoteStream]);
+  }, [remoteStream, isScreenSharing]);
 
   // ========== CLEANUP ON UNMOUNT ==========
   useEffect(() => {
@@ -623,14 +635,23 @@ export const VideoCallModalV2 = ({
               />
               
               {/* Remote Video PiP (top right) */}
-              {remoteStream && !showRemotePlaceholder && (
-                <div className="absolute top-4 right-4 w-40 h-28 rounded-lg overflow-hidden shadow-lg border border-border bg-background z-10">
+              {remoteStream && (
+                <div className="absolute top-4 right-4 w-40 h-28 rounded-lg overflow-hidden shadow-lg border border-border bg-black z-10">
                   <video
-                    ref={remoteVideoRef}
+                    ref={remotePipVideoRef}
                     autoPlay
                     playsInline
                     className="w-full h-full object-cover"
                   />
+                  {!remoteStream && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                      <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                        <span className="text-sm font-semibold text-primary">
+                          {remoteUserName.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               
