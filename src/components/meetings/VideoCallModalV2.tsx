@@ -30,7 +30,47 @@ interface VideoCallModalV2Props {
   onCallEnded: () => void;
 }
 
-// Find supported mime type for recording
+// Play notification sound when participant joins
+const playJoinNotification = () => {
+  try {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    // Pleasant chime sound
+    oscillator.frequency.value = 587.33; // D5 note
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+    
+    // Second chime
+    setTimeout(() => {
+      const osc2 = audioContext.createOscillator();
+      const gain2 = audioContext.createGain();
+      
+      osc2.connect(gain2);
+      gain2.connect(audioContext.destination);
+      
+      osc2.frequency.value = 783.99; // G5 note
+      osc2.type = 'sine';
+      
+      gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      osc2.start(audioContext.currentTime);
+      osc2.stop(audioContext.currentTime + 0.3);
+    }, 100);
+  } catch (error) {
+    console.log('Could not play notification sound');
+  }
+};
 const getSupportedMimeType = () => {
   const mimeTypes = [
     'video/webm;codecs=vp9,opus',
@@ -120,6 +160,14 @@ export const VideoCallModalV2 = ({
     onCallEnded: () => {
       console.log('[VideoCall] Call ended');
       handleClose();
+    },
+    onParticipantJoined: () => {
+      // Play notification sound when participant joins
+      playJoinNotification();
+      toast.success(`${remoteUserName} entrou na chamada`, {
+        duration: 4000,
+        icon: '👤',
+      });
     },
   });
 

@@ -31,6 +31,7 @@ export interface WebRTCSessionConfig {
   onRemoteStream: (stream: MediaStream) => void;
   onRoomStateChange: (state: RoomState) => void;
   onCallEnded: () => void;
+  onParticipantJoined?: () => void; // Called when participant accepts call
 }
 
 interface SignalPayload {
@@ -313,6 +314,8 @@ export const useWebRTCSession = (config: WebRTCSessionConfig) => {
           // PARTICIPANT accepted - HOST creates offer
           if (config.role === 'host') {
             console.log('[WebRTC] Call accepted, HOST creating offer');
+            // Notify that participant joined
+            config.onParticipantJoined?.();
             updateRoomState('connecting');
             await createAndSendOffer();
           }
@@ -476,20 +479,21 @@ export const useWebRTCSession = (config: WebRTCSessionConfig) => {
         // HOST waits for call-accept, then creates offer
         updateRoomState('waiting');
         
-        // Check for pending call-accept
+        // Check for pending call-accept immediately
         await fetchPendingSignals();
         
-        // Poll for call-accept (in case realtime misses it)
+        // Poll for call-accept more aggressively (in case realtime misses it)
         const pollInterval = setInterval(async () => {
           if (hasRemoteDescriptionRef.current || isCleanedUpRef.current) {
             clearInterval(pollInterval);
             return;
           }
+          console.log('[WebRTC] HOST polling for call-accept...');
           await fetchPendingSignals();
-        }, 2000);
+        }, 1000); // Poll every 1 second instead of 2
 
-        // Stop polling after 60 seconds
-        setTimeout(() => clearInterval(pollInterval), 60000);
+        // Stop polling after 120 seconds
+        setTimeout(() => clearInterval(pollInterval), 120000);
 
       } else {
         // PARTICIPANT waits for offer from HOST
@@ -498,16 +502,17 @@ export const useWebRTCSession = (config: WebRTCSessionConfig) => {
         // Check for pending offer
         await fetchPendingSignals();
         
-        // Poll for offer
+        // Poll for offer more aggressively
         const pollInterval = setInterval(async () => {
           if (hasRemoteDescriptionRef.current || isCleanedUpRef.current) {
             clearInterval(pollInterval);
             return;
           }
+          console.log('[WebRTC] PARTICIPANT polling for offer...');
           await fetchPendingSignals();
-        }, 2000);
+        }, 1000); // Poll every 1 second
 
-        setTimeout(() => clearInterval(pollInterval), 60000);
+        setTimeout(() => clearInterval(pollInterval), 120000);
       }
 
     } catch (error) {
