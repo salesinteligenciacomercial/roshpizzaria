@@ -192,10 +192,26 @@ export const VideoCallModalV2 = ({
         try {
           console.log('[VideoCall] Initializing, role:', role);
           await startSession(callType === 'video');
-        } catch (error) {
+        } catch (error: any) {
           console.error('[VideoCall] Init error:', error);
           if (isMountedRef.current) {
-            toast.error('Erro ao iniciar chamada');
+            // Provide more helpful error messages
+            if (error.name === 'AbortError' || error.message?.includes('Timeout')) {
+              toast.error('Câmera demorou para iniciar. Tentando novamente...', { duration: 3000 });
+              // Retry once with audio only
+              try {
+                await startSession(false);
+                toast.success('Chamada iniciada apenas com áudio');
+              } catch (retryError) {
+                toast.error('Erro ao acessar microfone. Verifique as permissões.');
+              }
+            } else if (error.name === 'NotAllowedError') {
+              toast.error('Permissão negada. Permita acesso à câmera/microfone.');
+            } else if (error.name === 'NotFoundError') {
+              toast.error('Câmera ou microfone não encontrado.');
+            } else {
+              toast.error('Erro ao iniciar chamada. Tente novamente.');
+            }
           }
         }
       };
