@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,33 +15,42 @@ import {
   Eye,
   Edit,
   Trash2,
-  Phone
+  Phone,
+  Trophy,
+  XCircle
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { FinalizarNegociacaoDialog } from "./FinalizarNegociacaoDialog";
 
 interface LeadQuickActionsProps {
   leadId: string;
   leadName: string;
   leadPhone?: string;
+  leadValue?: number;
   onEdit?: () => void;
   onDelete?: () => void;
   onOpenConversa?: () => void;
   onOpenAgenda?: () => void;
   onOpenTarefa?: () => void;
+  onLeadUpdated?: () => void;
 }
 
 export function LeadQuickActions({ 
   leadId, 
   leadName, 
   leadPhone,
+  leadValue,
   onEdit, 
   onDelete,
   onOpenConversa,
   onOpenAgenda,
-  onOpenTarefa
+  onOpenTarefa,
+  onLeadUpdated
 }: LeadQuickActionsProps) {
   const navigate = useNavigate();
+  const [finalizarDialogOpen, setFinalizarDialogOpen] = useState(false);
+  const [finalizarDefaultAction, setFinalizarDefaultAction] = useState<'ganho' | 'perdido'>('ganho');
 
   const abrirConversa = () => {
     if (onOpenConversa) {
@@ -78,6 +88,7 @@ export function LeadQuickActions({
   };
 
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -106,6 +117,24 @@ export function LeadQuickActions({
           <CheckSquare className="h-4 w-4 mr-2" />
           Criar Tarefa
         </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+        
+        <DropdownMenuItem 
+          onClick={() => { setFinalizarDefaultAction('ganho'); setFinalizarDialogOpen(true); }}
+          className="text-green-600 focus:text-green-600"
+        >
+          <Trophy className="h-4 w-4 mr-2" />
+          Marcar como Ganho
+        </DropdownMenuItem>
+        
+        <DropdownMenuItem 
+          onClick={() => { setFinalizarDefaultAction('perdido'); setFinalizarDialogOpen(true); }}
+          className="text-red-600 focus:text-red-600"
+        >
+          <XCircle className="h-4 w-4 mr-2" />
+          Marcar como Perdido
+        </DropdownMenuItem>
         
         {onEdit && (
           <>
@@ -131,5 +160,16 @@ export function LeadQuickActions({
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+
+    <FinalizarNegociacaoDialog
+      lead={{ id: leadId, name: leadName, value: leadValue }}
+      open={finalizarDialogOpen}
+      onOpenChange={setFinalizarDialogOpen}
+      onUpdated={() => {
+        onLeadUpdated?.();
+      }}
+      defaultAction={finalizarDefaultAction}
+    />
+    </>
   );
 }

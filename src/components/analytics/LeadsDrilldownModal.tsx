@@ -9,10 +9,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { 
   Users, DollarSign, Search, ExternalLink, Download, Phone, Mail, 
-  Building2, Eye, MessageSquare, ArrowUpRight, Loader2, ChevronLeft, ChevronRight 
+  Building2, Eye, MessageSquare, ArrowUpRight, Loader2, ChevronLeft, ChevronRight,
+  Trophy, XCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { ConversaPopup } from "@/components/leads/ConversaPopup";
+import { FinalizarNegociacaoDialog } from "@/components/leads/FinalizarNegociacaoDialog";
 
 export type DrilldownFilterType = 
   | 'total' 
@@ -70,6 +72,11 @@ export default function LeadsDrilldownModal({
   // Estado para popup de conversa
   const [conversaPopupOpen, setConversaPopupOpen] = useState(false);
   const [selectedLeadForConversation, setSelectedLeadForConversation] = useState<Lead | null>(null);
+  
+  // Estado para finalizar negociação
+  const [finalizarDialogOpen, setFinalizarDialogOpen] = useState(false);
+  const [finalizarDefaultAction, setFinalizarDefaultAction] = useState<'ganho' | 'perdido'>('ganho');
+  const [selectedLeadForFinalizar, setSelectedLeadForFinalizar] = useState<Lead | null>(null);
 
   const fetchLeads = useCallback(async () => {
     if (!userCompanyId || !open) return;
@@ -389,6 +396,32 @@ export default function LeadsDrilldownModal({
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-100"
+                          onClick={() => {
+                            setSelectedLeadForFinalizar(lead);
+                            setFinalizarDefaultAction('ganho');
+                            setFinalizarDialogOpen(true);
+                          }}
+                          title="Marcar como Ganho"
+                        >
+                          <Trophy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-100"
+                          onClick={() => {
+                            setSelectedLeadForFinalizar(lead);
+                            setFinalizarDefaultAction('perdido');
+                            setFinalizarDialogOpen(true);
+                          }}
+                          title="Marcar como Perdido"
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8"
                           onClick={() => navigate(`/leads`)}
                           title="Ver lead"
@@ -457,6 +490,26 @@ export default function LeadsDrilldownModal({
           leadId={selectedLeadForConversation.id}
           leadName={selectedLeadForConversation.name}
           leadPhone={selectedLeadForConversation.phone || undefined}
+        />
+      )}
+
+      {/* Dialog para Finalizar Negociação */}
+      {selectedLeadForFinalizar && (
+        <FinalizarNegociacaoDialog
+          lead={{
+            id: selectedLeadForFinalizar.id,
+            name: selectedLeadForFinalizar.name,
+            value: selectedLeadForFinalizar.value || 0
+          }}
+          open={finalizarDialogOpen}
+          onOpenChange={(isOpen) => {
+            setFinalizarDialogOpen(isOpen);
+            if (!isOpen) setSelectedLeadForFinalizar(null);
+          }}
+          onUpdated={() => {
+            fetchLeads();
+          }}
+          defaultAction={finalizarDefaultAction}
         />
       )}
     </Dialog>

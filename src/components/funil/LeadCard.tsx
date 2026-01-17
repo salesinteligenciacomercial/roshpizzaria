@@ -4,7 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus, Paperclip, Clock, MoveHorizontal, DollarSign, Save, Loader2, Pencil } from "lucide-react";
+import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus, Paperclip, Clock, MoveHorizontal, DollarSign, Save, Loader2, Pencil, Trophy, XCircle } from "lucide-react";
+import { FinalizarNegociacaoDialog } from "@/components/leads/FinalizarNegociacaoDialog";
 import { AgendaModal } from "@/components/agenda/AgendaModal";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -86,6 +87,9 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
   const [valorInput, setValorInput] = useState("");
   const [salvandoValor, setSalvandoValor] = useState(false);
   const [leadValue, setLeadValue] = useState(lead.value);
+  const [finalizarDialogOpen, setFinalizarDialogOpen] = useState(false);
+  const [finalizarDefaultAction, setFinalizarDefaultAction] = useState<'ganho' | 'perdido'>('ganho');
+  const [leadStatus, setLeadStatus] = useState<string | undefined>((lead as any).status);
 
   // Função para gerar cor consistente baseada no ID do usuário
   const generateColorFromId = (id: string): string => {
@@ -620,7 +624,22 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <h4 className="font-semibold text-sm text-foreground mb-1">{lead.nome}</h4>
+              <div className="flex items-center gap-2 mb-1">
+                <h4 className="font-semibold text-sm text-foreground">{lead.nome}</h4>
+                {/* Badge de Status Ganho/Perdido */}
+                {leadStatus === 'ganho' && (
+                  <Badge className="bg-green-500 hover:bg-green-600 text-white text-[10px] px-1.5 py-0">
+                    <Trophy className="h-2.5 w-2.5 mr-0.5" />
+                    Ganho
+                  </Badge>
+                )}
+                {leadStatus === 'perdido' && (
+                  <Badge className="bg-red-500 hover:bg-red-600 text-white text-[10px] px-1.5 py-0">
+                    <XCircle className="h-2.5 w-2.5 mr-0.5" />
+                    Perdido
+                  </Badge>
+                )}
+              </div>
               
               {/* Responsáveis (múltiplos) com foto */}
               {responsaveisData.length > 0 && (
@@ -761,6 +780,21 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                 <DropdownMenuItem onClick={() => setResponsavelDialogOpen(true)}>
                   <UserPlus className="h-3 w-3 mr-2" />
                   Atribuir responsáveis
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => { setFinalizarDefaultAction('ganho'); setFinalizarDialogOpen(true); }}
+                  className="text-green-600 focus:text-green-600"
+                >
+                  <Trophy className="h-3 w-3 mr-2" />
+                  Marcar como Ganho
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => { setFinalizarDefaultAction('perdido'); setFinalizarDialogOpen(true); }}
+                  className="text-red-600 focus:text-red-600"
+                >
+                  <XCircle className="h-3 w-3 mr-2" />
+                  Marcar como Perdido
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={(e) => { handleDelete(e as any); }}>Excluir</DropdownMenuItem>
@@ -1153,6 +1187,23 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Dialog para Finalizar Negociação (Ganho/Perdido) */}
+        <FinalizarNegociacaoDialog
+          lead={{ 
+            id: lead.id, 
+            nome: lead.nome, 
+            value: leadValue,
+            status: leadStatus
+          }}
+          open={finalizarDialogOpen}
+          onOpenChange={setFinalizarDialogOpen}
+          onUpdated={() => {
+            setLeadStatus(finalizarDefaultAction);
+            onLeadMoved?.();
+          }}
+          defaultAction={finalizarDefaultAction}
+        />
       </div>
     </Card>
   );

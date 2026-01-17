@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2, Download, CheckSquare, Square, Trash2, Edit, GitBranch, X, DollarSign } from "lucide-react";
+import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2, Download, CheckSquare, Square, Trash2, Edit, GitBranch, X, DollarSign, Trophy, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
@@ -915,6 +915,24 @@ export default function Leads() {
             >
               <DollarSign className="h-4 w-4 md:mr-1" />
               <span className="hidden md:inline">Com Valor</span>
+            </Button>
+            <Button 
+              size="sm" 
+              variant={selectedStatus === "ganho" ? "default" : "outline"} 
+              onClick={() => { setSelectedStatus("ganho"); setFilterWithValue(false); setSearchParams({ status: 'ganho' }); }} 
+              className="flex-shrink-0 text-green-600 hover:text-green-700 border-green-200 hover:bg-green-50 data-[state=active]:bg-green-600"
+            >
+              <Trophy className="h-4 w-4 md:mr-1" />
+              <span className="hidden md:inline">Ganhos</span>
+            </Button>
+            <Button 
+              size="sm" 
+              variant={selectedStatus === "perdido" ? "default" : "outline"} 
+              onClick={() => { setSelectedStatus("perdido"); setFilterWithValue(false); setSearchParams({ status: 'perdido' }); }} 
+              className="flex-shrink-0 text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
+            >
+              <XCircle className="h-4 w-4 md:mr-1" />
+              <span className="hidden md:inline">Perdidos</span>
             </Button>
             <Button size="sm" variant={selectionMode ? "default" : "outline"} onClick={toggleSelectionMode} className={`flex-shrink-0 ${selectionMode ? "bg-primary" : ""}`}>
               <CheckSquare className="h-4 w-4 md:mr-2" />
