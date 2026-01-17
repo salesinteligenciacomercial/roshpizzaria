@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { BarChart3, TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity, Trophy, XCircle, Download, Share2, Filter, Settings, Eye, PieChart, Clock, Zap, RefreshCw, CalendarDays, UserCheck, AlertTriangle, ArrowUpRight, ArrowDownRight, Megaphone, ExternalLink } from "lucide-react";
+import { BarChart3, TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity, Trophy, XCircle, Download, Share2, Filter, Settings, Eye, PieChart, Clock, Zap, RefreshCw, CalendarDays, UserCheck, AlertTriangle, ArrowUpRight, ArrowDownRight, Megaphone, ExternalLink, Package } from "lucide-react";
 import CampaignAnalytics from "@/components/analytics/CampaignAnalytics";
 import LeadsDrilldownModal, { DrilldownFilterType } from "@/components/analytics/LeadsDrilldownModal";
 import { PipelineFinanceiro } from "@/components/analytics/PipelineFinanceiro";
 import { LossReasonsReport } from "@/components/analytics/LossReasonsReport";
+import ProductsAnalytics from "@/components/analytics/ProductsAnalytics";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -973,7 +974,7 @@ export default function Analytics() {
       </Card>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-7 h-auto p-1">
+        <TabsList className="grid w-full grid-cols-8 h-auto p-1">
           <TabsTrigger value="overview" className="gap-2 py-3">
             <Eye className="h-4 w-4" />
             <span className="hidden sm:inline">Visão Geral</span>
@@ -981,6 +982,10 @@ export default function Analytics() {
           <TabsTrigger value="sales" className="gap-2 py-3">
             <TrendingUp className="h-4 w-4" />
             <span className="hidden sm:inline">Vendas</span>
+          </TabsTrigger>
+          <TabsTrigger value="products" className="gap-2 py-3">
+            <Package className="h-4 w-4" />
+            <span className="hidden sm:inline">Produtos</span>
           </TabsTrigger>
           <TabsTrigger value="campaigns" className="gap-2 py-3">
             <Megaphone className="h-4 w-4" />
@@ -1485,6 +1490,11 @@ export default function Analytics() {
 
           {/* Relatório de Motivos de Perda */}
           <LossReasonsReport userCompanyId={userCompanyId} globalFilters={globalFilters} />
+        </TabsContent>
+
+        {/* Produtos & Serviços */}
+        <TabsContent value="products" className="space-y-6">
+          <ProductsAnalytics userCompanyId={userCompanyId} globalFilters={globalFilters} />
         </TabsContent>
 
         {/* Campanhas de Tráfego Pago */}
