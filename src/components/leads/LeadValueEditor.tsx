@@ -56,6 +56,7 @@ export function LeadValueEditor({ lead, open, onOpenChange, onUpdated }: LeadVal
   const [showHistory, setShowHistory] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [formData, setFormData] = useState({
     value: lead.value?.toString() || "0",
     probability: lead.probability || 50,
@@ -322,10 +323,11 @@ export function LeadValueEditor({ lead, open, onOpenChange, onUpdated }: LeadVal
                 <CalendarIcon className="h-4 w-4" />
                 Data Prevista de Fechamento
               </Label>
-              <Popover>
+              <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
+                    type="button"
                     className={cn(
                       "w-full justify-start text-left font-normal",
                       !formData.expected_close_date && "text-muted-foreground"
@@ -337,11 +339,14 @@ export function LeadValueEditor({ lead, open, onOpenChange, onUpdated }: LeadVal
                       : "Selecionar data"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-auto p-0 z-[9999]" align="start">
                   <Calendar
                     mode="single"
                     selected={formData.expected_close_date}
-                    onSelect={(date) => setFormData({ ...formData, expected_close_date: date })}
+                    onSelect={(date) => {
+                      setFormData({ ...formData, expected_close_date: date });
+                      setDatePopoverOpen(false);
+                    }}
                     locale={ptBR}
                     initialFocus
                     className="pointer-events-auto"
