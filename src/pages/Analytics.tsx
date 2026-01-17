@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { BarChart3, TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity, Trophy, XCircle, Download, Share2, Filter, Settings, Eye, PieChart, Clock, Zap, RefreshCw, CalendarDays, UserCheck, AlertTriangle, ArrowUpRight, ArrowDownRight, Megaphone } from "lucide-react";
+import { BarChart3, TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity, Trophy, XCircle, Download, Share2, Filter, Settings, Eye, PieChart, Clock, Zap, RefreshCw, CalendarDays, UserCheck, AlertTriangle, ArrowUpRight, ArrowDownRight, Megaphone, ExternalLink } from "lucide-react";
 import CampaignAnalytics from "@/components/analytics/CampaignAnalytics";
+import LeadsDrilldownModal, { DrilldownFilterType } from "@/components/analytics/LeadsDrilldownModal";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -72,10 +73,7 @@ export default function Analytics() {
     loading: permissionsLoading
   } = usePermissions();
 
-  // Verificar permissão de acesso ao Analytics
-  if (!permissionsLoading && !canAccess('analytics') && !isAdmin) {
-    return <Navigate to="/leads" replace />;
-  }
+  // Estado movido para depois dos hooks (verificação no final)
   const [stats, setStats] = useState<Stats>({
     totalLeads: 0,
     totalValue: 0,
@@ -124,6 +122,14 @@ export default function Analytics() {
   const [productivityLoading, setProductivityLoading] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting');
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+
+  // ✅ Estados para drill-down modal
+  const [drilldownOpen, setDrilldownOpen] = useState(false);
+  const [drilldownFilter, setDrilldownFilter] = useState<{
+    type: DrilldownFilterType;
+    title: string;
+    description: string;
+  } | null>(null);
 
   // ✅ Estado para usuários da empresa (filtro de responsável)
   const [companyUsers, setCompanyUsers] = useState<{
@@ -296,6 +302,12 @@ export default function Analytics() {
       setEtapas([]);
     }
   }, [selectedFunil]);
+
+  // ✅ Verificar permissão de acesso ao Analytics (após todos os hooks)
+  if (!permissionsLoading && !canAccess('analytics') && !isAdmin) {
+    return <Navigate to="/leads" replace />;
+  }
+
   const fetchAllStats = async () => {
     setLoading(true);
     try {
@@ -742,7 +754,9 @@ export default function Analytics() {
     description: "Leads ativos no sistema",
     color: "text-primary",
     trend: "+12%",
-    trendColor: "text-success"
+    trendColor: "text-success",
+    filterType: 'total' as DrilldownFilterType,
+    clickable: true
   }, {
     title: "Valor em Pipeline",
     value: `R$ ${stats.totalValue.toLocaleString("pt-BR")}`,
@@ -750,7 +764,9 @@ export default function Analytics() {
     description: "Valor total em negociação",
     color: "text-success",
     trend: "+8%",
-    trendColor: "text-success"
+    trendColor: "text-success",
+    filterType: 'pipeline' as DrilldownFilterType,
+    clickable: true
   }, {
     title: "Taxa de Conversão",
     value: `${stats.conversionRate}%`,
@@ -758,7 +774,9 @@ export default function Analytics() {
     description: "Conversão média",
     color: "text-accent",
     trend: "+5%",
-    trendColor: "text-success"
+    trendColor: "text-success",
+    filterType: 'won' as DrilldownFilterType,
+    clickable: true
   }, {
     title: "Negócios Ativos",
     value: stats.activeDeals,
@@ -766,8 +784,11 @@ export default function Analytics() {
     description: "Em andamento",
     color: "text-warning",
     trend: "+15%",
-    trendColor: "text-success"
+    trendColor: "text-success",
+    filterType: 'active' as DrilldownFilterType,
+    clickable: true
   }];
+
   const operacionalCards = [{
     title: "Conversas Ativas",
     value: stats.conversas,
@@ -775,7 +796,9 @@ export default function Analytics() {
     description: "WhatsApp, Instagram, Facebook",
     color: "text-blue-500",
     trend: "+22%",
-    trendColor: "text-success"
+    trendColor: "text-success",
+    filterType: 'conversations' as DrilldownFilterType,
+    clickable: false
   }, {
     title: "Agendamentos",
     value: stats.compromissos,
@@ -783,7 +806,9 @@ export default function Analytics() {
     description: "Compromissos marcados",
     color: "text-purple-500",
     trend: "+18%",
-    trendColor: "text-success"
+    trendColor: "text-success",
+    filterType: 'appointments' as DrilldownFilterType,
+    clickable: false
   }, {
     title: "Tarefas",
     value: stats.tarefas,
@@ -791,7 +816,9 @@ export default function Analytics() {
     description: "Em todos os quadros",
     color: "text-green-500",
     trend: "+25%",
-    trendColor: "text-success"
+    trendColor: "text-success",
+    filterType: 'tasks' as DrilldownFilterType,
+    clickable: false
   }, {
     title: "Atendimentos IA",
     value: stats.mensagensIA,
@@ -799,8 +826,34 @@ export default function Analytics() {
     description: "Mensagens processadas",
     color: "text-cyan-500",
     trend: "+35%",
-    trendColor: "text-success"
+    trendColor: "text-success",
+    filterType: undefined,
+    clickable: false
   }];
+
+  // Handler para abrir drill-down
+  const handleCardClick = (stat: typeof statCards[0]) => {
+    if (!stat.clickable || !stat.filterType) return;
+    
+    const filterDescriptions: Record<DrilldownFilterType, { title: string; description: string }> = {
+      'total': { title: 'Todos os Leads', description: 'Lista completa de leads do período selecionado' },
+      'pipeline': { title: 'Leads em Pipeline', description: 'Leads com valor em negociação (não ganhos/perdidos)' },
+      'active': { title: 'Negócios Ativos', description: 'Leads em andamento que não foram fechados' },
+      'won': { title: 'Leads Convertidos', description: 'Leads que foram ganhos no período' },
+      'lost': { title: 'Leads Perdidos', description: 'Leads marcados como perdidos' },
+      'conversations': { title: 'Conversas', description: 'Conversas ativas' },
+      'appointments': { title: 'Agendamentos', description: 'Compromissos marcados' },
+      'tasks': { title: 'Tarefas', description: 'Tarefas criadas' }
+    };
+    
+    const config = filterDescriptions[stat.filterType];
+    setDrilldownFilter({
+      type: stat.filterType,
+      title: config.title,
+      description: config.description
+    });
+    setDrilldownOpen(true);
+  };
 
   // Renderiza a página imediatamente; quando loading=true, os cards usam valores padrão
   // e botões exibem apenas um pequeno spinner, sem bloquear a tela inteira.
@@ -953,9 +1006,13 @@ export default function Analytics() {
         <TabsContent value="overview" className="space-y-6">
           {/* KPIs Principais */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {statCards.map((stat, index) => <Card key={stat.title} className="group relative overflow-hidden border-0 shadow-card transition-all duration-300 hover:shadow-xl hover:-translate-y-1" style={{
-            animationDelay: `${index * 100}ms`
-          }}>
+            {statCards.map((stat, index) => (
+              <Card 
+                key={stat.title} 
+                className={`group relative overflow-hidden border-0 shadow-card transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${stat.clickable ? 'cursor-pointer' : ''}`} 
+                style={{ animationDelay: `${index * 100}ms` }}
+                onClick={() => stat.clickable && handleCardClick(stat)}
+              >
                 <div className="absolute inset-0 bg-gradient-card opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
@@ -969,12 +1026,18 @@ export default function Analytics() {
                   <div className="text-3xl font-bold text-foreground">{stat.value}</div>
                   <div className="flex items-center justify-between mt-1">
                     <p className="text-xs text-muted-foreground">{stat.description}</p>
-                    <Badge variant="secondary" className={`${stat.trendColor} text-xs`}>
-                      {stat.trend}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      {stat.clickable && (
+                        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                      <Badge variant="secondary" className={`${stat.trendColor} text-xs`}>
+                        {stat.trend}
+                      </Badge>
+                    </div>
                   </div>
                 </CardContent>
-              </Card>)}
+              </Card>
+            ))}
           </div>
 
           {/* Métricas Operacionais */}
@@ -2956,5 +3019,18 @@ export default function Analytics() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Modal de Drill-Down */}
+      {drilldownFilter && (
+        <LeadsDrilldownModal
+          open={drilldownOpen}
+          onOpenChange={setDrilldownOpen}
+          title={drilldownFilter.title}
+          description={drilldownFilter.description}
+          filterType={drilldownFilter.type}
+          userCompanyId={userCompanyId}
+          globalFilters={globalFilters}
+        />
+      )}
     </div>;
 }
