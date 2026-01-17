@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2, Download, CheckSquare, Square, Trash2, Edit, GitBranch, X } from "lucide-react";
+import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2, Download, CheckSquare, Square, Trash2, Edit, GitBranch, X, DollarSign } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
@@ -19,7 +19,7 @@ import { ConversaPopup } from "@/components/leads/ConversaPopup";
 import { AgendaModal } from "@/components/agenda/AgendaModal";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { formatPhoneNumber } from "@/utils/phoneFormatter";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLeadsSync } from "@/hooks/useLeadsSync";
 import { useGlobalSync } from "@/hooks/useGlobalSync";
 import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
@@ -47,11 +47,13 @@ interface Lead {
   responsavel_id?: string | null;
 }
 export default function Leads() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [filterWithValue, setFilterWithValue] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
@@ -385,6 +387,19 @@ export default function Leads() {
     },
     showNotifications: true
   });
+  // Ler parâmetros da URL para filtros vindos do Analytics
+  useEffect(() => {
+    const minValue = searchParams.get('minValue');
+    const status = searchParams.get('status');
+    
+    if (minValue) {
+      setFilterWithValue(true);
+    }
+    if (status) {
+      setSelectedStatus(status);
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     carregarCompanyIdELeads();
   }, []);
@@ -427,7 +442,7 @@ export default function Leads() {
   };
   useEffect(() => {
     filterLeads();
-  }, [searchTerm, selectedStatus, selectedTag, leads]);
+  }, [searchTerm, selectedStatus, selectedTag, filterWithValue, leads]);
   const carregarLeads = async (reset = false) => {
     if (loading || !companyIdRef.current) return;
     setLoading(true);
@@ -547,7 +562,7 @@ export default function Leads() {
     }, 500); // Debounce de 500ms para busca
 
     return () => clearTimeout(timeoutId);
-  }, [searchTerm, selectedStatus, selectedTag, resetAndLoadLeads]);
+  }, [searchTerm, selectedStatus, selectedTag, filterWithValue, resetAndLoadLeads]);
   const filterLeads = () => {
     let filtered = leads;
     const normalizeString = (s: string | null | undefined) => (s || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -590,6 +605,10 @@ export default function Leads() {
     }
     if (selectedTag) {
       filtered = filtered.filter(lead => lead.tags?.includes(selectedTag));
+    }
+    // Filtrar leads com valor de venda
+    if (filterWithValue) {
+      filtered = filtered.filter(lead => lead.value > 0);
     }
     setFilteredLeads(filtered);
   };
@@ -875,11 +894,27 @@ export default function Leads() {
             />
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0">
-            <Button size="sm" variant={selectedStatus === "all" ? "default" : "outline"} onClick={() => setSelectedStatus("all")} className="flex-shrink-0">
+            <Button size="sm" variant={selectedStatus === "all" && !filterWithValue ? "default" : "outline"} onClick={() => { setSelectedStatus("all"); setFilterWithValue(false); setSearchParams({}); }} className="flex-shrink-0">
               Todos
             </Button>
-            <Button size="sm" variant={selectedStatus === "novo" ? "default" : "outline"} onClick={() => setSelectedStatus("novo")} className="flex-shrink-0">
+            <Button size="sm" variant={selectedStatus === "novo" ? "default" : "outline"} onClick={() => { setSelectedStatus("novo"); setFilterWithValue(false); setSearchParams({}); }} className="flex-shrink-0">
               Novos
+            </Button>
+            <Button 
+              size="sm" 
+              variant={filterWithValue ? "default" : "outline"} 
+              onClick={() => { 
+                setFilterWithValue(!filterWithValue); 
+                if (!filterWithValue) {
+                  setSearchParams({ minValue: '1' });
+                } else {
+                  setSearchParams({});
+                }
+              }} 
+              className="flex-shrink-0"
+            >
+              <DollarSign className="h-4 w-4 md:mr-1" />
+              <span className="hidden md:inline">Com Valor</span>
             </Button>
             <Button size="sm" variant={selectionMode ? "default" : "outline"} onClick={toggleSelectionMode} className={`flex-shrink-0 ${selectionMode ? "bg-primary" : ""}`}>
               <CheckSquare className="h-4 w-4 md:mr-2" />
