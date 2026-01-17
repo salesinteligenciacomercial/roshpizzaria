@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
   Package, Plus, DollarSign, TrendingUp, ShoppingCart, BarChart3, 
   Trophy, AlertTriangle, ArrowUpRight, ArrowDownRight, Loader2, RefreshCw,
-  Eye, Pencil, Users, TrendingDown, Sparkles
+  Eye, Pencil, Users, TrendingDown, Sparkles, Settings
 } from "lucide-react";
 import { toast } from "sonner";
 import { Bar, Doughnut } from 'react-chartjs-2';
@@ -22,6 +22,7 @@ import ProductCustomersModal from "./ProductCustomersModal";
 import ProductSeasonalityChart from "./ProductSeasonalityChart";
 import ProductComparisonTable from "./ProductComparisonTable";
 import MarketingOpportunities from "./MarketingOpportunities";
+import ProductsManager from "./ProductsManager";
 
 interface Product {
   id: string;
@@ -70,6 +71,7 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
   // Modal states
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [customersModalOpen, setCustomersModalOpen] = useState(false);
+  const [managerModalOpen, setManagerModalOpen] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedProductName, setSelectedProductName] = useState("");
   
@@ -535,6 +537,10 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
             <RefreshCw className="h-4 w-4 mr-1" />
             Atualizar
           </Button>
+          <Button variant="outline" onClick={() => setManagerModalOpen(true)}>
+            <Settings className="h-4 w-4 mr-1" />
+            Gerenciar
+          </Button>
           <Button onClick={() => handleOpenDialog()}>
             <Plus className="h-4 w-4 mr-1" />
             Novo Produto
@@ -794,6 +800,14 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
         productId={selectedProductId}
         productName={selectedProductName}
         companyId={userCompanyId || ""}
+      />
+
+      {/* Products Manager Modal - NEW */}
+      <ProductsManager
+        open={managerModalOpen}
+        onOpenChange={setManagerModalOpen}
+        companyId={userCompanyId || ""}
+        onProductsChange={fetchData}
       />
     </div>
   );
