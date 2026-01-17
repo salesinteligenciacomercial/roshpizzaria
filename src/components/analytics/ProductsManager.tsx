@@ -7,10 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   FolderOpen, Plus, Pencil, Trash2, Loader2, Tag,
-  Search, Package
+  Search, Package, PlusCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -268,8 +269,20 @@ export default function ProductsManager({
         setSaving(false);
       }
     } else {
-      // Just add to form (will be saved with product)
-      toast.success("Categoria disponível para uso!");
+      // New category - add to local list and set in product form
+      const newCategoryName = categoryName.trim();
+      
+      // Add to categories list if not exists
+      if (!categories.some(c => c.nome === newCategoryName)) {
+        setCategories([...categories, { nome: newCategoryName, count: 0 }]);
+      }
+      
+      // Set in product form if dialog is open
+      if (productDialogOpen) {
+        setProductForm({ ...productForm, categoria: newCategoryName });
+      }
+      
+      toast.success(`Categoria "${newCategoryName}" criada!`);
       setCategoryDialogOpen(false);
     }
   };
@@ -549,18 +562,44 @@ export default function ProductsManager({
 
               <div className="space-y-2">
                 <Label htmlFor="product-categoria">Categoria</Label>
-                <Input
-                  id="product-categoria"
-                  value={productForm.categoria}
-                  onChange={(e) => setProductForm({ ...productForm, categoria: e.target.value })}
-                  placeholder="Ex: Serviço, Produto"
-                  list="categories-list"
-                />
-                <datalist id="categories-list">
-                  {categories.map(cat => (
-                    <option key={cat.nome} value={cat.nome} />
-                  ))}
-                </datalist>
+                <Select
+                  value={productForm.categoria || "__none__"}
+                  onValueChange={(value) => {
+                    if (value === "__new__") {
+                      // Open category dialog to create new
+                      setCategoryDialogOpen(true);
+                      setEditingCategory(null);
+                      setCategoryName("");
+                    } else if (value === "__none__") {
+                      setProductForm({ ...productForm, categoria: "" });
+                    } else {
+                      setProductForm({ ...productForm, categoria: value });
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione ou crie uma categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <span className="text-muted-foreground">Sem categoria</span>
+                    </SelectItem>
+                    {categories.map(cat => (
+                      <SelectItem key={cat.nome} value={cat.nome}>
+                        <div className="flex items-center gap-2">
+                          <Tag className="h-3 w-3" />
+                          {cat.nome}
+                        </div>
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="__new__" className="text-primary">
+                      <div className="flex items-center gap-2">
+                        <PlusCircle className="h-3 w-3" />
+                        Criar nova categoria
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
