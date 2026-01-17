@@ -12,6 +12,7 @@ import {
   Building2, Eye, MessageSquare, ArrowUpRight, Loader2, ChevronLeft, ChevronRight 
 } from "lucide-react";
 import { toast } from "sonner";
+import { ConversaPopup } from "@/components/leads/ConversaPopup";
 
 export type DrilldownFilterType = 
   | 'total' 
@@ -65,6 +66,10 @@ export default function LeadsDrilldownModal({
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Estado para popup de conversa
+  const [conversaPopupOpen, setConversaPopupOpen] = useState(false);
+  const [selectedLeadForConversation, setSelectedLeadForConversation] = useState<Lead | null>(null);
 
   const fetchLeads = useCallback(async () => {
     if (!userCompanyId || !open) return;
@@ -261,13 +266,13 @@ export default function LeadsDrilldownModal({
     navigate(`/leads${params.toString() ? `?${params.toString()}` : ''}`);
   };
 
-  const handleOpenConversation = (phone: string) => {
-    if (!phone) {
+  const handleOpenConversation = (lead: Lead) => {
+    if (!lead.phone) {
       toast.error('Lead sem telefone cadastrado');
       return;
     }
-    onOpenChange(false);
-    navigate('/conversas');
+    setSelectedLeadForConversation(lead);
+    setConversaPopupOpen(true);
   };
 
   return (
@@ -395,7 +400,7 @@ export default function LeadsDrilldownModal({
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => handleOpenConversation(lead.phone!)}
+                            onClick={() => handleOpenConversation(lead)}
                             title="Abrir conversa"
                           >
                             <MessageSquare className="h-4 w-4" />
@@ -440,6 +445,20 @@ export default function LeadsDrilldownModal({
           </div>
         )}
       </DialogContent>
+
+      {/* Popup de Conversa */}
+      {selectedLeadForConversation && (
+        <ConversaPopup
+          open={conversaPopupOpen}
+          onOpenChange={(isOpen) => {
+            setConversaPopupOpen(isOpen);
+            if (!isOpen) setSelectedLeadForConversation(null);
+          }}
+          leadId={selectedLeadForConversation.id}
+          leadName={selectedLeadForConversation.name}
+          leadPhone={selectedLeadForConversation.phone || undefined}
+        />
+      )}
     </Dialog>
   );
 }
