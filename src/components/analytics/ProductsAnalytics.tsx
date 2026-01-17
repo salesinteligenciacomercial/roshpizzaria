@@ -13,10 +13,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
   Package, Plus, DollarSign, TrendingUp, ShoppingCart, BarChart3, 
   Trophy, AlertTriangle, ArrowUpRight, ArrowDownRight, Loader2, RefreshCw,
-  Eye, Pencil
+  Eye, Pencil, Users, TrendingDown, Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
 import { Bar, Doughnut } from 'react-chartjs-2';
+import ProductSalesHistoryModal from "./ProductSalesHistoryModal";
+import ProductCustomersModal from "./ProductCustomersModal";
+import ProductSeasonalityChart from "./ProductSeasonalityChart";
+import ProductComparisonTable from "./ProductComparisonTable";
+import MarketingOpportunities from "./MarketingOpportunities";
 
 interface Product {
   id: string;
@@ -38,6 +43,12 @@ interface ProductStats {
   taxaConversao: number;
 }
 
+interface SaleData {
+  wonAt: string;
+  value: number;
+  productId: string;
+}
+
 interface ProductsAnalyticsProps {
   userCompanyId: string | null;
   globalFilters: {
@@ -49,9 +60,18 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [productStats, setProductStats] = useState<ProductStats[]>([]);
+  const [previousStats, setPreviousStats] = useState<ProductStats[]>([]);
+  const [salesData, setSalesData] = useState<SaleData[]>([]);
+  const [dormantCustomersCount, setDormantCustomersCount] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  
+  // Modal states
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [customersModalOpen, setCustomersModalOpen] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedProductName, setSelectedProductName] = useState("");
   
   // Form state
   const [formData, setFormData] = useState({
@@ -68,7 +88,10 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
     bestSeller: "",
     totalRevenue: 0,
     avgTicket: 0,
-    totalSales: 0
+    totalSales: 0,
+    growthProducts: 0,
+    decliningProducts: 0,
+    uniqueCustomers: 0
   });
 
   const fetchData = useCallback(async () => {
@@ -76,28 +99,46 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
     
     setLoading(true);
     try {
-      // Calculate date filter
+      // Calculate date filters
       let startDate: Date | null = null;
-      if (globalFilters.period !== 'all') {
-        const now = new Date();
-        switch (globalFilters.period) {
-          case 'today':
-            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            break;
-          case 'week':
-            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            break;
-          case 'month':
-            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-            break;
-          case 'quarter':
-            const quarterStart = Math.floor(now.getMonth() / 3) * 3;
-            startDate = new Date(now.getFullYear(), quarterStart, 1);
-            break;
-          case 'year':
-            startDate = new Date(now.getFullYear(), 0, 1);
-            break;
-        }
+      let previousStartDate: Date | null = null;
+      let previousEndDate: Date | null = null;
+      
+      const now = new Date();
+      
+      switch (globalFilters.period) {
+        case 'today':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          previousStartDate = new Date(startDate);
+          previousStartDate.setDate(previousStartDate.getDate() - 1);
+          previousEndDate = startDate;
+          break;
+        case 'week':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          previousEndDate = startDate;
+          previousStartDate = new Date(startDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case 'month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          previousEndDate = startDate;
+          previousStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          break;
+        case 'quarter':
+          const quarterStart = Math.floor(now.getMonth() / 3) * 3;
+          startDate = new Date(now.getFullYear(), quarterStart, 1);
+          previousEndDate = startDate;
+          previousStartDate = new Date(now.getFullYear(), quarterStart - 3, 1);
+          break;
+        case 'year':
+          startDate = new Date(now.getFullYear(), 0, 1);
+          previousEndDate = startDate;
+          previousStartDate = new Date(now.getFullYear() - 1, 0, 1);
+          break;
+        default:
+          // 'all' - last 12 months for comparison
+          startDate = null;
+          previousStartDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+          previousEndDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
       }
 
       // Fetch products
@@ -110,20 +151,36 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
       if (productsError) throw productsError;
       setProducts(productsData || []);
 
-      // Fetch leads with products (ganhos)
+      // Fetch current period leads with products (ganhos)
       let leadsQuery = supabase
         .from('leads')
-        .select('id, value, produto_id, created_at')
+        .select('id, name, value, produto_id, won_at, created_at')
         .eq('company_id', userCompanyId)
         .eq('status', 'ganho')
         .not('produto_id', 'is', null);
 
       if (startDate) {
-        leadsQuery = leadsQuery.gte('created_at', startDate.toISOString());
+        leadsQuery = leadsQuery.gte('won_at', startDate.toISOString());
       }
 
       const { data: leadsData, error: leadsError } = await leadsQuery;
       if (leadsError) throw leadsError;
+
+      // Fetch previous period leads for comparison
+      let previousLeadsQuery = supabase
+        .from('leads')
+        .select('id, value, produto_id, won_at')
+        .eq('company_id', userCompanyId)
+        .eq('status', 'ganho')
+        .not('produto_id', 'is', null);
+
+      if (previousStartDate && previousEndDate) {
+        previousLeadsQuery = previousLeadsQuery
+          .gte('won_at', previousStartDate.toISOString())
+          .lt('won_at', previousEndDate.toISOString());
+      }
+
+      const { data: previousLeadsData } = await previousLeadsQuery;
 
       // Fetch total leads with products for conversion rate
       let totalLeadsQuery = supabase
@@ -138,12 +195,38 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
 
       const { data: totalLeadsData } = await totalLeadsQuery;
 
-      // Calculate stats per product
-      const statsMap = new Map<string, { count: number; revenue: number; totalLeads: number }>();
+      // Count dormant customers (no purchase in last 60 days)
+      const sixtyDaysAgo = new Date();
+      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+      
+      const { data: recentCustomers } = await supabase
+        .from('leads')
+        .select('phone, telefone')
+        .eq('company_id', userCompanyId)
+        .eq('status', 'ganho')
+        .gte('won_at', sixtyDaysAgo.toISOString());
+      
+      const { data: allWonLeads } = await supabase
+        .from('leads')
+        .select('phone, telefone')
+        .eq('company_id', userCompanyId)
+        .eq('status', 'ganho');
+      
+      const recentPhones = new Set(
+        (recentCustomers || []).map(l => l.phone || l.telefone).filter(Boolean)
+      );
+      const allPhones = new Set(
+        (allWonLeads || []).map(l => l.phone || l.telefone).filter(Boolean)
+      );
+      const dormantCount = [...allPhones].filter(p => !recentPhones.has(p)).length;
+      setDormantCustomersCount(dormantCount);
+
+      // Calculate current stats per product
+      const statsMap = new Map<string, { count: number; revenue: number; totalLeads: number; customers: Set<string> }>();
       
       // Initialize all products
       (productsData || []).forEach(p => {
-        statsMap.set(p.id, { count: 0, revenue: 0, totalLeads: 0 });
+        statsMap.set(p.id, { count: 0, revenue: 0, totalLeads: 0, customers: new Set() });
       });
 
       // Count total leads per product
@@ -157,19 +240,27 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
       });
 
       // Count won leads and revenue per product
+      const allSalesData: SaleData[] = [];
       (leadsData || []).forEach(lead => {
         if (lead.produto_id) {
           const current = statsMap.get(lead.produto_id);
           if (current) {
             current.count++;
             current.revenue += Number(lead.value) || 0;
+            if (lead.name) current.customers.add(lead.name);
           }
+          allSalesData.push({
+            wonAt: lead.won_at || lead.created_at || "",
+            value: Number(lead.value) || 0,
+            productId: lead.produto_id
+          });
         }
       });
+      setSalesData(allSalesData);
 
-      // Build stats array
+      // Build current stats array
       const stats: ProductStats[] = (productsData || []).map(p => {
-        const s = statsMap.get(p.id) || { count: 0, revenue: 0, totalLeads: 0 };
+        const s = statsMap.get(p.id) || { count: 0, revenue: 0, totalLeads: 0, customers: new Set() };
         return {
           id: p.id,
           nome: p.nome,
@@ -183,6 +274,56 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
       }).sort((a, b) => b.receitaTotal - a.receitaTotal);
 
       setProductStats(stats);
+
+      // Calculate previous stats
+      const prevStatsMap = new Map<string, { count: number; revenue: number }>();
+      (productsData || []).forEach(p => {
+        prevStatsMap.set(p.id, { count: 0, revenue: 0 });
+      });
+
+      (previousLeadsData || []).forEach(lead => {
+        if (lead.produto_id) {
+          const current = prevStatsMap.get(lead.produto_id);
+          if (current) {
+            current.count++;
+            current.revenue += Number(lead.value) || 0;
+          }
+        }
+      });
+
+      const prevStats: ProductStats[] = (productsData || []).map(p => {
+        const s = prevStatsMap.get(p.id) || { count: 0, revenue: 0 };
+        return {
+          id: p.id,
+          nome: p.nome,
+          categoria: p.categoria,
+          preco_sugerido: p.preco_sugerido,
+          vendasCount: s.count,
+          receitaTotal: s.revenue,
+          ticketMedio: s.count > 0 ? s.revenue / s.count : 0,
+          taxaConversao: 0
+        };
+      }).sort((a, b) => b.receitaTotal - a.receitaTotal);
+
+      setPreviousStats(prevStats);
+
+      // Calculate unique customers
+      const uniqueCustomers = new Set<string>();
+      (leadsData || []).forEach(lead => {
+        if (lead.name) uniqueCustomers.add(lead.name);
+      });
+
+      // Calculate growth/decline products
+      let growthCount = 0;
+      let declineCount = 0;
+      stats.forEach(stat => {
+        const prevStat = prevStats.find(p => p.id === stat.id);
+        if (prevStat && prevStat.receitaTotal > 0) {
+          const growth = ((stat.receitaTotal - prevStat.receitaTotal) / prevStat.receitaTotal) * 100;
+          if (growth > 10) growthCount++;
+          if (growth < -10) declineCount++;
+        }
+      });
 
       // Calculate KPIs
       const totalProducts = productsData?.length || 0;
@@ -198,7 +339,10 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
         bestSeller,
         totalRevenue,
         avgTicket,
-        totalSales
+        totalSales,
+        growthProducts: growthCount,
+        decliningProducts: declineCount,
+        uniqueCustomers: uniqueCustomers.size
       });
 
     } catch (error) {
@@ -269,6 +413,18 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleViewHistory = (productId: string, productName: string) => {
+    setSelectedProductId(productId);
+    setSelectedProductName(productName);
+    setHistoryModalOpen(true);
+  };
+
+  const handleViewCustomers = (productId: string, productName: string) => {
+    setSelectedProductId(productId);
+    setSelectedProductName(productName);
+    setCustomersModalOpen(true);
   };
 
   const formatCurrency = (value: number) => {
@@ -372,7 +528,7 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
             <Package className="h-6 w-6 text-primary" />
             Produtos & Serviços
           </h2>
-          <p className="text-muted-foreground">Análise de performance por produto/serviço</p>
+          <p className="text-muted-foreground">Dashboard de vendas para análise e campanhas de marketing</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={fetchData}>
@@ -386,11 +542,11 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* KPIs - Extended */}
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <Card className="border-0 shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total de Produtos</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Produtos</CardTitle>
             <Package className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
@@ -401,37 +557,75 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
 
         <Card className="border-0 shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Mais Vendido</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Mais Vendido</CardTitle>
             <Trophy className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold truncate">{kpis.bestSeller}</div>
-            <p className="text-xs text-muted-foreground">{kpis.totalSales} vendas no período</p>
+            <div className="text-lg font-bold truncate">{kpis.bestSeller}</div>
+            <p className="text-xs text-muted-foreground">{kpis.totalSales} vendas</p>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Receita Total</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Receita Total</CardTitle>
             <DollarSign className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(kpis.totalRevenue)}</div>
-            <p className="text-xs text-muted-foreground">Vendas finalizadas</p>
+            <div className="text-xl font-bold">{formatCurrency(kpis.totalRevenue)}</div>
+            <p className="text-xs text-muted-foreground">período selecionado</p>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Ticket Médio</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Ticket Médio</CardTitle>
             <TrendingUp className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(kpis.avgTicket)}</div>
-            <p className="text-xs text-muted-foreground">Por venda</p>
+            <div className="text-xl font-bold">{formatCurrency(kpis.avgTicket)}</div>
+            <p className="text-xs text-muted-foreground">por venda</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Em Alta</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{kpis.growthProducts}</div>
+            <p className="text-xs text-muted-foreground">produtos crescendo</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Clientes Únicos</CardTitle>
+            <Users className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{kpis.uniqueCustomers}</div>
+            <p className="text-xs text-muted-foreground">compraram no período</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Seasonality Chart - NEW */}
+      {salesData.length > 0 && (
+        <ProductSeasonalityChart 
+          salesData={salesData} 
+          period={globalFilters.period} 
+        />
+      )}
+
+      {/* Marketing Opportunities - NEW */}
+      <MarketingOpportunities
+        currentStats={productStats}
+        previousStats={previousStats}
+        dormantCustomersCount={dormantCustomersCount}
+        onViewCustomers={handleViewCustomers}
+      />
 
       {/* Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -506,87 +700,13 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
         </Card>
       )}
 
-      {/* Detailed table */}
-      <Card className="border-0 shadow-card">
-        <CardHeader>
-          <CardTitle>Tabela Detalhada de Produtos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ScrollArea className="max-h-[400px]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Produto</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead className="text-right">Preço Sugerido</TableHead>
-                  <TableHead className="text-right">Vendas</TableHead>
-                  <TableHead className="text-right">Receita</TableHead>
-                  <TableHead className="text-right">Ticket Médio</TableHead>
-                  <TableHead className="text-center">Conversão</TableHead>
-                  <TableHead className="text-center">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {productStats.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      Nenhum produto cadastrado. Clique em "Novo Produto" para começar.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  productStats.map((stat, index) => (
-                    <TableRow key={stat.id} className="group">
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {index === 0 && stat.vendasCount > 0 && (
-                            <Trophy className="h-4 w-4 text-yellow-500" />
-                          )}
-                          <span className="font-medium">{stat.nome}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {stat.categoria && (
-                          <Badge variant="secondary">{stat.categoria}</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {stat.preco_sugerido ? formatCurrency(stat.preco_sugerido) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {stat.vendasCount}
-                      </TableCell>
-                      <TableCell className="text-right font-medium text-green-600">
-                        {formatCurrency(stat.receitaTotal)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {stat.vendasCount > 0 ? formatCurrency(stat.ticketMedio) : '-'}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant={stat.taxaConversao >= 50 ? "default" : "secondary"}>
-                          {stat.taxaConversao.toFixed(1)}%
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => {
-                            const product = products.find(p => p.id === stat.id);
-                            if (product) handleOpenDialog(product);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+      {/* Product Comparison Table - NEW */}
+      <ProductComparisonTable
+        currentStats={productStats}
+        previousStats={previousStats}
+        onViewHistory={handleViewHistory}
+        onViewCustomers={handleViewCustomers}
+      />
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -657,6 +777,24 @@ export default function ProductsAnalytics({ userCompanyId, globalFilters }: Prod
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Sales History Modal - NEW */}
+      <ProductSalesHistoryModal
+        open={historyModalOpen}
+        onOpenChange={setHistoryModalOpen}
+        productId={selectedProductId}
+        productName={selectedProductName}
+        companyId={userCompanyId || ""}
+      />
+
+      {/* Customers Modal - NEW */}
+      <ProductCustomersModal
+        open={customersModalOpen}
+        onOpenChange={setCustomersModalOpen}
+        productId={selectedProductId}
+        productName={selectedProductName}
+        companyId={userCompanyId || ""}
+      />
     </div>
   );
 }
