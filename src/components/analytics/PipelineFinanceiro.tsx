@@ -39,6 +39,8 @@ interface PipelineMetrics {
   leadsAtivos: number;
   leadsVencidos: number;
   taxaConversao: number;
+  proximosAFechar: number;
+  valorProximosAFechar: number;
 }
 
 export function PipelineFinanceiro({ userCompanyId, globalFilters }: PipelineFinanceiroProps) {
@@ -51,7 +53,9 @@ export function PipelineFinanceiro({ userCompanyId, globalFilters }: PipelineFin
     cicloMedioVenda: 0,
     leadsAtivos: 0,
     leadsVencidos: 0,
-    taxaConversao: 0
+    taxaConversao: 0,
+    proximosAFechar: 0,
+    valorProximosAFechar: 0
   });
   const [loading, setLoading] = useState(true);
   const [drilldownOpen, setDrilldownOpen] = useState(false);
@@ -134,6 +138,18 @@ export function PipelineFinanceiro({ userCompanyId, globalFilters }: PipelineFin
         return closeDate < today;
       }).length;
 
+      // Próximos a fechar (leads com data de fechamento nos próximos 7 dias)
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      
+      const leadsProximosAFechar = leadsAtivos.filter(l => {
+        if (!l.expected_close_date) return false;
+        const closeDate = new Date(l.expected_close_date);
+        return closeDate >= today && closeDate <= nextWeek;
+      });
+      const proximosAFechar = leadsProximosAFechar.length;
+      const valorProximosAFechar = leadsProximosAFechar.reduce((sum, l) => sum + (Number(l.value) || 0), 0);
+
       // Vendas fechadas (status = ganho)
       const leadsGanhos = allLeads.filter(l => l.status === 'ganho');
       const vendasFechadas = leadsGanhos.reduce((sum, l) => sum + (Number(l.value) || 0), 0);
@@ -145,10 +161,10 @@ export function PipelineFinanceiro({ userCompanyId, globalFilters }: PipelineFin
       // Ticket médio
       const ticketMedio = leadsGanhos.length > 0 ? vendasFechadas / leadsGanhos.length : 0;
 
-      // Taxa de conversão
-      const totalFinalizados = leadsGanhos.length + leadsPerdidos.length;
-      const taxaConversao = totalFinalizados > 0 
-        ? (leadsGanhos.length / totalFinalizados) * 100 
+      // Taxa de conversão - CORRIGIDO: calcula sobre TODOS os leads, não só finalizados
+      // Ganhos dividido pelo total de leads = taxa real de conversão
+      const taxaConversao = allLeads.length > 0 
+        ? (leadsGanhos.length / allLeads.length) * 100 
         : 0;
 
       // Ciclo médio de venda (dias entre criação e ganho)
@@ -174,7 +190,9 @@ export function PipelineFinanceiro({ userCompanyId, globalFilters }: PipelineFin
         cicloMedioVenda,
         leadsAtivos: leadsAtivos.length,
         leadsVencidos,
-        taxaConversao
+        taxaConversao,
+        proximosAFechar,
+        valorProximosAFechar
       });
 
     } catch (error) {
@@ -295,6 +313,34 @@ export function PipelineFinanceiro({ userCompanyId, globalFilters }: PipelineFin
               <div className="text-2xl font-bold">{formatCurrency(metrics.ticketMedio)}</div>
               <p className="text-xs text-muted-foreground">
                 Valor médio por venda
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Próximos a Fechar */}
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Próximos a Fechar</CardTitle>
+              <CalendarDays className="h-4 w-4 text-amber-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-amber-600">{metrics.proximosAFechar}</div>
+              <p className="text-xs text-muted-foreground">
+                {formatCurrency(metrics.valorProximosAFechar)} nos próximos 7 dias
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Taxa de Conversão */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Taxa de Conversão</CardTitle>
+              <Percent className="h-4 w-4 text-cyan-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-cyan-600">{metrics.taxaConversao.toFixed(1)}%</div>
+              <p className="text-xs text-muted-foreground">
+                Leads ganhos / Total de leads
               </p>
             </CardContent>
           </Card>
