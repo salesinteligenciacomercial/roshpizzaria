@@ -27,7 +27,8 @@ interface Stats {
   totalLeads: number;
   totalValue: number;
   conversionRate: number;
-  activeDeals: number;
+  proximosAFechar: number;
+  valorProximosAFechar: number;
   conversas: number;
   compromissos: number;
   tarefas: number;
@@ -81,7 +82,8 @@ export default function Analytics() {
     totalLeads: 0,
     totalValue: 0,
     conversionRate: 0,
-    activeDeals: 0,
+    proximosAFechar: 0,
+    valorProximosAFechar: 0,
     conversas: 0,
     compromissos: 0,
     tarefas: 0,
@@ -352,7 +354,7 @@ export default function Analytics() {
       }
 
       // Leads - com filtro de período
-      let leadsQuery = supabase.from("leads").select("value, status, etapa_id, created_at");
+      let leadsQuery = supabase.from("leads").select("value, status, etapa_id, created_at, expected_close_date");
       if (startDate) {
         leadsQuery = leadsQuery.gte('created_at', startDate.toISOString());
       }
@@ -360,9 +362,23 @@ export default function Analytics() {
 
       const totalLeads = leads?.length || 0;
       const totalValue = leads?.reduce((sum, lead) => sum + (Number(lead.value) || 0), 0) || 0;
-      const activeDeals = leads?.filter(l => l.status !== "perdido" && l.status !== "ganho").length || 0;
       const wonDeals = leads?.filter(l => l.status === "ganho").length || 0;
       const conversionRate = totalLeads > 0 ? wonDeals / totalLeads * 100 : 0;
+      
+      // Próximos a fechar - leads ativos com data de fechamento nos próximos 7 dias
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      
+      const leadsProximosAFechar = leads?.filter(l => {
+        if (l.status === 'ganho' || l.status === 'perdido') return false;
+        if (!l.expected_close_date) return false;
+        const closeDate = new Date(l.expected_close_date);
+        return closeDate >= today && closeDate <= nextWeek;
+      }) || [];
+      const proximosAFechar = leadsProximosAFechar.length;
+      const valorProximosAFechar = leadsProximosAFechar.reduce((sum, l) => sum + (Number(l.value) || 0), 0);
 
       // ✅ CORREÇÃO: Contar CONVERSAS ÚNICAS (números únicos) APENAS da empresa do usuário
       let conversasQuery = supabase.from("conversas").select("numero, telefone_formatado, is_group, created_at");
@@ -436,8 +452,9 @@ export default function Analytics() {
       setStats({
         totalLeads,
         totalValue,
-        conversionRate: Math.round(conversionRate),
-        activeDeals,
+        conversionRate: parseFloat(conversionRate.toFixed(1)),
+        proximosAFechar,
+        valorProximosAFechar,
         conversas: conversasCount || 0,
         compromissos: compromissosCount || 0,
         tarefas: tarefasCount || 0,
@@ -781,13 +798,13 @@ export default function Analytics() {
     filterType: 'won' as DrilldownFilterType,
     clickable: true
   }, {
-    title: "Negócios Ativos",
-    value: stats.activeDeals,
-    icon: Target,
-    description: "Em andamento",
-    color: "text-warning",
-    trend: "+15%",
-    trendColor: "text-success",
+    title: "Próximos a Fechar",
+    value: stats.proximosAFechar,
+    icon: CalendarDays,
+    description: `R$ ${stats.valorProximosAFechar.toLocaleString("pt-BR")} em 7 dias`,
+    color: "text-amber-500",
+    trend: "",
+    trendColor: "text-amber-500",
     filterType: 'active' as DrilldownFilterType,
     clickable: true
   }];
