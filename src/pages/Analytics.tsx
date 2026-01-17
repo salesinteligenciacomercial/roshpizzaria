@@ -1187,6 +1187,9 @@ export default function Analytics() {
 
         {/* Vendas & Pipeline */}
         <TabsContent value="sales" className="space-y-6">
+          {/* Pipeline Financeiro Avançado */}
+          <PipelineFinanceiro userCompanyId={userCompanyId} globalFilters={globalFilters} />
+          
           {/* KPIs de Vendas */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             <Card className="border-0 shadow-card group relative overflow-hidden">
@@ -1479,6 +1482,9 @@ export default function Analytics() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Relatório de Motivos de Perda */}
+          <LossReasonsReport userCompanyId={userCompanyId} globalFilters={globalFilters} />
         </TabsContent>
 
         {/* Campanhas de Tráfego Pago */}
