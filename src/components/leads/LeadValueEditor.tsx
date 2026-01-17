@@ -66,17 +66,17 @@ export function LeadValueEditor({ lead, open, onOpenChange, onUpdated }: LeadVal
     produto_id: lead.produto_id || ""
   });
 
-  // Reset form when lead changes
+  // Reset form when lead.id changes (not when other properties update)
   useEffect(() => {
     setFormData({
       value: lead.value?.toString() || "0",
-      probability: lead.probability || 50,
+      probability: lead.probability ?? 50,
       expected_close_date: lead.expected_close_date ? new Date(lead.expected_close_date) : undefined,
       loss_reason: lead.loss_reason || "",
       custom_loss_reason: "",
       produto_id: lead.produto_id || ""
     });
-  }, [lead]);
+  }, [lead.id, open]); // Only reset when lead changes OR dialog opens
 
   // Fetch products when dialog opens
   useEffect(() => {
