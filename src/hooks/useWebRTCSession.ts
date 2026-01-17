@@ -132,10 +132,10 @@ export const useWebRTCSession = (config: WebRTCSessionConfig) => {
     }
   }, [config.meetingId, config.localUserId, config.remoteUserId]);
 
-  // ========== MEDIA: Initialize ==========
+  // ========== MEDIA: Initialize with retry ==========
   const initializeMedia = useCallback(async (video: boolean = true) => {
-    try {
-      console.log('[WebRTC] Initializing media, video:', video);
+    const tryGetMedia = async (withVideo: boolean, attempt: number = 1): Promise<MediaStream> => {
+      console.log(`[WebRTC] Initializing media, video: ${withVideo}, attempt: ${attempt}`);
       
       const constraints = {
         audio: {
@@ -143,23 +143,85 @@ export const useWebRTCSession = (config: WebRTCSessionConfig) => {
           noiseSuppression: true,
           autoGainControl: true,
         },
-        video: video ? {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+        video: withVideo ? {
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
           facingMode: 'user',
         } : false,
       };
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      
-      console.log('[WebRTC] Media initialized:', {
-        audioTracks: stream.getAudioTracks().length,
-        videoTracks: stream.getVideoTracks().length,
-      });
+      try {
+        // Create abort controller with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        clearTimeout(timeoutId);
+        
+        console.log('[WebRTC] Media initialized:', {
+          audioTracks: stream.getAudioTracks().length,
+          videoTracks: stream.getVideoTracks().length,
+        });
+        
+        return stream;
+      } catch (error: any) {
+        console.warn(`[WebRTC] Media attempt ${attempt} failed:`, error.message);
+        
+        // If video failed and we were trying with video, retry without video
+        if (withVideo && attempt <= 2) {
+          console.log('[WebRTC] Retrying with lower video quality...');
+          // Try with lower resolution
+          try {
+            const lowResConstraints = {
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              },
+              video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: 'user',
+              },
+            };
+            const stream = await navigator.mediaDevices.getUserMedia(lowResConstraints);
+            console.log('[WebRTC] Media initialized with lower resolution');
+            return stream;
+          } catch (lowResError) {
+            console.warn('[WebRTC] Lower resolution also failed, trying audio only');
+          }
+        }
+        
+        // Final fallback: audio only
+        if (withVideo) {
+          console.log('[WebRTC] Falling back to audio only');
+          try {
+            const audioOnlyStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              },
+              video: false,
+            });
+            console.log('[WebRTC] Audio-only stream initialized');
+            return audioOnlyStream;
+          } catch (audioError) {
+            console.error('[WebRTC] Even audio-only failed:', audioError);
+            throw audioError;
+          }
+        }
+        
+        throw error;
+      }
+    };
 
+    try {
+      const stream = await tryGetMedia(video);
+      
       localStreamRef.current = stream;
       setLocalStream(stream);
-      setIsVideoEnabled(video && stream.getVideoTracks().length > 0);
+      setIsVideoEnabled(stream.getVideoTracks().length > 0);
       
       return stream;
     } catch (error) {
