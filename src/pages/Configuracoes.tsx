@@ -89,6 +89,9 @@ export default function Configuracoes() {
   const [currentCompany, setCurrentCompany] = useState<any | null>(null);
   const [manageUsersOpen, setManageUsersOpen] = useState(false);
   const [latestAnnouncement, setLatestAnnouncement] = useState<any | null>(null);
+  const [editingCompanyName, setEditingCompanyName] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState("");
+  const [savingCompanyName, setSavingCompanyName] = useState(false);
   
   
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
@@ -160,6 +163,36 @@ export default function Configuracoes() {
       console.error('Erro ao verificar role:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveCompanyName = async () => {
+    if (!currentCompany?.id || !newCompanyName.trim()) return;
+    
+    setSavingCompanyName(true);
+    try {
+      const { error } = await supabase
+        .from('companies')
+        .update({ name: newCompanyName.trim() })
+        .eq('id', currentCompany.id);
+
+      if (error) throw error;
+
+      setCurrentCompany({ ...currentCompany, name: newCompanyName.trim() });
+      setEditingCompanyName(false);
+      toast({
+        title: "Sucesso",
+        description: "Nome da empresa atualizado com sucesso!",
+      });
+    } catch (error: any) {
+      console.error('Erro ao atualizar nome:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar o nome da empresa.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingCompanyName(false);
     }
   };
 
@@ -945,8 +978,51 @@ export default function Configuracoes() {
           {currentCompany && (
             <div className="pt-2 border-t">
               <div className="text-sm font-medium mb-1">Empresa Atual:</div>
-              <div className="text-sm text-muted-foreground">{currentCompany.name}</div>
-              <div className="text-xs text-muted-foreground">
+              {editingCompanyName ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={newCompanyName}
+                    onChange={(e) => setNewCompanyName(e.target.value)}
+                    className="h-8 text-sm"
+                    placeholder="Nome da empresa"
+                    autoFocus
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleSaveCompanyName}
+                    disabled={savingCompanyName || !newCompanyName.trim()}
+                  >
+                    {savingCompanyName ? "Salvando..." : "Salvar"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditingCompanyName(false);
+                      setNewCompanyName(currentCompany.name);
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{currentCompany.name}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => {
+                      setNewCompanyName(currentCompany.name);
+                      setEditingCompanyName(true);
+                    }}
+                    title="Editar nome da empresa"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+              <div className="text-xs text-muted-foreground mt-1">
                 Plano: {currentCompany.plan} • 
                 Usuários: {currentCompany.max_users} • 
                 Leads: {currentCompany.max_leads}
