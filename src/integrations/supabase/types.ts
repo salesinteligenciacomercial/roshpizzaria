@@ -1401,6 +1401,69 @@ export type Database = {
           },
         ]
       }
+      ia_scripts_generated: {
+        Row: {
+          company_id: string
+          context: string
+          created_at: string | null
+          got_response: boolean | null
+          id: string
+          key_points: string[] | null
+          lead_id: string
+          objections_addressed: string[] | null
+          response_time_minutes: number | null
+          script_content: string
+          suggested_channel: string | null
+          updated_at: string | null
+          was_used: boolean | null
+        }
+        Insert: {
+          company_id: string
+          context: string
+          created_at?: string | null
+          got_response?: boolean | null
+          id?: string
+          key_points?: string[] | null
+          lead_id: string
+          objections_addressed?: string[] | null
+          response_time_minutes?: number | null
+          script_content: string
+          suggested_channel?: string | null
+          updated_at?: string | null
+          was_used?: boolean | null
+        }
+        Update: {
+          company_id?: string
+          context?: string
+          created_at?: string | null
+          got_response?: boolean | null
+          id?: string
+          key_points?: string[] | null
+          lead_id?: string
+          objections_addressed?: string[] | null
+          response_time_minutes?: number | null
+          script_content?: string
+          suggested_channel?: string | null
+          updated_at?: string | null
+          was_used?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ia_scripts_generated_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ia_scripts_generated_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ia_training_data: {
         Row: {
           agent_type: string

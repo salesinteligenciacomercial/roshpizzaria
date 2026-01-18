@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   FileText, 
   Copy, 
@@ -21,11 +20,9 @@ import {
   Flame,
   Sun,
   Snowflake,
-  Edit,
-  Trash2,
   Check,
-  X,
-  Star
+  Star,
+  Sparkles,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -43,6 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { GenerateAIScriptDialog } from "./GenerateAIScriptDialog";
 
 interface Script {
   id: string;
@@ -191,6 +189,7 @@ export const ScriptsLibrary: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedContext, setSelectedContext] = useState<string>("all");
   const [showNewScript, setShowNewScript] = useState(false);
+  const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(null);
 
   // Form state for new script
@@ -327,6 +326,34 @@ export const ScriptsLibrary: React.FC = () => {
     }
   };
 
+  // Salvar script gerado por IA na biblioteca
+  const saveAIGeneratedScript = async (scriptData: { name: string; content: string; context: string }) => {
+    if (!companyId) return;
+    
+    try {
+      const { error } = await supabase
+        .from("ia_scripts")
+        .insert({
+          company_id: companyId,
+          name: scriptData.name,
+          description: "Script gerado por IA",
+          trigger_context: scriptData.context,
+          script_template: scriptData.content,
+          target_channel: "whatsapp",
+          is_active: true,
+          times_used: 0,
+          success_count: 0,
+          tags: ["ia-generated"],
+        });
+
+      if (error) throw error;
+      loadScripts();
+    } catch (error) {
+      console.error("[ScriptsLibrary] Erro ao salvar script IA:", error);
+      toast.error("Erro ao salvar script na biblioteca");
+    }
+  };
+
   const getChannelIcon = (channel: string | null) => {
     switch (channel) {
       case "whatsapp": return <MessageSquare className="h-4 w-4 text-green-500" />;
@@ -386,13 +413,23 @@ export const ScriptsLibrary: React.FC = () => {
               Scripts prontos para cada situação de vendas
             </CardDescription>
           </div>
-          <Dialog open={showNewScript} onOpenChange={setShowNewScript}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" />
-                Novo Script
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <Button 
+              size="sm" 
+              variant="outline"
+              className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border-purple-200 hover:border-purple-300"
+              onClick={() => setShowAIGenerator(true)}
+            >
+              <Sparkles className="h-4 w-4 mr-1 text-purple-500" />
+              Gerar com IA
+            </Button>
+            <Dialog open={showNewScript} onOpenChange={setShowNewScript}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-1" />
+                  Novo Script
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Criar Novo Script</DialogTitle>
@@ -451,6 +488,7 @@ export const ScriptsLibrary: React.FC = () => {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -567,6 +605,13 @@ export const ScriptsLibrary: React.FC = () => {
           </div>
         </ScrollArea>
       </CardContent>
+      
+      {/* AI Script Generator Dialog */}
+      <GenerateAIScriptDialog
+        open={showAIGenerator}
+        onOpenChange={setShowAIGenerator}
+        onSaveScript={saveAIGeneratedScript}
+      />
     </Card>
   );
 };
