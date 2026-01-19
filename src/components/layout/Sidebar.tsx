@@ -10,6 +10,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useModuleAccess } from "@/hooks/useModuleAccess";
 import { useInternalChatNotifications } from "@/hooks/useInternalChatNotifications";
 import { useConversasNotifications } from "@/hooks/useConversasNotifications";
+import { useTarefasNotifications } from "@/hooks/useTarefasNotifications";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const navigation = [{
@@ -42,7 +43,8 @@ const navigation = [{
   name: "Tarefas",
   href: "/tarefas",
   icon: Calendar,
-  menuKey: "tarefas"
+  menuKey: "tarefas",
+  showTarefasBadge: true
 }, {
   name: "Fluxos e Automação",
   href: "/ia",
@@ -100,6 +102,7 @@ export function Sidebar({
   } = useModuleAccess();
   const { unreadCount: totalUnread } = useInternalChatNotifications();
   const { unreadCount: conversasUnread } = useConversasNotifications();
+  const { alertCount: tarefasAlert } = useTarefasNotifications();
   
   // AI Insights count from database
   const [aiInsightsCount, setAiInsightsCount] = useState(0);
@@ -261,6 +264,11 @@ export function Sidebar({
                               {conversasUnread > 99 ? '99+' : conversasUnread}
                             </Badge>
                           )}
+                          {item.showTarefasBadge && tarefasAlert > 0 && effectiveCollapsed && !isLocked && (
+                            <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-yellow-500 text-white">
+                              {tarefasAlert > 99 ? '99+' : tarefasAlert}
+                            </Badge>
+                          )}
                           {item.showAIBadge && aiInsightsCount > 0 && effectiveCollapsed && !isLocked && (
                             <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-orange-500 text-white">
                               {aiInsightsCount > 99 ? '99+' : aiInsightsCount}
@@ -283,6 +291,11 @@ export function Sidebar({
                                 {conversasUnread > 99 ? '99+' : conversasUnread}
                               </Badge>
                             )}
+                            {item.showTarefasBadge && tarefasAlert > 0 && !isLocked && (
+                              <Badge className="ml-2 text-xs bg-yellow-500 hover:bg-yellow-600 text-white">
+                                {tarefasAlert > 99 ? '99+' : tarefasAlert}
+                              </Badge>
+                            )}
                             {item.showAIBadge && aiInsightsCount > 0 && !isLocked && (
                               <Badge className="ml-2 text-xs bg-orange-500 hover:bg-orange-600 text-white gap-1">
                                 <Brain className="h-3 w-3" />
@@ -297,7 +310,7 @@ export function Sidebar({
                 </TooltipTrigger>
                 {effectiveCollapsed && (
                   <TooltipContent side="right" className="font-medium">
-                    {item.name} {isLocked ? "(Bloqueado)" : item.showBadge && totalUnread > 0 ? `(${totalUnread})` : item.showConversasBadge && conversasUnread > 0 ? `(${conversasUnread})` : item.showAIBadge && aiInsightsCount > 0 ? `(${aiInsightsCount} IA)` : ""}
+                    {item.name} {isLocked ? "(Bloqueado)" : item.showBadge && totalUnread > 0 ? `(${totalUnread})` : item.showConversasBadge && conversasUnread > 0 ? `(${conversasUnread})` : item.showTarefasBadge && tarefasAlert > 0 ? `(${tarefasAlert})` : item.showAIBadge && aiInsightsCount > 0 ? `(${aiInsightsCount} IA)` : ""}
                   </TooltipContent>
                 )}
               </Tooltip>
