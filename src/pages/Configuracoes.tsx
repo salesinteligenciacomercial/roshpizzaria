@@ -43,6 +43,7 @@ import { LeadAdsFormsConfig } from "@/components/configuracoes/LeadAdsFormsConfi
 import { GmailConfig } from "@/components/configuracoes/GmailConfig";
 import { ProdutosServicosManager } from "@/components/configuracoes/ProdutosServicosManager";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
+import { WebhooksConfig } from "@/components/configuracoes/WebhooksConfig";
 import { UsuariosSubcontaDialog } from "@/components/configuracoes/UsuariosSubcontaDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -1394,28 +1395,7 @@ export default function Configuracoes() {
         </TabsContent>
 
         <TabsContent value="webhooks_api" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Webhook className="h-5 w-5" />
-                Webhooks e API
-              </CardTitle>
-              <CardDescription>
-                Configure webhooks para integração com sistemas externos
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <Button>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Novo Webhook
-                </Button>
-                <div className="flex items-center justify-center py-12">
-                  <p className="text-muted-foreground">Nenhum webhook configurado</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <WebhooksConfig />
         </TabsContent>
 
         <TabsContent value="avancado" className="space-y-4">
