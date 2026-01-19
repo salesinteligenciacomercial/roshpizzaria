@@ -3762,6 +3762,135 @@ export type Database = {
           },
         ]
       }
+      webhook_api_keys: {
+        Row: {
+          allowed_ips: string[] | null
+          api_key: string
+          company_id: string
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          last_used_at: string | null
+          name: string
+          rate_limit: number | null
+          total_requests: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          allowed_ips?: string[] | null
+          api_key: string
+          company_id: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          name: string
+          rate_limit?: number | null
+          total_requests?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          allowed_ips?: string[] | null
+          api_key?: string
+          company_id?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          name?: string
+          rate_limit?: number | null
+          total_requests?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_api_keys_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      webhook_logs: {
+        Row: {
+          api_key_id: string | null
+          company_id: string | null
+          created_at: string | null
+          endpoint: string
+          error_message: string | null
+          id: string
+          ip_address: string | null
+          lead_id: string | null
+          processing_time_ms: number | null
+          request_body: Json | null
+          request_headers: Json | null
+          request_method: string | null
+          response_body: Json | null
+          response_status: number | null
+          user_agent: string | null
+        }
+        Insert: {
+          api_key_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          endpoint: string
+          error_message?: string | null
+          id?: string
+          ip_address?: string | null
+          lead_id?: string | null
+          processing_time_ms?: number | null
+          request_body?: Json | null
+          request_headers?: Json | null
+          request_method?: string | null
+          response_body?: Json | null
+          response_status?: number | null
+          user_agent?: string | null
+        }
+        Update: {
+          api_key_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          endpoint?: string
+          error_message?: string | null
+          id?: string
+          ip_address?: string | null
+          lead_id?: string | null
+          processing_time_ms?: number | null
+          request_body?: Json | null
+          request_headers?: Json | null
+          request_method?: string | null
+          response_body?: Json | null
+          response_status?: number | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_logs_api_key_id_fkey"
+            columns: ["api_key_id"]
+            isOneToOne: false
+            referencedRelation: "webhook_api_keys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_logs_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_campaigns_analytics: {
         Row: {
           campaign_id: string | null
