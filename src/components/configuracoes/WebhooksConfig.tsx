@@ -90,7 +90,10 @@ export function WebhooksConfig() {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
       
       const { data: userRole } = await supabase
         .from('user_roles')
@@ -99,7 +102,10 @@ export function WebhooksConfig() {
         .limit(1)
         .single();
       
-      if (!userRole?.company_id) return;
+      if (!userRole?.company_id) {
+        setLoading(false);
+        return;
+      }
       setCompanyId(userRole.company_id);
       
       // Load API keys
