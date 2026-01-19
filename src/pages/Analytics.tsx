@@ -787,10 +787,12 @@ export default function Analytics() {
 
   const fetchBirthdayStats = async () => {
     try {
-      const { data: leadsData } = await supabase
+      const { data: leadsData, error } = await supabase
         .from('leads')
         .select('id, name, data_nascimento')
         .not('data_nascimento', 'is', null);
+
+      console.log('🎂 [Analytics] Leads com data_nascimento:', leadsData?.length, error);
 
       if (!leadsData || leadsData.length === 0) {
         setBirthdayStats({
@@ -806,16 +808,18 @@ export default function Analytics() {
       const hojeD = hoje.getDate();
       const hojeM = hoje.getMonth();
 
+      console.log('🎂 [Analytics] Hoje:', hojeD, '/', hojeM + 1);
+
       // Filtrar aniversariantes
       const aniversariantesHoje = leadsData.filter((lead: any) => {
         if (!lead.data_nascimento) return false;
-        const nascimento = new Date(lead.data_nascimento);
+        const nascimento = new Date(lead.data_nascimento + 'T00:00:00');
         return nascimento.getDate() === hojeD && nascimento.getMonth() === hojeM;
       }).length;
 
       const aniversariantesSemana = leadsData.filter((lead: any) => {
         if (!lead.data_nascimento) return false;
-        const nascimento = new Date(lead.data_nascimento);
+        const nascimento = new Date(lead.data_nascimento + 'T00:00:00');
         for (let i = 0; i <= 7; i++) {
           const dia = new Date(hoje);
           dia.setDate(dia.getDate() + i);
@@ -828,23 +832,29 @@ export default function Analytics() {
 
       const aniversariantesMes = leadsData.filter((lead: any) => {
         if (!lead.data_nascimento) return false;
-        const nascimento = new Date(lead.data_nascimento);
+        const nascimento = new Date(lead.data_nascimento + 'T00:00:00');
         return nascimento.getMonth() === hojeM;
       }).length;
 
-      // Próximos aniversariantes (próximos 7 dias)
+      // Próximos aniversariantes (próximos 90 dias para garantir visibilidade)
       const proximosAniversariantes = leadsData
         .map((lead: any) => {
           if (!lead.data_nascimento) return null;
-          const nascimento = new Date(lead.data_nascimento);
+          const nascimento = new Date(lead.data_nascimento + 'T00:00:00');
           
           // Calcular próximo aniversário
           let proximoAniversario = new Date(hoje.getFullYear(), nascimento.getMonth(), nascimento.getDate());
-          if (proximoAniversario < hoje) {
+          
+          // Resetar horas para comparação precisa
+          const hojeZero = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+          
+          if (proximoAniversario < hojeZero) {
             proximoAniversario.setFullYear(proximoAniversario.getFullYear() + 1);
           }
           
-          const diasFaltando = Math.ceil((proximoAniversario.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+          const diasFaltando = Math.ceil((proximoAniversario.getTime() - hojeZero.getTime()) / (1000 * 60 * 60 * 24));
+          
+          console.log(`🎂 Lead ${lead.name}: nasc ${nascimento.getDate()}/${nascimento.getMonth()+1}, próx aniv: ${proximoAniversario.toLocaleDateString()}, dias: ${diasFaltando}`);
           
           return {
             id: lead.id,
@@ -853,9 +863,9 @@ export default function Analytics() {
             diasFaltando
           };
         })
-        .filter((l: any) => l !== null && l.diasFaltando <= 30)
+        .filter((l: any) => l !== null && l.diasFaltando <= 90)
         .sort((a: any, b: any) => a.diasFaltando - b.diasFaltando)
-        .slice(0, 5);
+        .slice(0, 10);
 
       setBirthdayStats({
         aniversariantesHoje,
@@ -864,7 +874,7 @@ export default function Analytics() {
         proximosAniversariantes
       });
 
-      console.log(`🎂 [Analytics] Aniversariantes: ${aniversariantesHoje} hoje, ${aniversariantesSemana} semana, ${aniversariantesMes} mês`);
+      console.log(`🎂 [Analytics] Aniversariantes: ${aniversariantesHoje} hoje, ${aniversariantesSemana} semana, ${aniversariantesMes} mês, ${proximosAniversariantes.length} próximos`);
     } catch (error) {
       console.error('Erro ao carregar estatísticas de aniversariantes:', error);
     }
