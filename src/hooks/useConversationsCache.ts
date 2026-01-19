@@ -38,6 +38,16 @@ export interface Conversation {
   isGroup?: boolean;
   avatarUrl?: string; // ⚡ Foto de perfil
   origemApi?: "evolution" | "meta"; // 🔥 NOVO: Identificação da API de origem
+  // 🆕 Dados do lead vinculado
+  funnelStage?: string;
+  valor?: string;
+  responsavel?: string;
+  leadId?: string;
+  assignedUser?: {
+    id: string;
+    name: string;
+    avatar?: string;
+  };
 }
 
 interface CacheData {
@@ -224,6 +234,80 @@ export const useConversationsCache = (companyId: string | null) => {
 
       console.log(`📊 [DATABASE] ${conversasMap.size} conversas únicas`);
 
+      // 🆕 FASE 2.4: Buscar leads vinculados para todas as conversas
+      const allPhones = Array.from(conversasMap.keys());
+      const leadsMap = new Map<string, any>();
+      const responsaveisMap = new Map<string, any[]>();
+      
+      if (allPhones.length > 0) {
+        try {
+          // Buscar leads pelo telefone
+          const { data: leadsData } = await supabase
+            .from('leads')
+            .select(`
+              id, phone, name, value, tags, status,
+              etapa_id, funil_id, responsaveis, responsavel_id,
+              etapas:etapa_id(nome),
+              funis:funil_id(nome)
+            `)
+            .eq('company_id', companyId);
+          
+          if (leadsData) {
+            // Mapear leads por telefone normalizado
+            leadsData.forEach(lead => {
+              if (lead.phone) {
+                const normalizedPhone = lead.phone.replace(/[^0-9]/g, '');
+                leadsMap.set(normalizedPhone, lead);
+                // Também mapear com formato completo
+                leadsMap.set(lead.phone, lead);
+              }
+            });
+            console.log(`👤 [DATABASE] ${leadsData.length} leads carregados`);
+            
+            // Buscar nomes dos responsáveis
+            const allResponsaveisIds = new Set<string>();
+            leadsData.forEach(lead => {
+              if (lead.responsaveis && Array.isArray(lead.responsaveis)) {
+                lead.responsaveis.forEach((id: string) => allResponsaveisIds.add(id));
+              }
+              if (lead.responsavel_id) {
+                allResponsaveisIds.add(lead.responsavel_id);
+              }
+            });
+            
+            if (allResponsaveisIds.size > 0) {
+              const { data: responsaveisProfiles } = await supabase
+                .from('profiles')
+                .select('id, full_name, email')
+                .in('id', Array.from(allResponsaveisIds));
+              
+              if (responsaveisProfiles) {
+                const profilesById = new Map(responsaveisProfiles.map(p => [p.id, p]));
+                
+                leadsData.forEach(lead => {
+                  if (lead.phone) {
+                    const normalizedPhone = lead.phone.replace(/[^0-9]/g, '');
+                    const responsaveisIds = lead.responsaveis || (lead.responsavel_id ? [lead.responsavel_id] : []);
+                    const responsaveisNames = responsaveisIds
+                      .map((id: string) => profilesById.get(id))
+                      .filter(Boolean)
+                      .map((p: any) => p.full_name || p.email);
+                    
+                    if (responsaveisNames.length > 0) {
+                      responsaveisMap.set(normalizedPhone, responsaveisNames);
+                      responsaveisMap.set(lead.phone, responsaveisNames);
+                    }
+                  }
+                });
+                console.log(`👥 [DATABASE] ${responsaveisMap.size} responsáveis mapeados`);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('⚠️ [DATABASE] Erro ao buscar leads:', error);
+        }
+      }
+
       // Converter para formato Conversation
       const conversations: Conversation[] = Array.from(conversasMap.entries()).map(([telefone, mensagens]) => {
         // ⚡ OTIMIZAÇÃO: Deduplicar apenas por ID (mais rápido)
@@ -309,6 +393,20 @@ export const useConversationsCache = (companyId: string | null) => {
           ? `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName)}&background=10b981&color=fff`
           : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName)}&background=0ea5e9&color=fff`;
 
+        // 🆕 Buscar dados do lead vinculado
+        const normalizedPhone = telefone.replace(/[^0-9]/g, '');
+        const lead = leadsMap.get(normalizedPhone) || leadsMap.get(telefone);
+        const responsaveis = responsaveisMap.get(normalizedPhone) || responsaveisMap.get(telefone) || [];
+        
+        // Formatar valor
+        let valorFormatado = '';
+        if (lead?.value) {
+          valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.value);
+        }
+        
+        // Nome da etapa do funil
+        const funnelStage = (lead?.etapas as any)?.nome || undefined;
+        
         return {
           id: telefone,
           contactName,
@@ -317,10 +415,19 @@ export const useConversationsCache = (companyId: string | null) => {
           lastMessage: ultimaMensagem?.content || '',
           unread: 0,
           messages: messagensFormatadas,
-          tags: [],
+          tags: lead?.tags || [],
           phoneNumber: telefone,
           isGroup,
-          avatarUrl, // ⚡ Incluir avatar
+          avatarUrl,
+          // 🆕 Dados do lead
+          leadId: lead?.id,
+          funnelStage,
+          valor: valorFormatado || undefined,
+          responsavel: responsaveis.join(', ') || undefined,
+          assignedUser: responsaveis.length > 0 ? {
+            id: lead?.responsavel_id || '',
+            name: responsaveis[0],
+          } : undefined,
         };
       });
 

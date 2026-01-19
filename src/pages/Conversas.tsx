@@ -101,6 +101,7 @@ interface Conversation {
   avatarUrl?: string;
   phoneNumber?: string;
   isGroup?: boolean;
+  leadId?: string; // 🆕 ID do lead vinculado
   assignedUser?: {
     id: string;
     name: string;
@@ -7728,7 +7729,7 @@ function Conversas() {
             </div> : filteredConversations.length === 0 ? <div className="flex flex-col items-center justify-center h-64 gap-3">
               <MessageSquare className="h-12 w-12 text-muted-foreground/50" />
               <p className="text-sm text-muted-foreground">Nenhuma conversa encontrada</p>
-            </div> : filteredConversations.map(conv => <ConversationListItem key={conv.id} contactName={conv.contactName} channel={conv.channel} lastMessage={conv.lastMessage} timestamp={new Date(conv.messages[conv.messages.length - 1]?.timestamp)} unread={conv.unread} isSelected={selectedConv?.id === conv.id} avatarUrl={conv.avatarUrl} tags={conv.tags} responsavel={conv.assignedUser?.name} funnelStage={conv.funnelStage} valor={conv.valor} conversationId={conv.id} leadId={leadsVinculados[conv.id] || leadsVinculados[safeFormatPhoneNumber(conv.id)]} isGroup={conv.isGroup} isBlocked={blockedGroups.has(conv.phoneNumber || conv.id)} assignedUser={conv.assignedUser} status={conv.status} origemApi={conv.origemApi} isPinned={pinnedConversations.has(conv.id) || pinnedConversations.has(conv.phoneNumber || '')} onTogglePin={() => togglePinConversation(conv.id)} lastRespondedBy={(() => {
+            </div> : filteredConversations.map(conv => <ConversationListItem key={conv.id} contactName={conv.contactName} channel={conv.channel} lastMessage={conv.lastMessage} timestamp={new Date(conv.messages[conv.messages.length - 1]?.timestamp)} unread={conv.unread} isSelected={selectedConv?.id === conv.id} avatarUrl={conv.avatarUrl} tags={conv.tags} responsavel={conv.responsavel || conv.assignedUser?.name} funnelStage={conv.funnelStage} valor={conv.valor} conversationId={conv.id} leadId={conv.leadId || leadsVinculados[conv.id] || leadsVinculados[safeFormatPhoneNumber(conv.id)]} isGroup={conv.isGroup} isBlocked={blockedGroups.has(conv.phoneNumber || conv.id)} assignedUser={conv.assignedUser} status={conv.status} origemApi={conv.origemApi} isPinned={pinnedConversations.has(conv.id) || pinnedConversations.has(conv.phoneNumber || '')} onTogglePin={() => togglePinConversation(conv.id)} lastRespondedBy={(() => {
           // ⚡ Buscar última mensagem enviada pelo usuário para mostrar quem respondeu
           const userMessages = conv.messages.filter(m => m.sender === "user");
           if (userMessages.length > 0) {
