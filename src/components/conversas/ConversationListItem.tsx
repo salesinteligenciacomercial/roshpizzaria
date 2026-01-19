@@ -224,7 +224,7 @@ function ConversationListItemComponent({
                   {lastRespondedBy}
                 </span>
               )}
-              {responsavel && (
+              {responsavel && !(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(responsavel.split(',')[0]?.trim() || '')) && (
                 <span className="text-muted-foreground truncate">👤 {responsavel}</span>
               )}
               {funnelStage && (

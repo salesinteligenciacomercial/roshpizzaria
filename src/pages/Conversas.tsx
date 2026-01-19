@@ -8259,13 +8259,24 @@ function Conversas() {
                     {/* Responsáveis */}
                     <ResponsaveisManager leadId={leadsVinculados[selectedConv.id] || leadsVinculados[safeFormatPhoneNumber(selectedConv.id)] || null} responsaveisAtuais={selectedConv.assignedUser?.name ? [selectedConv.assignedUser.name] : []} onResponsaveisUpdated={responsaveis => {
                 console.log('👥 Responsáveis atualizados:', responsaveis);
+                const nomeResponsavel = responsaveis.join(', ');
                 setConversations(prev => prev.map(conv => conv.id === selectedConv.id ? {
                   ...conv,
-                  responsavel: responsaveis.join(', ')
+                  responsavel: nomeResponsavel,
+                  assignedUser: responsaveis.length > 0 ? {
+                    id: conv.assignedUser?.id || '',
+                    name: responsaveis[0],
+                    avatar: conv.assignedUser?.avatar
+                  } : undefined
                 } : conv));
                 setSelectedConv(prev => prev ? {
                   ...prev,
-                  responsavel: responsaveis.join(', ')
+                  responsavel: nomeResponsavel,
+                  assignedUser: responsaveis.length > 0 ? {
+                    id: prev.assignedUser?.id || '',
+                    name: responsaveis[0],
+                    avatar: prev.assignedUser?.avatar
+                  } : undefined
                 } : null);
               }} />
 

@@ -78,19 +78,28 @@ export function ResponsaveisManager({
         }
 
         // Buscar nomes dos UUIDs
-        const { data: profiles } = await supabase
+        const { data: profiles, error: profilesError } = await supabase
           .from('profiles')
           .select('id, full_name, email')
           .in('id', uuidsToConvert);
 
+        if (profilesError) {
+          console.error('Erro ao buscar perfis:', profilesError);
+          setResponsaveis([]);
+          return;
+        }
+
         if (profiles && profiles.length > 0) {
           const convertedNames = uuidsToConvert.map(uuid => {
             const profile = profiles.find(p => p.id === uuid);
-            return profile?.full_name || profile?.email || uuid;
-          });
+            // Nunca retornar UUID, usar fallback adequado
+            return profile?.full_name || profile?.email || null;
+          }).filter(Boolean) as string[];
+          
           setResponsaveis(convertedNames);
           console.log('👥 Responsáveis carregados do banco:', convertedNames);
         } else {
+          console.warn('⚠️ Nenhum perfil encontrado para UUIDs:', uuidsToConvert);
           setResponsaveis([]);
         }
       } catch (error) {
@@ -108,8 +117,9 @@ export function ResponsaveisManager({
     const uuids = items.filter(isUUID);
     const names = items.filter(r => !isUUID(r));
 
+    // Se não há UUIDs, usar apenas os nomes
     if (uuids.length === 0) {
-      setResponsaveis(items);
+      setResponsaveis(names);
       return;
     }
 
@@ -119,18 +129,22 @@ export function ResponsaveisManager({
         .select('id, full_name, email')
         .in('id', uuids);
 
-      if (profiles) {
+      if (profiles && profiles.length > 0) {
         const convertedNames = uuids.map(uuid => {
           const profile = profiles.find(p => p.id === uuid);
-          return profile?.full_name || profile?.email || uuid;
-        });
+          // Nunca retornar UUID, usar null se não encontrar
+          return profile?.full_name || profile?.email || null;
+        }).filter(Boolean) as string[];
+        
         setResponsaveis([...names, ...convertedNames]);
       } else {
-        setResponsaveis(items);
+        // Se não encontrou perfis, usar apenas os nomes (sem UUIDs)
+        setResponsaveis(names);
       }
     } catch (error) {
       console.error('Erro ao converter UUIDs para nomes:', error);
-      setResponsaveis(items);
+      // Em caso de erro, usar apenas os nomes (sem UUIDs)
+      setResponsaveis(names);
     }
   };
 
