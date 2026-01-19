@@ -40,7 +40,8 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
     responsavel_id: "",
     tags: [] as string[],
     probability: 50,
-    expected_close_date: ""
+    expected_close_date: "",
+    data_nascimento: ""
   });
   const [newTag, setNewTag] = useState("");
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
@@ -167,7 +168,8 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
           stage: "prospeccao",
           tags: formData.tags.length > 0 ? formData.tags : null,
           probability: formData.probability || 50,
-          expected_close_date: formData.expected_close_date || null
+          expected_close_date: formData.expected_close_date || null,
+          data_nascimento: formData.data_nascimento || null
         }])
         .select();
 
@@ -191,7 +193,8 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
         responsavel_id: "",
         tags: [],
         probability: 50,
-        expected_close_date: ""
+        expected_close_date: "",
+        data_nascimento: ""
       });
       setNewTag("");
       setOpen(false);
@@ -306,6 +309,16 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="email@exemplo.com"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="data_nascimento">Data de Nascimento</Label>
+            <Input
+              id="data_nascimento"
+              type="date"
+              value={formData.data_nascimento}
+              onChange={(e) => setFormData({ ...formData, data_nascimento: e.target.value })}
             />
           </div>
 

@@ -133,6 +133,108 @@ export type Database = {
           },
         ]
       }
+      aniversario_envios: {
+        Row: {
+          ano: number
+          company_id: string | null
+          created_at: string | null
+          data_envio: string | null
+          id: string
+          lead_id: string | null
+          mensagem_id: string | null
+          status: string | null
+        }
+        Insert: {
+          ano: number
+          company_id?: string | null
+          created_at?: string | null
+          data_envio?: string | null
+          id?: string
+          lead_id?: string | null
+          mensagem_id?: string | null
+          status?: string | null
+        }
+        Update: {
+          ano?: number
+          company_id?: string | null
+          created_at?: string | null
+          data_envio?: string | null
+          id?: string
+          lead_id?: string | null
+          mensagem_id?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aniversario_envios_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aniversario_envios_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aniversario_envios_mensagem_id_fkey"
+            columns: ["mensagem_id"]
+            isOneToOne: false
+            referencedRelation: "aniversario_mensagens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      aniversario_mensagens: {
+        Row: {
+          ativo: boolean | null
+          canal: string | null
+          company_id: string | null
+          created_at: string | null
+          horario_envio: string | null
+          id: string
+          mensagem: string
+          midia_url: string | null
+          titulo: string
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          canal?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          horario_envio?: string | null
+          id?: string
+          mensagem: string
+          midia_url?: string | null
+          titulo: string
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          canal?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          horario_envio?: string | null
+          id?: string
+          mensagem?: string
+          midia_url?: string | null
+          titulo?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aniversario_mensagens_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_flow_logs: {
         Row: {
           company_id: string
@@ -1952,6 +2054,7 @@ export type Database = {
           conversion_timestamp: string | null
           cpf: string | null
           created_at: string | null
+          data_nascimento: string | null
           email: string | null
           etapa_id: string | null
           expected_close_date: string | null
@@ -1996,6 +2099,7 @@ export type Database = {
           conversion_timestamp?: string | null
           cpf?: string | null
           created_at?: string | null
+          data_nascimento?: string | null
           email?: string | null
           etapa_id?: string | null
           expected_close_date?: string | null
@@ -2040,6 +2144,7 @@ export type Database = {
           conversion_timestamp?: string | null
           cpf?: string | null
           created_at?: string | null
+          data_nascimento?: string | null
           email?: string | null
           etapa_id?: string | null
           expected_close_date?: string | null

@@ -29,6 +29,7 @@ interface EditarLeadDialogProps {
     tags?: string[];
     funil_id?: string;
     etapa_id?: string;
+    data_nascimento?: string;
   };
   onLeadUpdated: () => void;
   open?: boolean;
@@ -65,7 +66,8 @@ export function EditarLeadDialog({
     funil_id: lead.funil_id || "",
     etapa_id: lead.etapa_id || "",
     responsavel_id: (lead as any).responsavel_id || "",
-    tags: lead.tags || []
+    tags: lead.tags || [],
+    data_nascimento: lead.data_nascimento || ""
   });
   const [newTag, setNewTag] = useState("");
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
@@ -87,7 +89,8 @@ export function EditarLeadDialog({
       funil_id: lead.funil_id || "",
       etapa_id: lead.etapa_id || "",
       responsavel_id: (lead as any).responsavel_id || "",
-      tags: lead.tags || []
+      tags: lead.tags || [],
+      data_nascimento: lead.data_nascimento || ""
     });
   }, [lead]);
 
@@ -250,6 +253,7 @@ export function EditarLeadDialog({
           funil_id: formData.funil_id || null,
           responsavel_id: formData.responsavel_id || null,
           tags: formData.tags && formData.tags.length > 0 ? formData.tags : null,
+          data_nascimento: formData.data_nascimento || null,
           updated_at: new Date().toISOString()
         })
         .eq("id", lead.id);
@@ -377,6 +381,16 @@ export function EditarLeadDialog({
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="email@exemplo.com"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="data_nascimento">Data de Nascimento</Label>
+            <Input
+              id="data_nascimento"
+              type="date"
+              value={formData.data_nascimento}
+              onChange={(e) => setFormData({ ...formData, data_nascimento: e.target.value })}
             />
           </div>
 
