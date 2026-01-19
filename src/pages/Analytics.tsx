@@ -1123,8 +1123,8 @@ export default function Analytics() {
             <span className="hidden sm:inline">Relatórios</span>
           </TabsTrigger>
           <TabsTrigger value="customize" className="gap-2 py-3">
-            <Settings className="h-4 w-4" />
-            <span className="hidden sm:inline">Personalizar</span>
+            <Cake className="h-4 w-4" />
+            <span className="hidden sm:inline">Aniversariantes</span>
           </TabsTrigger>
         </TabsList>
 
@@ -2827,438 +2827,195 @@ export default function Analytics() {
           </Card>
         </TabsContent>
 
-        {/* Personalizar */}
+        {/* Aniversariantes */}
         <TabsContent value="customize" className="space-y-6">
-          {/* Meus Dashboards */}
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold flex items-center gap-2">
+                <Cake className="h-7 w-7 text-pink-500" />
+                Gestão de Aniversariantes
+              </h2>
+              <p className="text-muted-foreground">Acompanhe aniversários de contatos para campanhas sazonais</p>
+            </div>
+            <Button onClick={() => fetchBirthdayStats()} variant="outline" size="sm">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Atualizar
+            </Button>
+          </div>
+
+          {/* KPIs de Aniversariantes */}
+          <div className="grid gap-4 md:grid-cols-3">
+            {/* Aniversariantes Hoje */}
+            <Card className={`border-0 shadow-card ${birthdayStats.aniversariantesHoje > 0 ? 'bg-gradient-to-br from-pink-50 to-pink-100 dark:from-pink-900/20 dark:to-pink-800/20 ring-2 ring-pink-500' : ''}`}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Aniversariantes Hoje</p>
+                    <p className="text-4xl font-bold text-pink-600">{birthdayStats.aniversariantesHoje}</p>
+                  </div>
+                  <div className="p-4 rounded-full bg-pink-100 dark:bg-pink-900/30">
+                    <Gift className="h-8 w-8 text-pink-600" />
+                  </div>
+                </div>
+                {birthdayStats.aniversariantesHoje > 0 && (
+                  <div className="mt-4">
+                    <Badge className="bg-pink-500 text-white text-sm px-3 py-1">🎉 Hora de Celebrar!</Badge>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Aniversariantes da Semana */}
+            <Card className="border-0 shadow-card">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Esta Semana</p>
+                    <p className="text-4xl font-bold text-purple-600">{birthdayStats.aniversariantesSemana}</p>
+                  </div>
+                  <div className="p-4 rounded-full bg-purple-100 dark:bg-purple-900/30">
+                    <PartyPopper className="h-8 w-8 text-purple-600" />
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">Próximos 7 dias</p>
+              </CardContent>
+            </Card>
+
+            {/* Aniversariantes do Mês */}
+            <Card className="border-0 shadow-card">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Este Mês</p>
+                    <p className="text-4xl font-bold text-blue-600">{birthdayStats.aniversariantesMes}</p>
+                  </div>
+                  <div className="p-4 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                    <Cake className="h-8 w-8 text-blue-600" />
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">Total no mês atual</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Próximos Aniversariantes */}
           <Card className="border-0 shadow-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5 text-primary" />
-                Meus Dashboards
+                <CalendarDays className="h-5 w-5 text-primary" />
+                Próximos Aniversariantes
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                Dashboards personalizados criados por você
+                Contatos com aniversário nos próximos 30 dias
               </p>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <Card className="border-2 border-dashed border-muted-foreground/20 hover:border-primary/50 transition-colors cursor-pointer group">
-                  <CardContent className="flex flex-col items-center justify-center py-8">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
-                      <Settings className="h-6 w-6 text-primary" />
-                    </div>
-                    <p className="font-medium text-center">Criar Novo Dashboard</p>
-                    <p className="text-sm text-muted-foreground text-center mt-1">Personalize seu próprio layout</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-0 shadow-card hover:shadow-xl transition-all duration-300 cursor-pointer group">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      📊 Dashboard Executivo
-                      <Badge variant="secondary" className="text-xs">Padrão</Badge>
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Visão geral completa para gestores
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>Widgets</span>
-                        <Badge variant="outline">12</Badge>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Última edição</span>
-                        <span className="text-muted-foreground">2 dias atrás</span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 mt-4">
-                      <Button size="sm" variant="outline" className="flex-1">
-                        Editar
-                      </Button>
-                      <Button size="sm" variant="outline" className="flex-1">
-                        Usar
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-0 shadow-card hover:shadow-xl transition-all duration-300 cursor-pointer group">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      🎯 Foco em Vendas
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>Widgets</span>
-                        <Badge variant="outline">8</Badge>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Última edição</span>
-                        <span className="text-muted-foreground">1 semana atrás</span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 mt-4">
-                      <Button size="sm" variant="outline" className="flex-1">
-                        Editar
-                      </Button>
-                      <Button size="sm" variant="outline" className="flex-1">
-                        Usar
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Visão Geral de Aniversariantes */}
-          <Card className="border-0 shadow-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Cake className="h-5 w-5 text-pink-500" />
-                Visão Geral de Aniversariantes
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Acompanhe aniversários de contatos para campanhas sazonais
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-3 mb-6">
-                {/* Aniversariantes Hoje */}
-                <Card className={`border-0 shadow-card ${birthdayStats.aniversariantesHoje > 0 ? 'bg-gradient-to-br from-pink-50 to-pink-100 dark:from-pink-900/20 dark:to-pink-800/20' : ''}`}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground">Hoje</p>
-                        <p className="text-3xl font-bold text-pink-600">{birthdayStats.aniversariantesHoje}</p>
-                      </div>
-                      <div className="p-3 rounded-full bg-pink-100 dark:bg-pink-900/30">
-                        <Gift className="h-6 w-6 text-pink-600" />
-                      </div>
-                    </div>
-                    {birthdayStats.aniversariantesHoje > 0 && (
-                      <Badge className="mt-2 bg-pink-500">🎉 Celebrar!</Badge>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Aniversariantes da Semana */}
-                <Card className="border-0 shadow-card">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground">Esta Semana</p>
-                        <p className="text-3xl font-bold text-purple-600">{birthdayStats.aniversariantesSemana}</p>
-                      </div>
-                      <div className="p-3 rounded-full bg-purple-100 dark:bg-purple-900/30">
-                        <PartyPopper className="h-6 w-6 text-purple-600" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Aniversariantes do Mês */}
-                <Card className="border-0 shadow-card">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground">Este Mês</p>
-                        <p className="text-3xl font-bold text-blue-600">{birthdayStats.aniversariantesMes}</p>
-                      </div>
-                      <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900/30">
-                        <Cake className="h-6 w-6 text-blue-600" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Próximos Aniversariantes */}
-              {birthdayStats.proximosAniversariantes.length > 0 && (
+              {birthdayStats.proximosAniversariantes.length > 0 ? (
                 <div className="space-y-3">
-                  <h4 className="font-medium text-sm text-muted-foreground">Próximos Aniversariantes</h4>
-                  <div className="space-y-2">
-                    {birthdayStats.proximosAniversariantes.map((lead) => (
-                      <div 
-                        key={lead.id} 
-                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                  {birthdayStats.proximosAniversariantes.map((lead) => (
+                    <div 
+                      key={lead.id} 
+                      className={`flex items-center justify-between p-4 rounded-lg border transition-all ${
+                        lead.diasFaltando === 0 
+                          ? 'bg-gradient-to-r from-pink-50 to-pink-100 border-pink-300 dark:from-pink-900/20 dark:to-pink-800/20 dark:border-pink-700 shadow-md' 
+                          : 'bg-muted/30 hover:bg-muted/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl ${
                           lead.diasFaltando === 0 
-                            ? 'bg-pink-50 border-pink-200 dark:bg-pink-900/20 dark:border-pink-700' 
-                            : 'bg-muted/30'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            lead.diasFaltando === 0 
-                              ? 'bg-pink-500 text-white' 
-                              : 'bg-muted text-muted-foreground'
-                          }`}>
-                            🎂
-                          </div>
-                          <div>
-                            <p className="font-medium">{lead.nome}</p>
-                            <p className="text-sm text-muted-foreground">{lead.data}</p>
-                          </div>
+                            ? 'bg-pink-500 text-white shadow-lg' 
+                            : lead.diasFaltando <= 7 
+                              ? 'bg-purple-100 dark:bg-purple-900/30' 
+                              : 'bg-muted'
+                        }`}>
+                          🎂
                         </div>
-                        <Badge variant={lead.diasFaltando === 0 ? 'default' : 'secondary'}>
-                          {lead.diasFaltando === 0 ? 'HOJE!' : `Em ${lead.diasFaltando} dias`}
+                        <div>
+                          <p className="font-semibold text-lg">{lead.nome}</p>
+                          <p className="text-sm text-muted-foreground">Aniversário: {lead.data}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Badge 
+                          variant={lead.diasFaltando === 0 ? 'default' : 'secondary'}
+                          className={lead.diasFaltando === 0 ? 'bg-pink-500 text-white px-4 py-1' : ''}
+                        >
+                          {lead.diasFaltando === 0 ? '🎉 HOJE!' : `Em ${lead.diasFaltando} dias`}
                         </Badge>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
-              )}
-
-              {birthdayStats.proximosAniversariantes.length === 0 && birthdayStats.aniversariantesMes === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Cake className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                  <p className="text-sm">Nenhum aniversariante cadastrado</p>
-                  <p className="text-xs mt-1">Adicione datas de nascimento nos leads para acompanhar</p>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Cake className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                  <p className="text-lg font-medium">Nenhum aniversariante nos próximos 30 dias</p>
+                  <p className="text-sm mt-1">Adicione datas de nascimento nos contatos (Menu Leads)</p>
                 </div>
               )}
             </CardContent>
           </Card>
 
-
-          <Card className="border-0 shadow-card">
+          {/* Dicas de Campanhas */}
+          <Card className="border-0 shadow-card bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5 text-primary" />
-                Templates de Dashboard
+                <Zap className="h-5 w-5 text-amber-600" />
+                Dicas para Campanhas de Aniversário
               </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Comece com layouts pré-configurados
-              </p>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <Card className="border-0 shadow-card hover:shadow-xl transition-all duration-300 cursor-pointer group">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2 text-green-600">
-                      <Trophy className="h-5 w-5" />
-                      Executivo Completo
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Todas as métricas principais em um só lugar
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 mb-4">
-                      <Badge variant="secondary" className="text-xs">12 widgets</Badge>
-                      <Badge variant="outline" className="text-xs">Recomendado</Badge>
-                    </div>
-                    <Button size="sm" className="w-full">
-                      Usar Template
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-0 shadow-card hover:shadow-xl transition-all duration-300 cursor-pointer group">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2 text-blue-600">
-                      <TrendingUp className="h-5 w-5" />
-                      Foco em Vendas
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Métricas de pipeline e conversão
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 mb-4">
-                      <Badge variant="secondary" className="text-xs">8 widgets</Badge>
-                      <Badge variant="outline" className="text-xs">Popular</Badge>
-                    </div>
-                    <Button size="sm" className="w-full">
-                      Usar Template
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-0 shadow-card hover:shadow-xl transition-all duration-300 cursor-pointer group">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2 text-purple-600">
-                      <MessageSquare className="h-5 w-5" />
-                      Comunicação
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Métricas de engajamento e satisfação
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 mb-4">
-                      <Badge variant="secondary" className="text-xs">6 widgets</Badge>
-                      <Badge variant="outline" className="text-xs">Novo</Badge>
-                    </div>
-                    <Button size="sm" className="w-full">
-                      Usar Template
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Editor de Dashboard */}
-          <Card className="border-0 shadow-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5 text-primary" />
-                Editor de Dashboard
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Arraste e solte widgets para personalizar seu dashboard
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {/* Área de Drop Zone */}
-                <div className="min-h-96 border-2 border-dashed border-muted-foreground/20 rounded-lg p-8">
-                  <div className="text-center text-muted-foreground">
-                    <Settings className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                    <h3 className="font-semibold mb-2">Área de Edição</h3>
-                    <p className="text-sm">Arraste widgets da paleta para cá</p>
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-white/50 dark:bg-white/5">
+                  <div className="p-2 rounded-full bg-pink-100 dark:bg-pink-900/30">
+                    <Gift className="h-5 w-5 text-pink-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Desconto Especial</p>
+                    <p className="text-sm text-muted-foreground">Ofereça cupom exclusivo de aniversário</p>
                   </div>
                 </div>
-
-                {/* Paleta de Widgets */}
-                <div className="space-y-4">
-                  <h4 className="font-medium">Widgets Disponíveis</h4>
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <Card className="border-0 shadow-card cursor-grab hover:shadow-xl transition-all duration-300">
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-blue-100">
-                            <BarChart3 className="h-5 w-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium">Gráfico de Barras</p>
-                            <p className="text-sm text-muted-foreground">Métricas comparativas</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="border-0 shadow-card cursor-grab hover:shadow-xl transition-all duration-300">
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-green-100">
-                            <Users className="h-5 w-5 text-green-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium">Card de Métrica</p>
-                            <p className="text-sm text-muted-foreground">KPIs principais</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="border-0 shadow-card cursor-grab hover:shadow-xl transition-all duration-300">
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-purple-100">
-                            <PieChart className="h-5 w-5 text-purple-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium">Gráfico de Pizza</p>
-                            <p className="text-sm text-muted-foreground">Distribuição de dados</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="border-0 shadow-card cursor-grab hover:shadow-xl transition-all duration-300">
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-orange-100">
-                            <TrendingUp className="h-5 w-5 text-orange-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium">Linha do Tempo</p>
-                            <p className="text-sm text-muted-foreground">Tendências históricas</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-white/50 dark:bg-white/5">
+                  <div className="p-2 rounded-full bg-purple-100 dark:bg-purple-900/30">
+                    <MessageSquare className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Mensagem Personalizada</p>
+                    <p className="text-sm text-muted-foreground">Use o nome do cliente na mensagem</p>
                   </div>
                 </div>
-
-                {/* Controles */}
-                <div className="flex gap-3 pt-4 border-t">
-                  <Button>
-                    <Download className="h-4 w-4 mr-2" />
-                    Salvar Dashboard
-                  </Button>
-                  <Button variant="outline">
-                    <Eye className="h-4 w-4 mr-2" />
-                    Visualizar
-                  </Button>
-                  <Button variant="outline">
-                    <Share2 className="h-4 w-4 mr-2" />
-                    Compartilhar
-                  </Button>
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-white/50 dark:bg-white/5">
+                  <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                    <Calendar className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Envio Antecipado</p>
+                    <p className="text-sm text-muted-foreground">Configure envio automático às 09:00</p>
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Configurações de Tema */}
+          {/* Info sobre Configuração */}
           <Card className="border-0 shadow-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5 text-primary" />
-                Personalização Visual
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Customize cores, temas e aparência do seu dashboard
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-4">
-                  <h4 className="font-medium">Tema</h4>
-                  <div className="grid grid-cols-3 gap-3">
-                    <Card className="border-2 border-primary cursor-pointer">
-                      <CardContent className="p-3 text-center">
-                        <div className="w-full h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded mb-2"></div>
-                        <p className="text-sm font-medium">Padrão</p>
-                      </CardContent>
-                    </Card>
-                    <Card className="border-0 shadow-card cursor-pointer hover:shadow-xl transition-all">
-                      <CardContent className="p-3 text-center">
-                        <div className="w-full h-12 bg-gradient-to-r from-green-500 to-teal-600 rounded mb-2"></div>
-                        <p className="text-sm font-medium">Natureza</p>
-                      </CardContent>
-                    </Card>
-                    <Card className="border-0 shadow-card cursor-pointer hover:shadow-xl transition-all">
-                      <CardContent className="p-3 text-center">
-                        <div className="w-full h-12 bg-gradient-to-r from-orange-500 to-red-600 rounded mb-2"></div>
-                        <p className="text-sm font-medium">Energia</p>
-                      </CardContent>
-                    </Card>
-                  </div>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-full bg-primary/10">
+                  <Settings className="h-6 w-6 text-primary" />
                 </div>
-
-                <div className="space-y-4">
-                  <h4 className="font-medium">Layout</h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                      <span className="text-sm">Grade Responsiva</span>
-                      <input type="checkbox" className="rounded" defaultChecked />
-                    </div>
-                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                      <span className="text-sm">Auto-ajuste de Widgets</span>
-                      <input type="checkbox" className="rounded" defaultChecked />
-                    </div>
-                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                      <span className="text-sm">Animações Suaves</span>
-                      <input type="checkbox" className="rounded" defaultChecked />
-                    </div>
-                  </div>
+                <div className="flex-1">
+                  <p className="font-medium">Configure Mensagens Automáticas de Aniversário</p>
+                  <p className="text-sm text-muted-foreground">
+                    Acesse o Menu Leads → Botão "🎂 Aniversariantes" para configurar templates e envio automático via WhatsApp
+                  </p>
                 </div>
+                <Button variant="outline" onClick={() => window.location.href = '/leads'}>
+                  Ir para Leads
+                  <ExternalLink className="h-4 w-4 ml-2" />
+                </Button>
               </div>
             </CardContent>
           </Card>
