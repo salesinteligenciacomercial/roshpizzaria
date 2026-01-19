@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useInternalChat, InternalConversation } from '@/hooks/useInternalChat';
 import { useInternalMessages } from '@/hooks/useInternalMessages';
+import { useInternalChatNotifications } from '@/hooks/useInternalChatNotifications';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { useMeetings } from '@/hooks/useMeetings';
 import { supabase } from '@/integrations/supabase/client';
@@ -72,6 +73,9 @@ export default function ChatInterno() {
     members
   } = useTeamMembers();
 
+  // Hook para atualizar notificações globais
+  const { markConversationAsRead } = useInternalChatNotifications();
+
   // Note: Incoming calls are handled globally by GlobalCallListenerV2 in MainLayout
   const {
     createMeeting,
@@ -127,17 +131,21 @@ export default function ChatInterno() {
     if (selectedConversation) {
       setActiveConversationId(selectedConversation.id);
       markAsRead(selectedConversation.id);
+      // Atualizar notificações globais na sidebar
+      markConversationAsRead();
     } else {
       setActiveConversationId(null);
     }
-  }, [selectedConversation, markAsRead, setActiveConversationId]);
+  }, [selectedConversation, markAsRead, setActiveConversationId, markConversationAsRead]);
 
   // Marcar como lido automaticamente quando novas mensagens chegam na conversa ativa
   useEffect(() => {
     if (selectedConversation && messages.length > 0) {
       markAsRead(selectedConversation.id);
+      // Atualizar notificações globais na sidebar
+      markConversationAsRead();
     }
-  }, [selectedConversation, messages.length, markAsRead]);
+  }, [selectedConversation, messages.length, markAsRead, markConversationAsRead]);
 
   // Auto-resize textarea
   useEffect(() => {

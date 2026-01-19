@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModuleAccess } from "@/hooks/useModuleAccess";
-import { useInternalChat } from "@/hooks/useInternalChat";
+import { useInternalChatNotifications } from "@/hooks/useInternalChatNotifications";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const navigation = [{
@@ -96,10 +96,7 @@ export function Sidebar({
     loading: moduleLoading,
     isMasterAccount
   } = useModuleAccess();
-  const {
-    getTotalUnread
-  } = useInternalChat();
-  const totalUnread = getTotalUnread();
+  const { unreadCount: totalUnread } = useInternalChatNotifications();
   
   // AI Insights count from database
   const [aiInsightsCount, setAiInsightsCount] = useState(0);

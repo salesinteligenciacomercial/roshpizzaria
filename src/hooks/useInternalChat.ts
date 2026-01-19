@@ -333,6 +333,10 @@ export const useInternalChat = () => {
     if (!currentUserId) return;
 
     try {
+      // Primeiro atualizar o estado local para feedback imediato
+      const currentConvo = conversationsRef.current.find(c => c.id === conversationId);
+      const unreadBefore = currentConvo?.unread_count || 0;
+
       await supabase
         .from('internal_conversation_participants')
         .update({ last_read_at: new Date().toISOString() })
@@ -345,6 +349,8 @@ export const useInternalChat = () => {
           c.id === conversationId ? { ...c, unread_count: 0 } : c
         )
       );
+
+      console.log(`💬 [InternalChat] Marked as read: ${conversationId}, was ${unreadBefore} unread`);
     } catch (error) {
       console.error('Error marking as read:', error);
     }
