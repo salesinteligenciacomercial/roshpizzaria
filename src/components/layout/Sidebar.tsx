@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModuleAccess } from "@/hooks/useModuleAccess";
 import { useInternalChatNotifications } from "@/hooks/useInternalChatNotifications";
+import { useConversasNotifications } from "@/hooks/useConversasNotifications";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const navigation = [{
@@ -30,7 +31,8 @@ const navigation = [{
   name: "Conversas",
   href: "/conversas",
   icon: MessageSquare,
-  menuKey: "conversas"
+  menuKey: "conversas",
+  showConversasBadge: true
 }, {
   name: "Agenda",
   href: "/agenda",
@@ -97,6 +99,7 @@ export function Sidebar({
     isMasterAccount
   } = useModuleAccess();
   const { unreadCount: totalUnread } = useInternalChatNotifications();
+  const { unreadCount: conversasUnread } = useConversasNotifications();
   
   // AI Insights count from database
   const [aiInsightsCount, setAiInsightsCount] = useState(0);
@@ -253,6 +256,11 @@ export function Sidebar({
                               {totalUnread > 99 ? '99+' : totalUnread}
                             </Badge>
                           )}
+                          {item.showConversasBadge && conversasUnread > 0 && effectiveCollapsed && !isLocked && (
+                            <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-green-500 text-white">
+                              {conversasUnread > 99 ? '99+' : conversasUnread}
+                            </Badge>
+                          )}
                           {item.showAIBadge && aiInsightsCount > 0 && effectiveCollapsed && !isLocked && (
                             <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-orange-500 text-white">
                               {aiInsightsCount > 99 ? '99+' : aiInsightsCount}
@@ -270,6 +278,11 @@ export function Sidebar({
                                 {totalUnread > 99 ? '99+' : totalUnread}
                               </Badge>
                             )}
+                            {item.showConversasBadge && conversasUnread > 0 && !isLocked && (
+                              <Badge className="ml-2 text-xs bg-green-500 hover:bg-green-600 text-white">
+                                {conversasUnread > 99 ? '99+' : conversasUnread}
+                              </Badge>
+                            )}
                             {item.showAIBadge && aiInsightsCount > 0 && !isLocked && (
                               <Badge className="ml-2 text-xs bg-orange-500 hover:bg-orange-600 text-white gap-1">
                                 <Brain className="h-3 w-3" />
@@ -284,7 +297,7 @@ export function Sidebar({
                 </TooltipTrigger>
                 {effectiveCollapsed && (
                   <TooltipContent side="right" className="font-medium">
-                    {item.name} {isLocked ? "(Bloqueado)" : item.showBadge && totalUnread > 0 ? `(${totalUnread})` : item.showAIBadge && aiInsightsCount > 0 ? `(${aiInsightsCount} IA)` : ""}
+                    {item.name} {isLocked ? "(Bloqueado)" : item.showBadge && totalUnread > 0 ? `(${totalUnread})` : item.showConversasBadge && conversasUnread > 0 ? `(${conversasUnread})` : item.showAIBadge && aiInsightsCount > 0 ? `(${aiInsightsCount} IA)` : ""}
                   </TooltipContent>
                 )}
               </Tooltip>
