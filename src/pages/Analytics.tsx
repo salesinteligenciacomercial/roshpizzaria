@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { BarChart3, TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity, Trophy, XCircle, Download, Share2, Filter, Settings, Eye, PieChart, Clock, Zap, RefreshCw, CalendarDays, UserCheck, AlertTriangle, ArrowUpRight, ArrowDownRight, Megaphone, ExternalLink, Package } from "lucide-react";
+import { BarChart3, TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity, Trophy, XCircle, Download, Share2, Filter, Settings, Eye, PieChart, Clock, Zap, RefreshCw, CalendarDays, UserCheck, AlertTriangle, ArrowUpRight, ArrowDownRight, Megaphone, ExternalLink, Package, Cake, Gift, PartyPopper } from "lucide-react";
 import CampaignAnalytics from "@/components/analytics/CampaignAnalytics";
 import LeadsDrilldownModal, { DrilldownFilterType } from "@/components/analytics/LeadsDrilldownModal";
 import { PipelineFinanceiro } from "@/components/analytics/PipelineFinanceiro";
@@ -70,6 +70,17 @@ interface ProductivityStats {
   taxaComparecimento: number;
   tempoMedioTarefa: number;
 }
+interface BirthdayStats {
+  aniversariantesHoje: number;
+  aniversariantesSemana: number;
+  aniversariantesMes: number;
+  proximosAniversariantes: {
+    id: string;
+    nome: string;
+    data: string;
+    diasFaltando: number;
+  }[];
+}
 export default function Analytics() {
   const {
     canAccess,
@@ -127,6 +138,12 @@ export default function Analytics() {
   const [productivityLoading, setProductivityLoading] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting');
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [birthdayStats, setBirthdayStats] = useState<BirthdayStats>({
+    aniversariantesHoje: 0,
+    aniversariantesSemana: 0,
+    aniversariantesMes: 0,
+    proximosAniversariantes: []
+  });
 
   // ✅ Estados para drill-down modal
   const [drilldownOpen, setDrilldownOpen] = useState(false);
@@ -316,7 +333,7 @@ export default function Analytics() {
   const fetchAllStats = async () => {
     setLoading(true);
     try {
-      await Promise.all([fetchStats(), fetchReportStats(), fetchCommunicationStats(), fetchProductivityStats()]);
+      await Promise.all([fetchStats(), fetchReportStats(), fetchCommunicationStats(), fetchProductivityStats(), fetchBirthdayStats()]);
     } catch (error) {
       console.error("Erro ao carregar estatísticas:", error);
       setFatalError((error as Error)?.message || 'Erro ao carregar estatísticas');
@@ -325,7 +342,7 @@ export default function Analytics() {
     }
   };
   const fetchFilteredStats = async () => {
-    await Promise.all([fetchStats(), fetchReportStats(), fetchCommunicationStats(), fetchProductivityStats()]);
+    await Promise.all([fetchStats(), fetchReportStats(), fetchCommunicationStats(), fetchProductivityStats(), fetchBirthdayStats()]);
   };
   const fetchStats = async () => {
     try {
@@ -765,6 +782,91 @@ export default function Analytics() {
       console.error("Erro ao carregar estatísticas de produtividade:", error);
     } finally {
       setProductivityLoading(false);
+    }
+  };
+
+  const fetchBirthdayStats = async () => {
+    try {
+      const { data: leadsData } = await supabase
+        .from('leads')
+        .select('id, name, data_nascimento')
+        .not('data_nascimento', 'is', null);
+
+      if (!leadsData || leadsData.length === 0) {
+        setBirthdayStats({
+          aniversariantesHoje: 0,
+          aniversariantesSemana: 0,
+          aniversariantesMes: 0,
+          proximosAniversariantes: []
+        });
+        return;
+      }
+
+      const hoje = new Date();
+      const hojeD = hoje.getDate();
+      const hojeM = hoje.getMonth();
+
+      // Filtrar aniversariantes
+      const aniversariantesHoje = leadsData.filter((lead: any) => {
+        if (!lead.data_nascimento) return false;
+        const nascimento = new Date(lead.data_nascimento);
+        return nascimento.getDate() === hojeD && nascimento.getMonth() === hojeM;
+      }).length;
+
+      const aniversariantesSemana = leadsData.filter((lead: any) => {
+        if (!lead.data_nascimento) return false;
+        const nascimento = new Date(lead.data_nascimento);
+        for (let i = 0; i <= 7; i++) {
+          const dia = new Date(hoje);
+          dia.setDate(dia.getDate() + i);
+          if (nascimento.getDate() === dia.getDate() && nascimento.getMonth() === dia.getMonth()) {
+            return true;
+          }
+        }
+        return false;
+      }).length;
+
+      const aniversariantesMes = leadsData.filter((lead: any) => {
+        if (!lead.data_nascimento) return false;
+        const nascimento = new Date(lead.data_nascimento);
+        return nascimento.getMonth() === hojeM;
+      }).length;
+
+      // Próximos aniversariantes (próximos 7 dias)
+      const proximosAniversariantes = leadsData
+        .map((lead: any) => {
+          if (!lead.data_nascimento) return null;
+          const nascimento = new Date(lead.data_nascimento);
+          
+          // Calcular próximo aniversário
+          let proximoAniversario = new Date(hoje.getFullYear(), nascimento.getMonth(), nascimento.getDate());
+          if (proximoAniversario < hoje) {
+            proximoAniversario.setFullYear(proximoAniversario.getFullYear() + 1);
+          }
+          
+          const diasFaltando = Math.ceil((proximoAniversario.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+          
+          return {
+            id: lead.id,
+            nome: lead.name || 'Sem nome',
+            data: `${nascimento.getDate().toString().padStart(2, '0')}/${(nascimento.getMonth() + 1).toString().padStart(2, '0')}`,
+            diasFaltando
+          };
+        })
+        .filter((l: any) => l !== null && l.diasFaltando <= 30)
+        .sort((a: any, b: any) => a.diasFaltando - b.diasFaltando)
+        .slice(0, 5);
+
+      setBirthdayStats({
+        aniversariantesHoje,
+        aniversariantesSemana,
+        aniversariantesMes,
+        proximosAniversariantes
+      });
+
+      console.log(`🎂 [Analytics] Aniversariantes: ${aniversariantesHoje} hoje, ${aniversariantesSemana} semana, ${aniversariantesMes} mês`);
+    } catch (error) {
+      console.error('Erro ao carregar estatísticas de aniversariantes:', error);
     }
   };
   const statCards = [{
@@ -2813,7 +2915,115 @@ export default function Analytics() {
             </CardContent>
           </Card>
 
-          {/* Templates Disponíveis */}
+          {/* Visão Geral de Aniversariantes */}
+          <Card className="border-0 shadow-card">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Cake className="h-5 w-5 text-pink-500" />
+                Visão Geral de Aniversariantes
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Acompanhe aniversários de contatos para campanhas sazonais
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-3 mb-6">
+                {/* Aniversariantes Hoje */}
+                <Card className={`border-0 shadow-card ${birthdayStats.aniversariantesHoje > 0 ? 'bg-gradient-to-br from-pink-50 to-pink-100 dark:from-pink-900/20 dark:to-pink-800/20' : ''}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Hoje</p>
+                        <p className="text-3xl font-bold text-pink-600">{birthdayStats.aniversariantesHoje}</p>
+                      </div>
+                      <div className="p-3 rounded-full bg-pink-100 dark:bg-pink-900/30">
+                        <Gift className="h-6 w-6 text-pink-600" />
+                      </div>
+                    </div>
+                    {birthdayStats.aniversariantesHoje > 0 && (
+                      <Badge className="mt-2 bg-pink-500">🎉 Celebrar!</Badge>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Aniversariantes da Semana */}
+                <Card className="border-0 shadow-card">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Esta Semana</p>
+                        <p className="text-3xl font-bold text-purple-600">{birthdayStats.aniversariantesSemana}</p>
+                      </div>
+                      <div className="p-3 rounded-full bg-purple-100 dark:bg-purple-900/30">
+                        <PartyPopper className="h-6 w-6 text-purple-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Aniversariantes do Mês */}
+                <Card className="border-0 shadow-card">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Este Mês</p>
+                        <p className="text-3xl font-bold text-blue-600">{birthdayStats.aniversariantesMes}</p>
+                      </div>
+                      <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                        <Cake className="h-6 w-6 text-blue-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Próximos Aniversariantes */}
+              {birthdayStats.proximosAniversariantes.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-medium text-sm text-muted-foreground">Próximos Aniversariantes</h4>
+                  <div className="space-y-2">
+                    {birthdayStats.proximosAniversariantes.map((lead) => (
+                      <div 
+                        key={lead.id} 
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          lead.diasFaltando === 0 
+                            ? 'bg-pink-50 border-pink-200 dark:bg-pink-900/20 dark:border-pink-700' 
+                            : 'bg-muted/30'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            lead.diasFaltando === 0 
+                              ? 'bg-pink-500 text-white' 
+                              : 'bg-muted text-muted-foreground'
+                          }`}>
+                            🎂
+                          </div>
+                          <div>
+                            <p className="font-medium">{lead.nome}</p>
+                            <p className="text-sm text-muted-foreground">{lead.data}</p>
+                          </div>
+                        </div>
+                        <Badge variant={lead.diasFaltando === 0 ? 'default' : 'secondary'}>
+                          {lead.diasFaltando === 0 ? 'HOJE!' : `Em ${lead.diasFaltando} dias`}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {birthdayStats.proximosAniversariantes.length === 0 && birthdayStats.aniversariantesMes === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Cake className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                  <p className="text-sm">Nenhum aniversariante cadastrado</p>
+                  <p className="text-xs mt-1">Adicione datas de nascimento nos leads para acompanhar</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+
           <Card className="border-0 shadow-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
