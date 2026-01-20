@@ -439,7 +439,7 @@ export function EditarInformacoesLeadDialog({
             <Input
               id="nome"
               value={formData.nome}
-              onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, nome: e.target.value }))}
               placeholder="Nome do lead"
               required
             />
@@ -451,7 +451,7 @@ export function EditarInformacoesLeadDialog({
               id="telefone"
               type="tel"
               value={formData.telefone}
-              onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, telefone: e.target.value }))}
               placeholder="(00) 00000-0000"
             />
           </div>
@@ -462,7 +462,7 @@ export function EditarInformacoesLeadDialog({
               id="email"
               type="email"
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
               placeholder="email@exemplo.com"
             />
           </div>
@@ -472,7 +472,7 @@ export function EditarInformacoesLeadDialog({
             <Input
               id="cpf"
               value={formData.cpf}
-              onChange={(e) => setFormData({ ...formData, cpf: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, cpf: e.target.value }))}
               placeholder="000.000.000-00"
             />
           </div>
@@ -482,7 +482,7 @@ export function EditarInformacoesLeadDialog({
             <Input
               id="company"
               value={formData.company}
-              onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, company: e.target.value }))}
               placeholder="Nome da empresa"
             />
           </div>
@@ -492,7 +492,7 @@ export function EditarInformacoesLeadDialog({
             <Input
               id="servico"
               value={formData.servico}
-              onChange={(e) => setFormData({ ...formData, servico: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, servico: e.target.value }))}
               placeholder="Ex: Consultoria, Produto X"
             />
           </div>
@@ -504,7 +504,7 @@ export function EditarInformacoesLeadDialog({
               type="number"
               step="0.01"
               value={formData.valor}
-              onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, valor: e.target.value }))}
               placeholder="0.00"
             />
           </div>
@@ -514,7 +514,7 @@ export function EditarInformacoesLeadDialog({
             <Input
               id="segmentacao"
               value={formData.segmentacao}
-              onChange={(e) => setFormData({ ...formData, segmentacao: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, segmentacao: e.target.value }))}
               placeholder="Ex: Empresarial, Residencial"
             />
           </div>
@@ -524,7 +524,7 @@ export function EditarInformacoesLeadDialog({
             <Input
               id="source"
               value={formData.source}
-              onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, source: e.target.value }))}
               placeholder="Ex: WhatsApp, Instagram, Indicação"
             />
           </div>
@@ -654,7 +654,7 @@ export function EditarInformacoesLeadDialog({
             <Textarea
               id="notes"
               value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
               rows={3}
               placeholder="Informações adicionais sobre o lead"
             />
@@ -673,7 +673,7 @@ export function EditarInformacoesLeadDialog({
                     const tagTrimmed = newTag.trim();
                     if (tagTrimmed && !formData.tags.includes(tagTrimmed)) {
                       console.log('➕ Adicionando tag:', tagTrimmed);
-                      setFormData({ ...formData, tags: [...formData.tags, tagTrimmed] });
+                      setFormData(prev => ({ ...prev, tags: [...prev.tags, tagTrimmed] }));
                       setNewTag("");
                     } else if (formData.tags.includes(tagTrimmed)) {
                       toast.error("Esta tag já foi adicionada");
@@ -689,7 +689,7 @@ export function EditarInformacoesLeadDialog({
                   const tagTrimmed = newTag.trim();
                   if (tagTrimmed && !formData.tags.includes(tagTrimmed)) {
                     console.log('➕ Adicionando tag:', tagTrimmed);
-                    setFormData({ ...formData, tags: [...formData.tags, tagTrimmed] });
+                    setFormData(prev => ({ ...prev, tags: [...prev.tags, tagTrimmed] }));
                     setNewTag("");
                   } else if (tagTrimmed && formData.tags.includes(tagTrimmed)) {
                     toast.error("Esta tag já foi adicionada");
@@ -714,7 +714,7 @@ export function EditarInformacoesLeadDialog({
                       className="h-4 w-4 p-0 hover:bg-transparent"
                       onClick={() => {
                         console.log('🗑️ Removendo tag:', tag);
-                        setFormData({ ...formData, tags: formData.tags.filter(t => t !== tag) });
+                        setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
                       }}
                     >
                       <X className="h-3 w-3" />
