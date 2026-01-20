@@ -542,7 +542,7 @@ export function EditarInformacoesLeadDialog({
                 <Input
                   id="endereco_cep"
                   value={formData.endereco_cep}
-                  onChange={(e) => setFormData({ ...formData, endereco_cep: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, endereco_cep: e.target.value }))}
                   placeholder="00000-000"
                   className="h-8 text-sm"
                 />
@@ -552,7 +552,7 @@ export function EditarInformacoesLeadDialog({
                 <Input
                   id="endereco_estado"
                   value={formData.endereco_estado}
-                  onChange={(e) => setFormData({ ...formData, endereco_estado: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, endereco_estado: e.target.value }))}
                   placeholder="PE"
                   maxLength={2}
                   className="h-8 text-sm"
@@ -565,7 +565,7 @@ export function EditarInformacoesLeadDialog({
               <Input
                 id="endereco_logradouro"
                 value={formData.endereco_logradouro}
-                onChange={(e) => setFormData({ ...formData, endereco_logradouro: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, endereco_logradouro: e.target.value }))}
                 placeholder="Rua Exemplo"
                 className="h-8 text-sm"
               />
@@ -577,7 +577,7 @@ export function EditarInformacoesLeadDialog({
                 <Input
                   id="endereco_numero"
                   value={formData.endereco_numero}
-                  onChange={(e) => setFormData({ ...formData, endereco_numero: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, endereco_numero: e.target.value }))}
                   placeholder="123"
                   className="h-8 text-sm"
                 />
@@ -587,7 +587,7 @@ export function EditarInformacoesLeadDialog({
                 <Input
                   id="endereco_complemento"
                   value={formData.endereco_complemento}
-                  onChange={(e) => setFormData({ ...formData, endereco_complemento: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, endereco_complemento: e.target.value }))}
                   placeholder="Apto 101"
                   className="h-8 text-sm"
                 />
@@ -600,7 +600,7 @@ export function EditarInformacoesLeadDialog({
                 <Input
                   id="endereco_bairro"
                   value={formData.endereco_bairro}
-                  onChange={(e) => setFormData({ ...formData, endereco_bairro: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, endereco_bairro: e.target.value }))}
                   placeholder="Centro"
                   className="h-8 text-sm"
                 />
@@ -610,7 +610,7 @@ export function EditarInformacoesLeadDialog({
                 <Input
                   id="endereco_cidade"
                   value={formData.endereco_cidade}
-                  onChange={(e) => setFormData({ ...formData, endereco_cidade: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, endereco_cidade: e.target.value }))}
                   placeholder="Recife"
                   className="h-8 text-sm"
                 />
@@ -630,7 +630,7 @@ export function EditarInformacoesLeadDialog({
               <Input
                 id="govbr_login"
                 value={formData.govbr_login}
-                onChange={(e) => setFormData({ ...formData, govbr_login: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, govbr_login: e.target.value }))}
                 placeholder="000.000.000-00 ou email@exemplo.com"
                 className="h-8 text-sm"
               />
@@ -642,7 +642,7 @@ export function EditarInformacoesLeadDialog({
                 id="govbr_senha"
                 type="text"
                 value={formData.govbr_senha}
-                onChange={(e) => setFormData({ ...formData, govbr_senha: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, govbr_senha: e.target.value }))}
                 placeholder="Senha de acesso"
                 className="h-8 text-sm font-mono"
               />
