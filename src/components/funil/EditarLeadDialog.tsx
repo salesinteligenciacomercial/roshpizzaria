@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Pencil, Tag, X, Plus, Paperclip, FileText } from "lucide-react";
+import { Pencil, Tag, X, Plus, Paperclip, FileText, MapPin, Shield, Key } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -67,7 +67,18 @@ export function EditarLeadDialog({
     etapa_id: lead.etapa_id || "",
     responsavel_id: (lead as any).responsavel_id || "",
     tags: lead.tags || [],
-    data_nascimento: lead.data_nascimento || ""
+    data_nascimento: lead.data_nascimento || "",
+    // Endereço
+    endereco_cep: (lead as any).endereco_cep || "",
+    endereco_logradouro: (lead as any).endereco_logradouro || "",
+    endereco_numero: (lead as any).endereco_numero || "",
+    endereco_complemento: (lead as any).endereco_complemento || "",
+    endereco_bairro: (lead as any).endereco_bairro || "",
+    endereco_cidade: (lead as any).endereco_cidade || "",
+    endereco_estado: (lead as any).endereco_estado || "",
+    // Gov.br
+    govbr_login: (lead as any).govbr_login || "",
+    govbr_senha: (lead as any).govbr_senha || ""
   });
   const [newTag, setNewTag] = useState("");
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
@@ -90,7 +101,16 @@ export function EditarLeadDialog({
       etapa_id: lead.etapa_id || "",
       responsavel_id: (lead as any).responsavel_id || "",
       tags: lead.tags || [],
-      data_nascimento: lead.data_nascimento || ""
+      data_nascimento: lead.data_nascimento || "",
+      endereco_cep: (lead as any).endereco_cep || "",
+      endereco_logradouro: (lead as any).endereco_logradouro || "",
+      endereco_numero: (lead as any).endereco_numero || "",
+      endereco_complemento: (lead as any).endereco_complemento || "",
+      endereco_bairro: (lead as any).endereco_bairro || "",
+      endereco_cidade: (lead as any).endereco_cidade || "",
+      endereco_estado: (lead as any).endereco_estado || "",
+      govbr_login: (lead as any).govbr_login || "",
+      govbr_senha: (lead as any).govbr_senha || ""
     });
   }, [lead]);
 
@@ -246,7 +266,7 @@ export function EditarLeadDialog({
           cpf: formData.cpf || null,
           value: formData.valor ? parseFloat(formData.valor) : 0,
           company: formData.company || null,
-          company_id: companyId, // 🔒 CRÍTICO: Manter company_id
+          company_id: companyId,
           source: formData.source || null,
           notes: formData.notes || null,
           etapa_id: formData.etapa_id || null,
@@ -254,6 +274,15 @@ export function EditarLeadDialog({
           responsavel_id: formData.responsavel_id || null,
           tags: formData.tags && formData.tags.length > 0 ? formData.tags : null,
           data_nascimento: formData.data_nascimento || null,
+          endereco_cep: formData.endereco_cep || null,
+          endereco_logradouro: formData.endereco_logradouro || null,
+          endereco_numero: formData.endereco_numero || null,
+          endereco_complemento: formData.endereco_complemento || null,
+          endereco_bairro: formData.endereco_bairro || null,
+          endereco_cidade: formData.endereco_cidade || null,
+          endereco_estado: formData.endereco_estado || null,
+          govbr_login: formData.govbr_login || null,
+          govbr_senha: formData.govbr_senha || null,
           updated_at: new Date().toISOString()
         })
         .eq("id", lead.id);
@@ -434,6 +463,37 @@ export function EditarLeadDialog({
               onChange={(e) => setFormData({ ...formData, source: e.target.value })}
               placeholder="Ex: WhatsApp, Instagram, Indicação"
             />
+          </div>
+
+          {/* Seção de Endereço */}
+          <div className="bg-muted/30 border border-border/50 rounded-lg p-3 space-y-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              Endereço
+            </h3>
+            <div className="grid grid-cols-2 gap-2">
+              <Input placeholder="CEP" value={formData.endereco_cep} onChange={(e) => setFormData({ ...formData, endereco_cep: e.target.value })} className="h-8 text-sm" />
+              <Input placeholder="UF" value={formData.endereco_estado} onChange={(e) => setFormData({ ...formData, endereco_estado: e.target.value })} maxLength={2} className="h-8 text-sm" />
+            </div>
+            <Input placeholder="Logradouro" value={formData.endereco_logradouro} onChange={(e) => setFormData({ ...formData, endereco_logradouro: e.target.value })} className="h-8 text-sm" />
+            <div className="grid grid-cols-2 gap-2">
+              <Input placeholder="Número" value={formData.endereco_numero} onChange={(e) => setFormData({ ...formData, endereco_numero: e.target.value })} className="h-8 text-sm" />
+              <Input placeholder="Complemento" value={formData.endereco_complemento} onChange={(e) => setFormData({ ...formData, endereco_complemento: e.target.value })} className="h-8 text-sm" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Input placeholder="Bairro" value={formData.endereco_bairro} onChange={(e) => setFormData({ ...formData, endereco_bairro: e.target.value })} className="h-8 text-sm" />
+              <Input placeholder="Cidade" value={formData.endereco_cidade} onChange={(e) => setFormData({ ...formData, endereco_cidade: e.target.value })} className="h-8 text-sm" />
+            </div>
+          </div>
+
+          {/* Seção Gov.br */}
+          <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 space-y-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Shield className="h-4 w-4 text-blue-500" />
+              Acesso Gov.br
+            </h3>
+            <Input placeholder="Login (CPF ou Email)" value={formData.govbr_login} onChange={(e) => setFormData({ ...formData, govbr_login: e.target.value })} className="h-8 text-sm" />
+            <Input placeholder="Senha de acesso" value={formData.govbr_senha} onChange={(e) => setFormData({ ...formData, govbr_senha: e.target.value })} className="h-8 text-sm font-mono" />
           </div>
 
           <div>

@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle, Eye, ChevronDown, Mail, Building2, Globe, Pencil } from "lucide-react";
+import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle, Eye, ChevronDown, Mail, Building2, Globe, Pencil, MapPin, Key, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FinalizarNegociacaoDialog } from "@/components/leads/FinalizarNegociacaoDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -8234,6 +8234,58 @@ function Conversas() {
                                       <span className="font-medium text-green-600">
                                         R$ {Number(leadVinculado.value).toLocaleString('pt-BR')}
                                       </span>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Endereço */}
+                                  {(leadVinculado.endereco_logradouro || leadVinculado.endereco_cidade) && (
+                                    <div className="pt-2 border-t border-border/50">
+                                      <div className="flex items-start gap-2">
+                                        <MapPin className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                        <div className="flex-1">
+                                          <span className="text-muted-foreground">Endereço:</span>
+                                          <p className="text-xs mt-1 text-foreground">
+                                            {[
+                                              leadVinculado.endereco_logradouro,
+                                              leadVinculado.endereco_numero && `nº ${leadVinculado.endereco_numero}`,
+                                              leadVinculado.endereco_complemento,
+                                              leadVinculado.endereco_bairro,
+                                              leadVinculado.endereco_cidade && leadVinculado.endereco_estado 
+                                                ? `${leadVinculado.endereco_cidade} - ${leadVinculado.endereco_estado}` 
+                                                : (leadVinculado.endereco_cidade || leadVinculado.endereco_estado),
+                                              leadVinculado.endereco_cep && `CEP: ${leadVinculado.endereco_cep}`
+                                            ].filter(Boolean).join(', ')}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Gov.br */}
+                                  {(leadVinculado.govbr_login || leadVinculado.govbr_senha) && (
+                                    <div className="pt-2 border-t border-border/50">
+                                      <div className="flex items-start gap-2">
+                                        <Shield className="h-3 w-3 text-blue-500 flex-shrink-0 mt-0.5" />
+                                        <div className="flex-1">
+                                          <span className="text-muted-foreground font-medium">Gov.br:</span>
+                                          <div className="text-xs mt-1 space-y-1">
+                                            {leadVinculado.govbr_login && (
+                                              <div className="flex items-center gap-1">
+                                                <Key className="h-2.5 w-2.5 text-muted-foreground" />
+                                                <span className="text-muted-foreground">Login:</span>
+                                                <span className="font-medium">{leadVinculado.govbr_login}</span>
+                                              </div>
+                                            )}
+                                            {leadVinculado.govbr_senha && (
+                                              <div className="flex items-center gap-1">
+                                                <Key className="h-2.5 w-2.5 text-muted-foreground" />
+                                                <span className="text-muted-foreground">Senha:</span>
+                                                <span className="font-medium font-mono">{leadVinculado.govbr_senha}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
                                     </div>
                                   )}
                                   

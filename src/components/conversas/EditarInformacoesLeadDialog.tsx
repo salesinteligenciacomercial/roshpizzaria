@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Tag, X, Plus, TrendingUp } from "lucide-react";
+import { FileText, Tag, X, Plus, TrendingUp, MapPin, Key, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -41,7 +41,18 @@ export function EditarInformacoesLeadDialog({
     etapa_id: "",
     tags: [] as string[],
     servico: "",
-    segmentacao: ""
+    segmentacao: "",
+    // Endereço
+    endereco_cep: "",
+    endereco_logradouro: "",
+    endereco_numero: "",
+    endereco_complemento: "",
+    endereco_bairro: "",
+    endereco_cidade: "",
+    endereco_estado: "",
+    // Gov.br
+    govbr_login: "",
+    govbr_senha: ""
   });
   const [newTag, setNewTag] = useState("");
 
@@ -152,7 +163,18 @@ export function EditarInformacoesLeadDialog({
             etapa_id: leadData.etapa_id || "",
             tags: Array.isArray(leadData.tags) ? leadData.tags : [],
             servico: leadData.servico || "",
-            segmentacao: leadData.segmentacao || ""
+            segmentacao: leadData.segmentacao || "",
+            // Endereço
+            endereco_cep: (leadData as any).endereco_cep || "",
+            endereco_logradouro: (leadData as any).endereco_logradouro || "",
+            endereco_numero: (leadData as any).endereco_numero || "",
+            endereco_complemento: (leadData as any).endereco_complemento || "",
+            endereco_bairro: (leadData as any).endereco_bairro || "",
+            endereco_cidade: (leadData as any).endereco_cidade || "",
+            endereco_estado: (leadData as any).endereco_estado || "",
+            // Gov.br
+            govbr_login: (leadData as any).govbr_login || "",
+            govbr_senha: (leadData as any).govbr_senha || ""
           });
         }
       } else {
@@ -233,6 +255,17 @@ export function EditarInformacoesLeadDialog({
         tags: formData.tags,
         servico: formData.servico || null,
         segmentacao: formData.segmentacao || null,
+        // Endereço
+        endereco_cep: formData.endereco_cep || null,
+        endereco_logradouro: formData.endereco_logradouro || null,
+        endereco_numero: formData.endereco_numero || null,
+        endereco_complemento: formData.endereco_complemento || null,
+        endereco_bairro: formData.endereco_bairro || null,
+        endereco_cidade: formData.endereco_cidade || null,
+        endereco_estado: formData.endereco_estado || null,
+        // Gov.br
+        govbr_login: formData.govbr_login || null,
+        govbr_senha: formData.govbr_senha || null,
         company_id: userRole.company_id,
         owner_id: session.user.id,
         status: "novo",
@@ -494,6 +527,126 @@ export function EditarInformacoesLeadDialog({
               onChange={(e) => setFormData({ ...formData, source: e.target.value })}
               placeholder="Ex: WhatsApp, Instagram, Indicação"
             />
+          </div>
+
+          {/* Seção de Endereço */}
+          <div className="bg-muted/30 border border-border/50 rounded-lg p-3 space-y-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              Endereço
+            </h3>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor="endereco_cep" className="text-xs">CEP</Label>
+                <Input
+                  id="endereco_cep"
+                  value={formData.endereco_cep}
+                  onChange={(e) => setFormData({ ...formData, endereco_cep: e.target.value })}
+                  placeholder="00000-000"
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div>
+                <Label htmlFor="endereco_estado" className="text-xs">Estado (UF)</Label>
+                <Input
+                  id="endereco_estado"
+                  value={formData.endereco_estado}
+                  onChange={(e) => setFormData({ ...formData, endereco_estado: e.target.value })}
+                  placeholder="PE"
+                  maxLength={2}
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="endereco_logradouro" className="text-xs">Logradouro (Rua/Av.)</Label>
+              <Input
+                id="endereco_logradouro"
+                value={formData.endereco_logradouro}
+                onChange={(e) => setFormData({ ...formData, endereco_logradouro: e.target.value })}
+                placeholder="Rua Exemplo"
+                className="h-8 text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor="endereco_numero" className="text-xs">Número</Label>
+                <Input
+                  id="endereco_numero"
+                  value={formData.endereco_numero}
+                  onChange={(e) => setFormData({ ...formData, endereco_numero: e.target.value })}
+                  placeholder="123"
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div>
+                <Label htmlFor="endereco_complemento" className="text-xs">Complemento</Label>
+                <Input
+                  id="endereco_complemento"
+                  value={formData.endereco_complemento}
+                  onChange={(e) => setFormData({ ...formData, endereco_complemento: e.target.value })}
+                  placeholder="Apto 101"
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor="endereco_bairro" className="text-xs">Bairro</Label>
+                <Input
+                  id="endereco_bairro"
+                  value={formData.endereco_bairro}
+                  onChange={(e) => setFormData({ ...formData, endereco_bairro: e.target.value })}
+                  placeholder="Centro"
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div>
+                <Label htmlFor="endereco_cidade" className="text-xs">Cidade</Label>
+                <Input
+                  id="endereco_cidade"
+                  value={formData.endereco_cidade}
+                  onChange={(e) => setFormData({ ...formData, endereco_cidade: e.target.value })}
+                  placeholder="Recife"
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Seção Gov.br */}
+          <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 space-y-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Shield className="h-4 w-4 text-blue-500" />
+              Acesso Gov.br
+            </h3>
+            
+            <div>
+              <Label htmlFor="govbr_login" className="text-xs">Login (CPF ou Email)</Label>
+              <Input
+                id="govbr_login"
+                value={formData.govbr_login}
+                onChange={(e) => setFormData({ ...formData, govbr_login: e.target.value })}
+                placeholder="000.000.000-00 ou email@exemplo.com"
+                className="h-8 text-sm"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="govbr_senha" className="text-xs">Senha</Label>
+              <Input
+                id="govbr_senha"
+                type="text"
+                value={formData.govbr_senha}
+                onChange={(e) => setFormData({ ...formData, govbr_senha: e.target.value })}
+                placeholder="Senha de acesso"
+                className="h-8 text-sm font-mono"
+              />
+            </div>
           </div>
 
           <div>

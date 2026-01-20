@@ -2056,10 +2056,19 @@ export type Database = {
           created_at: string | null
           data_nascimento: string | null
           email: string | null
+          endereco_bairro: string | null
+          endereco_cep: string | null
+          endereco_cidade: string | null
+          endereco_complemento: string | null
+          endereco_estado: string | null
+          endereco_logradouro: string | null
+          endereco_numero: string | null
           etapa_id: string | null
           expected_close_date: string | null
           form_id: string | null
           funil_id: string | null
+          govbr_login: string | null
+          govbr_senha: string | null
           id: string
           lead_source_type: string | null
           loss_reason: string | null
@@ -2101,10 +2110,19 @@ export type Database = {
           created_at?: string | null
           data_nascimento?: string | null
           email?: string | null
+          endereco_bairro?: string | null
+          endereco_cep?: string | null
+          endereco_cidade?: string | null
+          endereco_complemento?: string | null
+          endereco_estado?: string | null
+          endereco_logradouro?: string | null
+          endereco_numero?: string | null
           etapa_id?: string | null
           expected_close_date?: string | null
           form_id?: string | null
           funil_id?: string | null
+          govbr_login?: string | null
+          govbr_senha?: string | null
           id?: string
           lead_source_type?: string | null
           loss_reason?: string | null
@@ -2146,10 +2164,19 @@ export type Database = {
           created_at?: string | null
           data_nascimento?: string | null
           email?: string | null
+          endereco_bairro?: string | null
+          endereco_cep?: string | null
+          endereco_cidade?: string | null
+          endereco_complemento?: string | null
+          endereco_estado?: string | null
+          endereco_logradouro?: string | null
+          endereco_numero?: string | null
           etapa_id?: string | null
           expected_close_date?: string | null
           form_id?: string | null
           funil_id?: string | null
+          govbr_login?: string | null
+          govbr_senha?: string | null
           id?: string
           lead_source_type?: string | null
           loss_reason?: string | null
