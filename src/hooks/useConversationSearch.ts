@@ -4,7 +4,7 @@ import { Conversation, Message } from './useConversationsCache';
 
 /**
  * Hook para busca de conversas diretamente no banco de dados
- * Resolve o problema de não encontrar conversas antigas que não estão carregadas
+ * ✅ MELHORADO: Busca em conversas E leads para garantir que sempre encontre o contato
  */
 export const useConversationSearch = (companyId: string | null) => {
   const [searchResults, setSearchResults] = useState<Conversation[]>([]);
@@ -12,7 +12,8 @@ export const useConversationSearch = (companyId: string | null) => {
   const [hasSearched, setHasSearched] = useState(false);
 
   /**
-   * Busca conversas no banco de dados por nome, telefone ou número
+   * ✅ MELHORADO: Busca conversas no banco de dados por nome, telefone ou número
+   * Agora busca também em leads para encontrar contatos mesmo sem conversas
    */
   const searchConversations = useCallback(async (query: string): Promise<Conversation[]> => {
     if (!companyId || !query.trim()) {
@@ -28,45 +29,60 @@ export const useConversationSearch = (companyId: string | null) => {
       const searchLower = query.toLowerCase().trim();
       const searchDigits = query.replace(/[^0-9]/g, '');
 
-      console.log('🔍 [SEARCH] Buscando no banco:', { query, searchLower, searchDigits });
+      console.log('🔍 [SEARCH] Buscando no banco:', { query, searchLower, searchDigits, companyId });
 
-      // Buscar mensagens que correspondem à busca (por nome_contato ou número)
-      // Usar ILIKE para busca case-insensitive
-      let searchQuery = supabase
+      // ========== 1. BUSCAR EM CONVERSAS ==========
+      let conversasQuery = supabase
         .from('conversas')
         .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme, company_id, sent_by, owner_id, midia_url, origem_api')
         .eq('company_id', companyId)
         .order('created_at', { ascending: false });
 
-      // Buscar por nome OU telefone
-      if (searchDigits.length >= 4) {
-        // Se tem dígitos suficientes, buscar por telefone
-        searchQuery = searchQuery.or(`nome_contato.ilike.%${searchLower}%,telefone_formatado.ilike.%${searchDigits}%,numero.ilike.%${searchDigits}%`);
+      // ✅ MELHORADO: Busca mais abrangente - sempre busca por nome E telefone
+      if (searchDigits.length >= 3) {
+        // Buscar por nome OU telefone (dígitos)
+        conversasQuery = conversasQuery.or(`nome_contato.ilike.%${searchLower}%,telefone_formatado.ilike.%${searchDigits}%,numero.ilike.%${searchDigits}%`);
       } else {
-        // Caso contrário, buscar só por nome
-        searchQuery = searchQuery.ilike('nome_contato', `%${searchLower}%`);
+        // Buscar por nome (case-insensitive)
+        conversasQuery = conversasQuery.ilike('nome_contato', `%${searchLower}%`);
       }
 
-      // Limitar a 500 resultados para performance
-      const { data: conversasResult, error } = await searchQuery.limit(500);
+      // ✅ MELHORADO: Aumentar limite para buscar mais resultados
+      const { data: conversasResult, error: conversasError } = await conversasQuery.limit(1000);
 
-      if (error) {
-        console.error('❌ [SEARCH] Erro na busca:', error);
-        setIsSearching(false);
-        return [];
+      if (conversasError) {
+        console.error('❌ [SEARCH] Erro ao buscar conversas:', conversasError);
       }
 
       const conversasData = conversasResult || [];
-      console.log(`📊 [SEARCH] ${conversasData.length} mensagens encontradas`);
+      console.log(`📊 [SEARCH] ${conversasData.length} mensagens encontradas em conversas`);
 
-      if (conversasData.length === 0) {
-        setSearchResults([]);
-        setIsSearching(false);
-        return [];
+      // ========== 2. BUSCAR EM LEADS (para encontrar contatos sem conversas) ==========
+      // ✅ Usando colunas corretas: 'name' ao invés de 'nome', 'phone' e 'telefone'
+      let leadsQuery = supabase
+        .from('leads')
+        .select('id, name, phone, telefone, email, company, notes, created_at, tags, company_id')
+        .eq('company_id', companyId);
+
+      if (searchDigits.length >= 3) {
+        leadsQuery = leadsQuery.or(`name.ilike.%${searchLower}%,phone.ilike.%${searchDigits}%,telefone.ilike.%${searchDigits}%`);
+      } else {
+        leadsQuery = leadsQuery.ilike('name', `%${searchLower}%`);
       }
 
-      // Agrupar por telefone para formar conversas
+      const { data: leadsResult, error: leadsError } = await leadsQuery.limit(200);
+
+      if (leadsError) {
+        console.error('❌ [SEARCH] Erro ao buscar leads:', leadsError);
+      }
+
+      const leadsData = leadsResult || [];
+      console.log(`📊 [SEARCH] ${leadsData.length} leads encontrados`);
+
+      // ========== 3. PROCESSAR E AGRUPAR CONVERSAS ==========
       const conversasMap = new Map<string, any[]>();
+      const processedPhones = new Set<string>();
+
       conversasData.forEach(conv => {
         const isGroup = conv.is_group || /@g\.us$/.test(conv.numero || '');
         const key = isGroup 
@@ -75,15 +91,45 @@ export const useConversationSearch = (companyId: string | null) => {
         
         if (!key) return;
         
+        processedPhones.add(key);
+        
         if (!conversasMap.has(key)) {
           conversasMap.set(key, []);
         }
         conversasMap.get(key)!.push(conv);
       });
 
-      console.log(`📊 [SEARCH] ${conversasMap.size} conversas únicas encontradas`);
+      console.log(`📊 [SEARCH] ${conversasMap.size} conversas únicas de mensagens`);
 
-      // Converter para formato Conversation
+      // ========== 4. ADICIONAR LEADS SEM CONVERSAS ==========
+      leadsData.forEach(lead => {
+        const leadPhone = (lead.telefone || lead.phone)?.replace(/[^0-9]/g, '') || '';
+        if (!leadPhone || processedPhones.has(leadPhone)) return;
+
+        // Criar uma conversa virtual para este lead
+        conversasMap.set(leadPhone, [{
+          id: `lead-${lead.id}`,
+          numero: leadPhone,
+          telefone_formatado: lead.telefone || lead.phone,
+          mensagem: `📋 Lead cadastrado: ${lead.name || 'Sem nome'}`,
+          nome_contato: lead.name || 'Lead',
+          tipo_mensagem: 'texto',
+          status: 'Pendente',
+          created_at: lead.created_at,
+          is_group: false,
+          fromme: false,
+          company_id: lead.company_id,
+          lead_id: lead.id,
+          origem_api: 'evolution',
+          is_lead_only: true, // Marcador para identificar que é apenas lead
+        }]);
+        
+        processedPhones.add(leadPhone);
+      });
+
+      console.log(`📊 [SEARCH] ${conversasMap.size} conversas únicas (incluindo leads)`);
+
+      // ========== 5. CONVERTER PARA FORMATO CONVERSATION ==========
       const results: Conversation[] = Array.from(conversasMap.entries()).map(([telefone, mensagens]) => {
         const isGroup = mensagens[0]?.is_group || /@g\.us$/.test(telefone);
         
@@ -100,7 +146,7 @@ export const useConversationSearch = (companyId: string | null) => {
             sender: isFromMe ? "user" : "contact",
             timestamp: new Date(m.created_at || Date.now()),
             delivered: m.delivered === true || m.status === 'Enviada',
-            read: m.read === true, // ⚡ CORREÇÃO: Usar campo read do banco (true = contato visualizou)
+            read: m.read === true,
             mediaUrl: m.midia_url,
             sentBy: m.sent_by || undefined,
           };
@@ -118,6 +164,8 @@ export const useConversationSearch = (companyId: string | null) => {
         }
 
         const origemApi = mensagens.find(m => m.origem_api)?.origem_api || 'evolution';
+        const leadId = mensagens.find(m => m.lead_id)?.lead_id;
+        const isLeadOnly = mensagens.some(m => m.is_lead_only);
 
         return {
           id: `conv-${telefone}`,
@@ -131,17 +179,20 @@ export const useConversationSearch = (companyId: string | null) => {
           phoneNumber: telefone,
           isGroup,
           origemApi: origemApi as "evolution" | "meta",
+          leadId,
+          // ✅ Marcar se é apenas lead (para UI mostrar de forma diferente se necessário)
+          isLeadOnly,
         };
       });
 
-      // Ordenar por última mensagem
+      // Ordenar por última mensagem (mais recentes primeiro)
       results.sort((a, b) => {
         const aTime = a.messages[a.messages.length - 1]?.timestamp?.getTime() || 0;
         const bTime = b.messages[b.messages.length - 1]?.timestamp?.getTime() || 0;
         return bTime - aTime;
       });
 
-      console.log(`✅ [SEARCH] ${results.length} conversas retornadas`);
+      console.log(`✅ [SEARCH] ${results.length} resultados totais retornados`);
       setSearchResults(results);
       setIsSearching(false);
       return results;
