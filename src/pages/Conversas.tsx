@@ -3691,6 +3691,16 @@ function Conversas() {
           // ⚡ CORREÇÃO CRÍTICA: Determinar sender baseado em fromme de forma robusta
           const isFromMe = m.fromme === true || m.fromme === 'true';
           const sender: "user" | "contact" = isFromMe ? "user" : "contact";
+          
+          // ✅ CORREÇÃO: Incluir sentBy do banco de dados para preservar assinatura permanente
+          let sentBy = m.sent_by || undefined;
+          
+          // Fallback: se não tem sent_by mas é mensagem enviada, usar "WhatsApp" (enviada pelo app)
+          // Isso é correto pois mensagens sem sent_by no banco foram enviadas fora do CRM
+          if (!sentBy && isFromMe) {
+            sentBy = "WhatsApp"; // Indica que foi enviada pelo WhatsApp app, não pelo CRM
+          }
+          
           return {
             id: m.id || `msg-${Date.now()}-${Math.random()}`,
             content: m.mensagem || '',
@@ -3701,7 +3711,8 @@ function Conversas() {
             read: m.read === true,
             // ⚡ CORREÇÃO: Usar campo read do banco (true = contato visualizou)
             mediaUrl: m.midia_url,
-            fileName: m.arquivo_nome
+            fileName: m.arquivo_nome,
+            sentBy: sentBy, // ✅ CORREÇÃO: Incluir assinatura do usuário que enviou
           };
         })
         // Ordenar por timestamp para garantir ordem cronológica correta
