@@ -370,10 +370,14 @@ export default function Analytics() {
         }
       }
 
-      // Leads - com filtro de período
-      let leadsQuery = supabase.from("leads").select("value, status, etapa_id, created_at, expected_close_date");
+      // Leads - com filtro de período e responsável
+      let leadsQuery = supabase.from("leads").select("value, status, etapa_id, created_at, expected_close_date, responsaveis, responsavel_id");
       if (startDate) {
         leadsQuery = leadsQuery.gte('created_at', startDate.toISOString());
+      }
+      // Aplicar filtro de responsável - buscar onde o usuário está no array responsaveis OU é o responsavel_id
+      if (globalFilters.responsible) {
+        leadsQuery = leadsQuery.or(`responsaveis.cs.{${globalFilters.responsible}},responsavel_id.eq.${globalFilters.responsible}`);
       }
       const { data: leads } = await leadsQuery;
 
@@ -483,12 +487,17 @@ export default function Analytics() {
   };
   const fetchEtapasDoFunil = async (funilId: string) => {
     try {
-      const {
-        data: leads
-      } = await supabase.from("leads").select("value, status, etapa_id, funil_id");
-      const {
-        data: etapasData
-      } = await supabase.from("etapas").select("id, nome, cor, funil_id").eq("funil_id", funilId).order("posicao");
+      // Buscar leads com campos de responsável para aplicar filtro
+      let leadsQuery = supabase.from("leads").select("value, status, etapa_id, funil_id, responsaveis, responsavel_id");
+      
+      // Aplicar filtro de responsável se definido
+      if (globalFilters.responsible) {
+        leadsQuery = leadsQuery.or(`responsaveis.cs.{${globalFilters.responsible}},responsavel_id.eq.${globalFilters.responsible}`);
+      }
+      
+      const { data: leads } = await leadsQuery;
+      const { data: etapasData } = await supabase.from("etapas").select("id, nome, cor, funil_id").eq("funil_id", funilId).order("posicao");
+      
       const leadsDoFunil = leads?.filter(l => l.funil_id === funilId) || [];
       const etapasComContagem = await Promise.all((etapasData || []).map(async etapa => {
         const leadsNaEtapa = leadsDoFunil.filter(l => l.etapa_id === etapa.id) || [];
@@ -508,8 +517,8 @@ export default function Analytics() {
       setReportLoading(true);
 
       // Base query com filtros
-      let queryGanhos = supabase.from("leads").select("value, created_at").eq("status", "ganho");
-      let queryPerdidos = supabase.from("leads").select("id, created_at").eq("status", "perdido");
+      let queryGanhos = supabase.from("leads").select("value, created_at, responsaveis, responsavel_id").eq("status", "ganho");
+      let queryPerdidos = supabase.from("leads").select("id, created_at, responsaveis, responsavel_id").eq("status", "perdido");
 
       // Aplicar filtros de período
       if (globalFilters.period !== 'all') {
@@ -537,6 +546,12 @@ export default function Analytics() {
         }
         queryGanhos = queryGanhos.gte('created_at', startDate.toISOString());
         queryPerdidos = queryPerdidos.gte('created_at', startDate.toISOString());
+      }
+
+      // Aplicar filtro de responsável
+      if (globalFilters.responsible) {
+        queryGanhos = queryGanhos.or(`responsaveis.cs.{${globalFilters.responsible}},responsavel_id.eq.${globalFilters.responsible}`);
+        queryPerdidos = queryPerdidos.or(`responsaveis.cs.{${globalFilters.responsible}},responsavel_id.eq.${globalFilters.responsible}`);
       }
       const {
         data: leadsGanhos,
