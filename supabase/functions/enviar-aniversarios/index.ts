@@ -136,7 +136,29 @@ serve(async (req) => {
             continue;
           }
 
-          // Registrar envio
+          // Formatar telefone para salvar na conversa
+          const telefoneFormatado = telefone.replace(/\D/g, "").replace(/^55/, "");
+          
+          // Salvar mensagem na tabela conversas para aparecer no histórico do CRM
+          await supabase.from("conversas").insert({
+            numero: telefone.replace(/\D/g, ""),
+            telefone_formatado: telefoneFormatado,
+            mensagem: mensagemFormatada,
+            origem: "aniversario",
+            status: "enviada",
+            tipo_mensagem: payload.tipo_mensagem || "text",
+            midia_url: mensagem.midia_url || null,
+            nome_contato: lead.name,
+            lead_id: lead.id,
+            company_id: mensagem.company_id,
+            fromme: true,
+            sent_by: "Sistema - Aniversário Automático",
+            campanha_nome: "Aniversário Automático",
+            read: true,
+            delivered: true
+          });
+
+          // Registrar envio na tabela de controle
           await supabase.from("aniversario_envios").insert({
             company_id: mensagem.company_id,
             lead_id: lead.id,
