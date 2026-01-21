@@ -377,7 +377,7 @@ export default function Analytics() {
       }
       // Aplicar filtro de responsável - buscar onde o usuário está no array responsaveis OU é o responsavel_id
       if (globalFilters.responsible) {
-        leadsQuery = leadsQuery.or(`responsaveis.cs.{${globalFilters.responsible}},responsavel_id.eq.${globalFilters.responsible}`);
+        leadsQuery = leadsQuery.or(`responsaveis.cs.["${globalFilters.responsible}"],responsavel_id.eq.${globalFilters.responsible}`);
       }
       const { data: leads } = await leadsQuery;
 
@@ -492,7 +492,7 @@ export default function Analytics() {
       
       // Aplicar filtro de responsável se definido
       if (globalFilters.responsible) {
-        leadsQuery = leadsQuery.or(`responsaveis.cs.{${globalFilters.responsible}},responsavel_id.eq.${globalFilters.responsible}`);
+        leadsQuery = leadsQuery.or(`responsaveis.cs.["${globalFilters.responsible}"],responsavel_id.eq.${globalFilters.responsible}`);
       }
       
       const { data: leads } = await leadsQuery;
@@ -550,8 +550,8 @@ export default function Analytics() {
 
       // Aplicar filtro de responsável
       if (globalFilters.responsible) {
-        queryGanhos = queryGanhos.or(`responsaveis.cs.{${globalFilters.responsible}},responsavel_id.eq.${globalFilters.responsible}`);
-        queryPerdidos = queryPerdidos.or(`responsaveis.cs.{${globalFilters.responsible}},responsavel_id.eq.${globalFilters.responsible}`);
+        queryGanhos = queryGanhos.or(`responsaveis.cs.["${globalFilters.responsible}"],responsavel_id.eq.${globalFilters.responsible}`);
+        queryPerdidos = queryPerdidos.or(`responsaveis.cs.["${globalFilters.responsible}"],responsavel_id.eq.${globalFilters.responsible}`);
       }
       const {
         data: leadsGanhos,
