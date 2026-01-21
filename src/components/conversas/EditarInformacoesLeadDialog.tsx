@@ -61,11 +61,13 @@ export function EditarInformacoesLeadDialog({
     setOpen(false);
   }, [leadId, telefone]);
 
+  // Carregar dados quando o dialog abre OU quando leadId muda (para garantir dados atualizados)
   useEffect(() => {
     if (open) {
+      console.log('🔄 Dialog aberto - carregando dados do lead...');
       carregarDados();
     }
-  }, [open]);
+  }, [open, leadId]);
 
   useEffect(() => {
     if (formData.funil_id) {
@@ -147,12 +149,17 @@ export function EditarInformacoesLeadDialog({
             funil: leadData.funil_id,
             etapa: leadData.etapa_id,
             tags: leadData.tags,
-            totalTags: leadData.tags?.length || 0
+            totalTags: leadData.tags?.length || 0,
+            endereco_cep: (leadData as any).endereco_cep,
+            endereco_logradouro: (leadData as any).endereco_logradouro,
+            endereco_cidade: (leadData as any).endereco_cidade,
+            govbr_login: (leadData as any).govbr_login
           });
           
-          setFormData({
+          // Usar os dados diretamente do banco
+          const newFormData = {
             nome: leadData.name || nomeContato,
-            telefone: leadData.telefone || telefone,
+            telefone: leadData.telefone || leadData.phone || telefone,
             email: leadData.email || "",
             cpf: leadData.cpf || "",
             valor: leadData.value?.toString() || "",
@@ -164,7 +171,7 @@ export function EditarInformacoesLeadDialog({
             tags: Array.isArray(leadData.tags) ? leadData.tags : [],
             servico: leadData.servico || "",
             segmentacao: leadData.segmentacao || "",
-            // Endereço
+            // Endereço - forçar leitura dos campos
             endereco_cep: (leadData as any).endereco_cep || "",
             endereco_logradouro: (leadData as any).endereco_logradouro || "",
             endereco_numero: (leadData as any).endereco_numero || "",
@@ -172,10 +179,18 @@ export function EditarInformacoesLeadDialog({
             endereco_bairro: (leadData as any).endereco_bairro || "",
             endereco_cidade: (leadData as any).endereco_cidade || "",
             endereco_estado: (leadData as any).endereco_estado || "",
-            // Gov.br
+            // Gov.br - forçar leitura dos campos
             govbr_login: (leadData as any).govbr_login || "",
             govbr_senha: (leadData as any).govbr_senha || ""
+          };
+          
+          console.log('📝 Dados do formulário setados:', {
+            endereco_cep: newFormData.endereco_cep,
+            endereco_cidade: newFormData.endereco_cidade,
+            govbr_login: newFormData.govbr_login
           });
+          
+          setFormData(newFormData);
         }
       } else {
         console.log('ℹ️ Nenhum lead vinculado, iniciando com dados básicos');

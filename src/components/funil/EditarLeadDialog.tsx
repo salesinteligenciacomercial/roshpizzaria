@@ -30,6 +30,17 @@ interface EditarLeadDialogProps {
     funil_id?: string;
     etapa_id?: string;
     data_nascimento?: string;
+    // Endereço
+    endereco_cep?: string;
+    endereco_logradouro?: string;
+    endereco_numero?: string;
+    endereco_complemento?: string;
+    endereco_bairro?: string;
+    endereco_cidade?: string;
+    endereco_estado?: string;
+    // Gov.br
+    govbr_login?: string;
+    govbr_senha?: string;
   };
   onLeadUpdated: () => void;
   open?: boolean;
@@ -69,16 +80,16 @@ export function EditarLeadDialog({
     tags: lead.tags || [],
     data_nascimento: lead.data_nascimento || "",
     // Endereço
-    endereco_cep: (lead as any).endereco_cep || "",
-    endereco_logradouro: (lead as any).endereco_logradouro || "",
-    endereco_numero: (lead as any).endereco_numero || "",
-    endereco_complemento: (lead as any).endereco_complemento || "",
-    endereco_bairro: (lead as any).endereco_bairro || "",
-    endereco_cidade: (lead as any).endereco_cidade || "",
-    endereco_estado: (lead as any).endereco_estado || "",
+    endereco_cep: lead.endereco_cep || "",
+    endereco_logradouro: lead.endereco_logradouro || "",
+    endereco_numero: lead.endereco_numero || "",
+    endereco_complemento: lead.endereco_complemento || "",
+    endereco_bairro: lead.endereco_bairro || "",
+    endereco_cidade: lead.endereco_cidade || "",
+    endereco_estado: lead.endereco_estado || "",
     // Gov.br
-    govbr_login: (lead as any).govbr_login || "",
-    govbr_senha: (lead as any).govbr_senha || ""
+    govbr_login: lead.govbr_login || "",
+    govbr_senha: lead.govbr_senha || ""
   });
   const [newTag, setNewTag] = useState("");
   const [tagsPopoverOpen, setTagsPopoverOpen] = useState(false);
@@ -102,15 +113,15 @@ export function EditarLeadDialog({
       responsavel_id: (lead as any).responsavel_id || "",
       tags: lead.tags || [],
       data_nascimento: lead.data_nascimento || "",
-      endereco_cep: (lead as any).endereco_cep || "",
-      endereco_logradouro: (lead as any).endereco_logradouro || "",
-      endereco_numero: (lead as any).endereco_numero || "",
-      endereco_complemento: (lead as any).endereco_complemento || "",
-      endereco_bairro: (lead as any).endereco_bairro || "",
-      endereco_cidade: (lead as any).endereco_cidade || "",
-      endereco_estado: (lead as any).endereco_estado || "",
-      govbr_login: (lead as any).govbr_login || "",
-      govbr_senha: (lead as any).govbr_senha || ""
+      endereco_cep: lead.endereco_cep || "",
+      endereco_logradouro: lead.endereco_logradouro || "",
+      endereco_numero: lead.endereco_numero || "",
+      endereco_complemento: lead.endereco_complemento || "",
+      endereco_bairro: lead.endereco_bairro || "",
+      endereco_cidade: lead.endereco_cidade || "",
+      endereco_estado: lead.endereco_estado || "",
+      govbr_login: lead.govbr_login || "",
+      govbr_senha: lead.govbr_senha || ""
     });
   }, [lead]);
 
