@@ -213,15 +213,42 @@ export function AniversariantesManager() {
         .replace(/{idade}/g, String(idade))
         .replace(/{nome_completo}/g, lead.name);
 
-      // Enviar via WhatsApp
-      const { error } = await supabase.functions.invoke("enviar-whatsapp", {
-        body: {
-          numero: telefone.replace(/\D/g, ""),
-          mensagem: mensagemFormatada,
-          company_id: companyId,
-          mediaUrl: mensagemAtiva.midia_url || undefined
+      // Preparar payload para envio via WhatsApp
+      const payload: any = {
+        numero: telefone.replace(/\D/g, ""),
+        mensagem: mensagemFormatada,
+        company_id: companyId,
+      };
+
+      // Adicionar mídia se existir
+      if (mensagemAtiva.midia_url) {
+        payload.mediaUrl = mensagemAtiva.midia_url;
+        // Detectar tipo de mídia pela URL
+        const url = mensagemAtiva.midia_url.toLowerCase();
+        if (url.match(/\.(mp4|mov|avi|webm)(\?.*)?$/)) {
+          payload.tipo_mensagem = 'video';
+        } else if (url.match(/\.(jpg|jpeg|png|gif|webp)(\?.*)?$/)) {
+          payload.tipo_mensagem = 'image';
+        } else if (url.match(/\.(pdf)(\?.*)?$/)) {
+          payload.tipo_mensagem = 'document';
+        } else {
+          // Tentar detectar pelo content-type do Supabase Storage
+          if (url.includes('video') || url.includes('/mp4')) {
+            payload.tipo_mensagem = 'video';
+          } else {
+            payload.tipo_mensagem = 'image';
+          }
         }
+        // Usar mensagem como caption
+        payload.caption = mensagemFormatada;
+      }
+
+      // Enviar via WhatsApp
+      const { error, data } = await supabase.functions.invoke("enviar-whatsapp", {
+        body: payload
       });
+      
+      console.log("Resposta enviar-whatsapp:", { error, data });
 
       if (error) throw error;
 
@@ -274,13 +301,30 @@ export function AniversariantesManager() {
           .replace(/{idade}/g, String(idade))
           .replace(/{nome_completo}/g, lead.name);
 
-        await supabase.functions.invoke("enviar-whatsapp", {
-          body: {
-            numero: telefone!.replace(/\D/g, ""),
-            mensagem: mensagemFormatada,
-            company_id: companyId,
-            mediaUrl: mensagemAtiva.midia_url || undefined
+        // Preparar payload
+        const massPayload: any = {
+          numero: telefone!.replace(/\D/g, ""),
+          mensagem: mensagemFormatada,
+          company_id: companyId,
+        };
+
+        if (mensagemAtiva.midia_url) {
+          massPayload.mediaUrl = mensagemAtiva.midia_url;
+          const url = mensagemAtiva.midia_url.toLowerCase();
+          if (url.match(/\.(mp4|mov|avi|webm)(\?.*)?$/)) {
+            massPayload.tipo_mensagem = 'video';
+          } else if (url.match(/\.(jpg|jpeg|png|gif|webp)(\?.*)?$/)) {
+            massPayload.tipo_mensagem = 'image';
+          } else if (url.match(/\.(pdf)(\?.*)?$/)) {
+            massPayload.tipo_mensagem = 'document';
+          } else {
+            massPayload.tipo_mensagem = 'image';
           }
+          massPayload.caption = mensagemFormatada;
+        }
+
+        await supabase.functions.invoke("enviar-whatsapp", {
+          body: massPayload
         });
 
         await supabase.from("aniversario_envios").insert({

@@ -99,14 +99,35 @@ serve(async (req) => {
           .replace(/{nome_completo}/g, lead.name);
 
         try {
+          // Preparar payload para envio via WhatsApp
+          const payload: any = {
+            numero: telefone.replace(/\D/g, ""),
+            mensagem: mensagemFormatada,
+            company_id: mensagem.company_id,
+          };
+
+          // Adicionar mídia se existir
+          if (mensagem.midia_url) {
+            payload.mediaUrl = mensagem.midia_url;
+            // Detectar tipo de mídia pela URL
+            const url = mensagem.midia_url.toLowerCase();
+            if (url.match(/\.(mp4|mov|avi|webm)(\?.*)?$/)) {
+              payload.tipo_mensagem = 'video';
+            } else if (url.match(/\.(jpg|jpeg|png|gif|webp)(\?.*)?$/)) {
+              payload.tipo_mensagem = 'image';
+            } else if (url.match(/\.(pdf)(\?.*)?$/)) {
+              payload.tipo_mensagem = 'document';
+            } else {
+              // Default para imagem
+              payload.tipo_mensagem = 'image';
+            }
+            // Usar mensagem como caption
+            payload.caption = mensagemFormatada;
+          }
+
           // Enviar via WhatsApp
           const { error: envioError } = await supabase.functions.invoke("enviar-whatsapp", {
-            body: {
-              numero: telefone.replace(/\D/g, ""),
-              mensagem: mensagemFormatada,
-              company_id: mensagem.company_id,
-              mediaUrl: mensagem.midia_url || undefined,
-            },
+            body: payload,
           });
 
           if (envioError) {
