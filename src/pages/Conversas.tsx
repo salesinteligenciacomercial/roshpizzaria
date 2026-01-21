@@ -8340,7 +8340,19 @@ function Conversas() {
                       notes: leadVinculado.notes || "",
                       tags: leadVinculado.tags || [],
                       funil_id: leadVinculado.funil_id || undefined,
-                      etapa_id: leadVinculado.etapa_id || undefined
+                      etapa_id: leadVinculado.etapa_id || undefined,
+                      data_nascimento: leadVinculado.data_nascimento || "",
+                      // Endereço
+                      endereco_cep: (leadVinculado as any).endereco_cep || "",
+                      endereco_logradouro: (leadVinculado as any).endereco_logradouro || "",
+                      endereco_numero: (leadVinculado as any).endereco_numero || "",
+                      endereco_complemento: (leadVinculado as any).endereco_complemento || "",
+                      endereco_bairro: (leadVinculado as any).endereco_bairro || "",
+                      endereco_cidade: (leadVinculado as any).endereco_cidade || "",
+                      endereco_estado: (leadVinculado as any).endereco_estado || "",
+                      // Gov.br
+                      govbr_login: (leadVinculado as any).govbr_login || "",
+                      govbr_senha: (leadVinculado as any).govbr_senha || ""
                     }} onLeadUpdated={async () => {
                       // Recarregar informações do lead após atualização
                       if (selectedConv.phoneNumber || selectedConv.id) {
