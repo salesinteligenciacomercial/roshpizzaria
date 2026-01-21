@@ -27,6 +27,7 @@ import { CountdownTimer } from "@/components/conversas/CountdownTimer";
 import { ConversationHeader } from "@/components/conversas/ConversationHeader";
 import { ConversationListItem } from "@/components/conversas/ConversationListItem";
 import { MessageItem } from "@/components/conversas/MessageItem";
+import { ForwardMessageDialog } from "@/components/conversas/ForwardMessageDialog";
 import { AudioRecorder } from "@/components/conversas/AudioRecorder";
 import { MediaUpload } from "@/components/conversas/MediaUpload";
 import { NovaConversaDialog } from "@/components/conversas/NovaConversaDialog";
@@ -288,6 +289,15 @@ function Conversas() {
   } = useTagsManager();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userCompanyId, setUserCompanyId] = useState<string | null>(null); // Declarar primeiro
+
+  // Estado para encaminhamento de mensagens
+  const [forwardData, setForwardData] = useState<{
+    open: boolean;
+    content: string;
+    type: "text" | "image" | "audio" | "pdf" | "video" | "contact" | "document";
+    mediaUrl?: string;
+    fileName?: string;
+  }>({ open: false, content: "", type: "text" });
 
   // ⚡ CARREGAMENTO INSTANTÂNEO: Hook carrega do cache em 0 segundos
   const {
@@ -7997,7 +8007,15 @@ function Conversas() {
                     name
                   });
                   setPdfModalOpen(true);
-                }} isTranscribing={transcriptionStatuses[msg.id] === "processing"} transcriptionStatus={msg.transcriptionStatus} onRetryTranscribe={msg.transcriptionStatus === "error" ? () => transcreverAudio(msg.id, msg.mediaUrl!, true) : undefined} onReply={handleReply} onEdit={handleEdit} onDelete={handleDelete} onReact={handleReact} onOpenContactConversation={openConversationWithContact} />)}
+                }} isTranscribing={transcriptionStatuses[msg.id] === "processing"} transcriptionStatus={msg.transcriptionStatus} onRetryTranscribe={msg.transcriptionStatus === "error" ? () => transcreverAudio(msg.id, msg.mediaUrl!, true) : undefined} onReply={handleReply} onEdit={handleEdit} onDelete={handleDelete} onReact={handleReact} onForward={(id, content, type, mediaUrl, fileName) => {
+                  setForwardData({
+                    open: true,
+                    content,
+                    type: type as any,
+                    mediaUrl,
+                    fileName
+                  });
+                }} onOpenContactConversation={openConversationWithContact} />)}
                     <div ref={messagesEndRef} />
                   </div>
                 </div>
@@ -10041,6 +10059,17 @@ function Conversas() {
           }}
         />
       )}
+
+      {/* Dialog: Encaminhar Mensagem */}
+      <ForwardMessageDialog
+        open={forwardData.open}
+        onOpenChange={(open) => setForwardData(prev => ({ ...prev, open }))}
+        messageContent={forwardData.content}
+        messageType={forwardData.type}
+        mediaUrl={forwardData.mediaUrl}
+        fileName={forwardData.fileName}
+        companyId={userCompanyId || ""}
+      />
     </div>;
 }
 export default Conversas;

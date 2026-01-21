@@ -80,6 +80,7 @@ interface MessageItemProps {
   onEdit: (messageId: string, newContent: string) => void;
   onDelete: (messageId: string, forEveryone: boolean) => void;
   onReact: (messageId: string, emoji: string) => void | Promise<void>;
+  onForward?: (messageId: string, content: string, messageType: string, mediaUrl?: string, fileName?: string) => void;
   onOpenContactConversation?: (name: string, phone: string) => void;
 }
 
@@ -97,6 +98,7 @@ function MessageItemComponent({
   onEdit,
   onDelete,
   onReact,
+  onForward,
   onOpenContactConversation,
 }: MessageItemProps) {
   const [showActions, setShowActions] = useState(false);
@@ -293,6 +295,7 @@ function MessageItemComponent({
               onEdit={onEdit}
               onDelete={onDelete}
               onReact={onReact}
+              onForward={onForward}
             />
           </div>
           {/* Text Message com Link Preview */}

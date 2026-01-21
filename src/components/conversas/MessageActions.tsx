@@ -17,7 +17,8 @@ import {
   Frown,
   Angry,
   Download,
-  FileText
+  FileText,
+  Forward
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -32,6 +33,7 @@ interface MessageActionsProps {
   onEdit: (messageId: string, newContent: string) => void;
   onDelete: (messageId: string, forEveryone: boolean) => void;
   onReact: (messageId: string, emoji: string) => void;
+  onForward?: (messageId: string, content: string, messageType: string, mediaUrl?: string, fileName?: string) => void;
   onSaveToMedicalRecord?: (mediaUrl: string, fileName: string, messageType: string) => void;
   leadId?: string;
 }
@@ -47,6 +49,7 @@ export function MessageActions({
   onEdit,
   onDelete,
   onReact,
+  onForward,
   onSaveToMedicalRecord,
   leadId,
 }: MessageActionsProps) {
@@ -119,6 +122,13 @@ export function MessageActions({
     }
   };
 
+  const handleForward = () => {
+    if (onForward) {
+      onForward(messageId, content, messageType || "text", mediaUrl, fileName);
+      setShowEmojiPicker(false);
+    }
+  };
+
   return (
     <div className="flex items-center gap-1">
       {/* Emojis rápidos */}
@@ -169,6 +179,14 @@ export function MessageActions({
             <Reply className="h-4 w-4 mr-2" />
             Responder
           </DropdownMenuItem>
+
+          {/* Opção de Encaminhar */}
+          {onForward && (
+            <DropdownMenuItem onClick={handleForward}>
+              <Forward className="h-4 w-4 mr-2" />
+              Encaminhar
+            </DropdownMenuItem>
+          )}
           
           {/* Opção de Download para mídias */}
           {mediaUrl && (messageType === "image" || messageType === "video" || messageType === "audio" || messageType === "pdf" || messageType === "document") && (
