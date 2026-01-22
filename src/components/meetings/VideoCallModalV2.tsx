@@ -238,6 +238,7 @@ export const VideoCallModalV2 = ({
   // ========== REFS FOR SCREEN SHARE ==========
   const screenVideoRef = useRef<HTMLVideoElement>(null);
   const remotePipVideoRef = useRef<HTMLVideoElement>(null);
+  const localPipVideoRef = useRef<HTMLVideoElement>(null);
 
   // ========== SET LOCAL VIDEO (Camera only) ==========
   useEffect(() => {
@@ -299,6 +300,31 @@ export const VideoCallModalV2 = ({
     setScreenVideoSource();
   }, [screenStream, isScreenSharing]);
 
+  // ========== SET LOCAL PIP VIDEO (for screen sharing mode) ==========
+  useEffect(() => {
+    if (!localStream || !isScreenSharing) return;
+
+    const setLocalPipVideoSource = (retryCount = 0) => {
+      if (!isMountedRef.current) return;
+      
+      const videoEl = localPipVideoRef.current;
+      if (videoEl) {
+        console.log('[VideoCall] Setting local video source (PiP) for screen share mode');
+        videoEl.srcObject = localStream;
+        videoEl.play().catch((err) => {
+          console.warn('[VideoCall] Local PiP play failed, retrying...', err);
+          if (retryCount < 5 && isMountedRef.current) {
+            setTimeout(() => setLocalPipVideoSource(retryCount + 1), 200);
+          }
+        });
+      } else if (retryCount < 10 && isMountedRef.current) {
+        setTimeout(() => setLocalPipVideoSource(retryCount + 1), 100);
+      }
+    };
+
+    setLocalPipVideoSource();
+  }, [localStream, isScreenSharing]);
+
   // ========== SET REMOTE VIDEO ==========
   useEffect(() => {
     if (!remoteStream) return;
@@ -323,23 +349,45 @@ export const VideoCallModalV2 = ({
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = remoteStream;
           }
+          if (remotePipVideoRef.current) {
+            remotePipVideoRef.current.srcObject = remoteStream;
+          }
         };
       } else if (retryCount < 10 && isMountedRef.current) {
         setTimeout(() => setRemoteVideoSource(retryCount + 1), 100);
       }
-      
-      // Also set the PiP remote video ref for screen sharing mode
-      const pipVideoEl = remotePipVideoRef.current;
-      if (pipVideoEl) {
-        console.log('[VideoCall] Setting remote video source (PiP)');
-        pipVideoEl.srcObject = remoteStream;
-        pipVideoEl.play().catch((err) => {
-          console.warn('[VideoCall] Remote PiP play failed', err);
-        });
-      }
     };
 
     setRemoteVideoSource();
+  }, [remoteStream]);
+
+  // ========== SET REMOTE PIP VIDEO (separate effect for screen sharing mode) ==========
+  useEffect(() => {
+    if (!remoteStream) return;
+    
+    const setPipVideoSource = (retryCount = 0) => {
+      if (!isMountedRef.current) return;
+      
+      const pipVideoEl = remotePipVideoRef.current;
+      if (pipVideoEl) {
+        console.log('[VideoCall] Setting remote video source (PiP) for screen share mode');
+        pipVideoEl.srcObject = remoteStream;
+        pipVideoEl.play().catch((err) => {
+          console.warn('[VideoCall] Remote PiP play failed, retrying...', err);
+          if (retryCount < 5 && isMountedRef.current) {
+            setTimeout(() => setPipVideoSource(retryCount + 1), 200);
+          }
+        });
+      } else if (retryCount < 10 && isMountedRef.current) {
+        // Video element not ready yet, retry
+        setTimeout(() => setPipVideoSource(retryCount + 1), 100);
+      }
+    };
+
+    // When screen sharing starts, we need to set the PiP video
+    if (isScreenSharing) {
+      setPipVideoSource();
+    }
   }, [remoteStream, isScreenSharing]);
 
   // ========== CLEANUP ON UNMOUNT ==========
@@ -806,18 +854,13 @@ export const VideoCallModalV2 = ({
                 {/* Local Camera PiP */}
                 <div className="w-40 h-28 rounded-lg overflow-hidden shadow-lg border-2 border-primary/50 bg-background relative">
                   <video
-                    ref={localVideoRef}
+                    ref={localPipVideoRef}
                     autoPlay
                     playsInline
                     muted
                     className="w-full h-full object-cover"
                     style={{ transform: 'scaleX(-1)' }}
                   />
-                  {!localVideoReady && localStream && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
-                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                    </div>
-                  )}
                   {(!localStream || !isVideoEnabled) && (
                     <div className="absolute inset-0 flex items-center justify-center bg-muted">
                       <VideoOff className="h-5 w-5 text-muted-foreground" />
