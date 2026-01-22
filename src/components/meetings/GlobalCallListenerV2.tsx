@@ -223,6 +223,7 @@ export const GlobalCallListenerV2 = () => {
     const channelId = `public-meeting-notifications-${currentUserId}-${Date.now()}`;
     console.log('[CallListener] Subscribing to public meeting guests:', channelId);
 
+    // Listen for guest-joined signals sent TO the current user (who is the host)
     const channel = supabase
       .channel(channelId)
       .on(
@@ -231,12 +232,12 @@ export const GlobalCallListenerV2 = () => {
           event: 'INSERT',
           schema: 'public',
           table: 'meeting_signals',
-          filter: `to_user=eq.host`,
+          filter: `to_user=eq.${currentUserId}`,
         },
         async (payload) => {
           const signal = payload.new as any;
           
-          // Only handle guest-joined signals
+          // Only handle guest-joined signals for public meetings
           if (signal.signal_type !== 'guest-joined') return;
           
           const signalKey = `${signal.meeting_id}-${signal.from_user}`;
@@ -247,7 +248,7 @@ export const GlobalCallListenerV2 = () => {
           
           console.log('[CallListener] Guest joined signal received for meeting:', signal.meeting_id);
           
-          // Check if current user is the host of this meeting
+          // Verify this is an external meeting where current user is host
           const { data: meeting } = await supabase
             .from('meetings')
             .select('id, created_by, meeting_type')
@@ -257,7 +258,7 @@ export const GlobalCallListenerV2 = () => {
             .maybeSingle();
           
           if (!meeting) {
-            console.log('[CallListener] Not the host of this meeting, ignoring');
+            console.log('[CallListener] Not a public meeting or not the host, ignoring');
             return;
           }
           

@@ -525,14 +525,17 @@ const PublicMeeting = () => {
       // Wait for subscription to be ready
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Notify host that guest joined
-      await supabase.from('meeting_signals').insert([{
-        meeting_id: meetingId!,
-        from_user: guestIdRef.current,
-        to_user: 'host',
-        signal_type: 'guest-joined',
-        signal_data: { guestName, guestId: guestIdRef.current },
-      }]);
+      // Notify host that guest joined - use actual host UUID for global notification
+      if (hostId) {
+        await supabase.from('meeting_signals').insert([{
+          meeting_id: meetingId!,
+          from_user: guestIdRef.current,
+          to_user: hostId,  // Use actual host UUID instead of 'host' string
+          signal_type: 'guest-joined',
+          signal_data: { guestName, guestId: guestIdRef.current },
+        }]);
+        console.log('[Guest] Sent guest-joined signal to host:', hostId);
+      }
 
       // Create and send offer
       const offer = await pc.createOffer({
