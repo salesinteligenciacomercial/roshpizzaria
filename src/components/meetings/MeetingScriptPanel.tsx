@@ -1,15 +1,17 @@
 /**
- * MeetingScriptPanel - Painel lateral de roteiro de reunião com controle de tempo
+ * MeetingScriptPanel - Popup flutuante de roteiro de reunião com controle de tempo
+ * Aparece ao lado do modal de videoconferência para ser visível durante compartilhamento de tela
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { 
   X, Play, Pause, SkipForward, RotateCcw, 
   CheckCircle2, Circle, Clock, ChevronDown, ChevronUp,
-  AlertTriangle
+  AlertTriangle, GripVertical, BookOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -51,8 +53,14 @@ export const MeetingScriptPanel = ({
   const [totalElapsed, setTotalElapsed] = useState(0);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set([script.steps[0]?.id]));
   
+  // Drag state for floating panel
+  const [position, setPosition] = useState({ x: 50, y: 100 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const currentStep = steps[currentStepIndex];
   const totalDuration = steps.reduce((acc, step) => acc + step.duration_seconds, 0);
@@ -119,6 +127,45 @@ export const MeetingScriptPanel = ({
     };
   }, []);
 
+  // Drag handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.drag-handle')) {
+      setIsDragging(true);
+      const rect = panelRef.current?.getBoundingClientRect();
+      if (rect) {
+        setDragOffset({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        });
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging) {
+        setPosition({
+          x: Math.max(0, Math.min(e.clientX - dragOffset.x, window.innerWidth - 340)),
+          y: Math.max(0, Math.min(e.clientY - dragOffset.y, window.innerHeight - 400))
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragOffset]);
+
   const toggleTimer = () => {
     setIsTimerRunning(prev => !prev);
   };
@@ -173,13 +220,25 @@ export const MeetingScriptPanel = ({
   const isTimeWarning = timeRemaining > 0 && timeRemaining <= 30;
   const isTimeCritical = timeRemaining > 0 && timeRemaining <= 10;
 
-  return (
-    <div className="absolute left-4 top-16 bottom-24 w-80 bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg flex flex-col z-10">
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b">
-        <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-primary" />
-          <span className="font-medium text-sm truncate">{script.title}</span>
+  // Render using portal to appear outside the video modal
+  const panelContent = (
+    <div 
+      ref={panelRef}
+      className="fixed z-[9999] w-80 bg-background/95 backdrop-blur-sm border rounded-lg shadow-2xl flex flex-col"
+      style={{
+        left: position.x,
+        top: position.y,
+        maxHeight: '80vh',
+        cursor: isDragging ? 'grabbing' : 'default'
+      }}
+      onMouseDown={handleMouseDown}
+    >
+      {/* Header with drag handle */}
+      <div className="flex items-center justify-between p-3 border-b bg-muted/50 rounded-t-lg">
+        <div className="flex items-center gap-2 drag-handle cursor-grab">
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+          <BookOpen className="h-4 w-4 text-primary" />
+          <span className="font-medium text-sm truncate max-w-[180px]">{script.title}</span>
         </div>
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
           <X className="h-4 w-4" />
@@ -252,7 +311,7 @@ export const MeetingScriptPanel = ({
       </div>
 
       {/* Steps List */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 max-h-[40vh]">
         <div className="p-2 space-y-1">
           {steps.map((step, index) => {
             const isActive = index === currentStepIndex;
@@ -336,4 +395,7 @@ export const MeetingScriptPanel = ({
       </ScrollArea>
     </div>
   );
+
+  // Use portal to render outside the modal
+  return createPortal(panelContent, document.body);
 };
