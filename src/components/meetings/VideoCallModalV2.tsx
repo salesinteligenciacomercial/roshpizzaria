@@ -719,10 +719,13 @@ export const VideoCallModalV2 = ({
   const showRemotePlaceholder = !remoteStream || isConnecting;
 
   return (
-    <Dialog open={open} onOpenChange={() => handleClose()}>
+    <Dialog open={open} onOpenChange={() => { /* Prevent closing on outside click */ }}>
       <DialogContent 
         className="max-w-4xl w-full h-[80vh] p-0 gap-0 bg-background/95 backdrop-blur-sm flex flex-col" 
         aria-describedby={undefined}
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
       >
         <VisuallyHidden>
           <DialogTitle>Chamada com {remoteUserName}</DialogTitle>
