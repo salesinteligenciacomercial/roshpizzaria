@@ -910,6 +910,7 @@ export function EditarTarefaDialog({ task, onTaskUpdated }: EditarTarefaDialogPr
                   onChange={(e) => setNewComment(e.target.value)} 
                   placeholder="Escrever comentário..."
                   onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && addComment()}
+                  className="text-foreground bg-background"
                 />
                 <Button type="button" variant="outline" onClick={addComment}>Adicionar</Button>
               </div>
