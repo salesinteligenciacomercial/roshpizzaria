@@ -138,6 +138,8 @@ const PublicMeeting = () => {
   const transcriptionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const guestIdRef = useRef<string>(`guest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+  const processedGuestJoinsRef = useRef<Set<string>>(new Set());
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check if meeting exists and if current user is host
   useEffect(() => {
@@ -178,6 +180,53 @@ const PublicMeeting = () => {
     checkMeeting();
   }, [meetingId]);
 
+  // Poll for guest-joined signals when host is waiting (backup for realtime)
+  useEffect(() => {
+    if (!isHost || !hasJoined || !waitingForGuests || !meetingId) return;
+
+    const pollForGuests = async () => {
+      try {
+        const { data: pendingJoins } = await supabase
+          .from('meeting_signals')
+          .select('*')
+          .eq('meeting_id', meetingId)
+          .eq('signal_type', 'guest-joined')
+          .order('created_at', { ascending: false })
+          .limit(10);
+        
+        if (pendingJoins && pendingJoins.length > 0) {
+          for (const join of pendingJoins) {
+            const joinKey = `${join.meeting_id}-${join.from_user}`;
+            if (processedGuestJoinsRef.current.has(joinKey)) continue;
+            
+            processedGuestJoinsRef.current.add(joinKey);
+            const joinData = join.signal_data as any;
+            console.log('[Host Poll] Found pending guest-joined:', joinData);
+            playJoinNotification();
+            toast.success(`${joinData?.guestName || 'Participante'} entrou na reunião`, {
+              duration: 5000,
+              icon: '👤',
+            });
+            setWaitingForGuests(false);
+          }
+        }
+      } catch (error) {
+        console.error('[Host Poll] Error polling for guests:', error);
+      }
+    };
+
+    // Poll every 2 seconds while waiting for guests
+    pollIntervalRef.current = setInterval(pollForGuests, 2000);
+    // Also poll immediately
+    pollForGuests();
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [isHost, hasJoined, waitingForGuests, meetingId]);
   // Process queued ICE candidates
   const processIceCandidateQueue = useCallback(async () => {
     const pc = peerConnectionRef.current;
