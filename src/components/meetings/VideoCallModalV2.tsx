@@ -11,12 +11,14 @@ import { Button } from '@/components/ui/button';
 import { 
   Mic, MicOff, Video, VideoOff, PhoneOff, 
   Monitor, MonitorOff, Circle, Square,
-  Loader2, FileText, Download, X, MessageSquare, Move
+  Loader2, FileText, Download, X, MessageSquare, Move, BookOpen
 } from 'lucide-react';
 import { useWebRTCSession, RoomState, ParticipantRole } from '@/hooks/useWebRTCSession';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
+import { MeetingScriptPanel, MeetingScript } from './MeetingScriptPanel';
+import { SelectMeetingScriptDialog } from './SelectMeetingScriptDialog';
 
 interface VideoCallModalV2Props {
   open: boolean;
@@ -104,6 +106,11 @@ export const VideoCallModalV2 = ({
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptions, setTranscriptions] = useState<Array<{ text: string; timestamp: string; speaker: string }>>([]);
   const [showTranscriptions, setShowTranscriptions] = useState(false);
+
+  // Meeting script state
+  const [showScriptSelector, setShowScriptSelector] = useState(false);
+  const [activeScript, setActiveScript] = useState<MeetingScript | null>(null);
+  const [showScriptPanel, setShowScriptPanel] = useState(false);
 
   // Local video position state (for dragging camera PiP)
   type PipPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
@@ -939,6 +946,22 @@ export const VideoCallModalV2 = ({
           </Button>
 
           <Button
+            variant={activeScript ? 'default' : 'secondary'}
+            size="lg"
+            className="rounded-full h-14 w-14"
+            onClick={() => {
+              if (activeScript) {
+                setShowScriptPanel(!showScriptPanel);
+              } else {
+                setShowScriptSelector(true);
+              }
+            }}
+            title={activeScript ? 'Mostrar/Ocultar roteiro' : 'Adicionar roteiro'}
+          >
+            <BookOpen className="h-6 w-6" />
+          </Button>
+
+          <Button
             variant="destructive"
             size="lg"
             className="rounded-full h-14 w-14"
@@ -990,6 +1013,26 @@ export const VideoCallModalV2 = ({
             </ScrollArea>
           </div>
         )}
+
+        {/* Meeting Script Panel */}
+        {showScriptPanel && activeScript && (
+          <MeetingScriptPanel
+            script={activeScript}
+            onClose={() => setShowScriptPanel(false)}
+            onScriptUpdate={(updated) => setActiveScript(updated)}
+          />
+        )}
+
+        {/* Script Selector Dialog */}
+        <SelectMeetingScriptDialog
+          open={showScriptSelector}
+          onClose={() => setShowScriptSelector(false)}
+          onSelectScript={(script) => {
+            setActiveScript(script);
+            setShowScriptPanel(true);
+            toast.success(`Roteiro "${script.title}" carregado!`);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
