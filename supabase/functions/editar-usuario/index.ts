@@ -153,40 +153,79 @@ serve(async (req) => {
     if (email) {
       console.log('📧 [EDITAR-USUARIO] Atualizando email...');
       
-      // Verificar se o email já existe
-      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-      const emailExists = existingUsers?.users?.some(u => 
-        u.email?.toLowerCase() === email.toLowerCase() && u.id !== userId
-      );
-      
-      if (emailExists) {
+      try {
+        // Buscar o email atual do usuário
+        const { data: userData, error: getUserErr } = await supabaseAdmin.auth.admin.getUserById(userId);
+        
+        if (getUserErr) {
+          console.error('❌ [EDITAR-USUARIO] Erro ao buscar usuário:', getUserErr);
+          return new Response(JSON.stringify({ error: 'Erro ao buscar dados do usuário' }), { 
+            status: 500, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          });
+        }
+        
+        const currentEmail = userData?.user?.email?.toLowerCase().trim();
+        const newEmail = email.toLowerCase().trim();
+        
+        // Só atualizar se o email for diferente
+        if (currentEmail !== newEmail) {
+          console.log('📧 [EDITAR-USUARIO] Email diferente, verificando disponibilidade...');
+          
+          // Verificar se o email já existe em outro usuário
+          const { data: profilesWithEmail } = await supabaseAdmin
+            .from('profiles')
+            .select('id')
+            .eq('email', newEmail)
+            .neq('id', userId)
+            .limit(1);
+          
+          if (profilesWithEmail && profilesWithEmail.length > 0) {
+            console.error('❌ [EDITAR-USUARIO] Email já em uso');
+            return new Response(JSON.stringify({ 
+              error: 'Este email já está em uso por outro usuário.' 
+            }), { 
+              status: 409, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            });
+          }
+
+          const { error: emailErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+            email: newEmail,
+            email_confirm: true
+          });
+
+          if (emailErr) {
+            console.error('❌ [EDITAR-USUARIO] Erro ao atualizar email:', emailErr);
+            return new Response(JSON.stringify({ error: `Erro ao atualizar email: ${emailErr.message}` }), { 
+              status: 500, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            });
+          }
+
+          // Atualizar email no profiles também
+          const { error: profileEmailErr } = await supabaseAdmin
+            .from('profiles')
+            .update({ email: newEmail, updated_at: new Date().toISOString() })
+            .eq('id', userId);
+
+          if (profileEmailErr) {
+            console.error('⚠️ [EDITAR-USUARIO] Aviso: erro ao atualizar email no profile:', profileEmailErr);
+          }
+
+          console.log('✅ [EDITAR-USUARIO] Email atualizado');
+        } else {
+          console.log('📧 [EDITAR-USUARIO] Email é o mesmo, ignorando atualização');
+        }
+      } catch (emailError) {
+        console.error('❌ [EDITAR-USUARIO] Erro na atualização de email:', emailError);
         return new Response(JSON.stringify({ 
-          error: 'Este email já está em uso por outro usuário.' 
+          error: emailError instanceof Error ? emailError.message : 'Erro ao atualizar email' 
         }), { 
-          status: 409, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        });
-      }
-
-      const { error: emailErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-        email: email.toLowerCase().trim(),
-      });
-
-      if (emailErr) {
-        console.error('❌ [EDITAR-USUARIO] Erro ao atualizar email:', emailErr);
-        return new Response(JSON.stringify({ error: 'Erro ao atualizar email' }), { 
           status: 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         });
       }
-
-      // Atualizar email no profiles também
-      await supabaseAdmin
-        .from('profiles')
-        .update({ email: email.toLowerCase().trim() })
-        .eq('id', userId);
-
-      console.log('✅ [EDITAR-USUARIO] Email atualizado');
     }
 
     // Atualizar senha (se fornecida)
