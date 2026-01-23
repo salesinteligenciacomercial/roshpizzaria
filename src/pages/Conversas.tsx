@@ -7133,7 +7133,10 @@ function Conversas() {
     }
     
     setSalvandoValor(true);
-    const valorNumerico = valorVendaInput ? parseFloat(valorVendaInput.replace(/[^\d.,]/g, '').replace(',', '.')) : 0;
+    // Parsear valor no formato brasileiro: 1.500,00 → 1500.00
+    const valorNumerico = valorVendaInput 
+      ? parseFloat(valorVendaInput.replace(/\./g, '').replace(',', '.')) 
+      : 0;
     
     try {
       const { error } = await supabase
@@ -10085,9 +10088,28 @@ function Conversas() {
                   placeholder="1.500,00"
                   value={valorVendaInput}
                   onChange={(e) => {
-                    // Permitir apenas números, vírgula e ponto
-                    const value = e.target.value.replace(/[^\d.,]/g, '');
-                    setValorVendaInput(value);
+                    // Remover tudo que não for número
+                    let rawValue = e.target.value.replace(/\D/g, '');
+                    
+                    // Limitar a 15 dígitos para evitar overflow
+                    if (rawValue.length > 15) {
+                      rawValue = rawValue.slice(0, 15);
+                    }
+                    
+                    // Formatar como moeda brasileira (centavos)
+                    if (rawValue === '') {
+                      setValorVendaInput('');
+                      return;
+                    }
+                    
+                    // Converter para número e formatar
+                    const numericValue = parseInt(rawValue, 10);
+                    const formatted = new Intl.NumberFormat('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    }).format(numericValue / 100);
+                    
+                    setValorVendaInput(formatted);
                   }}
                   className="text-lg font-medium pl-10"
                   autoFocus
