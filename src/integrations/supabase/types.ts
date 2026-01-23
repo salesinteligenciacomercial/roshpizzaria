@@ -2392,6 +2392,7 @@ export type Database = {
           status: string | null
           tags: string[] | null
           telefone: string | null
+          title: string | null
           updated_at: string | null
           utm_campaign: string | null
           utm_content: string | null
@@ -2446,6 +2447,7 @@ export type Database = {
           status?: string | null
           tags?: string[] | null
           telefone?: string | null
+          title?: string | null
           updated_at?: string | null
           utm_campaign?: string | null
           utm_content?: string | null
@@ -2500,6 +2502,7 @@ export type Database = {
           status?: string | null
           tags?: string[] | null
           telefone?: string | null
+          title?: string | null
           updated_at?: string | null
           utm_campaign?: string | null
           utm_content?: string | null

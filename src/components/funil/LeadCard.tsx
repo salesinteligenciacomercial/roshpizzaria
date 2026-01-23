@@ -60,6 +60,7 @@ interface LeadCardProps {
     probability?: number;
     produto_id?: string | null;
     status?: string;
+    title?: string | null; // Título da negociação/oportunidade
   };
   onDelete: (leadId: string) => void;
   onLeadMoved?: () => void;
@@ -99,6 +100,10 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
   const [expectedCloseDate, setExpectedCloseDate] = useState<string | null>(lead.expected_close_date || null);
   const [leadProbability, setLeadProbability] = useState<number | undefined>(lead.probability);
   const [leadProdutoId, setLeadProdutoId] = useState<string | null>(lead.produto_id || null);
+  const [leadTitle, setLeadTitle] = useState<string>(lead.title || '');
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleInput, setTitleInput] = useState(lead.title || '');
+  const [savingTitle, setSavingTitle] = useState(false);
 
   // Função para gerar cor consistente baseada no ID do usuário
   const generateColorFromId = (id: string): string => {
@@ -580,9 +585,47 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
     }
   }, [lead.id, valorInput, onLeadMoved]);
 
+  // Salvar título da negociação
+  const handleSaveTitle = useCallback(async () => {
+    if (savingTitle) return;
+    
+    setSavingTitle(true);
+    try {
+      const { data: leadData } = await supabase
+        .from("leads")
+        .select("company_id")
+        .eq("id", lead.id)
+        .single();
+
+      const { error } = await supabase
+        .from("leads")
+        .update({ 
+          title: titleInput.trim() || null,
+          company_id: leadData?.company_id
+        })
+        .eq("id", lead.id);
+      
+      if (error) throw error;
+      
+      setLeadTitle(titleInput.trim());
+      setEditingTitle(false);
+      toast.success("Título atualizado!");
+      onLeadMoved?.();
+    } catch (err) {
+      console.error("Erro ao salvar título:", err);
+      toast.error("Erro ao salvar título");
+    } finally {
+      setSavingTitle(false);
+    }
+  }, [lead.id, titleInput, savingTitle, onLeadMoved]);
+
+  const handleCancelTitleEdit = useCallback(() => {
+    setTitleInput(leadTitle);
+    setEditingTitle(false);
+  }, [leadTitle]);
+
   return (
     <Card
-      ref={setNodeRef}
       style={{
         ...style,
         borderLeftWidth: '4px',
@@ -647,6 +690,74 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                     <XCircle className="h-2.5 w-2.5 mr-0.5" />
                     Perdido
                   </Badge>
+                )}
+              </div>
+              
+              {/* Título da negociação - editável inline */}
+              <div 
+                className="mb-1"
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {editingTitle ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      value={titleInput}
+                      onChange={(e) => setTitleInput(e.target.value)}
+                      placeholder="Título da negociação..."
+                      className="h-6 text-xs py-0 px-2"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveTitle();
+                        } else if (e.key === 'Escape') {
+                          handleCancelTitleEdit();
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={handleSaveTitle}
+                      disabled={savingTitle}
+                    >
+                      {savingTitle ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Save className="h-3 w-3 text-success" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={handleCancelTitleEdit}
+                    >
+                      <XCircle className="h-3 w-3 text-muted-foreground" />
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded px-1 py-0.5 -ml-1 transition-colors group/title"
+                    onClick={() => {
+                      setTitleInput(leadTitle);
+                      setEditingTitle(true);
+                    }}
+                  >
+                    {leadTitle ? (
+                      <>
+                        <span className="font-medium text-foreground">{leadTitle}</span>
+                        <Pencil className="h-2.5 w-2.5 opacity-0 group-hover/title:opacity-100 transition-opacity" />
+                      </>
+                    ) : (
+                      <>
+                        <span className="italic">+ Adicionar título</span>
+                        <Pencil className="h-2.5 w-2.5 opacity-0 group-hover/title:opacity-100 transition-opacity" />
+                      </>
+                    )}
+                  </button>
                 )}
               </div>
               
@@ -1262,6 +1373,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
     prevProps.lead.funil_id === nextProps.lead.funil_id &&
     prevProps.lead.etapa_id === nextProps.lead.etapa_id &&
     prevProps.lead.responsavel_id === nextProps.lead.responsavel_id &&
+    prevProps.lead.title === nextProps.lead.title &&
     prevProps.isDragging === nextProps.isDragging &&
     JSON.stringify(prevProps.lead.tags) === JSON.stringify(nextProps.lead.tags)
   );
