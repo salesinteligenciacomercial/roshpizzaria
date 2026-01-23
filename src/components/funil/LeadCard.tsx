@@ -891,30 +891,6 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
               </TooltipProvider>
             )}
 
-            {/* Data Prevista de Fechamento */}
-            {expectedCloseDate && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge 
-                      variant="outline" 
-                      className="text-xs bg-primary/10 border-primary/20 text-primary cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setValorDialogOpen(true);
-                      }}
-                    >
-                      <Calendar className="h-2.5 w-2.5 mr-1" />
-                      {new Date(expectedCloseDate).toLocaleDateString('pt-BR')}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="font-medium">Previsão de fechamento</p>
-                    <p className="text-xs text-muted-foreground">Clique para editar</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1040,8 +1016,33 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
             </Tooltip>
           </TooltipProvider>
 
-          {/* Botões de ação à direita */}
-          <div className="flex items-center gap-0.5">
+          {/* Botões de ação à direita + Data Prevista */}
+          <div className="flex items-center gap-1">
+            {/* Data Prevista de Fechamento - ao lado do botão conversa */}
+            {expectedCloseDate && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge 
+                      variant="outline" 
+                      className="text-xs bg-primary/10 border-primary/20 text-primary cursor-pointer whitespace-nowrap"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setValorDialogOpen(true);
+                      }}
+                    >
+                      <Calendar className="h-2.5 w-2.5 mr-1" />
+                      {new Date(expectedCloseDate).toLocaleDateString('pt-BR')}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="font-medium">Previsão de fechamento</p>
+                    <p className="text-xs text-muted-foreground">Clique para editar</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
             {/* Botão Ver Conversas */}
             {lead.telefone && (
               <TooltipProvider>
