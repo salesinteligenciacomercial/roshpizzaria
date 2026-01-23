@@ -519,30 +519,35 @@ export default function ProductsManager({
                 <FolderOpen className="h-4 w-4 mr-1" />
                 Nova Categoria
               </Button>
-              {categories.length > 0 && (
-                <div className="flex items-center gap-1">
-                  <Select
-                    value={subcategoryParent || ""}
-                    onValueChange={(value) => {
-                      setSubcategoryParent(value);
-                      setSubcategoryName("");
-                      setSubcategoryDialogOpen(true);
-                    }}
-                  >
-                    <SelectTrigger className="w-auto h-9 gap-1">
-                      <PlusCircle className="h-4 w-4" />
-                      <span>+ Subcategoria</span>
-                    </SelectTrigger>
-                    <SelectContent className="bg-background border z-50">
-                      {categories.map(cat => (
-                        <SelectItem key={cat.nome} value={cat.nome}>
-                          {cat.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              <Select
+                value=""
+                onValueChange={(value) => {
+                  if (value) {
+                    setSubcategoryParent(value);
+                    setSubcategoryName("");
+                    setSubcategoryDialogOpen(true);
+                  }
+                }}
+                disabled={categories.length === 0}
+              >
+                <SelectTrigger className="w-auto h-9 gap-1">
+                  <PlusCircle className="h-4 w-4" />
+                  <span>+ Subcategoria</span>
+                </SelectTrigger>
+                <SelectContent className="bg-background border z-50">
+                  {categories.length === 0 ? (
+                    <SelectItem value="__empty__" disabled>
+                      Crie uma categoria primeiro
+                    </SelectItem>
+                  ) : (
+                    categories.map(cat => (
+                      <SelectItem key={cat.nome} value={cat.nome}>
+                        {cat.nome}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Categories Section */}
