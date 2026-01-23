@@ -439,7 +439,7 @@ export default function ProductsManager({
                       <PlusCircle className="h-4 w-4" />
                       <span>+ Subcategoria</span>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-background border z-50">
                       {categories.map(cat => (
                         <SelectItem key={cat.nome} value={cat.nome}>
                           {cat.nome}
@@ -697,7 +697,7 @@ export default function ProductsManager({
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione ou crie uma categoria" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-background border z-50">
                     <SelectItem value="__none__">
                       <span className="text-muted-foreground">Sem categoria</span>
                     </SelectItem>
@@ -706,6 +706,11 @@ export default function ProductsManager({
                         <div className="flex items-center gap-2">
                           <Tag className="h-3 w-3" />
                           {cat.nome}
+                          {cat.subcategorias.length > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              ({cat.subcategorias.length} sub)
+                            </span>
+                          )}
                         </div>
                       </SelectItem>
                     ))}
@@ -762,7 +767,7 @@ export default function ProductsManager({
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione uma subcategoria (opcional)" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-background border z-50">
                     <SelectItem value="__none__">
                       <span className="text-muted-foreground">Sem subcategoria</span>
                     </SelectItem>
