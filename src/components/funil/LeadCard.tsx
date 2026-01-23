@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus, Paperclip, Clock, MoveHorizontal, DollarSign, Save, Loader2, Pencil, Trophy, XCircle } from "lucide-react";
+import { Phone, Mail, User, Trash2, MessageCircle, Building2, Tag, Calendar, CheckSquare, ChevronDown, ChevronUp, MoreVertical, UserPlus, Paperclip, Clock, MoveHorizontal, DollarSign, Save, Loader2, Pencil, Trophy, XCircle, Copy } from "lucide-react";
 import { FinalizarNegociacaoDialog } from "@/components/leads/FinalizarNegociacaoDialog";
 import { LeadValueEditor } from "@/components/leads/LeadValueEditor";
 import { AgendaModal } from "@/components/agenda/AgendaModal";
@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Badge } from "@/components/ui/badge";
 import { EditarLeadDialog } from "./EditarLeadDialog";
 import { MoverLeadFunilDialog } from "./MoverLeadFunilDialog";
+import { DuplicarLeadDialog } from "./DuplicarLeadDialog";
 import { LeadComments } from "./LeadComments";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -636,13 +637,13 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                 <h4 className="font-semibold text-sm text-foreground">{lead.nome}</h4>
                 {/* Badge de Status Ganho/Perdido */}
                 {leadStatus === 'ganho' && (
-                  <Badge className="bg-green-500 hover:bg-green-600 text-white text-[10px] px-1.5 py-0">
+                  <Badge className="bg-success hover:bg-success text-success-foreground text-[10px] px-1.5 py-0">
                     <Trophy className="h-2.5 w-2.5 mr-0.5" />
                     Ganho
                   </Badge>
                 )}
                 {leadStatus === 'perdido' && (
-                  <Badge className="bg-red-500 hover:bg-red-600 text-white text-[10px] px-1.5 py-0">
+                  <Badge className="bg-destructive hover:bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0">
                     <XCircle className="h-2.5 w-2.5 mr-0.5" />
                     Perdido
                   </Badge>
@@ -815,16 +816,27 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                   Atribuir responsáveis
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
+                <DuplicarLeadDialog
+                  lead={lead}
+                  onLeadDuplicated={() => onLeadMoved?.()}
+                  trigger={
+                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                      <Copy className="h-3 w-3 mr-2" />
+                      Duplicar Lead
+                    </DropdownMenuItem>
+                  }
+                />
+                <DropdownMenuSeparator />
                 <DropdownMenuItem 
                   onClick={() => { setFinalizarDefaultAction('ganho'); setFinalizarDialogOpen(true); }}
-                  className="text-green-600 focus:text-green-600"
+                  className="text-success focus:text-success"
                 >
                   <Trophy className="h-3 w-3 mr-2" />
                   Marcar como Ganho
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   onClick={() => { setFinalizarDefaultAction('perdido'); setFinalizarDialogOpen(true); }}
-                  className="text-red-600 focus:text-red-600"
+                  className="text-destructive focus:text-destructive"
                 >
                   <XCircle className="h-3 w-3 mr-2" />
                   Marcar como Perdido
@@ -889,10 +901,10 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                         variant="outline" 
                         className={`text-[10px] px-1.5 ${
                           leadProbability >= 70 
-                            ? 'bg-green-500/10 border-green-500/30 text-green-600' 
+                            ? 'bg-success/10 border-success/30 text-success' 
                             : leadProbability >= 40 
-                              ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-600' 
-                              : 'bg-red-500/10 border-red-500/30 text-red-600'
+                              ? 'bg-warning/10 border-warning/30 text-warning' 
+                              : 'bg-destructive/10 border-destructive/30 text-destructive'
                         }`}
                       >
                         {leadProbability}%
@@ -937,7 +949,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-100"
+                    className="h-7 w-7 text-primary hover:text-primary hover:bg-primary/10"
                     onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
                   >
