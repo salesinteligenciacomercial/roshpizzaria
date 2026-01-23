@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, MessageSquare, Calendar, Bot, Settings, LogOut, MessagesSquare, Video, PhoneCall, Target, Lock, X, Brain } from "lucide-react";
+import { LayoutDashboard, Users, MessageSquare, Calendar, Bot, Settings, LogOut, MessagesSquare, Video, PhoneCall, Target, Lock, X, Brain, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -74,6 +74,12 @@ const navigation = [{
   icon: Target,
   menuKey: "processos",
   showAIBadge: true
+}, {
+  name: "Financeiro",
+  href: "/financeiro",
+  icon: DollarSign,
+  menuKey: "financeiro",
+  masterOnly: true
 }, {
   name: "Configurações",
   href: "/configuracoes",
@@ -198,6 +204,11 @@ export function Sidebar({
           {navigation.filter(item => {
             if (permissionsLoading || moduleLoading) return true;
             if (item.menuKey === 'configuracoes') return true; // Always show config
+            
+            // Financeiro só aparece para master accounts
+            if ((item as any).masterOnly && !isMasterAccount) {
+              return false;
+            }
             
             // Verificar se é módulo premium
             const isPremiumModule = premiumModules.includes(item.menuKey);
