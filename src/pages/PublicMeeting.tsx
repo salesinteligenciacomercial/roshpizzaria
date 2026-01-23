@@ -324,19 +324,28 @@ const PublicMeeting = () => {
       });
 
       pc.ontrack = (event) => {
-        console.log('Host received remote track');
-        setRemoteStream(event.streams[0]);
+        console.log('[Host] Received remote track, streams:', event.streams.length);
+        const remoteMediaStream = event.streams[0];
+        setRemoteStream(remoteMediaStream);
         if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
+          remoteVideoRef.current.srcObject = remoteMediaStream;
           remoteVideoRef.current.play().catch(console.warn);
         }
         setIsConnecting(false);
         setWaitingForGuests(false);
+        
+        // Start call timer when we receive remote track (connection established)
+        if (!callIntervalRef.current) {
+          console.log('[Host] Starting call timer from ontrack');
+          callIntervalRef.current = setInterval(() => {
+            setCallDuration(prev => prev + 1);
+          }, 1000);
+        }
       };
 
       pc.onicecandidate = async (event) => {
         if (event.candidate) {
-          console.log('Host ICE candidate');
+          console.log('[Host] Sending ICE candidate');
           await supabase.from('meeting_signals').insert([{
             meeting_id: meetingId!,
             from_user: 'host',
@@ -348,18 +357,26 @@ const PublicMeeting = () => {
       };
 
       pc.onconnectionstatechange = () => {
-        console.log('Host connection state:', pc.connectionState);
+        console.log('[Host] Connection state changed to:', pc.connectionState);
         if (pc.connectionState === 'connected') {
           setIsConnecting(false);
           setWaitingForGuests(false);
           if (!callIntervalRef.current) {
+            console.log('[Host] Starting call timer from connectionState');
             callIntervalRef.current = setInterval(() => {
               setCallDuration(prev => prev + 1);
             }, 1000);
           }
         } else if (pc.connectionState === 'failed') {
+          console.log('[Host] Connection failed, restarting ICE');
           pc.restartIce();
+        } else if (pc.connectionState === 'disconnected') {
+          console.log('[Host] Connection disconnected');
         }
+      };
+      
+      pc.oniceconnectionstatechange = () => {
+        console.log('[Host] ICE connection state:', pc.iceConnectionState);
       };
 
       // Subscribe to signals from guests
@@ -600,18 +617,27 @@ const PublicMeeting = () => {
       });
 
       pc.ontrack = (event) => {
-        console.log('Guest received remote track');
-        setRemoteStream(event.streams[0]);
+        console.log('[Guest] Received remote track, streams:', event.streams.length);
+        const remoteMediaStream = event.streams[0];
+        setRemoteStream(remoteMediaStream);
         if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
+          remoteVideoRef.current.srcObject = remoteMediaStream;
           remoteVideoRef.current.play().catch(console.warn);
         }
         setIsConnecting(false);
+        
+        // Start call timer when we receive remote track (connection established)
+        if (!callIntervalRef.current) {
+          console.log('[Guest] Starting call timer from ontrack');
+          callIntervalRef.current = setInterval(() => {
+            setCallDuration(prev => prev + 1);
+          }, 1000);
+        }
       };
 
       pc.onicecandidate = async (event) => {
         if (event.candidate) {
-          console.log('Guest ICE candidate');
+          console.log('[Guest] Sending ICE candidate');
           await supabase.from('meeting_signals').insert([{
             meeting_id: meetingId!,
             from_user: guestIdRef.current,
@@ -623,17 +649,25 @@ const PublicMeeting = () => {
       };
 
       pc.onconnectionstatechange = () => {
-        console.log('Guest connection state:', pc.connectionState);
+        console.log('[Guest] Connection state changed to:', pc.connectionState);
         if (pc.connectionState === 'connected') {
           setIsConnecting(false);
           if (!callIntervalRef.current) {
+            console.log('[Guest] Starting call timer from connectionState');
             callIntervalRef.current = setInterval(() => {
               setCallDuration(prev => prev + 1);
             }, 1000);
           }
         } else if (pc.connectionState === 'failed') {
+          console.log('[Guest] Connection failed, restarting ICE');
           pc.restartIce();
+        } else if (pc.connectionState === 'disconnected') {
+          console.log('[Guest] Connection disconnected');
         }
+      };
+      
+      pc.oniceconnectionstatechange = () => {
+        console.log('[Guest] ICE connection state:', pc.iceConnectionState);
       };
 
       // Subscribe to signals
