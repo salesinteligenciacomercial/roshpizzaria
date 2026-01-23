@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { DndContext, DragEndEvent, closestCenter, DragStartEvent, DragOverEvent, DragOverlay } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, closestCenter, DragStartEvent, DragOverEvent, DragOverlay, PointerSensor, useSensor, useSensors, pointerWithin, rectIntersection, CollisionDetection, getFirstCollision } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Plus, Wifi, WifiOff, GripVertical, ChevronLeft, ChevronRight } from "lucide-react";
@@ -109,6 +109,47 @@ export default function KanbanPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(true);
+  
+  // 🎯 Configurar sensores para melhor detecção de drag
+  const pointerSensor = useSensor(PointerSensor, {
+    activationConstraint: {
+      distance: 8, // Exige 8px de movimento antes de iniciar o drag
+    },
+  });
+  const sensors = useSensors(pointerSensor);
+
+  // 🎯 Função de colisão customizada que prioriza droppables sobre draggables
+  const customCollisionDetection: CollisionDetection = useCallback((args) => {
+    // Primeiro, tentar encontrar colisões com pointerWithin (mais preciso para áreas)
+    const pointerCollisions = pointerWithin(args);
+    
+    if (pointerCollisions.length > 0) {
+      // Priorizar colisões com etapas (droppables) sobre leads
+      const etapaCollision = pointerCollisions.find(
+        collision => collision.data?.droppableContainer?.data?.current?.type === 'etapa'
+      );
+      if (etapaCollision) {
+        return [etapaCollision];
+      }
+      return pointerCollisions;
+    }
+
+    // Fallback para rectIntersection se pointerWithin não encontrou nada
+    const rectCollisions = rectIntersection(args);
+    if (rectCollisions.length > 0) {
+      // Também priorizar etapas
+      const etapaCollision = rectCollisions.find(
+        collision => collision.data?.droppableContainer?.data?.current?.type === 'etapa'
+      );
+      if (etapaCollision) {
+        return [etapaCollision];
+      }
+      return rectCollisions;
+    }
+
+    // Último fallback para closestCenter
+    return closestCenter(args);
+  }, []);
   
   // Verificar permissão de criar funil
   useEffect(() => {
@@ -534,15 +575,25 @@ export default function KanbanPage() {
       // 🔍 Determinar etapa de destino com lógica clara
       let newEtapaId: string | null = null;
       
-      if (overData?.type === 'etapa') {
-        // Drop direto na área da coluna
+      // Primeiro, verificar se o over.id é uma etapa diretamente
+      const isOverEtapa = etapas.some(e => e.id === over.id);
+      
+      if (isOverEtapa) {
+        // Drop direto na área da coluna (droppable)
         newEtapaId = over.id as string;
+        console.log('[DRAG END] 📍 Destino detectado: coluna droppable', newEtapaId);
+      } else if (overData?.type === 'etapa') {
+        // Drop na área marcada como etapa
+        newEtapaId = over.id as string;
+        console.log('[DRAG END] 📍 Destino detectado: área tipo etapa', newEtapaId);
       } else if (overData?.etapaId) {
         // Drop sobre um lead (pegar etapa desse lead)
         newEtapaId = overData.etapaId as string;
+        console.log('[DRAG END] 📍 Destino detectado: lead com etapaId', newEtapaId);
       } else if (overData?.type === 'lead' && overData?.lead?.etapa_id) {
         // Drop sobre lead com etapa definida
         newEtapaId = overData.lead.etapa_id;
+        console.log('[DRAG END] 📍 Destino detectado: lead.etapa_id', newEtapaId);
       }
 
       // ✅ Validar etapa de destino
@@ -1036,7 +1087,8 @@ export default function KanbanPage() {
       </div>
 
       <DndContext
-        collisionDetection={closestCenter}
+        sensors={sensors}
+        collisionDetection={customCollisionDetection}
         onDragStart={(event) => {
           const { active } = event;
           const activeData = active.data.current;

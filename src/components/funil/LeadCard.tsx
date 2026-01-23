@@ -458,7 +458,8 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
     id: lead.id,
     data: {
       type: 'lead',
-      lead: lead
+      lead: lead,
+      etapaId: lead.etapa_id // ✅ Incluir etapaId para identificação no drag
     }
   });
 
@@ -626,19 +627,21 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
 
   return (
     <Card
+      ref={setNodeRef}
       style={{
         ...style,
         borderLeftWidth: '4px',
         borderLeftColor: creatorColor,
       }}
       {...attributes}
+      {...modifiedListeners}
       onClick={(e) => {
         if (!isDragging) {
           e.stopPropagation();
           setIsExpanded(!isExpanded);
         }
       }}
-      className={`group relative p-4 mb-3 cursor-grab active:cursor-grabbing border-0 shadow-card hover:shadow-lg transition-all duration-300 bg-card overflow-hidden min-h-[120px] ${
+      className={`group relative p-4 mb-3 cursor-grab active:cursor-grabbing border-0 shadow-card hover:shadow-lg transition-all duration-300 bg-card overflow-hidden min-h-[120px] touch-none ${
         isDragging ? 'shadow-2xl scale-105 z-50 ring-2 ring-primary/50 bg-gradient-to-br from-card to-primary/5' : ''
       }`}
     >
@@ -662,7 +665,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
       <div className="relative space-y-2">
         {/* Header sempre visível */}
         <div className="flex justify-between items-start gap-2">
-          <div className="flex items-start gap-2 flex-1" {...(modifiedListeners as any)}>
+          <div className="flex items-start gap-2 flex-1">
             <Avatar className="h-8 w-8">
               <AvatarImage 
                 src={avatarUrl || lead.avatar_url || undefined} 
