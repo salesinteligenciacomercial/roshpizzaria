@@ -416,7 +416,7 @@ export default function ProductsManager({
             </div>
 
             {/* Actions */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
               <Button onClick={() => handleOpenProductDialog()}>
                 <Plus className="h-4 w-4 mr-1" />
                 Novo Produto
@@ -426,6 +426,57 @@ export default function ProductsManager({
                 Nova Categoria
               </Button>
             </div>
+
+            {/* Categories Section - Moved to top for visibility */}
+            {categories.length > 0 && (
+              <div className="border rounded-lg p-3 bg-muted/30">
+                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <FolderOpen className="h-4 w-4 text-primary" />
+                  Categorias ({categories.length})
+                </h4>
+                <div className="space-y-2">
+                  {categories.map(cat => (
+                    <div key={cat.nome} className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge
+                          variant="secondary"
+                          className="cursor-pointer hover:bg-primary/20 py-1 px-2"
+                          onClick={() => handleOpenCategoryDialog(cat.nome)}
+                        >
+                          <Pencil className="h-3 w-3 mr-1" />
+                          {cat.nome}
+                          <span className="ml-1 text-xs bg-background/50 rounded px-1">
+                            {cat.count}
+                          </span>
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenSubcategoryDialog(cat.nome)}
+                          className="h-6 text-xs gap-1 px-2"
+                        >
+                          <PlusCircle className="h-3 w-3" />
+                          + Subcategoria
+                        </Button>
+                        {cat.subcategorias.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {cat.subcategorias.map(sub => (
+                              <Badge
+                                key={sub.nome}
+                                variant="outline"
+                                className="text-xs py-0.5 px-2"
+                              >
+                                └ {sub.nome} ({sub.count})
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Search and Filter */}
             <div className="flex gap-2 flex-wrap">
@@ -571,57 +622,6 @@ export default function ProductsManager({
               </ScrollArea>
             )}
 
-            {/* Categories Section - Always visible */}
-            {categories.length > 0 && (
-              <div className="border rounded-lg p-4 bg-muted/30">
-                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                  <FolderOpen className="h-4 w-4 text-primary" />
-                  Categorias ({categories.length})
-                </h4>
-                <div className="space-y-3">
-                  {categories.map(cat => (
-                    <div key={cat.nome} className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge
-                          variant="secondary"
-                          className="cursor-pointer hover:bg-primary/20 py-1.5 px-3"
-                          onClick={() => handleOpenCategoryDialog(cat.nome)}
-                        >
-                          <Pencil className="h-3 w-3 mr-1" />
-                          {cat.nome}
-                          <span className="ml-2 text-xs bg-background/50 rounded px-1">
-                            {cat.count}
-                          </span>
-                        </Badge>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleOpenSubcategoryDialog(cat.nome)}
-                          className="h-7 text-xs gap-1"
-                        >
-                          <PlusCircle className="h-3 w-3" />
-                          + Subcategoria
-                        </Button>
-                      </div>
-                      {cat.subcategorias.length > 0 && (
-                        <div className="flex flex-wrap gap-1 ml-4 mt-1">
-                          {cat.subcategorias.map(sub => (
-                            <Badge
-                              key={sub.nome}
-                              variant="outline"
-                              className="text-xs py-1 px-2"
-                            >
-                              └ {sub.nome}
-                              <span className="ml-1 text-muted-foreground">({sub.count})</span>
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           <DialogFooter>
