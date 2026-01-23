@@ -181,18 +181,28 @@ const PublicMeeting = () => {
   }, [meetingId]);
 
   // Poll for guest-joined signals when host is waiting (backup for realtime)
+  // This poll runs even after waitingForGuests becomes false to catch late arrivals
   useEffect(() => {
-    if (!isHost || !hasJoined || !waitingForGuests || !meetingId) return;
+    if (!isHost || !hasJoined || !meetingId) return;
+
+    console.log('[Host Poll] Starting guest polling for meeting:', meetingId);
 
     const pollForGuests = async () => {
       try {
-        const { data: pendingJoins } = await supabase
+        const { data: pendingJoins, error } = await supabase
           .from('meeting_signals')
           .select('*')
           .eq('meeting_id', meetingId)
           .eq('signal_type', 'guest-joined')
           .order('created_at', { ascending: false })
           .limit(10);
+        
+        if (error) {
+          console.error('[Host Poll] Error:', error);
+          return;
+        }
+
+        console.log('[Host Poll] Found signals:', pendingJoins?.length || 0);
         
         if (pendingJoins && pendingJoins.length > 0) {
           for (const join of pendingJoins) {
@@ -201,7 +211,7 @@ const PublicMeeting = () => {
             
             processedGuestJoinsRef.current.add(joinKey);
             const joinData = join.signal_data as any;
-            console.log('[Host Poll] Found pending guest-joined:', joinData);
+            console.log('[Host Poll] New guest detected:', joinData?.guestName);
             playJoinNotification();
             toast.success(`${joinData?.guestName || 'Participante'} entrou na reunião`, {
               duration: 5000,
@@ -215,7 +225,7 @@ const PublicMeeting = () => {
       }
     };
 
-    // Poll every 2 seconds while waiting for guests
+    // Poll every 2 seconds continuously
     pollIntervalRef.current = setInterval(pollForGuests, 2000);
     // Also poll immediately
     pollForGuests();
@@ -226,7 +236,7 @@ const PublicMeeting = () => {
         pollIntervalRef.current = null;
       }
     };
-  }, [isHost, hasJoined, waitingForGuests, meetingId]);
+  }, [isHost, hasJoined, meetingId]);
   // Process queued ICE candidates
   const processIceCandidateQueue = useCallback(async () => {
     const pc = peerConnectionRef.current;
