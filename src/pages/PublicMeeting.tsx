@@ -6,9 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { 
   Mic, MicOff, Video, VideoOff, PhoneOff, 
   Monitor, MonitorOff, Circle, Square, Loader2, Users, Copy, Check,
-  FileText, Download, X, MessageSquare
+  FileText, Download, X, MessageSquare, BookOpen
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { MeetingScriptPanel, MeetingScript } from '@/components/meetings/MeetingScriptPanel';
+import { SelectMeetingScriptDialog } from '@/components/meetings/SelectMeetingScriptDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -119,6 +121,10 @@ const PublicMeeting = () => {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptions, setTranscriptions] = useState<Array<{ text: string; timestamp: string; speaker: string }>>([]);
   const [showTranscriptions, setShowTranscriptions] = useState(false);
+  
+  // Script state
+  const [showScriptDialog, setShowScriptDialog] = useState(false);
+  const [activeScript, setActiveScript] = useState<MeetingScript | null>(null);
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -1298,6 +1304,16 @@ const PublicMeeting = () => {
         </Button>
 
         <Button
+          variant={activeScript ? 'default' : 'secondary'}
+          size="lg"
+          className="rounded-full h-14 w-14"
+          onClick={() => activeScript ? setActiveScript(null) : setShowScriptDialog(true)}
+          title={activeScript ? 'Fechar roteiro' : 'Abrir roteiro de reunião'}
+        >
+          <BookOpen className="h-6 w-6" />
+        </Button>
+
+        <Button
           variant="destructive"
           size="lg"
           className="rounded-full h-14 w-14"
@@ -1365,6 +1381,25 @@ const PublicMeeting = () => {
             )}
           </ScrollArea>
         </div>
+      )}
+
+      {/* Meeting Script Dialog */}
+      <SelectMeetingScriptDialog
+        open={showScriptDialog}
+        onClose={() => setShowScriptDialog(false)}
+        onSelectScript={(script) => {
+          setActiveScript(script);
+          setShowScriptDialog(false);
+        }}
+      />
+
+      {/* Meeting Script Panel */}
+      {activeScript && (
+        <MeetingScriptPanel
+          script={activeScript}
+          onClose={() => setActiveScript(null)}
+          onScriptUpdate={(updatedScript) => setActiveScript(updatedScript)}
+        />
       )}
     </div>
   );
