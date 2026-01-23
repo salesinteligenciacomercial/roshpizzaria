@@ -33,6 +33,7 @@ interface Lead {
   funil_id?: string;
   created_at?: string;
   updated_at?: string;
+  title?: string | null; // Título da negociação/oportunidade
 }
 
 interface Etapa {
