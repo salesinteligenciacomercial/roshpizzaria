@@ -698,6 +698,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                 className="mb-1"
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
               >
                 {editingTitle ? (
                   <div className="flex items-center gap-1">
@@ -740,10 +741,19 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                   </div>
                 ) : (
                   <button
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded px-1 py-0.5 -ml-1 transition-colors group/title"
-                    onClick={() => {
+                    type="button"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded px-1 py-0.5 -ml-1 transition-colors group/title cursor-pointer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       setTitleInput(leadTitle);
                       setEditingTitle(true);
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
                     }}
                   >
                     {leadTitle ? (
