@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle, Eye, ChevronDown, Mail, Building2, Globe, Pencil, MapPin, Key, Shield } from "lucide-react";
+import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle, Eye, ChevronDown, Mail, Building2, Globe, Pencil, MapPin, Key, Shield, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FinalizarNegociacaoDialog } from "@/components/leads/FinalizarNegociacaoDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -416,6 +416,12 @@ function Conversas() {
   const [finalizarNegociacaoOpen, setFinalizarNegociacaoOpen] = useState(false);
   const [finalizarNegociacaoAction, setFinalizarNegociacaoAction] = useState<'ganho' | 'perdido'>('ganho');
   const [cleaningHistory, setCleaningHistory] = useState(false);
+  
+  // Estados para seleção de produto
+  const [produtoDialogOpen, setProdutoDialogOpen] = useState(false);
+  const [produtos, setProdutos] = useState<Array<{ id: string; nome: string; preco_sugerido: number | null }>>([]);
+  const [loadingProdutos, setLoadingProdutos] = useState(false);
+  const [salvandoProduto, setSalvandoProduto] = useState(false);
   const [cleaningProgress, setCleaningProgress] = useState(0);
   const [cleaningStats, setCleaningStats] = useState({
     deleted: 0,
@@ -2156,11 +2162,17 @@ function Conversas() {
       const phoneToSearch = conversa.phoneNumber || conversa.id;
       const phoneFormatted = safeFormatPhoneNumber(phoneToSearch);
 
-      // Buscar lead pelo telefone
+      // Buscar lead pelo telefone (incluindo nome do produto)
       const {
         data: leadData,
         error
-      } = await supabase.from('leads').select('*').eq('company_id', userRole.company_id).or(`phone.eq.${phoneFormatted},telefone.eq.${phoneFormatted}`).maybeSingle();
+      } = await supabase.from('leads').select('*, produtos_servicos(nome)').eq('company_id', userRole.company_id).or(`phone.eq.${phoneFormatted},telefone.eq.${phoneFormatted}`).maybeSingle();
+      
+      // Mapear nome do produto para facilitar acesso
+      const leadWithProduto = leadData ? {
+        ...leadData,
+        produto_nome: (leadData as any).produtos_servicos?.nome || null
+      } : null;
       if (error || !leadData) {
         console.error('❌ Erro ao buscar lead:', error);
         return;
@@ -7152,6 +7164,64 @@ function Conversas() {
     }
   };
 
+  // ✅ Carregar produtos para seleção
+  const carregarProdutos = async () => {
+    if (!userCompanyId) return;
+    
+    setLoadingProdutos(true);
+    try {
+      const { data, error } = await supabase
+        .from("produtos_servicos")
+        .select("id, nome, preco_sugerido")
+        .eq("company_id", userCompanyId)
+        .eq("ativo", true)
+        .order("nome");
+
+      if (error) throw error;
+      setProdutos(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar produtos:", error);
+      toast.error("Erro ao carregar produtos");
+    } finally {
+      setLoadingProdutos(false);
+    }
+  };
+
+  // ✅ Salvar produto selecionado no lead
+  const handleSalvarProduto = async (produtoId: string) => {
+    if (!leadVinculado?.id) {
+      toast.error('Salve o lead no CRM primeiro');
+      return;
+    }
+    
+    setSalvandoProduto(true);
+    try {
+      const produto = produtos.find(p => p.id === produtoId);
+      
+      const { error } = await supabase
+        .from('leads')
+        .update({ produto_id: produtoId || null })
+        .eq('id', leadVinculado.id);
+      
+      if (error) throw error;
+      
+      // Atualizar estado local
+      setLeadVinculado({ 
+        ...leadVinculado, 
+        produto_id: produtoId || null,
+        produto_nome: produto?.nome || null
+      });
+      
+      setProdutoDialogOpen(false);
+      toast.success(produtoId ? `Produto "${produto?.nome}" associado!` : 'Produto removido');
+    } catch (err) {
+      console.error('Erro ao salvar produto:', err);
+      toast.error('Erro ao salvar produto');
+    } finally {
+      setSalvandoProduto(false);
+    }
+  };
+
   const handleEditName = async (conversationId: string) => {
     const conv = conversations.find(c => c.id === conversationId);
     if (!conv) return;
@@ -8426,21 +8496,38 @@ function Conversas() {
                     }} triggerButton={<Button size="sm" variant="outline" className="w-full">
                                   <Pencil className="h-3 w-3 mr-2" /> Editar Informações
                                 </Button>} />
-                            {/* ✅ NOVO: Botão rápido para adicionar valor da venda */}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="w-full gap-2 mt-2"
-                              onClick={() => {
-                                setValorVendaInput(leadVinculado?.value?.toString() || "");
-                                setValorVendaDialogOpen(true);
-                              }}
-                            >
-                              <DollarSign className="h-3 w-3 text-green-600" />
-                              {leadVinculado?.value 
-                                ? `Valor: R$ ${Number(leadVinculado.value).toLocaleString("pt-BR")}` 
-                                : "Adicionar Valor da Venda"}
-                            </Button>
+                            {/* ✅ Botões de Valor e Produto lado a lado */}
+                            <div className="flex gap-2 mt-2">
+                              {/* Botão rápido para adicionar valor da venda */}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1 gap-1"
+                                onClick={() => {
+                                  setValorVendaInput(leadVinculado?.value?.toString() || "");
+                                  setValorVendaDialogOpen(true);
+                                }}
+                              >
+                                <DollarSign className="h-3 w-3 text-green-600" />
+                                {leadVinculado?.value 
+                                  ? `R$ ${Number(leadVinculado.value).toLocaleString("pt-BR")}` 
+                                  : "Valor"}
+                              </Button>
+                              
+                              {/* Botão para selecionar produto */}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1 gap-1"
+                                onClick={() => {
+                                  carregarProdutos();
+                                  setProdutoDialogOpen(true);
+                                }}
+                              >
+                                <Package className="h-3 w-3 text-blue-600" />
+                                {leadVinculado?.produto_nome || (produtos.find(p => p.id === leadVinculado?.produto_id)?.nome) || "Produto"}
+                              </Button>
+                            </div>
                             
                             {/* Botões de Finalizar Negociação - Ganho/Perdido */}
                             <div className="flex gap-2 mt-2">
@@ -10027,6 +10114,69 @@ function Conversas() {
                 Salvar Valor
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Selecionar Produto */}
+      <Dialog open={produtoDialogOpen} onOpenChange={setProdutoDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5 text-blue-600" />
+              Produto / Serviço
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {loadingProdutos ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : produtos.length === 0 ? (
+              <div className="text-center py-6">
+                <Package className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  Nenhum produto cadastrado.
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Cadastre produtos em Analytics → Produtos
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {/* Opção para remover produto */}
+                <Button
+                  variant={!leadVinculado?.produto_id ? "secondary" : "outline"}
+                  className="w-full justify-start gap-2"
+                  onClick={() => handleSalvarProduto("")}
+                  disabled={salvandoProduto}
+                >
+                  <X className="h-4 w-4 text-muted-foreground" />
+                  <span>Sem produto definido</span>
+                </Button>
+                
+                {produtos.map((produto) => (
+                  <Button
+                    key={produto.id}
+                    variant={leadVinculado?.produto_id === produto.id ? "secondary" : "outline"}
+                    className="w-full justify-start gap-2"
+                    onClick={() => handleSalvarProduto(produto.id)}
+                    disabled={salvandoProduto}
+                  >
+                    <Package className="h-4 w-4 text-blue-600" />
+                    <span className="flex-1 text-left truncate">{produto.nome}</span>
+                    {produto.preco_sugerido && (
+                      <span className="text-xs text-muted-foreground">
+                        R$ {produto.preco_sugerido.toLocaleString("pt-BR")}
+                      </span>
+                    )}
+                    {leadVinculado?.produto_id === produto.id && (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    )}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
