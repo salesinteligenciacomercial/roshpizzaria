@@ -377,17 +377,34 @@ const PublicMeeting = () => {
             const signal = payload.new as any;
             if (signal.from_user === 'host') return;
             
-            console.log('Host received signal:', signal.signal_type);
+            console.log('[Host Realtime] Received signal:', signal.signal_type);
 
             if (signal.signal_type === 'offer') {
               // Guest sent offer, respond with answer
+              console.log('[Host Realtime] Processing offer, signalingState:', pc.signalingState, 'hasRemote:', hasRemoteDescriptionRef.current);
+              
+              if (hasRemoteDescriptionRef.current) {
+                console.log('[Host Realtime] Already has remote description, skipping');
+                return;
+              }
+              
+              if (pc.signalingState !== 'stable') {
+                console.log('[Host Realtime] Not in stable state, skipping');
+                return;
+              }
+              
               try {
+                console.log('[Host Realtime] Setting remote description...');
                 await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
                 hasRemoteDescriptionRef.current = true;
+                console.log('[Host Realtime] Remote description set successfully');
+                
                 await processIceCandidateQueue();
                 
+                console.log('[Host Realtime] Creating answer...');
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
+                console.log('[Host Realtime] Local description set');
                 
                 await supabase.from('meeting_signals').insert([{
                   meeting_id: meetingId!,
@@ -396,9 +413,11 @@ const PublicMeeting = () => {
                   signal_type: 'answer',
                   signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
                 }]);
-                console.log('Host sent answer to guest:', signal.from_user);
+                console.log('[Host Realtime] Answer sent to guest:', signal.from_user);
+                setWaitingForGuests(false);
+                setIsConnecting(false);
               } catch (error) {
-                console.error('Error handling offer:', error);
+                console.error('[Host Realtime] Error handling offer:', error);
               }
             } else if (signal.signal_type === 'answer') {
               if (pc.signalingState === 'have-local-offer') {
@@ -418,7 +437,7 @@ const PublicMeeting = () => {
                 iceCandidateQueueRef.current.push(candidate);
               }
             } else if (signal.signal_type === 'guest-joined') {
-              console.log('[Host] Guest joined:', signal.signal_data);
+              console.log('[Host Realtime] Guest joined:', signal.signal_data);
               // Play notification sound
               playJoinNotification();
               // Show toast notification
@@ -447,9 +466,20 @@ const PublicMeeting = () => {
       
       // Function to check and process pending offers
       const checkAndProcessOffers = async () => {
-        if (hasRemoteDescriptionRef.current) return; // Already connected
+        const currentPc = peerConnectionRef.current;
+        if (!currentPc) {
+          console.log('[Host Poll] No peer connection available');
+          return;
+        }
         
-        const { data: pendingOffers } = await supabase
+        if (hasRemoteDescriptionRef.current) {
+          console.log('[Host Poll] Already has remote description, skipping');
+          return;
+        }
+        
+        console.log('[Host Poll] Checking for offers, signalingState:', currentPc.signalingState);
+        
+        const { data: pendingOffers, error } = await supabase
           .from('meeting_signals')
           .select('*')
           .eq('meeting_id', meetingId!)
@@ -457,18 +487,33 @@ const PublicMeeting = () => {
           .order('created_at', { ascending: false })
           .limit(1);
         
+        if (error) {
+          console.error('[Host Poll] Error fetching offers:', error);
+          return;
+        }
+        
+        console.log('[Host Poll] Found offers:', pendingOffers?.length || 0);
+        
         if (pendingOffers && pendingOffers.length > 0 && !hasRemoteDescriptionRef.current) {
-          console.log('[Host] Found pending offer from guest');
           const offer = pendingOffers[0];
           const signalData = offer.signal_data as any;
+          
+          console.log('[Host Poll] Processing offer from:', offer.from_user, 'signalingState:', currentPc.signalingState);
+          
           try {
-            if (pc.signalingState !== 'have-remote-offer' && pc.signalingState !== 'stable' || !hasRemoteDescriptionRef.current) {
-              await pc.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
+            // Only process if we haven't already set remote description
+            if (currentPc.signalingState === 'stable' && !hasRemoteDescriptionRef.current) {
+              console.log('[Host Poll] Setting remote description...');
+              await currentPc.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
               hasRemoteDescriptionRef.current = true;
+              console.log('[Host Poll] Remote description set successfully');
+              
               await processIceCandidateQueue();
               
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
+              console.log('[Host Poll] Creating answer...');
+              const answer = await currentPc.createAnswer();
+              await currentPc.setLocalDescription(answer);
+              console.log('[Host Poll] Local description set');
               
               await supabase.from('meeting_signals').insert([{
                 meeting_id: meetingId!,
@@ -477,11 +522,14 @@ const PublicMeeting = () => {
                 signal_type: 'answer',
                 signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
               }]);
-              console.log('[Host] Sent answer to pending guest offer');
+              console.log('[Host Poll] Answer sent to guest:', offer.from_user);
               setWaitingForGuests(false);
+              setIsConnecting(false);
+            } else {
+              console.log('[Host Poll] Skipping - signalingState:', currentPc.signalingState, 'hasRemote:', hasRemoteDescriptionRef.current);
             }
           } catch (error) {
-            console.error('[Host] Error processing pending offer:', error);
+            console.error('[Host Poll] Error processing offer:', error);
           }
         }
       };
@@ -489,37 +537,15 @@ const PublicMeeting = () => {
       // Check for pending offers immediately
       await checkAndProcessOffers();
       
-      // Also check for pending guest-joined signals
-      const { data: pendingJoins } = await supabase
-        .from('meeting_signals')
-        .select('*')
-        .eq('meeting_id', meetingId!)
-        .eq('signal_type', 'guest-joined')
-        .order('created_at', { ascending: false });
-      
-      if (pendingJoins && pendingJoins.length > 0) {
-        for (const join of pendingJoins) {
-          const joinData = join.signal_data as any;
-          console.log('[Host] Found pending guest-joined:', joinData);
-          playJoinNotification();
-          toast.success(`${joinData?.guestName || 'Participante'} entrou na reunião`, {
-            duration: 5000,
-            icon: '👤',
-          });
-        }
-        setWaitingForGuests(false);
-      } else {
-        setWaitingForGuests(true);
-      }
-      
-      // Continuous polling for offers every 2 seconds (backup for realtime)
+      // Continuous polling for offers every 1.5 seconds (faster polling for better response)
       const offerPollInterval = setInterval(async () => {
         if (hasRemoteDescriptionRef.current) {
+          console.log('[Host Poll] Connected, stopping poll');
           clearInterval(offerPollInterval);
           return;
         }
         await checkAndProcessOffers();
-      }, 2000);
+      }, 1500);
       
       // Store interval for cleanup - attach to pollIntervalRef
       const existingPollCleanup = pollIntervalRef.current;
