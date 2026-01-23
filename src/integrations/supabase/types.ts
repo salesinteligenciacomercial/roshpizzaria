@@ -321,6 +321,227 @@ export type Database = {
         }
         Relationships: []
       }
+      billing_invoices: {
+        Row: {
+          amount: number
+          company_id: string
+          created_at: string
+          description: string | null
+          due_date: string
+          external_invoice_id: string | null
+          external_payment_url: string | null
+          id: string
+          invoice_number: string
+          master_company_id: string | null
+          notes: string | null
+          paid_at: string | null
+          payment_method: string | null
+          status: string
+          subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          company_id: string
+          created_at?: string
+          description?: string | null
+          due_date: string
+          external_invoice_id?: string | null
+          external_payment_url?: string | null
+          id?: string
+          invoice_number: string
+          master_company_id?: string | null
+          notes?: string | null
+          paid_at?: string | null
+          payment_method?: string | null
+          status?: string
+          subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          company_id?: string
+          created_at?: string
+          description?: string | null
+          due_date?: string
+          external_invoice_id?: string | null
+          external_payment_url?: string | null
+          id?: string
+          invoice_number?: string
+          master_company_id?: string | null
+          notes?: string | null
+          paid_at?: string | null
+          payment_method?: string | null
+          status?: string
+          subscription_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_invoices_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_invoices_master_company_id_fkey"
+            columns: ["master_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_invoices_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "company_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_plans: {
+        Row: {
+          annual_price: number | null
+          company_id: string | null
+          created_at: string
+          description: string | null
+          features: Json | null
+          id: string
+          is_active: boolean | null
+          max_leads: number
+          max_messages: number
+          max_users: number
+          monthly_price: number
+          name: string
+          setup_fee: number
+          updated_at: string
+        }
+        Insert: {
+          annual_price?: number | null
+          company_id?: string | null
+          created_at?: string
+          description?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_leads?: number
+          max_messages?: number
+          max_users?: number
+          monthly_price?: number
+          name: string
+          setup_fee?: number
+          updated_at?: string
+        }
+        Update: {
+          annual_price?: number | null
+          company_id?: string | null
+          created_at?: string
+          description?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_leads?: number
+          max_messages?: number
+          max_users?: number
+          monthly_price?: number
+          name?: string
+          setup_fee?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_plans_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_transactions: {
+        Row: {
+          amount: number
+          company_id: string
+          created_at: string
+          created_by: string | null
+          external_transaction_id: string | null
+          id: string
+          invoice_id: string | null
+          master_company_id: string | null
+          notes: string | null
+          payment_date: string
+          payment_method: string | null
+          receipt_url: string | null
+          status: string
+          subscription_id: string | null
+          type: string
+        }
+        Insert: {
+          amount: number
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          external_transaction_id?: string | null
+          id?: string
+          invoice_id?: string | null
+          master_company_id?: string | null
+          notes?: string | null
+          payment_date?: string
+          payment_method?: string | null
+          receipt_url?: string | null
+          status?: string
+          subscription_id?: string | null
+          type?: string
+        }
+        Update: {
+          amount?: number
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          external_transaction_id?: string | null
+          id?: string
+          invoice_id?: string | null
+          master_company_id?: string | null
+          notes?: string | null
+          payment_date?: string
+          payment_method?: string | null
+          receipt_url?: string | null
+          status?: string
+          subscription_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_transactions_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "billing_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_transactions_master_company_id_fkey"
+            columns: ["master_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_transactions_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "company_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blocked_groups: {
         Row: {
           blocked_at: string
@@ -496,6 +717,88 @@ export type Database = {
           {
             foreignKeyName: "companies_parent_company_id_fkey"
             columns: ["parent_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_subscriptions: {
+        Row: {
+          billing_cycle: string
+          billing_plan_id: string | null
+          company_id: string
+          created_at: string
+          external_customer_id: string | null
+          external_subscription_id: string | null
+          id: string
+          master_company_id: string | null
+          monthly_value: number
+          next_billing_date: string | null
+          notes: string | null
+          payment_method: string | null
+          setup_fee_paid: boolean | null
+          setup_fee_value: number | null
+          start_date: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          billing_cycle?: string
+          billing_plan_id?: string | null
+          company_id: string
+          created_at?: string
+          external_customer_id?: string | null
+          external_subscription_id?: string | null
+          id?: string
+          master_company_id?: string | null
+          monthly_value?: number
+          next_billing_date?: string | null
+          notes?: string | null
+          payment_method?: string | null
+          setup_fee_paid?: boolean | null
+          setup_fee_value?: number | null
+          start_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          billing_cycle?: string
+          billing_plan_id?: string | null
+          company_id?: string
+          created_at?: string
+          external_customer_id?: string | null
+          external_subscription_id?: string | null
+          id?: string
+          master_company_id?: string | null
+          monthly_value?: number
+          next_billing_date?: string | null
+          notes?: string | null
+          payment_method?: string | null
+          setup_fee_paid?: boolean | null
+          setup_fee_value?: number | null
+          start_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_subscriptions_billing_plan_id_fkey"
+            columns: ["billing_plan_id"]
+            isOneToOne: false
+            referencedRelation: "billing_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_subscriptions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_subscriptions_master_company_id_fkey"
+            columns: ["master_company_id"]
             isOneToOne: false
             referencedRelation: "companies"
             referencedColumns: ["id"]
