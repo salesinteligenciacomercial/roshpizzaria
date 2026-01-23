@@ -637,6 +637,41 @@ export type Database = {
           },
         ]
       }
+      categorias_produtos: {
+        Row: {
+          categoria_pai: string | null
+          company_id: string
+          created_at: string
+          id: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          categoria_pai?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          categoria_pai?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categorias_produtos_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           allow_ai_features: boolean | null

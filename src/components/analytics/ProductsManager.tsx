@@ -102,45 +102,83 @@ export default function ProductsManager({
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("produtos_servicos")
-        .select("*")
-        .eq("company_id", companyId)
-        .order("nome");
+      // Fetch products and categories in parallel
+      const [productsRes, categoriesRes] = await Promise.all([
+        supabase
+          .from("produtos_servicos")
+          .select("*")
+          .eq("company_id", companyId)
+          .order("nome"),
+        supabase
+          .from("categorias_produtos")
+          .select("*")
+          .eq("company_id", companyId)
+          .order("nome")
+      ]);
 
-      if (error) throw error;
+      if (productsRes.error) throw productsRes.error;
+      if (categoriesRes.error) throw categoriesRes.error;
 
-      setProducts(data || []);
+      setProducts(productsRes.data || []);
 
-      // Extract unique categories with counts and subcategories
-      const categoryMap = new Map<string, { count: number; subcategories: Map<string, number> }>();
-      (data || []).forEach(p => {
+      // Build categories from saved categories table + product usage counts
+      const savedCategories = categoriesRes.data || [];
+      
+      // Count products per category/subcategory
+      const productCounts = new Map<string, { count: number; subcounts: Map<string, number> }>();
+      (productsRes.data || []).forEach(p => {
         if (p.categoria) {
-          if (!categoryMap.has(p.categoria)) {
-            categoryMap.set(p.categoria, { count: 0, subcategories: new Map() });
+          if (!productCounts.has(p.categoria)) {
+            productCounts.set(p.categoria, { count: 0, subcounts: new Map() });
           }
-          const catData = categoryMap.get(p.categoria)!;
+          const catData = productCounts.get(p.categoria)!;
           catData.count++;
           
           if (p.subcategoria) {
-            catData.subcategories.set(
+            catData.subcounts.set(
               p.subcategoria,
-              (catData.subcategories.get(p.subcategoria) || 0) + 1
+              (catData.subcounts.get(p.subcategoria) || 0) + 1
             );
           }
         }
       });
 
-      const cats: Category[] = Array.from(categoryMap.entries()).map(([nome, data]) => ({
-        nome,
-        count: data.count,
-        subcategorias: Array.from(data.subcategories.entries()).map(([subNome, subCount]) => ({
-          nome: subNome,
-          count: subCount,
-          parentCategory: nome
-        })).sort((a, b) => a.nome.localeCompare(b.nome))
-      })).sort((a, b) => a.nome.localeCompare(b.nome));
+      // Build categories list from saved categories
+      const categoryMap = new Map<string, Category>();
+      
+      // First pass: create all parent categories
+      savedCategories
+        .filter(c => !c.categoria_pai)
+        .forEach(c => {
+          const counts = productCounts.get(c.nome);
+          categoryMap.set(c.nome, {
+            nome: c.nome,
+            count: counts?.count || 0,
+            subcategorias: []
+          });
+        });
 
+      // Second pass: add subcategories to their parents
+      savedCategories
+        .filter(c => c.categoria_pai)
+        .forEach(c => {
+          const parent = categoryMap.get(c.categoria_pai!);
+          if (parent) {
+            const subcount = productCounts.get(c.categoria_pai!)?.subcounts.get(c.nome) || 0;
+            parent.subcategorias.push({
+              nome: c.nome,
+              count: subcount,
+              parentCategory: c.categoria_pai!
+            });
+          }
+        });
+
+      // Sort subcategories
+      categoryMap.forEach(cat => {
+        cat.subcategorias.sort((a, b) => a.nome.localeCompare(b.nome));
+      });
+
+      const cats = Array.from(categoryMap.values()).sort((a, b) => a.nome.localeCompare(b.nome));
       setCategories(cats);
     } catch (error) {
       console.error("[ProductsManager] Error:", error);
@@ -281,16 +319,31 @@ export default function ProductsManager({
     }
 
     if (editingCategory) {
-      // Rename category in all products
+      // Rename category in all products and categories table
       setSaving(true);
       try {
-        const { error } = await supabase
+        // Update products
+        await supabase
           .from("produtos_servicos")
           .update({ categoria: categoryName.trim() })
           .eq("company_id", companyId)
           .eq("categoria", editingCategory);
 
-        if (error) throw error;
+        // Update categories table
+        await supabase
+          .from("categorias_produtos")
+          .update({ nome: categoryName.trim() })
+          .eq("company_id", companyId)
+          .eq("nome", editingCategory)
+          .is("categoria_pai", null);
+
+        // Update subcategories parent reference
+        await supabase
+          .from("categorias_produtos")
+          .update({ categoria_pai: categoryName.trim() })
+          .eq("company_id", companyId)
+          .eq("categoria_pai", editingCategory);
+
         toast.success("Categoria renomeada!");
         setCategoryDialogOpen(false);
         fetchData();
@@ -302,21 +355,43 @@ export default function ProductsManager({
         setSaving(false);
       }
     } else {
-      // New category - add to local list and set in product form
+      // New category - save to database
       const newCategoryName = categoryName.trim();
+      setSaving(true);
       
-      // Add to categories list if not exists
-      if (!categories.some(c => c.nome === newCategoryName)) {
-        setCategories([...categories, { nome: newCategoryName, count: 0, subcategorias: [] }]);
+      try {
+        const { error } = await supabase
+          .from("categorias_produtos")
+          .insert({
+            company_id: companyId,
+            nome: newCategoryName,
+            categoria_pai: null
+          });
+
+        if (error) {
+          if (error.code === '23505') {
+            toast.error("Categoria já existe");
+          } else {
+            throw error;
+          }
+        } else {
+          // Add to local state
+          setCategories([...categories, { nome: newCategoryName, count: 0, subcategorias: [] }]);
+          
+          // Set in product form if dialog is open
+          if (productDialogOpen) {
+            setProductForm({ ...productForm, categoria: newCategoryName, subcategoria: "" });
+          }
+          
+          toast.success(`Categoria "${newCategoryName}" criada!`);
+        }
+        setCategoryDialogOpen(false);
+      } catch (error) {
+        console.error("[ProductsManager] Error creating category:", error);
+        toast.error("Erro ao criar categoria");
+      } finally {
+        setSaving(false);
       }
-      
-      // Set in product form if dialog is open
-      if (productDialogOpen) {
-        setProductForm({ ...productForm, categoria: newCategoryName, subcategoria: "" });
-      }
-      
-      toast.success(`Categoria "${newCategoryName}" criada!`);
-      setCategoryDialogOpen(false);
     }
   };
 
@@ -338,33 +413,52 @@ export default function ProductsManager({
     }
 
     const newSubcategoryName = subcategoryName.trim();
-    
-    // Add to local categories list
-    setCategories(categories.map(cat => {
-      if (cat.nome === subcategoryParent) {
-        // Check if subcategory already exists
-        if (cat.subcategorias.some(s => s.nome === newSubcategoryName)) {
+    setSaving(true);
+
+    try {
+      const { error } = await supabase
+        .from("categorias_produtos")
+        .insert({
+          company_id: companyId,
+          nome: newSubcategoryName,
+          categoria_pai: subcategoryParent
+        });
+
+      if (error) {
+        if (error.code === '23505') {
           toast.error("Subcategoria já existe");
-          return cat;
+        } else {
+          throw error;
         }
-        return {
-          ...cat,
-          subcategorias: [
-            ...cat.subcategorias,
-            { nome: newSubcategoryName, count: 0, parentCategory: subcategoryParent }
-          ].sort((a, b) => a.nome.localeCompare(b.nome))
-        };
+      } else {
+        // Add to local categories list
+        setCategories(categories.map(cat => {
+          if (cat.nome === subcategoryParent) {
+            return {
+              ...cat,
+              subcategorias: [
+                ...cat.subcategorias,
+                { nome: newSubcategoryName, count: 0, parentCategory: subcategoryParent }
+              ].sort((a, b) => a.nome.localeCompare(b.nome))
+            };
+          }
+          return cat;
+        }));
+        
+        // Set in product form if dialog is open
+        if (productDialogOpen && productForm.categoria === subcategoryParent) {
+          setProductForm({ ...productForm, subcategoria: newSubcategoryName });
+        }
+        
+        toast.success(`Subcategoria "${newSubcategoryName}" criada!`);
       }
-      return cat;
-    }));
-    
-    // Set in product form if dialog is open
-    if (productDialogOpen && productForm.categoria === subcategoryParent) {
-      setProductForm({ ...productForm, subcategoria: newSubcategoryName });
+      setSubcategoryDialogOpen(false);
+    } catch (error) {
+      console.error("[ProductsManager] Error creating subcategory:", error);
+      toast.error("Erro ao criar subcategoria");
+    } finally {
+      setSaving(false);
     }
-    
-    toast.success(`Subcategoria "${newSubcategoryName}" criada!`);
-    setSubcategoryDialogOpen(false);
   };
 
   const formatCurrency = (value: number | null) => {
