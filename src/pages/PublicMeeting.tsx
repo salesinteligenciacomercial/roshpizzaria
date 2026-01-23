@@ -445,39 +445,49 @@ const PublicMeeting = () => {
       // Wait for subscription to be ready
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Check for any pending offers from guests
-      const { data: pendingOffers } = await supabase
-        .from('meeting_signals')
-        .select('*')
-        .eq('meeting_id', meetingId!)
-        .eq('signal_type', 'offer')
-        .order('created_at', { ascending: true });
-      
-      if (pendingOffers && pendingOffers.length > 0) {
-        console.log('Found pending offer from guest');
-        const offer = pendingOffers[0];
-        const signalData = offer.signal_data as any;
-        try {
-          await pc.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
-          hasRemoteDescriptionRef.current = true;
-          await processIceCandidateQueue();
-          
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          
-          await supabase.from('meeting_signals').insert([{
-            meeting_id: meetingId!,
-            from_user: 'host',
-            to_user: offer.from_user,
-            signal_type: 'answer',
-            signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
-          }]);
-          console.log('Host sent answer to pending guest');
-          setWaitingForGuests(false);
-        } catch (error) {
-          console.error('Error processing pending offer:', error);
+      // Function to check and process pending offers
+      const checkAndProcessOffers = async () => {
+        if (hasRemoteDescriptionRef.current) return; // Already connected
+        
+        const { data: pendingOffers } = await supabase
+          .from('meeting_signals')
+          .select('*')
+          .eq('meeting_id', meetingId!)
+          .eq('signal_type', 'offer')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (pendingOffers && pendingOffers.length > 0 && !hasRemoteDescriptionRef.current) {
+          console.log('[Host] Found pending offer from guest');
+          const offer = pendingOffers[0];
+          const signalData = offer.signal_data as any;
+          try {
+            if (pc.signalingState !== 'have-remote-offer' && pc.signalingState !== 'stable' || !hasRemoteDescriptionRef.current) {
+              await pc.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
+              hasRemoteDescriptionRef.current = true;
+              await processIceCandidateQueue();
+              
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              
+              await supabase.from('meeting_signals').insert([{
+                meeting_id: meetingId!,
+                from_user: 'host',
+                to_user: offer.from_user,
+                signal_type: 'answer',
+                signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
+              }]);
+              console.log('[Host] Sent answer to pending guest offer');
+              setWaitingForGuests(false);
+            }
+          } catch (error) {
+            console.error('[Host] Error processing pending offer:', error);
+          }
         }
-      }
+      };
+      
+      // Check for pending offers immediately
+      await checkAndProcessOffers();
       
       // Also check for pending guest-joined signals
       const { data: pendingJoins } = await supabase
@@ -501,6 +511,32 @@ const PublicMeeting = () => {
       } else {
         setWaitingForGuests(true);
       }
+      
+      // Continuous polling for offers every 2 seconds (backup for realtime)
+      const offerPollInterval = setInterval(async () => {
+        if (hasRemoteDescriptionRef.current) {
+          clearInterval(offerPollInterval);
+          return;
+        }
+        await checkAndProcessOffers();
+      }, 2000);
+      
+      // Store interval for cleanup - attach to pollIntervalRef
+      const existingPollCleanup = pollIntervalRef.current;
+      pollIntervalRef.current = setInterval(() => {
+        // This is a no-op interval just to trigger cleanup
+      }, 60000);
+      
+      // Override cleanup to include offer polling
+      const originalChannel = channelRef.current;
+      channelRef.current = {
+        ...originalChannel,
+        unsubscribe: () => {
+          clearInterval(offerPollInterval);
+          if (existingPollCleanup) clearInterval(existingPollCleanup);
+          return originalChannel?.unsubscribe();
+        },
+      } as any;
       
       setIsConnecting(false);
       toast.success('Sala iniciada! Aguardando participantes...');
