@@ -13,6 +13,7 @@ import { MeetingScriptPanel, MeetingScript } from '@/components/meetings/Meeting
 import { SelectMeetingScriptDialog } from '@/components/meetings/SelectMeetingScriptDialog';
 import { CameraFiltersPanel } from '@/components/meetings/CameraFiltersPanel';
 import { useCameraFilters } from '@/hooks/useCameraFilters';
+import { useBackgroundBlur } from '@/hooks/useBackgroundBlur';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -137,6 +138,20 @@ const PublicMeeting = () => {
     resetFilters: resetCameraFilters,
     getFilterStyle,
   } = useCameraFilters();
+
+  // Background blur
+  const {
+    isBlurEnabled,
+    isModelLoading: isBlurLoading,
+    options: blurOptions,
+    toggleBlur,
+    updateOptions: updateBlurOptions,
+    startProcessing: startBlurProcessing,
+    stopProcessing: stopBlurProcessing,
+  } = useBackgroundBlur();
+
+  // Canvas ref for background blur
+  const blurCanvasRef = useRef<HTMLCanvasElement>(null);
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -158,6 +173,15 @@ const PublicMeeting = () => {
   const guestIdRef = useRef<string>(`guest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
   const processedGuestJoinsRef = useRef<Set<string>>(new Set());
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ========== BACKGROUND BLUR PROCESSING ==========
+  useEffect(() => {
+    if (isBlurEnabled && localStream && localVideoRef.current && blurCanvasRef.current) {
+      startBlurProcessing(localVideoRef.current, blurCanvasRef.current);
+    } else {
+      stopBlurProcessing();
+    }
+  }, [isBlurEnabled, localStream, startBlurProcessing, stopBlurProcessing]);
 
   // Check if meeting exists and if current user is host
   useEffect(() => {
@@ -1251,14 +1275,35 @@ const PublicMeeting = () => {
         )}
 
         <div className="absolute bottom-4 right-4 w-48 h-36 rounded-lg overflow-hidden shadow-lg border border-border bg-background">
+          {/* Hidden video for blur processing */}
           <video
             ref={localVideoRef}
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover"
-            style={getFilterStyle()}
+            className={isBlurEnabled ? 'hidden' : 'w-full h-full object-cover'}
+            style={!isBlurEnabled ? getFilterStyle() : undefined}
           />
+          
+          {/* Canvas for blur effect */}
+          {isBlurEnabled && (
+            <canvas
+              ref={blurCanvasRef}
+              className="w-full h-full object-cover"
+              style={getFilterStyle()}
+            />
+          )}
+          
+          {/* Blur loading indicator */}
+          {isBlurLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
+              <div className="text-center">
+                <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-1" />
+                <span className="text-[10px] text-muted-foreground">Carregando IA...</span>
+              </div>
+            </div>
+          )}
+          
           {!isVideoEnabled && (
             <div className="absolute inset-0 flex items-center justify-center bg-muted">
               <VideoOff className="h-8 w-8 text-muted-foreground" />
@@ -1294,6 +1339,11 @@ const PublicMeeting = () => {
           onUpdateFilter={updateCameraFilter}
           onApplyPreset={applyCameraPreset}
           onReset={resetCameraFilters}
+          isBlurEnabled={isBlurEnabled}
+          isBlurLoading={isBlurLoading}
+          blurOptions={blurOptions}
+          onToggleBlur={toggleBlur}
+          onUpdateBlurOptions={updateBlurOptions}
         />
 
         <Button

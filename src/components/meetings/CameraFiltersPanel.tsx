@@ -12,10 +12,12 @@ import {
   Palette, 
   Sparkles,
   FlipHorizontal2,
-  RotateCcw
+  RotateCcw,
+  User,
+  Loader2
 } from 'lucide-react';
-import { useCameraFilters, CameraFilters, CAMERA_PRESETS } from '@/hooks/useCameraFilters';
-import { cn } from '@/lib/utils';
+import { CameraFilters, CAMERA_PRESETS } from '@/hooks/useCameraFilters';
+import { BackgroundBlurOptions } from '@/hooks/useBackgroundBlur';
 
 interface CameraFiltersPanelProps {
   filters: CameraFilters;
@@ -23,7 +25,12 @@ interface CameraFiltersPanelProps {
   onUpdateFilter: (key: keyof CameraFilters, value: number | boolean) => void;
   onApplyPreset: (presetName: string) => void;
   onReset: () => void;
-  videoRef?: React.RefObject<HTMLVideoElement>;
+  // Background blur props
+  isBlurEnabled?: boolean;
+  isBlurLoading?: boolean;
+  blurOptions?: BackgroundBlurOptions;
+  onToggleBlur?: () => void;
+  onUpdateBlurOptions?: (options: Partial<BackgroundBlurOptions>) => void;
 }
 
 export function CameraFiltersPanel({
@@ -32,6 +39,11 @@ export function CameraFiltersPanel({
   onUpdateFilter,
   onApplyPreset,
   onReset,
+  isBlurEnabled = false,
+  isBlurLoading = false,
+  blurOptions,
+  onToggleBlur,
+  onUpdateBlurOptions,
 }: CameraFiltersPanelProps) {
   return (
     <Popover>
@@ -46,7 +58,7 @@ export function CameraFiltersPanel({
         </Button>
       </PopoverTrigger>
       <PopoverContent 
-        className="w-80 p-4" 
+        className="w-80 p-4 max-h-[70vh] overflow-y-auto" 
         side="top" 
         align="center"
         sideOffset={16}
@@ -64,6 +76,75 @@ export function CameraFiltersPanel({
               Resetar
             </Button>
           </div>
+
+          {/* Background Blur - Featured at top */}
+          {onToggleBlur && (
+            <>
+              <div className="p-3 rounded-lg bg-muted/50 border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm flex items-center gap-2 font-medium">
+                    <User className="h-4 w-4" />
+                    Desfoque de Fundo
+                    {isBlurLoading && (
+                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                    )}
+                  </Label>
+                  <Switch
+                    checked={isBlurEnabled}
+                    onCheckedChange={onToggleBlur}
+                    disabled={isBlurLoading}
+                  />
+                </div>
+                
+                {isBlurEnabled && blurOptions && onUpdateBlurOptions && (
+                  <div className="space-y-3 pt-2">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">
+                          Intensidade do desfoque
+                        </Label>
+                        <span className="text-xs text-muted-foreground">
+                          {blurOptions.blurAmount}px
+                        </span>
+                      </div>
+                      <Slider
+                        value={[blurOptions.blurAmount]}
+                        onValueChange={([value]) => onUpdateBlurOptions({ blurAmount: value })}
+                        min={3}
+                        max={20}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">
+                          Suavização de bordas
+                        </Label>
+                        <span className="text-xs text-muted-foreground">
+                          {blurOptions.edgeBlurAmount}px
+                        </span>
+                      </div>
+                      <Slider
+                        value={[blurOptions.edgeBlurAmount]}
+                        onValueChange={([value]) => onUpdateBlurOptions({ edgeBlurAmount: value })}
+                        min={0}
+                        max={10}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                <p className="text-[10px] text-muted-foreground">
+                  Usa IA para desfocar o fundo e destacar você
+                </p>
+              </div>
+              <Separator />
+            </>
+          )}
 
           {/* Presets */}
           <div className="space-y-2">
@@ -189,26 +270,5 @@ export function CameraFiltersPanel({
         </div>
       </PopoverContent>
     </Popover>
-  );
-}
-
-// Standalone button component for simpler integration
-export function CameraFiltersButton() {
-  const {
-    filters,
-    activePreset,
-    updateFilter,
-    applyPreset,
-    resetFilters,
-  } = useCameraFilters();
-
-  return (
-    <CameraFiltersPanel
-      filters={filters}
-      activePreset={activePreset}
-      onUpdateFilter={updateFilter}
-      onApplyPreset={applyPreset}
-      onReset={resetFilters}
-    />
   );
 }

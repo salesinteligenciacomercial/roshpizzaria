@@ -21,6 +21,7 @@ import { MeetingScriptPanel, MeetingScript } from './MeetingScriptPanel';
 import { SelectMeetingScriptDialog } from './SelectMeetingScriptDialog';
 import { CameraFiltersPanel } from './CameraFiltersPanel';
 import { useCameraFilters } from '@/hooks/useCameraFilters';
+import { useBackgroundBlur } from '@/hooks/useBackgroundBlur';
 
 interface VideoCallModalV2Props {
   open: boolean;
@@ -123,6 +124,20 @@ export const VideoCallModalV2 = ({
     resetFilters: resetCameraFilters,
     getFilterStyle,
   } = useCameraFilters();
+
+  // Background blur
+  const {
+    isBlurEnabled,
+    isModelLoading: isBlurLoading,
+    options: blurOptions,
+    toggleBlur,
+    updateOptions: updateBlurOptions,
+    startProcessing: startBlurProcessing,
+    stopProcessing: stopBlurProcessing,
+  } = useBackgroundBlur();
+
+  // Canvas ref for background blur
+  const blurCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Local video position state (for dragging camera PiP)
   type PipPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
@@ -251,6 +266,15 @@ export const VideoCallModalV2 = ({
   const screenVideoRef = useRef<HTMLVideoElement>(null);
   const remotePipVideoRef = useRef<HTMLVideoElement>(null);
   const localPipVideoRef = useRef<HTMLVideoElement>(null);
+
+  // ========== BACKGROUND BLUR PROCESSING ==========
+  useEffect(() => {
+    if (isBlurEnabled && localStream && localVideoRef.current && blurCanvasRef.current) {
+      startBlurProcessing(localVideoRef.current, blurCanvasRef.current);
+    } else {
+      stopBlurProcessing();
+    }
+  }, [isBlurEnabled, localStream, startBlurProcessing, stopBlurProcessing]);
 
   // ========== SET LOCAL VIDEO (Camera only) ==========
   useEffect(() => {
@@ -1106,19 +1130,39 @@ export const VideoCallModalV2 = ({
                 onMouseDown={handlePipMouseDown}
                 title="Arraste para mover a câmera"
               >
+                {/* Hidden video for blur processing */}
                 <video
                   ref={localVideoRef}
                   autoPlay
                   playsInline
                   muted
-                  className="w-full h-full object-cover pointer-events-none"
-                  style={getFilterStyle()}
+                  className={isBlurEnabled ? 'hidden' : 'w-full h-full object-cover pointer-events-none'}
+                  style={!isBlurEnabled ? getFilterStyle() : undefined}
                 />
+                
+                {/* Canvas for blur effect */}
+                {isBlurEnabled && (
+                  <canvas
+                    ref={blurCanvasRef}
+                    className="w-full h-full object-cover pointer-events-none"
+                    style={getFilterStyle()}
+                  />
+                )}
                 
                 {/* Loading state for local video */}
                 {!localVideoReady && localStream && (
                   <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                )}
+                
+                {/* Blur loading indicator */}
+                {isBlurLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
+                    <div className="text-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-1" />
+                      <span className="text-[10px] text-muted-foreground">Carregando IA...</span>
+                    </div>
                   </div>
                 )}
                 
@@ -1164,6 +1208,11 @@ export const VideoCallModalV2 = ({
             onUpdateFilter={updateCameraFilter}
             onApplyPreset={applyCameraPreset}
             onReset={resetCameraFilters}
+            isBlurEnabled={isBlurEnabled}
+            isBlurLoading={isBlurLoading}
+            blurOptions={blurOptions}
+            onToggleBlur={toggleBlur}
+            onUpdateBlurOptions={updateBlurOptions}
           />
 
           <Button
