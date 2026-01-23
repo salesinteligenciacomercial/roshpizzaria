@@ -11,6 +11,8 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MeetingScriptPanel, MeetingScript } from '@/components/meetings/MeetingScriptPanel';
 import { SelectMeetingScriptDialog } from '@/components/meetings/SelectMeetingScriptDialog';
+import { CameraFiltersPanel } from '@/components/meetings/CameraFiltersPanel';
+import { useCameraFilters } from '@/hooks/useCameraFilters';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -125,6 +127,16 @@ const PublicMeeting = () => {
   // Script state
   const [showScriptDialog, setShowScriptDialog] = useState(false);
   const [activeScript, setActiveScript] = useState<MeetingScript | null>(null);
+  
+  // Camera filters
+  const {
+    filters: cameraFilters,
+    activePreset: cameraPreset,
+    updateFilter: updateCameraFilter,
+    applyPreset: applyCameraPreset,
+    resetFilters: resetCameraFilters,
+    getFilterStyle,
+  } = useCameraFilters();
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -1245,6 +1257,7 @@ const PublicMeeting = () => {
             playsInline
             muted
             className="w-full h-full object-cover"
+            style={getFilterStyle()}
           />
           {!isVideoEnabled && (
             <div className="absolute inset-0 flex items-center justify-center bg-muted">
@@ -1273,6 +1286,15 @@ const PublicMeeting = () => {
         >
           {isVideoEnabled ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
         </Button>
+
+        {/* Camera Filters */}
+        <CameraFiltersPanel
+          filters={cameraFilters}
+          activePreset={cameraPreset}
+          onUpdateFilter={updateCameraFilter}
+          onApplyPreset={applyCameraPreset}
+          onReset={resetCameraFilters}
+        />
 
         <Button
           variant={isScreenSharing ? 'default' : 'secondary'}

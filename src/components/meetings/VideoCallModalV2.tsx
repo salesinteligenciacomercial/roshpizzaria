@@ -19,6 +19,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { MeetingScriptPanel, MeetingScript } from './MeetingScriptPanel';
 import { SelectMeetingScriptDialog } from './SelectMeetingScriptDialog';
+import { CameraFiltersPanel } from './CameraFiltersPanel';
+import { useCameraFilters } from '@/hooks/useCameraFilters';
 
 interface VideoCallModalV2Props {
   open: boolean;
@@ -111,6 +113,16 @@ export const VideoCallModalV2 = ({
   const [showScriptSelector, setShowScriptSelector] = useState(false);
   const [activeScript, setActiveScript] = useState<MeetingScript | null>(null);
   const [showScriptPanel, setShowScriptPanel] = useState(false);
+
+  // Camera filters
+  const {
+    filters: cameraFilters,
+    activePreset: cameraPreset,
+    updateFilter: updateCameraFilter,
+    applyPreset: applyCameraPreset,
+    resetFilters: resetCameraFilters,
+    getFilterStyle,
+  } = useCameraFilters();
 
   // Local video position state (for dragging camera PiP)
   type PipPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
@@ -1041,7 +1053,7 @@ export const VideoCallModalV2 = ({
                     playsInline
                     muted
                     className="w-full h-full object-cover"
-                    style={{ transform: 'scaleX(-1)' }}
+                    style={getFilterStyle()}
                   />
                   {(!localStream || !isVideoEnabled) && (
                     <div className="absolute inset-0 flex items-center justify-center bg-muted">
@@ -1100,7 +1112,7 @@ export const VideoCallModalV2 = ({
                   playsInline
                   muted
                   className="w-full h-full object-cover pointer-events-none"
-                  style={{ transform: 'scaleX(-1)' }}
+                  style={getFilterStyle()}
                 />
                 
                 {/* Loading state for local video */}
@@ -1144,6 +1156,15 @@ export const VideoCallModalV2 = ({
           >
             {isVideoEnabled ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
           </Button>
+
+          {/* Camera Filters */}
+          <CameraFiltersPanel
+            filters={cameraFilters}
+            activePreset={cameraPreset}
+            onUpdateFilter={updateCameraFilter}
+            onApplyPreset={applyCameraPreset}
+            onReset={resetCameraFilters}
+          />
 
           <Button
             variant={isScreenSharing ? 'default' : 'secondary'}
