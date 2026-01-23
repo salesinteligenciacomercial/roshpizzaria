@@ -425,53 +425,66 @@ export default function ProductsManager({
                 <FolderOpen className="h-4 w-4 mr-1" />
                 Nova Categoria
               </Button>
+              {categories.length > 0 && (
+                <div className="flex items-center gap-1">
+                  <Select
+                    value={subcategoryParent || ""}
+                    onValueChange={(value) => {
+                      setSubcategoryParent(value);
+                      setSubcategoryName("");
+                      setSubcategoryDialogOpen(true);
+                    }}
+                  >
+                    <SelectTrigger className="w-auto h-9 gap-1">
+                      <PlusCircle className="h-4 w-4" />
+                      <span>+ Subcategoria</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map(cat => (
+                        <SelectItem key={cat.nome} value={cat.nome}>
+                          {cat.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
-            {/* Categories Section - Moved to top for visibility */}
+            {/* Categories Section */}
             {categories.length > 0 && (
               <div className="border rounded-lg p-3 bg-muted/30">
                 <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
                   <FolderOpen className="h-4 w-4 text-primary" />
                   Categorias ({categories.length})
                 </h4>
-                <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
                   {categories.map(cat => (
-                    <div key={cat.nome} className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge
-                          variant="secondary"
-                          className="cursor-pointer hover:bg-primary/20 py-1 px-2"
-                          onClick={() => handleOpenCategoryDialog(cat.nome)}
-                        >
-                          <Pencil className="h-3 w-3 mr-1" />
-                          {cat.nome}
-                          <span className="ml-1 text-xs bg-background/50 rounded px-1">
-                            {cat.count}
-                          </span>
-                        </Badge>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleOpenSubcategoryDialog(cat.nome)}
-                          className="h-6 text-xs gap-1 px-2"
-                        >
-                          <PlusCircle className="h-3 w-3" />
-                          + Subcategoria
-                        </Button>
-                        {cat.subcategorias.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {cat.subcategorias.map(sub => (
-                              <Badge
-                                key={sub.nome}
-                                variant="outline"
-                                className="text-xs py-0.5 px-2"
-                              >
-                                └ {sub.nome} ({sub.count})
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                    <div key={cat.nome} className="flex items-center gap-1 flex-wrap">
+                      <Badge
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-primary/20 py-1 px-2"
+                        onClick={() => handleOpenCategoryDialog(cat.nome)}
+                      >
+                        <Pencil className="h-3 w-3 mr-1" />
+                        {cat.nome}
+                        <span className="ml-1 text-xs bg-background/50 rounded px-1">
+                          {cat.count}
+                        </span>
+                      </Badge>
+                      {cat.subcategorias.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {cat.subcategorias.map(sub => (
+                            <Badge
+                              key={sub.nome}
+                              variant="outline"
+                              className="text-xs py-0.5 px-2"
+                            >
+                              └ {sub.nome} ({sub.count})
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
