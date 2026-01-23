@@ -571,17 +571,17 @@ export default function ProductsManager({
               </ScrollArea>
             )}
 
-            {/* Categories Section */}
+            {/* Categories Section - Always visible */}
             {categories.length > 0 && (
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                  <FolderOpen className="h-4 w-4" />
+              <div className="border rounded-lg p-4 bg-muted/30">
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <FolderOpen className="h-4 w-4 text-primary" />
                   Categorias ({categories.length})
                 </h4>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {categories.map(cat => (
                     <div key={cat.nome} className="space-y-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Badge
                           variant="secondary"
                           className="cursor-pointer hover:bg-primary/20 py-1.5 px-3"
@@ -594,17 +594,17 @@ export default function ProductsManager({
                           </span>
                         </Badge>
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
                           onClick={() => handleOpenSubcategoryDialog(cat.nome)}
-                          className="h-7 text-xs"
+                          className="h-7 text-xs gap-1"
                         >
-                          <PlusCircle className="h-3 w-3 mr-1" />
-                          Subcategoria
+                          <PlusCircle className="h-3 w-3" />
+                          + Subcategoria
                         </Button>
                       </div>
                       {cat.subcategorias.length > 0 && (
-                        <div className="flex flex-wrap gap-1 ml-4">
+                        <div className="flex flex-wrap gap-1 ml-4 mt-1">
                           {cat.subcategorias.map(sub => (
                             <Badge
                               key={sub.nome}
