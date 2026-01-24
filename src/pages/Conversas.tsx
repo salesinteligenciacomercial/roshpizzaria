@@ -39,6 +39,7 @@ import { HorarioComercial, criarHorarioPadrao } from "@/components/agenda/Horari
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { LeadAttachments } from "@/components/leads/LeadAttachments";
 import { ProdutoSelectorDialog } from "@/components/conversas/ProdutoSelectorDialog";
+import { VendasLeadPanel } from "@/components/conversas/VendasLeadPanel";
 import { formatPhoneNumber, safeFormatPhoneNumber, normalizePhoneForComparison } from "@/utils/phoneFormatter";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { getMediaUrl, MediaExpiredError } from "@/utils/mediaLoader";
@@ -8636,49 +8637,21 @@ function Conversas() {
                     }} triggerButton={<Button size="sm" variant="outline" className="w-full">
                                   <Pencil className="h-3 w-3 mr-2" /> Editar Informações
                                 </Button>} />
-                            {/* ✅ Botões de Valor e Produto lado a lado */}
-                            <div className="flex gap-2 mt-2">
-                              {/* Botão rápido para adicionar valor da venda */}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1 gap-1"
-                                onClick={() => {
-                                  setValorVendaInput(leadVinculado?.value?.toString() || "");
-                                  setValorVendaDialogOpen(true);
+                            {/* ✅ Painel de Vendas/Negociações */}
+                            <div className="mt-3">
+                              <VendasLeadPanel
+                                leadId={leadVinculado.id}
+                                leadName={leadVinculado.name || selectedConv?.contactName || "Cliente"}
+                                companyId={userCompanyId || ""}
+                                onVendaUpdated={() => {
+                                  // Atualizar lead se necessário
+                                  console.log("Venda atualizada para lead:", leadVinculado.id);
                                 }}
-                              >
-                                <DollarSign className="h-3 w-3 text-green-600" />
-                                {leadVinculado?.value 
-                                  ? `R$ ${Number(leadVinculado.value).toLocaleString("pt-BR")}` 
-                                  : "Valor"}
-                              </Button>
-                              
-                              {/* Botão para selecionar produto */}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1 gap-1 h-auto py-1.5"
-                                onClick={() => {
-                                  setProdutoDialogOpen(true);
-                                }}
-                              >
-                                <Package className="h-3 w-3 text-primary flex-shrink-0" />
-                                <div className="flex flex-col items-start min-w-0 flex-1">
-                                  <span className="text-xs font-medium truncate w-full text-left">
-                                    {leadVinculado?.produto_nome || (produtos.find(p => p.id === leadVinculado?.produto_id)?.nome) || "Produto"}
-                                  </span>
-                                  {(leadVinculado?.produto_categoria || leadVinculado?.produto_subcategoria) && (
-                                    <span className="text-[10px] text-muted-foreground truncate w-full text-left">
-                                      {[leadVinculado?.produto_categoria, leadVinculado?.produto_subcategoria].filter(Boolean).join(" → ")}
-                                    </span>
-                                  )}
-                                </div>
-                              </Button>
+                              />
                             </div>
                             
                             {/* Botões de Finalizar Negociação - Ganho/Perdido */}
-                            <div className="flex gap-2 mt-2">
+                            <div className="flex gap-2 mt-3">
                               <Button
                                 size="sm"
                                 variant="outline"
