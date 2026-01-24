@@ -40,6 +40,7 @@ import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { LeadAttachments } from "@/components/leads/LeadAttachments";
 import { formatPhoneNumber, safeFormatPhoneNumber, normalizePhoneForComparison } from "@/utils/phoneFormatter";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
+import { getMediaUrl, MediaExpiredError } from "@/utils/mediaLoader";
 import { useLeadsSync } from "@/hooks/useLeadsSync";
 import { useGlobalSync } from "@/hooks/useGlobalSync";
 import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
@@ -3961,8 +3962,23 @@ function Conversas() {
         duration: 2000
       });
 
+      // Resolver URL real do áudio (pode ser JSON de metadados)
+      let resolvedAudioUrl = audioUrl;
+      
+      // Verificar se é JSON de metadados (Evolution/Meta API)
+      try {
+        const parsed = JSON.parse(audioUrl);
+        if (parsed.url || parsed.media_id || parsed.messageId) {
+          console.log('🔄 [TRANSCRIBE] Resolvendo URL de mídia via mediaLoader...');
+          resolvedAudioUrl = await getMediaUrl(messageId, 'audio');
+          console.log('✅ [TRANSCRIBE] URL resolvida:', resolvedAudioUrl.substring(0, 60));
+        }
+      } catch {
+        // Não é JSON, usar URL direta
+      }
+
       // Baixar o áudio
-      const audioResponse = await fetch(audioUrl);
+      const audioResponse = await fetch(resolvedAudioUrl);
       if (!audioResponse.ok) {
         throw new Error(`Erro ao baixar áudio: ${audioResponse.statusText}`);
       }
@@ -4071,6 +4087,13 @@ function Conversas() {
       console.error('❌ [TRANSCRIBE] Erro ao transcrever áudio:', error);
       updateTranscriptionStatus(messageId, "error");
       clearTranscriptionPolling(messageId);
+      
+      // Verificar se é mídia expirada
+      if (error instanceof MediaExpiredError || error?.message === 'MEDIA_EXPIRED') {
+        toast.error("O áudio expirou e não pode mais ser transcrito. Mídias do WhatsApp expiram após alguns dias.");
+        return;
+      }
+      
       const errorMessage = error?.message || "Não foi possível transcrever o áudio";
       toast.error(`Erro ao transcrever: ${errorMessage}. Você pode tentar novamente.`);
     }
