@@ -637,6 +637,101 @@ function MessageItemComponent({
             </div>
           )}
           
+          {/* Document Message (Non-PDF: Excel, Word, etc.) */}
+          {message.type === "document" && !isPdfMessage(message) && (
+            <div className="space-y-2 min-w-[250px]">
+              {(() => {
+                const fileSizeMB = message.fileSize ? (message.fileSize / (1024 * 1024)).toFixed(1) : null;
+                const extension = message.fileName?.split('.').pop()?.toLowerCase() || '';
+                
+                // Ícone e cor baseado no tipo de arquivo
+                const getDocumentInfo = () => {
+                  // Planilhas
+                  if (['xlsx', 'xls', 'xlsm', 'xlsb', 'csv', 'ods'].includes(extension)) {
+                    return { icon: '📊', label: 'Planilha', color: 'text-green-600', bgColor: 'bg-green-50 dark:bg-green-950/20', borderColor: 'border-green-200 dark:border-green-800' };
+                  }
+                  // Word
+                  if (['doc', 'docx', 'odt', 'rtf'].includes(extension)) {
+                    return { icon: '📝', label: 'Documento Word', color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-950/20', borderColor: 'border-blue-200 dark:border-blue-800' };
+                  }
+                  // PowerPoint
+                  if (['ppt', 'pptx', 'odp'].includes(extension)) {
+                    return { icon: '📽️', label: 'Apresentação', color: 'text-orange-600', bgColor: 'bg-orange-50 dark:bg-orange-950/20', borderColor: 'border-orange-200 dark:border-orange-800' };
+                  }
+                  // Arquivos compactados
+                  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(extension)) {
+                    return { icon: '📦', label: 'Arquivo Compactado', color: 'text-purple-600', bgColor: 'bg-purple-50 dark:bg-purple-950/20', borderColor: 'border-purple-200 dark:border-purple-800' };
+                  }
+                  // Texto
+                  if (['txt', 'json', 'xml', 'md'].includes(extension)) {
+                    return { icon: '📄', label: 'Arquivo de Texto', color: 'text-gray-600', bgColor: 'bg-gray-50 dark:bg-gray-950/20', borderColor: 'border-gray-200 dark:border-gray-700' };
+                  }
+                  // Padrão
+                  return { icon: '📎', label: 'Documento', color: 'text-slate-600', bgColor: 'bg-slate-50 dark:bg-slate-950/20', borderColor: 'border-slate-200 dark:border-slate-700' };
+                };
+
+                const docInfo = getDocumentInfo();
+
+                if (mediaExpired) {
+                  return (
+                    <div className={`flex flex-col items-center justify-center p-6 ${docInfo.bgColor} rounded-lg border ${docInfo.borderColor}`}>
+                      <AlertCircle className="h-10 w-10 text-amber-500 mb-2" />
+                      <span className="text-sm text-amber-700 dark:text-amber-300 font-medium text-center">Documento expirado</span>
+                      <span className="text-xs text-amber-600 dark:text-amber-400 text-center mt-1">Mídias do WhatsApp expiram após alguns dias</span>
+                    </div>
+                  );
+                }
+
+                if (mediaLoading) {
+                  return (
+                    <div className={`flex flex-col items-center justify-center p-6 border-2 border-dashed ${docInfo.borderColor} rounded-lg ${docInfo.bgColor}`}>
+                      <span className="text-3xl mb-2">{docInfo.icon}</span>
+                      <Loader2 className={`h-5 w-5 animate-spin ${docInfo.color} mb-1`} />
+                      <span className="text-xs text-muted-foreground">Carregando documento...</span>
+                      {message.fileName && (
+                        <span className="text-xs text-muted-foreground mt-1 px-2 text-center truncate max-w-full">{message.fileName}</span>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-2">
+                    {/* Card do documento */}
+                    <div className={`flex flex-col items-center justify-center p-4 ${docInfo.bgColor} rounded-lg border ${docInfo.borderColor}`}>
+                      <span className="text-4xl mb-2">{docInfo.icon}</span>
+                      <span className={`text-sm ${docInfo.color} font-medium text-center`}>
+                        {docInfo.label}
+                      </span>
+                      {message.fileName && (
+                        <span className="text-xs text-muted-foreground mt-1 text-center px-2 truncate max-w-full">
+                          {message.fileName}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge variant="secondary" className="text-[10px] uppercase">{extension || 'DOC'}</Badge>
+                        {fileSizeMB && (
+                          <Badge variant="outline" className="text-[10px]">{fileSizeMB} MB</Badge>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Botão de download */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onDownload?.(mediaUrl || message.mediaUrl || '', message.fileName || `documento.${extension}`)}
+                      className="w-full"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Baixar {docInfo.label}
+                    </Button>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+          
           {/* Video Message */}
           {message.type === "video" && (
             <div className="space-y-2">
