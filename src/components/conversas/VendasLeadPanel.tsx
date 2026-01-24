@@ -142,6 +142,32 @@ export function VendasLeadPanel({
     carregarVendas();
   }, [leadId]);
 
+  // Função para calcular e atualizar o valor total do lead baseado nas vendas ganhas
+  const atualizarValorLead = async () => {
+    try {
+      const { data: todasVendas, error } = await supabase
+        .from("customer_sales")
+        .select("valor_final, status")
+        .eq("lead_id", leadId);
+
+      if (error) throw error;
+
+      const totalGanhoAtualizado = (todasVendas || [])
+        .filter(v => v.status === "ganho")
+        .reduce((sum, v) => sum + (v.valor_final || 0), 0);
+
+      await supabase
+        .from('leads')
+        .update({ 
+          value: totalGanhoAtualizado,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', leadId);
+    } catch (error) {
+      console.error("Erro ao atualizar valor do lead:", error);
+    }
+  };
+
   const handleFinalizarVenda = async () => {
     if (!finalizarVenda) return;
     
@@ -172,7 +198,7 @@ export function VendasLeadPanel({
       
       toast.success(action === 'ganho' ? "Venda registrada como ganha!" : "Negociação marcada como perdida");
       
-      // Atualizar status do lead se for ganho
+      // Atualizar status do lead e valor total se for ganho
       if (action === 'ganho') {
         await supabase
           .from('leads')
@@ -183,6 +209,9 @@ export function VendasLeadPanel({
           })
           .eq('id', leadId);
       }
+      
+      // Atualizar valor total do lead com base em todas as vendas ganhas
+      await atualizarValorLead();
       
       await carregarVendas();
       onVendaUpdated?.();
@@ -222,15 +251,15 @@ export function VendasLeadPanel({
   };
 
   const handleMarcarTodasGanho = async () => {
-    const vendasEmNegociacao = vendas.filter(v => v.status === 'em_negociacao' || !v.status);
-    if (vendasEmNegociacao.length === 0) {
+    const vendasEmNegociacaoLocal = vendas.filter(v => v.status === 'em_negociacao' || !v.status);
+    if (vendasEmNegociacaoLocal.length === 0) {
       toast.info("Não há negociações em andamento");
       return;
     }
     
     setFinalizando(true);
     try {
-      const ids = vendasEmNegociacao.map(v => v.id);
+      const ids = vendasEmNegociacaoLocal.map(v => v.id);
       
       const { error } = await supabase
         .from("customer_sales")
@@ -253,7 +282,10 @@ export function VendasLeadPanel({
         })
         .eq('id', leadId);
       
-      toast.success(`${vendasEmNegociacao.length} venda(s) marcada(s) como ganha(s)!`);
+      // Atualizar valor total do lead
+      await atualizarValorLead();
+      
+      toast.success(`${vendasEmNegociacaoLocal.length} venda(s) marcada(s) como ganha(s)!`);
       await carregarVendas();
       onVendaUpdated?.();
     } catch (error) {

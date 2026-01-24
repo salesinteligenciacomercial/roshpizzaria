@@ -114,6 +114,19 @@ export function PipelineFinanceiro({ userCompanyId, globalFilters }: PipelineFin
       const { data: leads, error } = await query;
       if (error) throw error;
 
+      // Buscar vendas da tabela customer_sales para valores mais precisos
+      let salesQuery = supabase
+        .from("customer_sales")
+        .select("lead_id, valor_final, status, finalized_at")
+        .eq("company_id", userCompanyId);
+
+      if (startDate) {
+        salesQuery = salesQuery.gte('created_at', startDate.toISOString());
+      }
+
+      const { data: sales } = await salesQuery;
+      const allSales = sales || [];
+
       const allLeads = leads || [];
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -121,8 +134,11 @@ export function PipelineFinanceiro({ userCompanyId, globalFilters }: PipelineFin
       // Leads ativos (não ganhos e não perdidos)
       const leadsAtivos = allLeads.filter(l => l.status !== 'ganho' && l.status !== 'perdido');
       
-      // Valor total no pipeline (leads ativos com valor)
-      const valorPipeline = leadsAtivos.reduce((sum, l) => sum + (Number(l.value) || 0), 0);
+      // Valor total no pipeline - usar vendas em negociação
+      const vendasEmNegociacao = allSales.filter(s => s.status === 'em_negociacao' || !s.status);
+      const valorPipelineFromSales = vendasEmNegociacao.reduce((sum, s) => sum + (Number(s.valor_final) || 0), 0);
+      const valorPipelineFromLeads = leadsAtivos.reduce((sum, l) => sum + (Number(l.value) || 0), 0);
+      const valorPipeline = valorPipelineFromSales > 0 ? valorPipelineFromSales : valorPipelineFromLeads;
       
       // Valor ponderado (valor × probabilidade)
       const valorPonderado = leadsAtivos.reduce((sum, l) => {
@@ -150,16 +166,24 @@ export function PipelineFinanceiro({ userCompanyId, globalFilters }: PipelineFin
       const proximosAFechar = leadsProximosAFechar.length;
       const valorProximosAFechar = leadsProximosAFechar.reduce((sum, l) => sum + (Number(l.value) || 0), 0);
 
-      // Vendas fechadas (status = ganho)
+      // Vendas fechadas - combinar leads.value (atualizado) + customer_sales ganhas
       const leadsGanhos = allLeads.filter(l => l.status === 'ganho');
-      const vendasFechadas = leadsGanhos.reduce((sum, l) => sum + (Number(l.value) || 0), 0);
+      const vendasGanhasFromSales = allSales.filter(s => s.status === 'ganho');
+      const valorVendasGanhas = vendasGanhasFromSales.reduce((sum, s) => sum + (Number(s.valor_final) || 0), 0);
+      const valorLeadsGanhos = leadsGanhos.reduce((sum, l) => sum + (Number(l.value) || 0), 0);
+      // Usar o maior valor entre as duas fontes (leads.value já deve estar sincronizado)
+      const vendasFechadas = Math.max(valorVendasGanhas, valorLeadsGanhos);
 
-      // Vendas perdidas
+      // Vendas perdidas - combinar ambas as fontes
       const leadsPerdidos = allLeads.filter(l => l.status === 'perdido');
-      const vendasPerdidas = leadsPerdidos.reduce((sum, l) => sum + (Number(l.value) || 0), 0);
+      const vendasPerdidasFromSales = allSales.filter(s => s.status === 'perdido');
+      const valorVendasPerdidas = vendasPerdidasFromSales.reduce((sum, s) => sum + (Number(s.valor_final) || 0), 0);
+      const valorLeadsPerdidos = leadsPerdidos.reduce((sum, l) => sum + (Number(l.value) || 0), 0);
+      const vendasPerdidas = Math.max(valorVendasPerdidas, valorLeadsPerdidos);
 
-      // Ticket médio
-      const ticketMedio = leadsGanhos.length > 0 ? vendasFechadas / leadsGanhos.length : 0;
+      // Ticket médio - baseado em vendas individuais quando disponível
+      const countVendasGanhas = vendasGanhasFromSales.length > 0 ? vendasGanhasFromSales.length : leadsGanhos.length;
+      const ticketMedio = countVendasGanhas > 0 ? vendasFechadas / countVendasGanhas : 0;
 
       // Taxa de conversão - CORRIGIDO: calcula sobre TODOS os leads, não só finalizados
       // Ganhos dividido pelo total de leads = taxa real de conversão
