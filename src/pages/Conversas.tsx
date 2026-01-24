@@ -395,6 +395,9 @@ function Conversas() {
     url: string;
     name?: string;
   } | null>(null);
+  // Estado para drag-and-drop de arquivos
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const dragCounterRef = useRef(0);
   // MELHORIA: Gerenciar status de transcrição por mensagem
   const [transcriptionStatuses, setTranscriptionStatuses] = useState<Record<string, "pending" | "processing" | "completed" | "error">>({});
   const transcriptionPollingRefs = useRef<Record<string, {
@@ -4728,6 +4731,74 @@ function Conversas() {
     }
   };
 
+  // 📁 DRAG-AND-DROP: Handlers para arrastar e soltar arquivos
+  const getFileType = (file: File): string => {
+    const mimeType = file.type.toLowerCase();
+    if (mimeType.startsWith('image/')) return 'image';
+    if (mimeType.startsWith('video/')) return 'video';
+    if (mimeType.startsWith('audio/')) return 'audio';
+    if (mimeType === 'application/pdf') return 'pdf';
+    return 'document';
+  };
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDraggingFile(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDraggingFile(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDraggingFile(false);
+
+    if (!selectedConv) {
+      toast.error("Selecione uma conversa primeiro");
+      return;
+    }
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    // Processar cada arquivo
+    for (const file of files) {
+      // Validar tamanho (máximo 20MB)
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error(`Arquivo "${file.name}" é muito grande. Máximo: 20MB`);
+        continue;
+      }
+
+      const fileType = getFileType(file);
+      console.log('📁 [DROP] Arquivo solto:', { name: file.name, type: fileType, size: file.size });
+      
+      try {
+        await handleSendMedia(file, '', fileType);
+        toast.success(`Arquivo "${file.name}" enviado!`);
+      } catch (err) {
+        console.error('❌ [DROP] Erro ao enviar arquivo:', err);
+        toast.error(`Erro ao enviar "${file.name}"`);
+      }
+    }
+  }, [selectedConv, handleSendMedia]);
+
   // ⚡ FUNÇÃO PARA CALCULAR STATUS BASEADO NA ÚLTIMA MENSAGEM
   const calculateConversationStatus = (messages: Message[]): "waiting" | "answered" | "resolved" => {
     if (!messages || messages.length === 0) return "waiting";
@@ -8068,7 +8139,29 @@ function Conversas() {
             </Dialog>
 
             {/* Container principal: mensagens + input - usa flex-1 para ocupar espaço restante */}
-            <div className="flex flex-1 min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
+            <div 
+              className="flex flex-1 min-h-0 overflow-hidden relative" 
+              style={{ flex: '1 1 0%' }}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+            >
+              {/* Overlay de arrastar arquivo */}
+              {isDraggingFile && (
+                <div className="absolute inset-0 z-50 bg-primary/20 backdrop-blur-sm border-4 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none">
+                  <div className="bg-background/95 rounded-xl p-8 shadow-2xl flex flex-col items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                      <FileUp className="h-8 w-8 text-primary animate-bounce" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-semibold text-foreground">Solte os arquivos aqui</p>
+                      <p className="text-sm text-muted-foreground">Imagens, PDFs, documentos e vídeos</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Messages Area + Input */}
               <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
                 {/* Messages - ÚNICA ÁREA COM SCROLL */}
