@@ -38,6 +38,7 @@ import { HorarioSeletor } from "@/components/agenda/HorarioSeletor";
 import { HorarioComercial, criarHorarioPadrao } from "@/components/agenda/HorarioComercialConfig";
 import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { LeadAttachments } from "@/components/leads/LeadAttachments";
+import { ProdutoSelectorDialog } from "@/components/conversas/ProdutoSelectorDialog";
 import { formatPhoneNumber, safeFormatPhoneNumber, normalizePhoneForComparison } from "@/utils/phoneFormatter";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { getMediaUrl, MediaExpiredError } from "@/utils/mediaLoader";
@@ -423,7 +424,7 @@ function Conversas() {
   
   // Estados para seleção de produto
   const [produtoDialogOpen, setProdutoDialogOpen] = useState(false);
-  const [produtos, setProdutos] = useState<Array<{ id: string; nome: string; preco_sugerido: number | null }>>([]);
+  const [produtos, setProdutos] = useState<Array<{ id: string; nome: string; preco_sugerido: number | null; categoria: string | null; subcategoria: string | null }>>([]);
   const [loadingProdutos, setLoadingProdutos] = useState(false);
   const [salvandoProduto, setSalvandoProduto] = useState(false);
   const [cleaningProgress, setCleaningProgress] = useState(0);
@@ -7285,9 +7286,11 @@ function Conversas() {
     try {
       const { data, error } = await supabase
         .from("produtos_servicos")
-        .select("id, nome, preco_sugerido")
+        .select("id, nome, preco_sugerido, categoria, subcategoria")
         .eq("company_id", userCompanyId)
         .eq("ativo", true)
+        .order("categoria")
+        .order("subcategoria")
         .order("nome");
 
       if (error) throw error;
@@ -7301,7 +7304,7 @@ function Conversas() {
   };
 
   // ✅ Salvar produto selecionado no lead
-  const handleSalvarProduto = async (produtoId: string) => {
+  const handleSalvarProduto = async (produtoId: string, produto?: { id: string; nome: string; categoria: string | null; subcategoria: string | null; preco_sugerido: number | null }) => {
     if (!leadVinculado?.id) {
       toast.error('Salve o lead no CRM primeiro');
       return;
@@ -7309,7 +7312,7 @@ function Conversas() {
     
     setSalvandoProduto(true);
     try {
-      const produto = produtos.find(p => p.id === produtoId);
+      const produtoSelecionado = produto || produtos.find(p => p.id === produtoId);
       
       const { error } = await supabase
         .from('leads')
@@ -7318,15 +7321,17 @@ function Conversas() {
       
       if (error) throw error;
       
-      // Atualizar estado local
+      // Atualizar estado local com todas as informações do produto
       setLeadVinculado({ 
         ...leadVinculado, 
         produto_id: produtoId || null,
-        produto_nome: produto?.nome || null
+        produto_nome: produtoSelecionado?.nome || null,
+        produto_categoria: produtoSelecionado?.categoria || null,
+        produto_subcategoria: produtoSelecionado?.subcategoria || null
       });
       
       setProdutoDialogOpen(false);
-      toast.success(produtoId ? `Produto "${produto?.nome}" associado!` : 'Produto removido');
+      toast.success(produtoId ? `Produto "${produtoSelecionado?.nome}" associado!` : 'Produto removido');
     } catch (err) {
       console.error('Erro ao salvar produto:', err);
       toast.error('Erro ao salvar produto');
@@ -8653,14 +8658,22 @@ function Conversas() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="flex-1 gap-1"
+                                className="flex-1 gap-1 h-auto py-1.5"
                                 onClick={() => {
-                                  carregarProdutos();
                                   setProdutoDialogOpen(true);
                                 }}
                               >
-                                <Package className="h-3 w-3 text-blue-600" />
-                                {leadVinculado?.produto_nome || (produtos.find(p => p.id === leadVinculado?.produto_id)?.nome) || "Produto"}
+                                <Package className="h-3 w-3 text-primary flex-shrink-0" />
+                                <div className="flex flex-col items-start min-w-0 flex-1">
+                                  <span className="text-xs font-medium truncate w-full text-left">
+                                    {leadVinculado?.produto_nome || (produtos.find(p => p.id === leadVinculado?.produto_id)?.nome) || "Produto"}
+                                  </span>
+                                  {(leadVinculado?.produto_categoria || leadVinculado?.produto_subcategoria) && (
+                                    <span className="text-[10px] text-muted-foreground truncate w-full text-left">
+                                      {[leadVinculado?.produto_categoria, leadVinculado?.produto_subcategoria].filter(Boolean).join(" → ")}
+                                    </span>
+                                  )}
+                                </div>
                               </Button>
                             </div>
                             
@@ -10273,67 +10286,15 @@ function Conversas() {
       </Dialog>
 
       {/* Dialog: Selecionar Produto */}
-      <Dialog open={produtoDialogOpen} onOpenChange={setProdutoDialogOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-blue-600" />
-              Produto / Serviço
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            {loadingProdutos ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : produtos.length === 0 ? (
-              <div className="text-center py-6">
-                <Package className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground">
-                  Nenhum produto cadastrado.
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Cadastre produtos em Analytics → Produtos
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                {/* Opção para remover produto */}
-                <Button
-                  variant={!leadVinculado?.produto_id ? "secondary" : "outline"}
-                  className="w-full justify-start gap-2"
-                  onClick={() => handleSalvarProduto("")}
-                  disabled={salvandoProduto}
-                >
-                  <X className="h-4 w-4 text-muted-foreground" />
-                  <span>Sem produto definido</span>
-                </Button>
-                
-                {produtos.map((produto) => (
-                  <Button
-                    key={produto.id}
-                    variant={leadVinculado?.produto_id === produto.id ? "secondary" : "outline"}
-                    className="w-full justify-start gap-2"
-                    onClick={() => handleSalvarProduto(produto.id)}
-                    disabled={salvandoProduto}
-                  >
-                    <Package className="h-4 w-4 text-blue-600" />
-                    <span className="flex-1 text-left truncate">{produto.nome}</span>
-                    {produto.preco_sugerido && (
-                      <span className="text-xs text-muted-foreground">
-                        R$ {produto.preco_sugerido.toLocaleString("pt-BR")}
-                      </span>
-                    )}
-                    {leadVinculado?.produto_id === produto.id && (
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    )}
-                  </Button>
-                ))}
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Dialog de seleção de produto com filtros e pesquisa */}
+      <ProdutoSelectorDialog
+        open={produtoDialogOpen}
+        onOpenChange={setProdutoDialogOpen}
+        companyId={userCompanyId || ""}
+        selectedProductId={leadVinculado?.produto_id}
+        onSelectProduct={handleSalvarProduto}
+        saving={salvandoProduto}
+      />
 
       {/* Dialog: Finalizar Negociação (Ganho/Perdido) */}
       {leadVinculado && (
