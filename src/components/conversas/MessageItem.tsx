@@ -727,7 +727,12 @@ function MessageItemComponent({
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => window.open(mediaUrl || message.mediaUrl, '_blank')}
+                          onClick={() => {
+                            const fileUrl = mediaUrl || message.mediaUrl || '';
+                            // Usar Google Docs Viewer para visualizar planilhas online
+                            const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=false`;
+                            window.open(viewerUrl, '_blank');
+                          }}
                           className="flex-1"
                         >
                           <FileText className="h-3 w-3 mr-2" />
