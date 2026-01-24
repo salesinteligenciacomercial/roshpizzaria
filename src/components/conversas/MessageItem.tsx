@@ -729,8 +729,8 @@ function MessageItemComponent({
                           variant="outline"
                           onClick={() => {
                             const fileUrl = mediaUrl || message.mediaUrl || '';
-                            // Usar Google Docs Viewer para visualizar planilhas online
-                            const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=false`;
+                            // Usar Microsoft Office Online Viewer para visualizar planilhas Excel
+                            const viewerUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(fileUrl)}`;
                             window.open(viewerUrl, '_blank');
                           }}
                           className="flex-1"
