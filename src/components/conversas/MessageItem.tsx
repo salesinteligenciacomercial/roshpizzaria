@@ -22,6 +22,7 @@ import {
 import { MessageActions } from "./MessageActions";
 import { PDFPreview } from "./PDFPreview";
 import { PdfViewerDialog } from "./PdfViewerDialog";
+import { SpreadsheetViewerDialog } from "./SpreadsheetViewerDialog";
 import { toast } from "@/hooks/use-toast";
 import { getMediaUrl, isPermanentUrl, MediaExpiredError } from "@/utils/mediaLoader";
 import { TextWithLinks } from "./LinkPreview";
@@ -109,8 +110,11 @@ function MessageItemComponent({
   
   // Estado para PDF Viewer Dialog
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+  
+  // Estado para Spreadsheet Viewer Dialog
+  const [spreadsheetViewerOpen, setSpreadsheetViewerOpen] = useState(false);
 
-  const repliedMessage = message.replyTo && allMessages 
+  const repliedMessage = message.replyTo && allMessages
     ? allMessages.find(m => m.id === message.replyTo)
     : null;
 
@@ -695,6 +699,9 @@ function MessageItemComponent({
                   );
                 }
 
+                // Verificar se é planilha (pode abrir no visualizador)
+                const isSpreadsheet = ['xlsx', 'xls', 'xlsm', 'xlsb', 'csv', 'ods'].includes(extension);
+
                 return (
                   <div className="space-y-2">
                     {/* Card do documento */}
@@ -716,16 +723,39 @@ function MessageItemComponent({
                       </div>
                     </div>
                     
-                    {/* Botão de download */}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onDownload?.(mediaUrl || message.mediaUrl || '', message.fileName || `documento.${extension}`)}
-                      className="w-full"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Baixar {docInfo.label}
-                    </Button>
+                    {/* Botões de ação */}
+                    <div className="flex gap-2">
+                      {isSpreadsheet && (mediaUrl || message.mediaUrl) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSpreadsheetViewerOpen(true)}
+                          className="flex-1"
+                        >
+                          <FileText className="h-3 w-3 mr-2" />
+                          Abrir Planilha
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onDownload?.(mediaUrl || message.mediaUrl || '', message.fileName || `documento.${extension}`)}
+                        className={isSpreadsheet && (mediaUrl || message.mediaUrl) ? "" : "w-full"}
+                      >
+                        <Download className="h-3 w-3 mr-2" />
+                        Baixar
+                      </Button>
+                    </div>
+                    
+                    {/* Spreadsheet Viewer Dialog */}
+                    {isSpreadsheet && (
+                      <SpreadsheetViewerDialog
+                        open={spreadsheetViewerOpen}
+                        onOpenChange={setSpreadsheetViewerOpen}
+                        url={mediaUrl || message.mediaUrl || ''}
+                        fileName={message.fileName}
+                      />
+                    )}
                   </div>
                 );
               })()}
