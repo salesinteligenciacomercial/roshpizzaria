@@ -19,8 +19,8 @@ import {
   Repeat,
   ArrowUpRight,
   Shuffle,
-  Pencil,
   Trash2,
+  CheckCircle,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -32,6 +32,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { AdicionarVendaDialog } from "@/components/leads/AdicionarVendaDialog";
 
 interface Venda {
@@ -44,7 +54,9 @@ interface Venda {
   valor_final: number;
   tipo: string | null;
   recorrencia: string | null;
-  status?: string;
+  status: string | null;
+  motivo_perda: string | null;
+  finalized_at: string | null;
   created_at: string;
   categoria?: string | null;
   subcategoria?: string | null;
@@ -71,6 +83,22 @@ const TIPO_LABELS: Record<string, string> = {
   cross_sell: "Cross-sell",
 };
 
+const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
+  em_negociacao: { label: "Em Negociação", color: "bg-amber-100 text-amber-700 border-amber-200", icon: Clock },
+  ganho: { label: "Ganho", color: "bg-green-100 text-green-700 border-green-200", icon: Trophy },
+  perdido: { label: "Perdido", color: "bg-red-100 text-red-700 border-red-200", icon: XCircle },
+};
+
+const MOTIVOS_PERDA = [
+  { value: "preco", label: "Preço muito alto" },
+  { value: "concorrencia", label: "Escolheu concorrente" },
+  { value: "timing", label: "Não é o momento" },
+  { value: "orcamento", label: "Sem orçamento" },
+  { value: "sem_resposta", label: "Sem resposta" },
+  { value: "nao_qualificado", label: "Não qualificado" },
+  { value: "outro", label: "Outro motivo" },
+];
+
 export function VendasLeadPanel({
   leadId,
   leadName,
@@ -83,6 +111,12 @@ export function VendasLeadPanel({
   const [novaVendaOpen, setNovaVendaOpen] = useState(false);
   const [deleteVendaId, setDeleteVendaId] = useState<string | null>(null);
   const [deletingVenda, setDeletingVenda] = useState(false);
+  
+  // Estado para finalizar venda
+  const [finalizarVenda, setFinalizarVenda] = useState<{ venda: Venda; action: 'ganho' | 'perdido' } | null>(null);
+  const [motivoPerda, setMotivoPerda] = useState("");
+  const [notasFinalizacao, setNotasFinalizacao] = useState("");
+  const [finalizando, setFinalizando] = useState(false);
 
   const carregarVendas = async () => {
     if (!leadId) return;
@@ -108,6 +142,61 @@ export function VendasLeadPanel({
     carregarVendas();
   }, [leadId]);
 
+  const handleFinalizarVenda = async () => {
+    if (!finalizarVenda) return;
+    
+    setFinalizando(true);
+    try {
+      const { venda, action } = finalizarVenda;
+      
+      const updateData: Record<string, any> = {
+        status: action,
+        finalized_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      
+      if (action === 'perdido') {
+        updateData.motivo_perda = motivoPerda;
+      }
+      
+      if (notasFinalizacao.trim()) {
+        updateData.notas = notasFinalizacao.trim();
+      }
+
+      const { error } = await supabase
+        .from("customer_sales")
+        .update(updateData)
+        .eq("id", venda.id);
+
+      if (error) throw error;
+      
+      toast.success(action === 'ganho' ? "Venda registrada como ganha!" : "Negociação marcada como perdida");
+      
+      // Atualizar status do lead se for ganho
+      if (action === 'ganho') {
+        await supabase
+          .from('leads')
+          .update({ 
+            status: 'ganho',
+            won_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', leadId);
+      }
+      
+      await carregarVendas();
+      onVendaUpdated?.();
+      setFinalizarVenda(null);
+      setMotivoPerda("");
+      setNotasFinalizacao("");
+    } catch (error) {
+      console.error("Erro ao finalizar venda:", error);
+      toast.error("Erro ao finalizar venda");
+    } finally {
+      setFinalizando(false);
+    }
+  };
+
   const handleDeleteVenda = async () => {
     if (!deleteVendaId) return;
     
@@ -132,6 +221,49 @@ export function VendasLeadPanel({
     }
   };
 
+  const handleMarcarTodasGanho = async () => {
+    const vendasEmNegociacao = vendas.filter(v => v.status === 'em_negociacao' || !v.status);
+    if (vendasEmNegociacao.length === 0) {
+      toast.info("Não há negociações em andamento");
+      return;
+    }
+    
+    setFinalizando(true);
+    try {
+      const ids = vendasEmNegociacao.map(v => v.id);
+      
+      const { error } = await supabase
+        .from("customer_sales")
+        .update({
+          status: 'ganho',
+          finalized_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .in("id", ids);
+
+      if (error) throw error;
+      
+      // Atualizar lead para ganho
+      await supabase
+        .from('leads')
+        .update({ 
+          status: 'ganho',
+          won_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', leadId);
+      
+      toast.success(`${vendasEmNegociacao.length} venda(s) marcada(s) como ganha(s)!`);
+      await carregarVendas();
+      onVendaUpdated?.();
+    } catch (error) {
+      console.error("Erro ao marcar vendas:", error);
+      toast.error("Erro ao marcar vendas como ganhas");
+    } finally {
+      setFinalizando(false);
+    }
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
@@ -148,9 +280,13 @@ export function VendasLeadPanel({
   };
 
   const totalVendas = vendas.reduce((sum, v) => sum + (v.valor_final || 0), 0);
-  const totalRecorrente = vendas
-    .filter(v => v.tipo === "recorrente")
+  const totalGanho = vendas
+    .filter(v => v.status === "ganho")
     .reduce((sum, v) => sum + (v.valor_final || 0), 0);
+  const totalRecorrente = vendas
+    .filter(v => v.tipo === "recorrente" && v.status === "ganho")
+    .reduce((sum, v) => sum + (v.valor_final || 0), 0);
+  const vendasEmNegociacao = vendas.filter(v => v.status === 'em_negociacao' || !v.status);
 
   return (
     <div className="border rounded-lg bg-card">
@@ -210,16 +346,25 @@ export function VendasLeadPanel({
                 </p>
               </div>
             ) : (
-              <ScrollArea className="max-h-[250px]">
+              <ScrollArea className="max-h-[300px]">
                 <div className="space-y-2">
                   {vendas.map((venda) => {
                     const TipoIcon = TIPO_ICONS[venda.tipo || "avulsa"] || ShoppingCart;
+                    const status = venda.status || "em_negociacao";
+                    const statusConfig = STATUS_CONFIG[status] || STATUS_CONFIG.em_negociacao;
+                    const StatusIcon = statusConfig.icon;
+                    const isEmNegociacao = status === 'em_negociacao';
                     
                     return (
                       <div
                         key={venda.id}
-                        className="p-2 border rounded-lg bg-muted/30 space-y-1 group relative"
+                        className={`p-2 border rounded-lg space-y-1 group relative ${
+                          status === 'ganho' ? 'bg-green-50/50 border-green-200' :
+                          status === 'perdido' ? 'bg-red-50/30 border-red-200 opacity-70' :
+                          'bg-muted/30'
+                        }`}
                       >
+                        {/* Cabeçalho com status */}
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
@@ -239,17 +384,20 @@ export function VendasLeadPanel({
                             <span className="text-xs font-semibold text-primary">
                               {formatCurrency(venda.valor_final)}
                             </span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
-                              onClick={() => setDeleteVendaId(venda.id)}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
+                            {isEmNegociacao && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
+                                onClick={() => setDeleteVendaId(venda.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
                           </div>
                         </div>
 
+                        {/* Tipo e Data */}
                         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                           <div className="flex items-center gap-1">
                             <TipoIcon className="h-3 w-3" />
@@ -266,6 +414,48 @@ export function VendasLeadPanel({
                             {formatDate(venda.created_at)}
                           </span>
                         </div>
+
+                        {/* Status Badge */}
+                        <div className="flex items-center justify-between pt-1">
+                          <Badge 
+                            variant="outline" 
+                            className={`text-[10px] px-1.5 py-0.5 flex items-center gap-1 ${statusConfig.color}`}
+                          >
+                            <StatusIcon className="h-2.5 w-2.5" />
+                            {statusConfig.label}
+                          </Badge>
+                          
+                          {/* Ações rápidas para vendas em negociação */}
+                          {isEmNegociacao && (
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-green-600 hover:bg-green-100 hover:text-green-700"
+                                onClick={() => setFinalizarVenda({ venda, action: 'ganho' })}
+                                title="Marcar como Ganho"
+                              >
+                                <Trophy className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-red-600 hover:bg-red-100 hover:text-red-700"
+                                onClick={() => setFinalizarVenda({ venda, action: 'perdido' })}
+                                title="Marcar como Perdido"
+                              >
+                                <XCircle className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Motivo de perda */}
+                        {status === 'perdido' && venda.motivo_perda && (
+                          <p className="text-[10px] text-red-600 italic pl-4">
+                            Motivo: {MOTIVOS_PERDA.find(m => m.value === venda.motivo_perda)?.label || venda.motivo_perda}
+                          </p>
+                        )}
 
                         {venda.quantidade > 1 && (
                           <p className="text-[10px] text-muted-foreground">
@@ -289,6 +479,17 @@ export function VendasLeadPanel({
                     {formatCurrency(totalVendas)}
                   </span>
                 </div>
+                {totalGanho > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <Trophy className="h-3 w-3 text-green-600" />
+                      Ganho:
+                    </span>
+                    <span className="font-medium text-green-600">
+                      {formatCurrency(totalGanho)}
+                    </span>
+                  </div>
+                )}
                 {totalRecorrente > 0 && (
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground flex items-center gap-1">
@@ -300,6 +501,29 @@ export function VendasLeadPanel({
                     </span>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Botões de ação rápida para todas as negociações */}
+            {vendasEmNegociacao.length > 0 && (
+              <div className="pt-2 border-t">
+                <p className="text-[10px] text-muted-foreground mb-2">
+                  {vendasEmNegociacao.length} negociação(ões) em andamento
+                </p>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="w-full gap-2 bg-green-600 hover:bg-green-700"
+                  onClick={handleMarcarTodasGanho}
+                  disabled={finalizando}
+                >
+                  {finalizando ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4" />
+                  )}
+                  Marcar todas como Ganho
+                </Button>
               </div>
             )}
           </div>
@@ -317,6 +541,91 @@ export function VendasLeadPanel({
           onVendaUpdated?.();
         }}
       />
+
+      {/* Dialog de finalizar venda (ganho/perdido) */}
+      <Dialog open={!!finalizarVenda} onOpenChange={(open) => !open && setFinalizarVenda(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {finalizarVenda?.action === 'ganho' ? (
+                <>
+                  <Trophy className="h-5 w-5 text-green-600" />
+                  <span className="text-green-700">Confirmar Venda</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-5 w-5 text-red-600" />
+                  <span className="text-red-700">Marcar como Perdido</span>
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {finalizarVenda?.action === 'ganho' 
+                ? `Confirmar venda de "${finalizarVenda?.venda.produto_nome}" por ${formatCurrency(finalizarVenda?.venda.valor_final || 0)}?`
+                : `Marcar negociação de "${finalizarVenda?.venda.produto_nome}" como perdida?`
+              }
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 pt-2">
+            {finalizarVenda?.action === 'perdido' && (
+              <div>
+                <Label htmlFor="motivoPerda">Motivo da perda</Label>
+                <Select value={motivoPerda} onValueChange={setMotivoPerda}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o motivo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MOTIVOS_PERDA.map((motivo) => (
+                      <SelectItem key={motivo.value} value={motivo.value}>
+                        {motivo.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            <div>
+              <Label htmlFor="notasFinalizacao">Observações (opcional)</Label>
+              <Textarea
+                id="notasFinalizacao"
+                placeholder="Adicione notas sobre esta venda..."
+                value={notasFinalizacao}
+                onChange={(e) => setNotasFinalizacao(e.target.value)}
+                className="h-20"
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button 
+                variant="outline" 
+                onClick={() => setFinalizarVenda(null)}
+                disabled={finalizando}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleFinalizarVenda}
+                disabled={finalizando || (finalizarVenda?.action === 'perdido' && !motivoPerda)}
+                className={finalizarVenda?.action === 'ganho' 
+                  ? "bg-green-600 hover:bg-green-700" 
+                  : "bg-red-600 hover:bg-red-700"
+                }
+              >
+                {finalizando ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : finalizarVenda?.action === 'ganho' ? (
+                  <Trophy className="h-4 w-4 mr-2" />
+                ) : (
+                  <XCircle className="h-4 w-4 mr-2" />
+                )}
+                Confirmar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog de confirmação de exclusão */}
       <AlertDialog open={!!deleteVendaId} onOpenChange={(open) => !open && setDeleteVendaId(null)}>

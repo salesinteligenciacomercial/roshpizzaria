@@ -8637,45 +8637,27 @@ function Conversas() {
                     }} triggerButton={<Button size="sm" variant="outline" className="w-full">
                                   <Pencil className="h-3 w-3 mr-2" /> Editar Informações
                                 </Button>} />
-                            {/* ✅ Painel de Vendas/Negociações */}
+                            {/* ✅ Painel de Vendas/Negociações com botões Ganho/Perdido integrados */}
                             <div className="mt-3">
                               <VendasLeadPanel
                                 leadId={leadVinculado.id}
                                 leadName={leadVinculado.name || selectedConv?.contactName || "Cliente"}
                                 companyId={userCompanyId || ""}
-                                onVendaUpdated={() => {
-                                  // Atualizar lead se necessário
-                                  console.log("Venda atualizada para lead:", leadVinculado.id);
+                                onVendaUpdated={async () => {
+                                  // Recarregar lead após atualização de venda
+                                  if (selectedConv && (selectedConv.phoneNumber || selectedConv.id)) {
+                                    const telefoneFormatado = safeFormatPhoneNumber(selectedConv.phoneNumber || selectedConv.id);
+                                    const { data: leadAtualizado } = await supabase
+                                      .from('leads')
+                                      .select('*')
+                                      .or(`phone.eq.${telefoneFormatado},telefone.eq.${telefoneFormatado}`)
+                                      .maybeSingle();
+                                    if (leadAtualizado) {
+                                      setLeadVinculado(leadAtualizado);
+                                    }
+                                  }
                                 }}
                               />
-                            </div>
-                            
-                            {/* Botões de Finalizar Negociação - Ganho/Perdido */}
-                            <div className="flex gap-2 mt-3">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1 gap-1 text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700"
-                                onClick={() => {
-                                  setFinalizarNegociacaoAction('ganho');
-                                  setFinalizarNegociacaoOpen(true);
-                                }}
-                              >
-                                <Trophy className="h-3 w-3" />
-                                Ganho
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1 gap-1 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                                onClick={() => {
-                                  setFinalizarNegociacaoAction('perdido');
-                                  setFinalizarNegociacaoOpen(true);
-                                }}
-                              >
-                                <XCircle className="h-3 w-3" />
-                                Perdido
-                              </Button>
                             </div>
                           </> : <div className="space-y-2">
                             <Badge variant="outline" className="w-full justify-center gap-2 py-2 bg-amber-500/10 text-amber-600 border-amber-500/20">

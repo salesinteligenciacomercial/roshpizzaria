@@ -1178,14 +1178,17 @@ export type Database = {
           company_id: string
           created_at: string | null
           desconto: number | null
+          finalized_at: string | null
           id: string
           lead_id: string
+          motivo_perda: string | null
           notas: string | null
           produto_id: string | null
           produto_nome: string
           quantidade: number
           recorrencia: string | null
           responsavel_id: string | null
+          status: string | null
           subcategoria: string | null
           tipo: string | null
           updated_at: string | null
@@ -1198,14 +1201,17 @@ export type Database = {
           company_id: string
           created_at?: string | null
           desconto?: number | null
+          finalized_at?: string | null
           id?: string
           lead_id: string
+          motivo_perda?: string | null
           notas?: string | null
           produto_id?: string | null
           produto_nome: string
           quantidade?: number
           recorrencia?: string | null
           responsavel_id?: string | null
+          status?: string | null
           subcategoria?: string | null
           tipo?: string | null
           updated_at?: string | null
@@ -1218,14 +1224,17 @@ export type Database = {
           company_id?: string
           created_at?: string | null
           desconto?: number | null
+          finalized_at?: string | null
           id?: string
           lead_id?: string
+          motivo_perda?: string | null
           notas?: string | null
           produto_id?: string | null
           produto_nome?: string
           quantidade?: number
           recorrencia?: string | null
           responsavel_id?: string | null
+          status?: string | null
           subcategoria?: string | null
           tipo?: string | null
           updated_at?: string | null
