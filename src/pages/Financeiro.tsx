@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   LayoutDashboard, 
@@ -8,7 +7,8 @@ import {
   ArrowLeftRight,
   TrendingUp,
   ShieldAlert,
-  Building2
+  Building2,
+  Zap
 } from 'lucide-react';
 import { useFinanceiro } from '@/hooks/useFinanceiro';
 import { FinanceiroDashboard } from '@/components/financeiro/FinanceiroDashboard';
@@ -17,6 +17,7 @@ import { FaturasManager } from '@/components/financeiro/FaturasManager';
 import { TransacoesManager } from '@/components/financeiro/TransacoesManager';
 import { MRRChart } from '@/components/financeiro/MRRChart';
 import { SubcontasFinanceiroManager } from '@/components/financeiro/SubcontasFinanceiroManager';
+import { AsaasIntegration } from '@/components/financeiro/AsaasIntegration';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function Financeiro() {
@@ -35,8 +36,12 @@ export default function Financeiro() {
     createInvoice,
     updateInvoice,
     markInvoiceAsPaid,
-    createTransaction
   } = useFinanceiro();
+
+  const refreshData = useCallback(() => {
+    // Trigger a re-fetch by reloading the page or calling load functions
+    window.location.reload();
+  }, []);
 
   // Check if user has access (is master account)
   useEffect(() => {
@@ -94,10 +99,14 @@ export default function Financeiro() {
       </div>
 
       <Tabs defaultValue="subcontas" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 lg:w-auto lg:inline-grid">
+        <TabsList className="grid w-full grid-cols-4 md:grid-cols-7 lg:w-auto lg:inline-grid">
           <TabsTrigger value="subcontas" className="gap-2">
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">Subcontas</span>
+          </TabsTrigger>
+          <TabsTrigger value="asaas" className="gap-2">
+            <Zap className="h-4 w-4" />
+            <span className="hidden sm:inline">Asaas</span>
           </TabsTrigger>
           <TabsTrigger value="dashboard" className="gap-2">
             <LayoutDashboard className="h-4 w-4" />
@@ -127,6 +136,14 @@ export default function Financeiro() {
             plans={plans}
             loading={loading}
             onCreateSubscription={createSubscription}
+          />
+        </TabsContent>
+
+        <TabsContent value="asaas">
+          <AsaasIntegration
+            subscriptions={subscriptions}
+            invoices={invoices}
+            onRefresh={refreshData}
           />
         </TabsContent>
 

@@ -65,3 +65,6 @@ verify_jwt = true
 
 [functions.ia-analise-comercial]
 verify_jwt = false
+
+[functions.asaas-api]
+verify_jwt = false
