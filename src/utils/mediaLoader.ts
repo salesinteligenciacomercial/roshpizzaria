@@ -32,6 +32,12 @@ async function saveMediaToStorage(
     
     uploadingMedia.add(messageId);
     
+    // Normalizar mimeType para Storage (remove codecs que não são suportados)
+    let normalizedMimeType = mimeType;
+    if (mimeType.includes('audio/ogg')) {
+      normalizedMimeType = 'audio/ogg';
+    }
+    
     // Determinar extensão do arquivo baseado no mimeType
     const extensionMap: Record<string, string> = {
       'application/pdf': 'pdf',
@@ -44,10 +50,9 @@ async function saveMediaToStorage(
       'audio/ogg': 'ogg',
       'audio/mpeg': 'mp3',
       'audio/wav': 'wav',
-      'audio/ogg; codecs=opus': 'ogg',
     };
     
-    const extension = extensionMap[mimeType] || 'bin';
+    const extension = extensionMap[normalizedMimeType] || 'bin';
     const fileName = `${companyId}/${messageId}.${extension}`;
     
     console.log('💾 [MEDIA-LOADER] Salvando mídia no Storage:', {
@@ -65,12 +70,12 @@ async function saveMediaToStorage(
     }
     const byteArray = new Uint8Array(byteNumbers);
     
-    // Upload para o Storage
+    // Upload para o Storage com mimeType normalizado
     const { data: uploadData, error: uploadError } = await supabase
       .storage
       .from('conversation-media')
       .upload(fileName, byteArray, {
-        contentType: mimeType,
+        contentType: normalizedMimeType,
         upsert: true
       });
     
