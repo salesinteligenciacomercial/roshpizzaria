@@ -127,6 +127,7 @@ export default function Agenda() {
   const [diasFuncionamento, setDiasFuncionamento] = useState<string[]>(["segunda", "terca", "quarta", "quinta", "sexta"]); // Dias da semana que a empresa funciona (padrão: seg-sex)
   const [lembretes, setLembretes] = useState<Lembrete[]>([]);
   const [activeTab, setActiveTab] = useState<string>("agenda");
+  const [activeMainTab, setActiveMainTab] = useState<string>("visao-geral");
   const [filtroStatusLembrete, setFiltroStatusLembrete] = useState<string>("all");
   const [filtroCanalLembrete, setFiltroCanalLembrete] = useState<string>("all");
   const [filtroRecorrencia, setFiltroRecorrencia] = useState<string>("all");
@@ -2020,12 +2021,18 @@ export default function Agenda() {
       if (filtroResponsavel !== "all" && c.usuario_responsavel_id !== filtroResponsavel) {
         return false;
       }
+
+      // Filtro de status
+      if (filterStatus !== "all" && c.status !== filterStatus) {
+        return false;
+      }
+
       return true;
     }).sort((a, b) => {
       // Ordenar por data/hora (mais recentes primeiro)
       return new Date(b.data_hora_inicio).getTime() - new Date(a.data_hora_inicio).getTime();
     });
-  }, [compromissos, buscaCompromissos, filtroAgenda, filtroTipoServico, filtroPeriodo, filtroResponsavel]);
+  }, [compromissos, buscaCompromissos, filtroAgenda, filtroTipoServico, filtroPeriodo, filtroResponsavel, filterStatus]);
 
   // Obter lista de responsáveis únicos dos compromissos
   const responsaveisUnicos = useMemo(() => {
@@ -2069,7 +2076,18 @@ export default function Agenda() {
     }
   };
   const lembretesFiltrados = lembretes.filter(lembrete => {
-    if (filtroStatusLembrete !== "all" && lembrete.status_envio !== filtroStatusLembrete) return false;
+    // Filtro especial "hoje" - lembretes para o dia atual
+    if (filtroStatusLembrete === "hoje") {
+      if (!lembrete.data_envio) return false;
+      const dataEnvio = new Date(lembrete.data_envio);
+      const hojeFilter = new Date();
+      hojeFilter.setHours(0, 0, 0, 0);
+      const amanhaFilter = new Date(hojeFilter);
+      amanhaFilter.setDate(amanhaFilter.getDate() + 1);
+      if (dataEnvio < hojeFilter || dataEnvio >= amanhaFilter) return false;
+    } else if (filtroStatusLembrete !== "all" && lembrete.status_envio !== filtroStatusLembrete) {
+      return false;
+    }
     if (filtroCanalLembrete !== "all" && lembrete.canal !== filtroCanalLembrete) return false;
     if (filtroRecorrencia === "recorrente" && !lembrete.recorrencia) return false;
     if (filtroRecorrencia === "unico" && lembrete.recorrencia) return false;
@@ -2532,27 +2550,51 @@ export default function Agenda() {
         </div>
       </div>
 
-      {/* Estatísticas */}
+      {/* Estatísticas de Compromissos - Clicáveis para filtrar */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-all hover:shadow-md ${filterStatus === 'all' ? 'ring-2 ring-primary' : ''}`}
+          onClick={() => {
+            setFilterStatus('all');
+            setActiveMainTab('lista');
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-foreground">{estatisticas.total}</div>
             <p className="text-xs text-muted-foreground">Compromissos do mês</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-all hover:shadow-md ${filterStatus === 'agendado' ? 'ring-2 ring-blue-500' : ''}`}
+          onClick={() => {
+            setFilterStatus('agendado');
+            setActiveMainTab('lista');
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-blue-600">{estatisticas.agendados}</div>
             <p className="text-xs text-muted-foreground">Agendados</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-all hover:shadow-md ${filterStatus === 'concluido' ? 'ring-2 ring-green-500' : ''}`}
+          onClick={() => {
+            setFilterStatus('concluido');
+            setActiveMainTab('lista');
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-green-600">{estatisticas.concluidos}</div>
             <p className="text-xs text-muted-foreground">Concluídos</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-all hover:shadow-md ${filterStatus === 'cancelado' ? 'ring-2 ring-red-500' : ''}`}
+          onClick={() => {
+            setFilterStatus('cancelado');
+            setActiveMainTab('lista');
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-red-600">{estatisticas.cancelados}</div>
             <p className="text-xs text-muted-foreground">Cancelados</p>
@@ -2560,33 +2602,68 @@ export default function Agenda() {
         </Card>
       </div>
 
-      {/* Estatísticas de Lembretes */}
+      {/* Estatísticas de Lembretes - Clicáveis para filtrar */}
       <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-all hover:shadow-md ${filtroStatusLembrete === 'all' && filtroRecorrencia === 'all' ? 'ring-2 ring-primary' : ''}`}
+          onClick={() => {
+            setFiltroStatusLembrete('all');
+            setFiltroRecorrencia('all');
+            setActiveMainTab('lembretes');
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-foreground">{estatisticasLembretes.total}</div>
             <p className="text-xs text-muted-foreground">Total de lembretes</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-all hover:shadow-md ${filtroStatusLembrete === 'enviado' ? 'ring-2 ring-green-500' : ''}`}
+          onClick={() => {
+            setFiltroStatusLembrete('enviado');
+            setFiltroRecorrencia('all');
+            setActiveMainTab('lembretes');
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-green-600">{estatisticasLembretes.enviados}</div>
             <p className="text-xs text-muted-foreground">Enviados</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-all hover:shadow-md ${filtroStatusLembrete === 'pendente' ? 'ring-2 ring-yellow-500' : ''}`}
+          onClick={() => {
+            setFiltroStatusLembrete('pendente');
+            setFiltroRecorrencia('all');
+            setActiveMainTab('lembretes');
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-yellow-600">{estatisticasLembretes.pendentes}</div>
             <p className="text-xs text-muted-foreground">Pendentes</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-all hover:shadow-md ${filtroRecorrencia === 'recorrente' ? 'ring-2 ring-purple-500' : ''}`}
+          onClick={() => {
+            setFiltroStatusLembrete('all');
+            setFiltroRecorrencia('recorrente');
+            setActiveMainTab('lembretes');
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-purple-600">{estatisticasLembretes.recorrentes}</div>
             <p className="text-xs text-muted-foreground">Recorrentes</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-all hover:shadow-md`}
+          onClick={() => {
+            setFiltroStatusLembrete('hoje');
+            setFiltroRecorrencia('all');
+            setActiveMainTab('lembretes');
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-cyan-600">{estatisticasLembretes.paraHoje}</div>
             <p className="text-xs text-muted-foreground">Para hoje</p>
@@ -2601,12 +2678,12 @@ export default function Agenda() {
       </div>
 
       {/* Tabs principais */}
-      <Tabs defaultValue="visao-geral" className="w-full">
+      <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
           <TabsTrigger value="lista">Lista de Compromissos</TabsTrigger>
           <TabsTrigger value="lembretes">Lembretes</TabsTrigger>
-          <TabsTrigger value="minhas-agendas" onClick={() => console.log('🖱️ [Agenda] Clique na aba Minhas Agendas')}>
+          <TabsTrigger value="minhas-agendas">
             Minhas Agendas
           </TabsTrigger>
         </TabsList>
