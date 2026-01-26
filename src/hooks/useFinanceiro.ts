@@ -251,14 +251,15 @@ export function useFinanceiro() {
     const overdueAmount = overdueInvoices.reduce((sum, i) => sum + Number(i.amount || 0), 0);
     const overdueCount = overdueInvoices.length;
 
-    // Taxa de setup do ano
-    const setupFeesYear = transactions
-      .filter(t => 
-        t.type === 'setup_fee' && 
-        t.status === 'confirmed' && 
-        new Date(t.payment_date) >= startOfYear
+    // Taxa de setup do ano - soma setup_fee_value de assinaturas pagas este ano
+    const setupFeesYear = subscriptions
+      .filter(s => 
+        s.setup_fee_paid === true && 
+        s.setup_fee_value && 
+        s.setup_fee_value > 0 &&
+        new Date(s.start_date) >= startOfYear
       )
-      .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+      .reduce((sum, s) => sum + Number(s.setup_fee_value || 0), 0);
 
     // Churn rate (simplificado - baseado em assinaturas canceladas nos últimos 30 dias)
     const cancelledLastMonth = subscriptions.filter(s => 
