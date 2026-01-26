@@ -170,6 +170,28 @@ export function SubcontasFinanceiroManager({
     setNovaAssinaturaOpen(true);
   };
 
+  const handleAddTrial = async (subconta: Subconta) => {
+    try {
+      const trialDays = 14;
+      const trialEndDate = new Date();
+      trialEndDate.setDate(trialEndDate.getDate() + trialDays);
+      
+      await onCreateSubscription({
+        company_id: subconta.id,
+        status: 'trial',
+        monthly_value: 0,
+        billing_cycle: 'monthly',
+        start_date: new Date().toISOString(),
+        trial_days: trialDays,
+        trial_end_date: trialEndDate.toISOString().split('T')[0],
+      });
+      
+      loadSubcontas();
+    } catch (error) {
+      console.error('Erro ao criar trial:', error);
+    }
+  };
+
   // Stats
   const stats = {
     total: subcontas.length,
@@ -342,10 +364,16 @@ export function SubcontasFinanceiroManager({
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             {!subconta.subscription ? (
-                              <DropdownMenuItem onClick={() => handleAddSubscription(subconta)}>
-                                <CreditCard className="h-4 w-4 mr-2" />
-                                Criar Assinatura
-                              </DropdownMenuItem>
+                              <>
+                                <DropdownMenuItem onClick={() => handleAddSubscription(subconta)}>
+                                  <CreditCard className="h-4 w-4 mr-2" />
+                                  Criar Assinatura
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleAddTrial(subconta)}>
+                                  <Clock className="h-4 w-4 mr-2" />
+                                  Iniciar Trial
+                                </DropdownMenuItem>
+                              </>
                             ) : (
                               <>
                                 <DropdownMenuItem>
