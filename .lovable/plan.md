@@ -1,229 +1,43 @@
 
-# Calculador de Custos por Subconta
+# Melhorias no Calculador de Custos
 
-## Objetivo
-Criar um módulo integrado ao Financeiro que calcule e exiba o custo operacional real de cada subconta, permitindo precificação assertiva das mensalidades.
+## Visao Geral
+
+Implementar tres novas funcionalidades no modulo de Custos do Financeiro:
+1. **Custo Historico Total** - Visualizacao do custo acumulado desde a ativacao de cada subconta
+2. **Comparativo Mensal** - Relatorio de evolucao de custos mes a mes
+3. **Alertas de Limite** - Notificacoes automaticas quando custos excedem limites configurados
 
 ---
 
-## Arquitetura da Solucao
+## 1. Custo Historico Total
 
-### 1. Nova Tabela de Metricas de Uso (Database)
+### Alteracoes no Banco de Dados
 
-Criar tabela `company_usage_metrics` para armazenar snapshots de uso:
+Criar nova funcao SQL para calcular custo historico desde a ativacao:
 
 ```sql
-CREATE TABLE public.company_usage_metrics (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  period_start DATE NOT NULL,
-  period_end DATE NOT NULL,
-  
-  -- Metricas de Uso
-  total_leads INTEGER DEFAULT 0,
-  total_users INTEGER DEFAULT 0,
-  total_messages INTEGER DEFAULT 0,
-  messages_sent INTEGER DEFAULT 0,
-  messages_received INTEGER DEFAULT 0,
-  media_files_count INTEGER DEFAULT 0,
-  storage_bytes_used BIGINT DEFAULT 0,
-  edge_function_calls INTEGER DEFAULT 0,
-  ia_requests INTEGER DEFAULT 0,
-  automation_executions INTEGER DEFAULT 0,
-  
-  -- Custos Calculados (em centavos para precisao)
-  database_cost INTEGER DEFAULT 0,
-  storage_cost INTEGER DEFAULT 0,
-  edge_functions_cost INTEGER DEFAULT 0,
-  ia_cost INTEGER DEFAULT 0,
-  whatsapp_cost INTEGER DEFAULT 0,
-  total_cost INTEGER DEFAULT 0,
-  
-  -- Metadata
-  calculated_at TIMESTAMPTZ DEFAULT now(),
-  master_company_id UUID REFERENCES companies(id),
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Indice para busca eficiente
-CREATE INDEX idx_usage_metrics_company_period 
-ON company_usage_metrics(company_id, period_start, period_end);
-```
-
-### 2. Tabela de Configuracao de Custos
-
-```sql
-CREATE TABLE public.cost_configuration (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  master_company_id UUID NOT NULL REFERENCES companies(id),
-  
-  -- Custos por unidade (em centavos BRL)
-  cost_per_lead INTEGER DEFAULT 5,           -- R$ 0,05 por lead
-  cost_per_user INTEGER DEFAULT 500,         -- R$ 5,00 por usuario
-  cost_per_message_sent INTEGER DEFAULT 4,   -- R$ 0,04 por msg enviada
-  cost_per_message_received INTEGER DEFAULT 1, -- R$ 0,01 por msg recebida
-  cost_per_media_file INTEGER DEFAULT 10,    -- R$ 0,10 por arquivo
-  cost_per_gb_storage INTEGER DEFAULT 1000,  -- R$ 10,00 por GB
-  cost_per_edge_call INTEGER DEFAULT 1,      -- R$ 0,01 por chamada
-  cost_per_ia_request INTEGER DEFAULT 50,    -- R$ 0,50 por request IA
-  cost_per_automation INTEGER DEFAULT 2,     -- R$ 0,02 por execucao
-  
-  -- Custos fixos
-  base_monthly_cost INTEGER DEFAULT 2000,    -- R$ 20,00 base
-  
-  -- WhatsApp custos por tipo
-  whatsapp_utility_cost INTEGER DEFAULT 4,   -- R$ 0,035 utilidade
-  whatsapp_marketing_cost INTEGER DEFAULT 7, -- R$ 0,065 marketing
-  whatsapp_auth_cost INTEGER DEFAULT 5,      -- R$ 0,045 autenticacao
-  
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(master_company_id)
-);
-```
-
----
-
-## Componentes Frontend
-
-### 3. Novo Componente: CustoCalculator.tsx
-
-Localizado em `src/components/financeiro/CustoCalculator.tsx`:
-
-**Funcionalidades:**
-- Cards de resumo (Custo Total, Custo Medio, Margem Sugerida)
-- Tabela detalhada por subconta com breakdown de custos
-- Filtros por periodo (Mes atual, Ultimos 3 meses, Custom)
-- Grafico comparativo de custos vs receita
-- Export para CSV/Excel
-
-**Interface visual:**
-```text
-+------------------------------------------+
-| CALCULADOR DE CUSTOS                     |
-+------------------------------------------+
-| [Card] Custo Total  | [Card] Custo Medio |
-| R$ 1.234,00         | R$ 82,26/subconta  |
-+------------------------------------------+
-| [Card] Margem Media | [Card] Lucro Bruto |  
-| 68.5%               | R$ 2.680,00        |
-+------------------------------------------+
-
-| Subconta | Leads | Msgs | Storage | WhatsApp | IA | Total | Receita | Margem |
-|----------|-------|------|---------|----------|----|----- |---------|--------|
-| AB CONN  | R$12  | R$47 | R$8     | R$89     | R$5| R$161| R$497   | 67.6%  |
-| WR Corr  | R$8   | R$5  | R$2     | R$12     | R$0| R$27 | R$297   | 90.9%  |
-```
-
-### 4. Componente: CostConfigurationDialog.tsx
-
-Dialog para configurar custos unitarios:
-- Inputs para cada tipo de custo
-- Preview de calculo com dados reais
-- Salvar configuracao persistente
-
-### 5. Componente: CostBreakdownCard.tsx
-
-Card expansivel mostrando detalhamento:
-- Pie chart de distribuicao de custos
-- Linha do tempo de custos mensais
-- Alertas de subcontas com margem negativa
-
----
-
-## Hook Customizado
-
-### 6. useCompanyCosts.ts
-
-```typescript
-interface CompanyUsageData {
-  companyId: string;
-  companyName: string;
-  totalLeads: number;
-  totalUsers: number;
-  messagesSent: number;
-  messagesReceived: number;
-  mediaFiles: number;
-  storageBytes: number;
-  edgeFunctionCalls: number;
-  iaRequests: number;
-  automationExecutions: number;
-}
-
-interface CompanyCostBreakdown {
-  companyId: string;
-  companyName: string;
-  databaseCost: number;
-  storageCost: number;
-  edgeFunctionsCost: number;
-  iaCost: number;
-  whatsappCost: number;
-  totalCost: number;
-  monthlyRevenue: number;
-  margin: number;
-  marginPercent: number;
-}
-```
-
-**Funcoes:**
-- `loadUsageMetrics(startDate, endDate)` - Agrega dados de uso
-- `calculateCosts(usageData, config)` - Aplica custos unitarios
-- `saveUsageSnapshot()` - Persiste metricas para historico
-- `getCostConfiguration()` - Carrega configuracao
-
----
-
-## Integracao com Financeiro.tsx
-
-### 7. Nova Aba "Custos"
-
-Adicionar ao TabsList:
-```typescript
-<TabsTrigger value="custos" className="gap-2">
-  <Calculator className="h-4 w-4" />
-  <span className="hidden sm:inline">Custos</span>
-</TabsTrigger>
-```
-
-Adicionar TabsContent:
-```typescript
-<TabsContent value="custos">
-  <CustoCalculator 
-    subcontas={subcontas}
-    subscriptions={subscriptions}
-  />
-</TabsContent>
-```
-
----
-
-## Funcao de Calculo de Metricas
-
-### 8. Funcao SQL para Agregar Uso
-
-```sql
-CREATE OR REPLACE FUNCTION calculate_company_usage(
-  p_company_id UUID,
-  p_start_date DATE,
-  p_end_date DATE
+CREATE OR REPLACE FUNCTION get_subconta_historical_cost(
+  p_master_company_id UUID,
+  p_company_id UUID
 ) RETURNS JSONB AS $$
 DECLARE
   result JSONB;
+  v_activation_date DATE;
 BEGIN
+  -- Buscar data de ativacao da subconta
+  SELECT created_at::date INTO v_activation_date
+  FROM companies WHERE id = p_company_id;
+  
   SELECT jsonb_build_object(
-    'total_leads', (SELECT COUNT(*) FROM leads WHERE company_id = p_company_id),
-    'total_users', (SELECT COUNT(*) FROM user_roles WHERE company_id = p_company_id),
-    'messages_sent', (SELECT COUNT(*) FROM conversas WHERE company_id = p_company_id 
-                      AND fromme = true AND created_at BETWEEN p_start_date AND p_end_date),
-    'messages_received', (SELECT COUNT(*) FROM conversas WHERE company_id = p_company_id 
-                          AND fromme = false AND created_at BETWEEN p_start_date AND p_end_date),
-    'media_files', (SELECT COUNT(*) FROM conversas WHERE company_id = p_company_id 
-                    AND tipo_mensagem IN ('audio','video','image','document') 
-                    AND created_at BETWEEN p_start_date AND p_end_date),
-    'automation_executions', (SELECT COUNT(*) FROM automation_flow_logs 
-                              WHERE company_id = p_company_id 
-                              AND started_at BETWEEN p_start_date AND p_end_date),
-    'ia_requests', (SELECT COALESCE(SUM(times_used), 0) FROM ia_scripts 
-                    WHERE company_id = p_company_id)
+    'activation_date', v_activation_date,
+    'months_active', EXTRACT(MONTH FROM age(current_date, v_activation_date)) + 
+                     EXTRACT(YEAR FROM age(current_date, v_activation_date)) * 12,
+    'total_messages_sent', (SELECT COUNT(*) FROM conversas WHERE company_id = p_company_id AND fromme = true),
+    'total_messages_received', (SELECT COUNT(*) FROM conversas WHERE company_id = p_company_id AND fromme = false),
+    'total_media_files', (SELECT COUNT(*) FROM conversas WHERE company_id = p_company_id 
+                          AND tipo_mensagem IN ('audio','video','image','document')),
+    'total_automations', (SELECT COUNT(*) FROM automation_flow_logs WHERE company_id = p_company_id)
   ) INTO result;
   
   RETURN result;
@@ -231,45 +45,315 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
 
+### Alteracoes no Frontend
+
+**Interface `CompanyCostBreakdown`** - Adicionar campos:
+```typescript
+// Em useCompanyCosts.ts
+export interface CompanyCostBreakdown {
+  // ... campos existentes ...
+  
+  // Novos campos para historico
+  activationDate?: string;
+  monthsActive?: number;
+  historicalTotalCost?: number;
+  historicalMessagesSent?: number;
+  historicalMessagesReceived?: number;
+  historicalMediaFiles?: number;
+  historicalAutomations?: number;
+}
+```
+
+**Novo componente `HistoricalCostCard.tsx`**:
+- Card mostrando custo total acumulado
+- Data de ativacao da subconta
+- Meses ativos
+- Grafico de linha com evolucao mensal
+- Custo medio mensal
+
+**Integracao na tabela principal**:
+- Nova coluna "Historico" com icone clicavel
+- Ao clicar, abre modal com detalhes historicos
+
+---
+
+## 2. Comparativo Mensal de Custos
+
+### Alteracoes no Banco de Dados
+
+Criar funcao SQL para retornar dados mensais agregados:
+
+```sql
+CREATE OR REPLACE FUNCTION get_monthly_cost_comparison(
+  p_master_company_id UUID,
+  p_months INTEGER DEFAULT 6
+) RETURNS TABLE(
+  month_year TEXT,
+  month_date DATE,
+  company_id UUID,
+  company_name TEXT,
+  total_cost INTEGER,
+  messages_cost INTEGER,
+  leads_cost INTEGER,
+  media_cost INTEGER,
+  revenue INTEGER,
+  margin INTEGER
+) AS $$
+BEGIN
+  RETURN QUERY
+  WITH months AS (
+    SELECT generate_series(
+      date_trunc('month', current_date - (p_months || ' months')::interval),
+      date_trunc('month', current_date),
+      '1 month'::interval
+    )::date as month_start
+  )
+  -- Agregacao por mes e subconta
+  SELECT 
+    to_char(m.month_start, 'YYYY-MM') as month_year,
+    m.month_start as month_date,
+    c.id as company_id,
+    c.name as company_name,
+    -- Calculos de custo baseados em uso do mes
+    ...
+  FROM months m
+  CROSS JOIN companies c
+  WHERE c.parent_company_id = p_master_company_id
+  ORDER BY m.month_start, c.name;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+### Novo Componente `MonthlyCostComparison.tsx`
+
+**Funcionalidades**:
+- Tabela pivotada com meses como colunas
+- Linhas por subconta
+- Cores indicando variacao (verde = reducao, vermelho = aumento)
+- Porcentagem de variacao entre meses
+- Grafico de area empilhada mostrando distribuicao de custos
+- Filtro para selecionar numero de meses (3, 6, 12)
+
+**Layout visual**:
+```text
++--------------------------------------------------------------------+
+| COMPARATIVO MENSAL                           [3 meses] [6m] [12m]  |
++--------------------------------------------------------------------+
+|              | Nov/25  | Dez/25  | Jan/26  | Variacao |            |
+|--------------|---------|---------|---------|----------|            |
+| AB CONECTA   | R$145   | R$161   | R$178   | +10.5%   |            |
+| WR CORRETORA | R$27    | R$31    | R$28    | -9.6%    |            |
+| jd promotora | R$45    | R$52    | R$48    | -7.7%    |            |
++--------------------------------------------------------------------+
+| [Grafico de area empilhada - evolucao por categoria de custo]      |
++--------------------------------------------------------------------+
+```
+
+### Hook `useMonthlyCostHistory.ts`
+
+```typescript
+interface MonthlyData {
+  monthYear: string;
+  monthDate: Date;
+  companies: {
+    companyId: string;
+    companyName: string;
+    totalCost: number;
+    messagesCost: number;
+    leadsCost: number;
+    mediaCost: number;
+    revenue: number;
+    margin: number;
+    percentChange: number;
+  }[];
+  totals: {
+    totalCost: number;
+    totalRevenue: number;
+  };
+}
+```
+
+---
+
+## 3. Alertas de Limite de Custo
+
+### Alteracoes no Banco de Dados
+
+**Nova tabela `cost_alerts`**:
+
+```sql
+CREATE TABLE public.cost_alerts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  master_company_id UUID NOT NULL REFERENCES companies(id),
+  company_id UUID REFERENCES companies(id), -- NULL = todas subcontas
+  alert_name TEXT NOT NULL,
+  alert_type TEXT CHECK (alert_type IN ('total_cost', 'margin_percent', 'cost_category')),
+  threshold_value INTEGER NOT NULL, -- em centavos ou percentual x100
+  threshold_operator TEXT CHECK (threshold_operator IN ('>', '<', '>=', '<=')),
+  cost_category TEXT, -- para alertas de categoria especifica
+  is_active BOOLEAN DEFAULT true,
+  notify_email BOOLEAN DEFAULT true,
+  notify_in_app BOOLEAN DEFAULT true,
+  last_triggered_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Tabela para historico de alertas disparados
+CREATE TABLE public.cost_alert_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  alert_id UUID REFERENCES cost_alerts(id) ON DELETE CASCADE,
+  company_id UUID REFERENCES companies(id),
+  triggered_value INTEGER NOT NULL,
+  threshold_value INTEGER NOT NULL,
+  message TEXT NOT NULL,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+### Novo Componente `CostAlertsManager.tsx`
+
+**Funcionalidades**:
+- Lista de alertas configurados
+- Botao para criar novo alerta
+- Dialog de configuracao com:
+  - Nome do alerta
+  - Tipo (custo total, margem, categoria)
+  - Subconta especifica ou todas
+  - Valor limite
+  - Operador (maior que, menor que)
+  - Opcoes de notificacao
+- Indicador visual de alertas ativos
+- Historico de alertas disparados
+
+**Layout visual**:
+```text
++--------------------------------------------------------------------+
+| ALERTAS DE CUSTO                                    [+ Novo Alerta]|
++--------------------------------------------------------------------+
+| Nome                | Tipo       | Limite    | Status  | Acoes    |
+|---------------------|------------|-----------|---------|----------|
+| Custo Alto AB       | Total      | > R$200   | Ativo   | [Ed][Del]|
+| Margem Critica      | Margem     | < 30%     | Ativo   | [Ed][Del]|
+| Msgs Excessivas     | Categoria  | > R$100   | Pausado | [Ed][Del]|
++--------------------------------------------------------------------+
+```
+
+### Componente `CostAlertBadge.tsx`
+
+- Badge que aparece na tabela de custos quando subconta excede limite
+- Icone de alerta com tooltip explicativo
+- Clicavel para ver detalhes
+
+### Integracao com Hook `useCompanyCosts.ts`
+
+Adicionar funcao para verificar alertas:
+
+```typescript
+const checkCostAlerts = useCallback(async (breakdowns: CompanyCostBreakdown[]) => {
+  // Buscar alertas configurados
+  // Comparar com valores atuais
+  // Retornar lista de alertas disparados
+  // Salvar no historico se necessario
+}, []);
+```
+
+---
+
+## Integracao no CustoCalculator.tsx
+
+### Nova Estrutura de Tabs Internas
+
+```typescript
+<Tabs defaultValue="overview">
+  <TabsList>
+    <TabsTrigger value="overview">Visao Geral</TabsTrigger>
+    <TabsTrigger value="monthly">Comparativo Mensal</TabsTrigger>
+    <TabsTrigger value="alerts">Alertas</TabsTrigger>
+  </TabsList>
+  
+  <TabsContent value="overview">
+    {/* Conteudo atual + coluna de historico */}
+  </TabsContent>
+  
+  <TabsContent value="monthly">
+    <MonthlyCostComparison />
+  </TabsContent>
+  
+  <TabsContent value="alerts">
+    <CostAlertsManager />
+  </TabsContent>
+</Tabs>
+```
+
+### Summary Cards Atualizados
+
+Adicionar novos cards:
+- **Custo Historico Total**: Soma de todos os custos desde ativacao
+- **Alertas Ativos**: Contador de subcontas em alerta
+
 ---
 
 ## Arquivos a Criar
 
 | Arquivo | Descricao |
 |---------|-----------|
-| `src/components/financeiro/CustoCalculator.tsx` | Componente principal do calculador |
-| `src/components/financeiro/CostConfigurationDialog.tsx` | Dialog de configuracao de custos |
-| `src/components/financeiro/CostBreakdownCard.tsx` | Card de detalhamento expandivel |
-| `src/components/financeiro/CostComparisonChart.tsx` | Grafico custo vs receita |
-| `src/hooks/useCompanyCosts.ts` | Hook de logica de custos |
+| `src/components/financeiro/HistoricalCostCard.tsx` | Card de custo historico por subconta |
+| `src/components/financeiro/MonthlyCostComparison.tsx` | Comparativo mensal de custos |
+| `src/components/financeiro/CostAlertsManager.tsx` | Gerenciador de alertas |
+| `src/components/financeiro/CostAlertDialog.tsx` | Dialog para criar/editar alertas |
+| `src/components/financeiro/CostAlertBadge.tsx` | Badge de alerta na tabela |
+| `src/hooks/useMonthlyCostHistory.ts` | Hook para dados mensais |
+| `src/hooks/useCostAlerts.ts` | Hook para gerenciar alertas |
 
 ## Arquivos a Editar
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/pages/Financeiro.tsx` | Adicionar aba "Custos" |
-| `src/hooks/useFinanceiro.ts` | Expor subcontas/costs data |
+| `src/components/financeiro/CustoCalculator.tsx` | Adicionar tabs internas e integracao |
+| `src/hooks/useCompanyCosts.ts` | Adicionar campos historicos e funcao de alertas |
 
 ---
 
-## Fluxo de Uso
+## Resumo das Migrations
 
-```text
-1. Master admin acessa Financeiro > Custos
-2. Sistema carrega metricas de uso de todas subcontas
-3. Aplica configuracao de custos (default ou customizada)
-4. Exibe tabela com custos calculados por subconta
-5. Compara com receita da assinatura para mostrar margem
-6. Admin pode ajustar custos unitarios e ver simulacao
-7. Opcao de exportar relatorio para analise
+```sql
+-- 1. Funcao para custo historico
+CREATE OR REPLACE FUNCTION get_subconta_historical_cost(...);
+
+-- 2. Funcao para comparativo mensal
+CREATE OR REPLACE FUNCTION get_monthly_cost_comparison(...);
+
+-- 3. Tabela de alertas
+CREATE TABLE cost_alerts (...);
+CREATE TABLE cost_alert_history (...);
+
+-- 4. RLS policies para as novas tabelas
+CREATE POLICY "Master can manage own alerts" ON cost_alerts ...;
+CREATE POLICY "Master can view own alert history" ON cost_alert_history ...;
 ```
 
 ---
 
-## Resumo Tecnico
+## Fluxo de Usuario
 
-**Complexidade:** Media-Alta  
-**Migrations:** 2 tabelas + 1 funcao SQL  
-**Componentes:** 5 novos  
-**Hooks:** 1 novo  
-**Estimativa:** ~400 linhas de codigo
+```text
+1. Admin acessa Financeiro > Custos
+2. Ve resumo com custo total historico e alertas ativos
+3. Na tabela, clica em subconta para ver historico detalhado
+4. Muda para aba "Comparativo Mensal" para analisar tendencias
+5. Identifica subconta com crescimento de custo
+6. Vai para aba "Alertas" e configura limite
+7. Recebe notificacao quando limite for ultrapassado
+```
+
+---
+
+## Estimativas
+
+**Complexidade**: Alta
+**Migrations**: 2 funcoes SQL + 2 tabelas + RLS
+**Componentes novos**: 6
+**Hooks novos**: 2
+**Linhas de codigo estimadas**: ~800
