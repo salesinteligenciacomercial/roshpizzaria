@@ -1,193 +1,243 @@
 
 # Plano de Melhorias para o Menu Agenda
 
-## Resumo das Melhorias Solicitadas
+## Resumo das Funcionalidades
 
-O usuário deseja duas funcionalidades principais para o menu Agenda, especialmente úteis no segmento médico:
+Este plano implementa duas melhorias principais para o menu Agenda:
 
-1. **Atribuir compromissos a profissionais** - Permitir designar um profissional/colaborador específico para cada compromisso
-2. **Agendar retorno/próximo compromisso** - Funcionalidade para remarcar consultas de retorno diretamente após um atendimento
-
----
-
-## Análise da Situação Atual
-
-### Estrutura do Banco de Dados
-A tabela `compromissos` já possui campos que suportam as melhorias:
-- `profissional_id` (uuid) - Referência para a tabela `profissionais`
-- `agenda_id` (uuid) - Referência para agendas específicas
-- `usuario_responsavel_id` (uuid) - Usuário responsável pelo compromisso
-
-A tabela `profissionais` contém:
-- `id`, `user_id`, `nome`, `email`, `telefone`, `especialidade`, `company_id`
-
-### Componentes Existentes
-- `EditarCompromissoDialog.tsx` - Edição de compromissos (938 linhas)
-- `AgendaModal.tsx` - Criação de novos compromissos
-- `Agenda.tsx` - Página principal com visualização mensal/semanal/diária
+1. **Seletor de Profissional**: Permitir escolher manualmente o profissional responsavel pelo compromisso
+2. **Agendar Retorno**: Botao para agendar consulta de retorno com dados pre-preenchidos do paciente
 
 ---
 
-## Implementação Proposta
+## Fase 1: Migracao de Banco de Dados
 
-### 1. Seletor de Profissional nos Compromissos
-
-**Onde:** `EditarCompromissoDialog.tsx` e formulário de novo compromisso em `Agenda.tsx`
-
-**Funcionalidades:**
-- Dropdown para selecionar profissional responsável
-- Exibir especialidade do profissional
-- Filtrar profissionais ativos da empresa
-- Validar disponibilidade do profissional no horário
-
-**Interface Visual:**
-```text
-+-------------------------------------------+
-| Profissional Responsável                  |
-| [v] Dr. João Silva - Cardiologista        |
-+-------------------------------------------+
-|  > Dr. Maria Santos - Clínico Geral       |
-|  > Dr. Carlos Oliveira - Dermatologista   |
-|  > Sem profissional atribuído             |
-+-------------------------------------------+
-```
-
-### 2. Botão "Agendar Retorno" nos Compromissos
-
-**Onde:** No card do compromisso e no `EditarCompromissoDialog.tsx`
-
-**Funcionalidades:**
-- Botão destacado para agendar próximo compromisso
-- Pré-preencher dados do paciente/lead automaticamente
-- Sugerir data de retorno baseada em intervalos comuns (7, 15, 30, 60, 90 dias)
-- Manter vínculo com o compromisso original (histórico)
-- Notificação opcional ao paciente sobre o retorno
-
-**Interface Visual:**
-```text
-+-----------------------------------------------------------+
-| COMPROMISSO: Consulta - João da Silva                     |
-| 26/01/2026 às 14:00 | Status: Realizado                   |
-+-----------------------------------------------------------+
-|                                                           |
-|  [Editar]  [Concluir]  [🔄 Agendar Retorno]               |
-|                                                           |
-+-----------------------------------------------------------+
-
-Modal "Agendar Retorno":
-+-----------------------------------------------------------+
-| AGENDAR RETORNO - João da Silva                           |
-+-----------------------------------------------------------+
-| Paciente: João da Silva (preenchido)                      |
-| Telefone: (11) 99999-0000 (preenchido)                    |
-|                                                           |
-| Retorno em:                                               |
-| [7 dias] [15 dias] [30 dias] [60 dias] [Personalizado]    |
-|                                                           |
-| Data sugerida: 26/02/2026                                 |
-| Horário: [v] 14:00 (mesmo horário)                        |
-|                                                           |
-| Tipo de serviço: [v] Retorno                              |
-| Profissional: [v] Dr. João Silva (mesmo)                  |
-|                                                           |
-| [ ] Notificar paciente sobre agendamento                  |
-|                                                           |
-| [Cancelar]                      [Agendar Retorno]         |
-+-----------------------------------------------------------+
-```
-
-### 3. Campo de Vínculo para Histórico de Retornos
-
-**Alteração no banco de dados:**
-Adicionar campo `compromisso_origem_id` na tabela `compromissos` para rastrear a cadeia de retornos.
+Adicionar campo para rastrear historico de retornos:
 
 ```sql
-ALTER TABLE compromissos 
-ADD COLUMN compromisso_origem_id UUID REFERENCES compromissos(id);
-```
-
-**Benefício:** Permite visualizar histórico completo de consultas do paciente com seus retornos.
-
----
-
-## Arquivos a Serem Modificados/Criados
-
-### Novos Componentes
-| Arquivo | Descrição |
-|---------|-----------|
-| `AgendarRetornoDialog.tsx` | Modal para agendar retorno com pré-preenchimento |
-| `ProfissionalSelector.tsx` | Componente reutilizável para seleção de profissional |
-
-### Arquivos a Modificar
-| Arquivo | Alteração |
-|---------|-----------|
-| `EditarCompromissoDialog.tsx` | Adicionar seletor de profissional + botão retorno |
-| `Agenda.tsx` | Integrar seletor de profissional no formulário de criação |
-| `AgendaModal.tsx` | Adicionar campo de profissional |
-
----
-
-## Migração de Banco de Dados
-
-```sql
--- Adicionar campo para vincular retornos ao compromisso original
 ALTER TABLE public.compromissos 
 ADD COLUMN IF NOT EXISTS compromisso_origem_id UUID REFERENCES public.compromissos(id);
 
--- Índice para consultas de histórico de retornos
 CREATE INDEX IF NOT EXISTS idx_compromissos_origem 
 ON public.compromissos(compromisso_origem_id);
 
--- Comentário explicativo
 COMMENT ON COLUMN public.compromissos.compromisso_origem_id IS 
 'ID do compromisso original para rastreamento de retornos';
 ```
 
 ---
 
-## Fluxo de Uso (Segmento Médico)
+## Fase 2: Novo Componente - ProfissionalSelector
 
-1. **Paciente chega para consulta**
-   - Atendente abre compromisso e marca como "Em atendimento"
+Criar componente reutilizavel para selecao de profissional:
 
-2. **Após consulta**
-   - Médico/atendente clica em "Agendar Retorno"
-   - Sistema pré-preenche dados do paciente
-   - Seleciona intervalo de retorno (ex: 30 dias)
-   - Sistema sugere horário disponível
+**Arquivo**: `src/components/agenda/ProfissionalSelector.tsx`
 
-3. **Paciente confirma**
-   - Opção de enviar WhatsApp com confirmação
-   - Compromisso de retorno criado com vínculo ao original
+**Funcionalidades**:
+- Dropdown com lista de profissionais ativos da empresa
+- Exibicao de nome e especialidade
+- Opcao "Nenhum profissional" para deixar vazio
+- Sincronizacao com agenda selecionada (sugestao automatica)
 
-4. **Histórico**
-   - No perfil do paciente/lead, visualizar todos os atendimentos e retornos vinculados
-
----
-
-## Benefícios para o Segmento Médico
-
-- **Produtividade**: Agendar retorno em segundos, sem recriar dados
-- **Rastreabilidade**: Histórico completo de consultas do paciente
-- **Organização**: Profissional responsável claramente definido
-- **Comunicação**: Notificação automática ao paciente
-- **Redução de faltas**: Paciente recebe lembrete do retorno
+**Interface Visual**:
+```text
++-------------------------------------------+
+| Profissional Responsavel                  |
+| [v] Dr. Joao Silva - Cardiologista        |
++-------------------------------------------+
+|  > Nenhum profissional                    |
+|  > Dr. Maria Santos - Clinico Geral       |
+|  > Dr. Carlos Oliveira - Dermatologista   |
++-------------------------------------------+
+```
 
 ---
 
-## Ordem de Implementação
+## Fase 3: Novo Componente - AgendarRetornoDialog
 
-### Fase 1 - Seletor de Profissional (imediato)
-1. Criar componente `ProfissionalSelector.tsx`
-2. Integrar em `EditarCompromissoDialog.tsx`
-3. Integrar no formulário de novo compromisso
+Criar modal para agendar retornos:
 
-### Fase 2 - Funcionalidade de Retorno (após Fase 1)
-1. Migração DB para `compromisso_origem_id`
-2. Criar `AgendarRetornoDialog.tsx`
-3. Adicionar botão de retorno nos cards de compromisso
-4. Implementar pré-preenchimento e sugestões de data
+**Arquivo**: `src/components/agenda/AgendarRetornoDialog.tsx`
 
-### Fase 3 - Histórico e Relatórios (opcional)
-1. Visualização de cadeia de retornos no perfil do lead
-2. Relatório de taxa de retorno por profissional/período
+**Funcionalidades**:
+- Pre-preencher dados do paciente/lead do compromisso original
+- Botoes de selecao rapida: 7, 15, 30, 60, 90 dias
+- Manter mesma agenda e profissional (configuravel)
+- Opcao de alterar horario (sugere mesmo horario original)
+- Checkbox para notificar paciente via WhatsApp
+- Vincular ao compromisso original via `compromisso_origem_id`
+
+**Interface Visual**:
+```text
++-----------------------------------------------------------+
+| AGENDAR RETORNO - Joao da Silva                           |
++-----------------------------------------------------------+
+| Paciente: Joao da Silva (preenchido automaticamente)      |
+| Telefone: (11) 99999-0000                                  |
+|                                                            |
+| Retorno em:                                                |
+| [7 dias] [15 dias] [30 dias] [60 dias] [90 dias]          |
+| [ Personalizar data ]                                      |
+|                                                            |
+| Data sugerida: 26/02/2026                                  |
+| Horario: [v] 14:00 (mesmo horario)                         |
+|                                                            |
+| Tipo de servico: [v] Retorno                               |
+| Agenda: [v] Consultorio Dr. Silva                          |
+| Profissional: [v] Dr. Joao Silva                           |
+|                                                            |
+| [ ] Notificar paciente sobre agendamento                   |
+|                                                            |
+| [Cancelar]                      [Agendar Retorno]          |
++-----------------------------------------------------------+
+```
+
+---
+
+## Fase 4: Integracao nos Componentes Existentes
+
+### 4.1 EditarCompromissoDialog.tsx
+
+Modificacoes:
+- Adicionar `ProfissionalSelector` apos o campo de Agenda
+- Carregar lista de profissionais ao abrir dialog
+- Sincronizar com agenda selecionada (quando trocar agenda, sugerir profissional)
+- Adicionar botao "Agendar Retorno" no rodape do dialog
+
+**Codigo a adicionar**:
+```typescript
+// Novo estado para profissional
+const [profissionalId, setProfissionalId] = useState(compromisso.profissional_id || "");
+const [profissionais, setProfissionais] = useState<Profissional[]>([]);
+
+// Carregar profissionais
+const loadProfissionais = async () => {
+  const { data } = await supabase
+    .from('profissionais')
+    .select('id, nome, especialidade')
+    .order('nome');
+  setProfissionais(data || []);
+};
+```
+
+### 4.2 Agenda.tsx
+
+Modificacoes:
+- Adicionar `ProfissionalSelector` no formulario de novo compromisso
+- Adicionar estado `profissional_id` no `formData`
+- Atualizar funcao `criarCompromisso` para incluir `profissional_id`
+- Adicionar botao "Agendar Retorno" nos cards de compromisso
+- Adicionar tipo "Retorno" na lista de tipos de servico
+
+**Botao de retorno nos cards**:
+```typescript
+// Adicionar apos botao de duplicar
+<AgendarRetornoDialog 
+  compromissoOriginal={compromisso}
+  onRetornoAgendado={carregarCompromissos}
+/>
+```
+
+---
+
+## Fase 5: Logica de Sincronizacao
+
+### Prioridade de Profissional:
+
+1. Se usuario selecionar profissional manualmente -> usar esse
+2. Se nao, e agenda tiver `responsavel_id` -> usar responsavel da agenda
+3. Se nao -> deixar `profissional_id` como null
+
+### Fluxo de Retorno:
+
+1. Usuario clica em "Agendar Retorno" no compromisso
+2. Modal abre com dados pre-preenchidos
+3. Usuario seleciona intervalo de dias ou data customizada
+4. Sistema sugere horarios disponiveis
+5. Usuario confirma e retorno e criado com `compromisso_origem_id` vinculado
+6. Opcionalmente, paciente recebe notificacao WhatsApp
+
+---
+
+## Arquivos a Criar
+
+| Arquivo | Descricao |
+|---------|-----------|
+| `src/components/agenda/ProfissionalSelector.tsx` | Componente dropdown para selecao de profissional |
+| `src/components/agenda/AgendarRetornoDialog.tsx` | Modal para agendar retorno de consulta |
+
+## Arquivos a Modificar
+
+| Arquivo | Modificacao |
+|---------|-------------|
+| `src/components/agenda/EditarCompromissoDialog.tsx` | Adicionar seletor de profissional e botao de retorno |
+| `src/pages/Agenda.tsx` | Adicionar seletor de profissional no formulario e botao de retorno nos cards |
+
+---
+
+## Beneficios para o Segmento Medico
+
+- **Produtividade**: Agendar retorno em segundos, sem recriar dados do paciente
+- **Rastreabilidade**: Historico completo de consultas vinculadas
+- **Organizacao**: Profissional responsavel claramente definido
+- **Flexibilidade**: Escolher profissional independente da agenda
+- **Comunicacao**: Notificacao automatica ao paciente sobre retorno
+
+---
+
+## Secao Tecnica
+
+### Estrutura da Interface Compromisso (atualizada)
+
+```typescript
+interface Compromisso {
+  id: string;
+  agenda_id?: string;
+  lead_id?: string;
+  profissional_id?: string;
+  usuario_responsavel_id: string;
+  compromisso_origem_id?: string; // NOVO - vinculo com retorno
+  data_hora_inicio: string;
+  data_hora_fim: string;
+  tipo_servico: string;
+  status: string;
+  // ... outros campos existentes
+}
+```
+
+### Interface do ProfissionalSelector
+
+```typescript
+interface ProfissionalSelectorProps {
+  value: string;
+  onChange: (profissionalId: string) => void;
+  agendaId?: string; // Para sugerir profissional da agenda
+  disabled?: boolean;
+}
+```
+
+### Interface do AgendarRetornoDialog
+
+```typescript
+interface AgendarRetornoDialogProps {
+  compromissoOriginal: Compromisso;
+  onRetornoAgendado: () => void;
+  trigger?: React.ReactNode; // Botao customizado (opcional)
+}
+```
+
+### Tipo de Servico "Retorno"
+
+Adicionar "retorno" na lista de tipos de servico:
+- reuniao, consultoria, atendimento, visita, apresentacao, **retorno**, outro
+
+---
+
+## Ordem de Implementacao
+
+1. Migracao de banco de dados (`compromisso_origem_id`)
+2. Criar `ProfissionalSelector.tsx`
+3. Criar `AgendarRetornoDialog.tsx`
+4. Integrar em `EditarCompromissoDialog.tsx`
+5. Integrar em `Agenda.tsx`
+6. Testar fluxo completo
