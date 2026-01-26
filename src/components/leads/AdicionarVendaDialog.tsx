@@ -390,15 +390,22 @@ export function AdicionarVendaDialog({
                               <SelectContent>
                                 {produtos.map((p) => (
                                   <SelectItem key={p.id} value={p.id}>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span>{p.nome}</span>
-                                      {p.preco_sugerido && p.preco_sugerido > 0 && (
-                                        <Badge
-                                          variant="secondary"
-                                          className="text-xs"
-                                        >
-                                          {formatCurrency(p.preco_sugerido)}
-                                        </Badge>
+                                    <div className="flex flex-col gap-0.5">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="font-medium">{p.nome}</span>
+                                        {p.preco_sugerido && p.preco_sugerido > 0 && (
+                                          <Badge
+                                            variant="secondary"
+                                            className="text-xs"
+                                          >
+                                            {formatCurrency(p.preco_sugerido)}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      {(p.categoria || p.subcategoria) && (
+                                        <span className="text-[10px] text-muted-foreground">
+                                          {[p.categoria, p.subcategoria].filter(Boolean).join(" → ")}
+                                        </span>
                                       )}
                                     </div>
                                   </SelectItem>
