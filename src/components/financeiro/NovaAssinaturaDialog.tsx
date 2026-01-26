@@ -52,6 +52,7 @@ export function NovaAssinaturaDialog({
     setup_fee_value: '',
     setup_fee_paid: false,
     payment_method: 'manual' as 'pix' | 'boleto' | 'cartao' | 'manual' | 'stripe' | 'asaas',
+    status: 'active' as 'active' | 'trial' | 'pending',
     notes: ''
   });
 
@@ -127,9 +128,9 @@ export function NovaAssinaturaDialog({
         setup_fee_paid: formData.setup_fee_paid,
         payment_method: formData.payment_method,
         notes: formData.notes || null,
-        status: 'active',
+        status: formData.status,
         start_date: new Date().toISOString().split('T')[0],
-        next_billing_date: nextBillingDate.toISOString().split('T')[0]
+        next_billing_date: formData.status === 'trial' ? null : nextBillingDate.toISOString().split('T')[0]
       });
 
       onOpenChange(false);
@@ -141,6 +142,7 @@ export function NovaAssinaturaDialog({
         setup_fee_value: '',
         setup_fee_paid: false,
         payment_method: 'manual',
+        status: 'active',
         notes: ''
       });
     } finally {
@@ -256,22 +258,41 @@ export function NovaAssinaturaDialog({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Método de Pagamento</Label>
-            <Select
-              value={formData.payment_method}
-              onValueChange={(value: typeof formData.payment_method) => setFormData(prev => ({ ...prev, payment_method: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="manual">Manual</SelectItem>
-                <SelectItem value="pix">PIX</SelectItem>
-                <SelectItem value="boleto">Boleto</SelectItem>
-                <SelectItem value="cartao">Cartão</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value: typeof formData.status) => setFormData(prev => ({ ...prev, status: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Ativo</SelectItem>
+                  <SelectItem value="trial">Em Teste</SelectItem>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Método de Pagamento</Label>
+              <Select
+                value={formData.payment_method}
+                onValueChange={(value: typeof formData.payment_method) => setFormData(prev => ({ ...prev, payment_method: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Manual</SelectItem>
+                  <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="boleto">Boleto</SelectItem>
+                  <SelectItem value="cartao">Cartão</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="space-y-2">
