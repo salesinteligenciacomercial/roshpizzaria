@@ -23,6 +23,7 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { EditarCompromissoDialog } from "@/components/agenda/EditarCompromissoDialog";
+import { AgendarRetornoDialog } from "@/components/agenda/AgendarRetornoDialog";
 import { AgendaColaboradores } from "@/components/agenda/AgendaColaboradores";
 import { HorarioComercialConfig, criarHorarioPadrao, converterHorarioAntigo, HorarioComercial } from "@/components/agenda/HorarioComercialConfig";
 import { HorarioSeletor } from "@/components/agenda/HorarioSeletor";
@@ -2379,6 +2380,7 @@ export default function Agenda() {
                       <SelectItem value="atendimento">Atendimento</SelectItem>
                       <SelectItem value="visita">Visita</SelectItem>
                       <SelectItem value="apresentacao">Apresentação</SelectItem>
+                      <SelectItem value="retorno">Retorno</SelectItem>
                       <SelectItem value="outro">Outro</SelectItem>
                     </SelectContent>
                   </Select>
@@ -2765,6 +2767,10 @@ export default function Agenda() {
                                 <Button size="sm" variant="ghost" onClick={() => duplicarCompromisso(compromisso)} title="Duplicar compromisso">
                                   <Copy className="h-4 w-4" />
                                 </Button>
+                                <AgendarRetornoDialog 
+                                  compromissoOriginal={compromisso}
+                                  onRetornoAgendado={carregarCompromissos}
+                                />
                                 <EditarCompromissoDialog compromisso={compromisso} onCompromissoUpdated={carregarCompromissos} />
                                 {compromisso.status === 'agendado' && <>
                                     <Button size="sm" variant="ghost" onClick={() => atualizarStatus(compromisso.id, 'concluido')} title="Marcar como concluído">
@@ -2838,6 +2844,7 @@ export default function Agenda() {
                       <SelectItem value="atendimento">Atendimento</SelectItem>
                       <SelectItem value="visita">Visita</SelectItem>
                       <SelectItem value="apresentacao">Apresentação</SelectItem>
+                      <SelectItem value="retorno">Retorno</SelectItem>
                       <SelectItem value="outro">Outro</SelectItem>
                     </SelectContent>
                   </Select>

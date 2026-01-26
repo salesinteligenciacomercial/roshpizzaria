@@ -882,6 +882,7 @@ export function EditarCompromissoDialog({
                 <SelectItem value="atendimento">Atendimento</SelectItem>
                 <SelectItem value="visita">Visita</SelectItem>
                 <SelectItem value="apresentacao">Apresentação</SelectItem>
+                <SelectItem value="retorno">Retorno</SelectItem>
                 <SelectItem value="outro">Outro</SelectItem>
               </SelectContent>
             </Select>

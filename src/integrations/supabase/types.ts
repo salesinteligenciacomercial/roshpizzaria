@@ -1032,6 +1032,7 @@ export type Database = {
         Row: {
           agenda_id: string | null
           company_id: string | null
+          compromisso_origem_id: string | null
           created_at: string | null
           custo_estimado: number | null
           data_hora_fim: string
@@ -1054,6 +1055,7 @@ export type Database = {
         Insert: {
           agenda_id?: string | null
           company_id?: string | null
+          compromisso_origem_id?: string | null
           created_at?: string | null
           custo_estimado?: number | null
           data_hora_fim: string
@@ -1076,6 +1078,7 @@ export type Database = {
         Update: {
           agenda_id?: string | null
           company_id?: string | null
+          compromisso_origem_id?: string | null
           created_at?: string | null
           custo_estimado?: number | null
           data_hora_fim?: string
@@ -1108,6 +1111,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compromissos_compromisso_origem_id_fkey"
+            columns: ["compromisso_origem_id"]
+            isOneToOne: false
+            referencedRelation: "compromissos"
             referencedColumns: ["id"]
           },
           {
