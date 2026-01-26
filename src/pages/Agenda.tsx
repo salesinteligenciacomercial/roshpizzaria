@@ -2083,12 +2083,21 @@ export default function Agenda() {
     concluidos: compromissosDoMes.filter(c => c.status === 'concluido').length,
     cancelados: compromissosDoMes.filter(c => c.status === 'cancelado').length
   }), [compromissosDoMes]);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const amanha = new Date(hoje);
+  amanha.setDate(amanha.getDate() + 1);
+  
   const estatisticasLembretes = {
     total: lembretes.length,
     enviados: lembretes.filter(l => l.status_envio === 'enviado').length,
     pendentes: lembretes.filter(l => l.status_envio === 'pendente').length,
-    erro: lembretes.filter(l => l.status_envio === 'erro').length,
-    retry: lembretes.filter(l => l.status_envio === 'retry').length,
+    recorrentes: lembretes.filter(l => l.recorrencia && l.ativo !== false).length,
+    paraHoje: lembretes.filter(l => {
+      if (!l.data_envio) return false;
+      const dataEnvio = new Date(l.data_envio);
+      return dataEnvio >= hoje && dataEnvio < amanha;
+    }).length,
     taxaSucesso: lembretes.length > 0 ? Math.round(lembretes.filter(l => l.status_envio === 'enviado').length / lembretes.length * 100) : 0
   };
   return <div className="space-y-6 p-6">
@@ -2573,14 +2582,14 @@ export default function Agenda() {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-orange-600">{estatisticasLembretes.retry}</div>
-            <p className="text-xs text-muted-foreground">Em retry</p>
+            <div className="text-2xl font-bold text-purple-600">{estatisticasLembretes.recorrentes}</div>
+            <p className="text-xs text-muted-foreground">Recorrentes</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-red-600">{estatisticasLembretes.erro}</div>
-            <p className="text-xs text-muted-foreground">Com erro</p>
+            <div className="text-2xl font-bold text-cyan-600">{estatisticasLembretes.paraHoje}</div>
+            <p className="text-xs text-muted-foreground">Para hoje</p>
           </CardContent>
         </Card>
         <Card>
