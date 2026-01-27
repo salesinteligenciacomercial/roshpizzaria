@@ -1651,60 +1651,80 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
 
         {/* Seção do lead movida para o CardHeader para aparecer sempre */}
         
-        <div className="flex justify-end items-center gap-1 pt-2 flex-wrap" onPointerDown={(e) => e.stopPropagation()}>
-          {/* Adicionar comentário - usando Dialog popup apenas para adicionar */}
-          <Dialog open={showCommentInput} onOpenChange={setShowCommentInput}>
-            <DialogTrigger asChild>
-              <Button 
-                type="button" 
-                size="sm" 
-                variant="ghost" 
-                className="h-7 w-7 p-0 flex-shrink-0"
-                onPointerDown={(e) => e.stopPropagation()}
-                title="Adicionar comentário"
-              >
-                <MessageSquare className="h-3.5 w-3.5" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md bg-background" onPointerDown={(e) => e.stopPropagation()}>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  Adicionar Comentário
-                </DialogTitle>
-              </DialogHeader>
-              
-              <div className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        addComment();
-                        setShowCommentInput(false);
-                      }
-                    }}
-                    placeholder="Digite seu comentário..."
-                    className="flex-1 text-foreground bg-background"
-                    autoFocus
-                  />
-                  <Button 
-                    type="button" 
-                    size="sm"
-                    onClick={() => {
-                      addComment();
-                      setShowCommentInput(false);
-                    }}
-                    disabled={!newComment.trim()}
-                  >
-                    <Check className="h-4 w-4" />
-                  </Button>
-                </div>
+        {/* Área de comentário inline expansível */}
+        {showCommentInput && (
+          <div className="mt-3 pt-3 border-t border-border/50" onPointerDown={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-2">
+              <textarea
+                value={newComment}
+                onChange={(e) => {
+                  setNewComment(e.target.value);
+                  // Auto-resize textarea
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    addComment();
+                    setShowCommentInput(false);
+                  }
+                  if (e.key === 'Escape') {
+                    setShowCommentInput(false);
+                    setNewComment('');
+                  }
+                }}
+                placeholder="Digite seu comentário... (Ctrl+Enter para enviar, Esc para cancelar)"
+                className="flex-1 min-h-[36px] max-h-[200px] p-2 text-sm rounded-md border border-input bg-background text-foreground resize-none overflow-hidden focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+                autoFocus
+                rows={1}
+              />
+              <div className="flex flex-col gap-1">
+                <Button 
+                  type="button" 
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={() => {
+                    addComment();
+                    setShowCommentInput(false);
+                  }}
+                  disabled={!newComment.trim()}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+                <Button 
+                  type="button" 
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 px-2"
+                  onClick={() => {
+                    setShowCommentInput(false);
+                    setNewComment('');
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
-            </DialogContent>
-          </Dialog>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end items-center gap-1 pt-2 flex-wrap" onPointerDown={(e) => e.stopPropagation()}>
+          {/* Botão para abrir área de comentário inline */}
+          <Button 
+            type="button" 
+            size="sm" 
+            variant="ghost" 
+            className="h-7 w-7 p-0 flex-shrink-0"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowCommentInput(!showCommentInput);
+            }}
+            title="Adicionar comentário"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+          </Button>
           
           {/* ✅ NOVO: Botão de mover tarefa para outra coluna */}
           {columns && columns.length > 0 && (
