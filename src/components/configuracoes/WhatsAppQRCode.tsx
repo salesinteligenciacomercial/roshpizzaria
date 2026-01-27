@@ -108,23 +108,26 @@ export function WhatsAppQRCode() {
 
       if (!connections) return;
 
-      // Executar health checks em paralelo
+      // 🔒 CORREÇÃO: Health check apenas para ATUALIZAR para connected
+      // NÃO desconectar automaticamente - apenas desconexão manual
       const healthCheckPromises = connections.map(async (conn) => {
         try {
           const isHealthy = await testConnectionHealth(conn);
-          const newStatus = isHealthy ? 'connected' : 'disconnected';
 
-          if (newStatus !== conn.status) {
+          // Apenas atualizar SE está healthy (não desconectar automaticamente)
+          if (isHealthy) {
             await supabase
               .from('whatsapp_connections')
               .update({
-                status: newStatus,
                 last_health_check: new Date().toISOString(),
-                last_connected_at: isHealthy ? new Date().toISOString() : conn.last_connected_at
+                last_connected_at: new Date().toISOString()
               })
               .eq('id', conn.id);
 
-            console.log(`🔄 Status da instância ${conn.instance_name} atualizado: ${newStatus}`);
+            console.log(`✅ Health check OK para ${conn.instance_name}`);
+          } else {
+            // Apenas logar, NÃO desconectar automaticamente
+            console.log(`⚠️ Health check falhou para ${conn.instance_name} - mantendo status (desconexão manual apenas)`);
           }
         } catch (error) {
           console.error(`❌ Erro no health check de ${conn.instance_name}:`, error);

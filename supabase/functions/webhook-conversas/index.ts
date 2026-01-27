@@ -496,37 +496,32 @@ serve(async (req) => {
         const instanceName = body.instance;
         const connectionState = body.data?.state || body.state || 'unknown';
         
-        // Mapear estado para status do banco
-        let newStatus: string;
+        // 🔒 CORREÇÃO: Só atualizar status para CONECTADO (open/connected)
+        // A desconexão deve ser MANUAL - não desconectar automaticamente
+        // Isso evita que falhas temporárias da API desativem a conexão
         if (connectionState === 'open' || connectionState === 'connected') {
-          newStatus = 'connected';
-        } else if (connectionState === 'close' || connectionState === 'closed' || connectionState === 'disconnected') {
-          newStatus = 'disconnected';
-        } else if (connectionState === 'connecting') {
-          newStatus = 'connecting';
+          console.log(`🔄 [WEBHOOK] Atualizando status da instância ${instanceName}: ${connectionState} -> connected`);
+          
+          const { error: updateError } = await supabase
+            .from('whatsapp_connections')
+            .update({ 
+              status: 'connected',
+              updated_at: new Date().toISOString()
+            })
+            .eq('instance_name', instanceName);
+          
+          if (updateError) {
+            console.error('❌ [WEBHOOK] Erro ao atualizar status:', updateError);
+          } else {
+            console.log(`✅ [WEBHOOK] Status da instância ${instanceName} atualizado para: connected`);
+          }
         } else {
-          newStatus = 'disconnected'; // Default para desconectado se estado desconhecido
-        }
-        
-        console.log(`🔄 [WEBHOOK] Atualizando status da instância ${instanceName}: ${connectionState} -> ${newStatus}`);
-        
-        // Atualizar status no banco
-        const { data: updateResult, error: updateError } = await supabase
-          .from('whatsapp_connections')
-          .update({ 
-            status: newStatus,
-            updated_at: new Date().toISOString()
-          })
-          .eq('instance_name', instanceName);
-        
-        if (updateError) {
-          console.error('❌ [WEBHOOK] Erro ao atualizar status:', updateError);
-        } else {
-          console.log(`✅ [WEBHOOK] Status da instância ${instanceName} atualizado para: ${newStatus}`);
+          // Para estados de desconexão, apenas LOGAR - não atualizar banco
+          console.log(`⚠️ [WEBHOOK] Estado de conexão ${connectionState} para ${instanceName} - IGNORADO (desconexão apenas manual)`);
         }
         
         return new Response(
-          JSON.stringify({ success: true, message: 'Connection status updated', newStatus }),
+          JSON.stringify({ success: true, message: 'Connection event processed', state: connectionState }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } catch (error) {

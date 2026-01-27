@@ -727,15 +727,12 @@ serve(async (req) => {
             validatedData
           );
           
-          // Se Evolution falhou com "Connection Closed", atualizar status e tentar Meta
+          // 🔒 CORREÇÃO: Se Evolution falhou com "Connection Closed", NÃO atualizar status automaticamente
+          // A desconexão deve ser MANUAL - apenas logar e tentar fallback
           if (!result.success && result.error?.includes('Connection Closed')) {
-            console.log("🔴 Evolution retornou 'Connection Closed', atualizando status...");
-            await supabase
-              .from('whatsapp_connections')
-              .update({ status: 'disconnected', updated_at: new Date().toISOString() })
-              .eq('id', connection.id);
+            console.log("⚠️ Evolution retornou 'Connection Closed' - NÃO desconectando automaticamente (desconexão manual apenas)");
             
-            // Tentar Meta como fallback
+            // Tentar Meta como fallback SEM atualizar status de desconexão
             if (hasMetaCredentials && validatedData.mensagem) {
               console.log("🔄 Tentando Meta como fallback...");
               result = await sendMetaTextMessage(
@@ -780,13 +777,10 @@ serve(async (req) => {
         validatedData
       );
       
-      // Se Evolution falhou com "Connection Closed", atualizar status
+      // 🔒 CORREÇÃO: Se Evolution falhou com "Connection Closed", NÃO atualizar status automaticamente
+      // A desconexão deve ser MANUAL - apenas logar o erro
       if (!result.success && result.error?.includes('Connection Closed')) {
-        console.log("🔴 Evolution retornou 'Connection Closed', atualizando status...");
-        await supabase
-          .from('whatsapp_connections')
-          .update({ status: 'disconnected', updated_at: new Date().toISOString() })
-          .eq('id', connection.id);
+        console.log("⚠️ Evolution retornou 'Connection Closed' - NÃO desconectando automaticamente (desconexão manual apenas)");
       }
     }
 
