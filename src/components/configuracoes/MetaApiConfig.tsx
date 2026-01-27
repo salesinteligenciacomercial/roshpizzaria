@@ -92,22 +92,30 @@ export function MetaApiConfig({ companyId }: MetaApiConfigProps) {
         }
       }
 
-      // Determinar status - se Meta API tem credenciais válidas, marcar como connected
-      const hasMetaCredentials = formData.meta_phone_number_id && formData.meta_access_token;
-      const newStatus = (formData.api_provider === 'meta' || formData.api_provider === 'both') && hasMetaCredentials 
-        ? 'connected' 
-        : 'pending';
-
       // Usar token master global - NÃO gerar token por subconta
-      const updateData = {
+      // IMPORTANTE: NÃO alterar o campo 'status' aqui - ele é gerenciado pelo Evolution API
+      // O status reflete a conexão do Evolution, não deve ser sobrescrito ao configurar Meta
+      const updateData: Record<string, unknown> = {
         api_provider: formData.api_provider,
         meta_phone_number_id: formData.meta_phone_number_id || null,
         meta_access_token: formData.meta_access_token || null,
         meta_webhook_verify_token: MASTER_VERIFY_TOKEN, // Token fixo global
         meta_business_account_id: formData.meta_business_account_id || null,
-        status: newStatus, // Status atualizado baseado nas credenciais
         updated_at: new Date().toISOString(),
       };
+
+      // Só definir status se for uma NOVA conexão (sem Evolution existente)
+      // ou se estiver mudando para "meta" apenas (sem Evolution)
+      if (!connection) {
+        updateData.status = 'pending';
+      } else if (formData.api_provider === 'meta') {
+        // Se usar APENAS Meta, podemos marcar como connected se tiver credenciais
+        const hasMetaCredentials = formData.meta_phone_number_id && formData.meta_access_token;
+        if (hasMetaCredentials) {
+          updateData.status = 'connected';
+        }
+      }
+      // Para "both" ou "evolution", NÃO alterar o status - manter o status atual do Evolution
 
       if (connection) {
         const { error } = await supabase
