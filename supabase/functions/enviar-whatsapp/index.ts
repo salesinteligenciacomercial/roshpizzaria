@@ -435,13 +435,21 @@ serve(async (req) => {
     const apiProvider = validatedData.force_provider || connection.api_provider || 'evolution';
     const isGroup = /@g\.us$/.test(validatedData.numero);
     
-    // Formatar número para Meta API (adicionar código do país)
+    // Formatar número para Meta API (adicionar código do país se necessário)
     let formattedNumber = validatedData.numero.replace(/[^0-9]/g, '');
-    if (!formattedNumber.startsWith('55') && formattedNumber.length <= 11) {
+    
+    // Se o número não começa com 55 e tem 10 ou 11 dígitos, adicionar código do país
+    if (!formattedNumber.startsWith('55') && (formattedNumber.length === 10 || formattedNumber.length === 11)) {
       formattedNumber = '55' + formattedNumber;
     }
+    
+    // Se já tem 55 no início, garantir que o formato está correto
+    // Números brasileiros: 55 + DDD (2 dígitos) + número (8 ou 9 dígitos) = 12 ou 13 dígitos total
+    if (formattedNumber.startsWith('55') && formattedNumber.length < 12) {
+      console.warn("⚠️ Número pode estar incompleto:", formattedNumber, "length:", formattedNumber.length);
+    }
 
-    console.log("🔀 Router - Provider:", apiProvider, "| Grupo:", isGroup);
+    console.log("🔀 Router - Provider:", apiProvider, "| Grupo:", isGroup, "| Número formatado:", formattedNumber);
 
     // ============= ROTEAMENTO DE MENSAGENS =============
     let result: { success: boolean; provider: string; data?: any; error?: string };
