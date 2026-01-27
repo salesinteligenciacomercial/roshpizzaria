@@ -1092,12 +1092,15 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
                   </AvatarFallback>
                 </Avatar>
                 
-                <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                <div className="flex flex-col gap-0.5 flex-1 min-w-0 max-w-[calc(100%-60px)]">
                   <span className="text-sm font-medium text-foreground truncate">
                     {leadNome || task.lead_name || "Lead"}
                   </span>
-                  <CardTitle className={`text-xs font-normal ${isOverdue ? 'text-red-700' : 'text-muted-foreground'} truncate`}>
-                    {task.title}
+                  <CardTitle 
+                    className={`text-xs font-normal ${isOverdue ? 'text-red-700' : 'text-muted-foreground'} truncate`}
+                    title={task.title}
+                  >
+                    {task.title.length > 50 ? `${task.title.substring(0, 50)}...` : task.title}
                     {isOverdue && <span className="ml-1 text-red-500">🔴</span>}
                   </CardTitle>
                   
@@ -1162,9 +1165,12 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                <CardTitle className={`text-base font-semibold ${isOverdue ? 'text-red-700' : 'text-foreground'}`}>
-                  {task.title}
+              <div className="flex flex-col gap-1.5 flex-1 min-w-0 max-w-[calc(100%-60px)]">
+                <CardTitle 
+                  className={`text-base font-semibold ${isOverdue ? 'text-red-700' : 'text-foreground'} truncate`}
+                  title={task.title}
+                >
+                  {task.title.length > 50 ? `${task.title.substring(0, 50)}...` : task.title}
                   {isOverdue && <span className="ml-2 text-red-500">🔴</span>}
                 </CardTitle>
                 
