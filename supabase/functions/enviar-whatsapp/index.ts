@@ -382,11 +382,11 @@ serve(async (req) => {
       );
     }
 
+    // Buscar conexão - NÃO filtrar por status aqui, pois Meta API funciona independente do Evolution
     const { data: connection, error: connError } = await supabase
       .from('whatsapp_connections')
       .select('*')
       .eq('company_id', validatedData.company_id)
-      .eq('status', 'connected')
       .single();
 
     if (connError || !connection) {
@@ -396,6 +396,40 @@ serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Verificar se há pelo menos uma API disponível
+    const hasMetaCredentials = connection.meta_phone_number_id && connection.meta_access_token;
+    const hasEvolutionConfig = (connection.evolution_api_url || EVOLUTION_API_URL) && 
+                                (connection.evolution_api_key || EVOLUTION_API_KEY) &&
+                                connection.instance_name;
+    const evolutionConnected = connection.status === 'connected';
+
+    // Se não tem nenhuma API configurada OU (Evolution desconectado E não tem Meta)
+    if (!hasMetaCredentials && !hasEvolutionConfig) {
+      console.error("❌ Nenhuma API WhatsApp configurada");
+      return new Response(
+        JSON.stringify({ error: "Nenhuma conexão WhatsApp configurada", code: "NO_WHATSAPP_CONFIG" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Se apenas Evolution está configurado e está desconectado
+    if (!hasMetaCredentials && hasEvolutionConfig && !evolutionConnected) {
+      console.error("❌ Evolution API desconectada e Meta não configurada");
+      return new Response(
+        JSON.stringify({ error: "WhatsApp Evolution desconectado. Reconecte sua instância ou configure a API Meta.", code: "EVOLUTION_DISCONNECTED" }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("🔗 Conexão encontrada:", {
+      instanceName: connection.instance_name,
+      apiProvider: connection.api_provider,
+      status: connection.status,
+      hasEvolution: hasEvolutionConfig,
+      evolutionConnected,
+      hasMeta: hasMetaCredentials
+    });
 
     // Determinar provider a usar
     const apiProvider = validatedData.force_provider || connection.api_provider || 'evolution';
@@ -608,66 +642,74 @@ serve(async (req) => {
         result = { success: false, provider: 'meta', error: 'Mensagem, mídia, template ou Evolution API é obrigatória' };
       }
     }
-    // Both APIs - Usar Evolution como principal, Meta como fallback
+    // Both APIs - Usar Evolution como principal (se conectado), Meta como fallback
     else if (apiProvider === 'both') {
-      console.log("📗📘 Provider 'both' - Usando Evolution como principal...");
+      console.log("📗📘 Provider 'both'");
       const baseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
       const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
-      const hasMetaCredentials = connection.meta_phone_number_id && connection.meta_access_token;
       
-      if (!baseUrl || !apiKey) {
-        // Sem Evolution, tentar Meta
+      // Se Evolution está desconectada, ir direto para Meta
+      if (!evolutionConnected) {
+        console.log("📘 Evolution desconectada - Usando Meta API diretamente...");
+        
         if (hasMetaCredentials && validatedData.mensagem) {
-          console.log("⚠️ Evolution não configurada, tentando Meta...");
           result = await sendMetaTextMessage(
             connection.meta_phone_number_id,
             connection.meta_access_token,
             formattedNumber,
             validatedData.mensagem
           );
-        } else {
-          return new Response(
-            JSON.stringify({ error: "Nenhuma API configurada corretamente", code: "NO_API_CONFIG" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-      } else {
-        // 🔍 VERIFICAR STATUS DA INSTÂNCIA ANTES DE ENVIAR
-        let evolutionConnected = true;
-        try {
-          console.log("🔍 Verificando status da instância Evolution antes de enviar...");
-          const statusUrl = `${baseUrl.replace(/\/$/, '')}/instance/connectionState/${connection.instance_name}`;
-          const statusResponse = await fetch(statusUrl, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': apiKey
-            }
-          });
           
-          if (statusResponse.ok) {
-            const statusData = await statusResponse.json();
-            const instanceState = statusData.instance?.state || statusData.state;
-            console.log("📊 Estado da instância Evolution:", instanceState);
-            
-            if (instanceState !== 'open' && instanceState !== 'connected') {
-              console.log("⚠️ Instância Evolution não conectada, marcando como desconectada...");
-              evolutionConnected = false;
-              
-              // Atualizar status no banco para refletir a realidade
-              await supabase
-                .from('whatsapp_connections')
-                .update({ status: 'disconnected', updated_at: new Date().toISOString() })
-                .eq('id', connection.id);
-            }
+          // Detectar erro de janela de 24h
+          if (!result.success && (result.error?.includes('Re-engagement message') || result.error?.includes('outside the allowed window'))) {
+            console.log("⚠️ Janela de 24h expirada - necessário usar template");
+            result.error = 'JANELA_24H_EXPIRADA: Este contato não enviou mensagem nas últimas 24h. Para enviar a primeira mensagem, use um template aprovado.';
           }
-        } catch (statusError) {
-          console.error("⚠️ Erro ao verificar status da Evolution:", statusError);
-          // Se não conseguir verificar, tentar enviar mesmo assim
+        } else if (hasMetaCredentials && validatedData.mediaUrl) {
+          let mediaType = validatedData.tipo_mensagem || 'image';
+          if (mediaType === 'texto') mediaType = 'text';
+          if (mediaType === 'pdf') mediaType = 'document';
+          
+          result = await sendMetaMediaMessage(
+            connection.meta_phone_number_id,
+            connection.meta_access_token,
+            formattedNumber,
+            validatedData.mediaUrl,
+            mediaType as 'image' | 'video' | 'audio' | 'document',
+            validatedData.mensagem || validatedData.caption,
+            false
+          );
+        } else if (!hasMetaCredentials) {
+          return new Response(
+            JSON.stringify({ error: "WhatsApp Evolution desconectado e Meta API não configurada. Reconecte sua instância.", code: "ALL_APIS_UNAVAILABLE" }),
+            { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } else {
+          result = { success: false, provider: 'meta', error: 'Mensagem ou mídia é obrigatória' };
         }
+      } 
+      // Evolution está conectada - usar como principal
+      else {
+        console.log("📗 Evolution conectada - Usando como principal, Meta como fallback...");
         
-        // Se Evolution está conectada, tentar enviar
-        if (evolutionConnected) {
+        if (!baseUrl || !apiKey) {
+          // Sem Evolution configurada, tentar Meta
+          if (hasMetaCredentials && validatedData.mensagem) {
+            console.log("⚠️ Evolution não configurada, tentando Meta...");
+            result = await sendMetaTextMessage(
+              connection.meta_phone_number_id,
+              connection.meta_access_token,
+              formattedNumber,
+              validatedData.mensagem
+            );
+          } else {
+            return new Response(
+              JSON.stringify({ error: "Nenhuma API configurada corretamente", code: "NO_API_CONFIG" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } else {
+          // Tentar enviar via Evolution
           result = await sendEvolutionMessage(
             baseUrl.replace(/\/$/, ''),
             connection.instance_name,
@@ -685,22 +727,26 @@ serve(async (req) => {
               .update({ status: 'disconnected', updated_at: new Date().toISOString() })
               .eq('id', connection.id);
             
-            evolutionConnected = false;
+            // Tentar Meta como fallback
+            if (hasMetaCredentials && validatedData.mensagem) {
+              console.log("🔄 Tentando Meta como fallback...");
+              result = await sendMetaTextMessage(
+                connection.meta_phone_number_id,
+                connection.meta_access_token,
+                formattedNumber,
+                validatedData.mensagem
+              );
+            }
+          } else if (!result.success && hasMetaCredentials && validatedData.mensagem) {
+            // Outro erro do Evolution - tentar Meta
+            console.log("🔄 Evolution falhou, tentando Meta como fallback...");
+            result = await sendMetaTextMessage(
+              connection.meta_phone_number_id,
+              connection.meta_access_token,
+              formattedNumber,
+              validatedData.mensagem
+            );
           }
-        } else {
-          // Evolution não conectada - inicializar result com erro
-          result = { success: false, provider: 'evolution', error: 'Instância Evolution desconectada' };
-        }
-        
-        // Se Evolution falhou ou não está conectada, tentar Meta como fallback
-        if (!result.success && hasMetaCredentials && validatedData.mensagem) {
-          console.log("🔄 Evolution falhou/desconectada, tentando Meta como fallback...");
-          result = await sendMetaTextMessage(
-            connection.meta_phone_number_id,
-            connection.meta_access_token,
-            formattedNumber,
-            validatedData.mensagem
-          );
         }
       }
     }
