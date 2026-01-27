@@ -51,6 +51,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { PdfViewerDialog } from "./PdfViewerDialog";
+import { TransferirTarefaDialog } from "./TransferirTarefaDialog";
 
 interface Task {
   id: string;
@@ -1822,6 +1823,13 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
           >
             <Copy className="h-3 w-3" />
           </Button>
+          {/* Botão de transferir para outro quadro */}
+          <TransferirTarefaDialog
+            taskId={task.id}
+            taskTitle={task.title}
+            currentBoardId={task.board_id}
+            onTransferred={onUpdate}
+          />
           <EditarTarefaDialog task={task} onTaskUpdated={onUpdate} />
           <AlertDialog>
             <AlertDialogTrigger asChild>
