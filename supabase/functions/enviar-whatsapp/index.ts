@@ -434,8 +434,9 @@ serve(async (req) => {
         validatedData
       );
     }
-    // Meta API
-    else if (apiProvider === 'meta' || apiProvider === 'both') {
+    // Meta API (apenas quando provider é explicitamente "meta")
+    // Quando "both", usar Evolution como principal (mais estável para envio direto)
+    else if (apiProvider === 'meta') {
       const hasMetaCredentials = connection.meta_phone_number_id && connection.meta_access_token;
       const hasEvolutionConfig = (connection.evolution_api_url || EVOLUTION_API_URL) && 
                                   (connection.evolution_api_key || EVOLUTION_API_KEY);
@@ -607,7 +608,53 @@ serve(async (req) => {
         result = { success: false, provider: 'meta', error: 'Mensagem, mídia, template ou Evolution API é obrigatória' };
       }
     }
-    // Evolution API
+    // Both APIs - Usar Evolution como principal, Meta como fallback
+    else if (apiProvider === 'both') {
+      console.log("📗📘 Provider 'both' - Usando Evolution como principal...");
+      const baseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
+      const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+      const hasMetaCredentials = connection.meta_phone_number_id && connection.meta_access_token;
+      
+      if (!baseUrl || !apiKey) {
+        // Sem Evolution, tentar Meta
+        if (hasMetaCredentials && validatedData.mensagem) {
+          console.log("⚠️ Evolution não configurada, tentando Meta...");
+          result = await sendMetaTextMessage(
+            connection.meta_phone_number_id,
+            connection.meta_access_token,
+            formattedNumber,
+            validatedData.mensagem
+          );
+        } else {
+          return new Response(
+            JSON.stringify({ error: "Nenhuma API configurada corretamente", code: "NO_API_CONFIG" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } else {
+        // Tentar Evolution primeiro
+        result = await sendEvolutionMessage(
+          baseUrl.replace(/\/$/, ''),
+          connection.instance_name,
+          apiKey,
+          validatedData.numero,
+          false,
+          validatedData
+        );
+        
+        // Se Evolution falhar e temos Meta, tentar Meta como fallback
+        if (!result.success && hasMetaCredentials && validatedData.mensagem) {
+          console.log("🔄 Evolution falhou, tentando Meta como fallback...");
+          result = await sendMetaTextMessage(
+            connection.meta_phone_number_id,
+            connection.meta_access_token,
+            formattedNumber,
+            validatedData.mensagem
+          );
+        }
+      }
+    }
+    // Evolution API only
     else {
       console.log("📗 Usando Evolution API...");
       const baseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
