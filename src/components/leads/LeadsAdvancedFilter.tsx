@@ -6,14 +6,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Filter, Trophy, XCircle, DollarSign, FileText, Cake, CalendarIcon, Loader2, User } from "lucide-react";
+import { Filter, Trophy, XCircle, DollarSign, FileText, Cake, CalendarIcon, Loader2, User, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
-type FilterType = "ganhos" | "perdidos" | "valores" | "prontuarios" | "aniversariantes" | null;
+type FilterType = "novos" | "ganhos" | "perdidos" | "valores" | "prontuarios" | "aniversariantes" | null;
 type DatePeriod = "today" | "week" | "month" | "custom";
 
 interface FilteredLead {
@@ -29,6 +29,7 @@ interface FilteredLead {
   profile_picture_url: string | null;
   tags: string[] | null;
   attachmentsCount?: number;
+  created_at?: string;
 }
 
 interface LeadsAdvancedFilterProps {
@@ -94,10 +95,23 @@ export function LeadsAdvancedFilter({ onApplyFilter, activeFilter }: LeadsAdvanc
       let data: FilteredLead[] = [];
 
       switch (filterType) {
+        case "novos":
+          const { data: novos, error: erroNovos } = await supabase
+            .from("leads")
+            .select("id, name, phone, telefone, value, status, won_at, lost_at, data_nascimento, profile_picture_url, tags, created_at")
+            .eq("company_id", companyId)
+            .gte("created_at", start.toISOString())
+            .lte("created_at", end.toISOString())
+            .order("created_at", { ascending: false });
+          
+          if (erroNovos) throw erroNovos;
+          data = novos || [];
+          break;
+
         case "ganhos":
           const { data: ganhos, error: erroGanhos } = await supabase
             .from("leads")
-            .select("id, name, phone, telefone, value, status, won_at, lost_at, data_nascimento, profile_picture_url, tags")
+            .select("id, name, phone, telefone, value, status, won_at, lost_at, data_nascimento, profile_picture_url, tags, created_at")
             .eq("company_id", companyId)
             .eq("status", "ganho")
             .gte("won_at", start.toISOString())
@@ -111,7 +125,7 @@ export function LeadsAdvancedFilter({ onApplyFilter, activeFilter }: LeadsAdvanc
         case "perdidos":
           const { data: perdidos, error: erroPerdidos } = await supabase
             .from("leads")
-            .select("id, name, phone, telefone, value, status, won_at, lost_at, data_nascimento, profile_picture_url, tags")
+            .select("id, name, phone, telefone, value, status, won_at, lost_at, data_nascimento, profile_picture_url, tags, created_at")
             .eq("company_id", companyId)
             .eq("status", "perdido")
             .gte("lost_at", start.toISOString())
@@ -125,7 +139,7 @@ export function LeadsAdvancedFilter({ onApplyFilter, activeFilter }: LeadsAdvanc
         case "valores":
           const { data: comValores, error: erroValores } = await supabase
             .from("leads")
-            .select("id, name, phone, telefone, value, status, won_at, lost_at, data_nascimento, profile_picture_url, tags")
+            .select("id, name, phone, telefone, value, status, won_at, lost_at, data_nascimento, profile_picture_url, tags, created_at")
             .eq("company_id", companyId)
             .gt("value", 0)
             .order("value", { ascending: false });
@@ -149,7 +163,7 @@ export function LeadsAdvancedFilter({ onApplyFilter, activeFilter }: LeadsAdvanc
             // Buscar os leads
             const { data: leadsComProntuario, error: erroLeads } = await supabase
               .from("leads")
-              .select("id, name, phone, telefone, value, status, won_at, lost_at, data_nascimento, profile_picture_url, tags")
+              .select("id, name, phone, telefone, value, status, won_at, lost_at, data_nascimento, profile_picture_url, tags, created_at")
               .eq("company_id", companyId)
               .in("id", leadIdsWithAttachments);
             
@@ -174,7 +188,7 @@ export function LeadsAdvancedFilter({ onApplyFilter, activeFilter }: LeadsAdvanc
           // Buscar todos os leads com data de nascimento e filtrar no frontend
           const { data: todosLeads, error: erroTodos } = await supabase
             .from("leads")
-            .select("id, name, phone, telefone, value, status, won_at, lost_at, data_nascimento, profile_picture_url, tags")
+            .select("id, name, phone, telefone, value, status, won_at, lost_at, data_nascimento, profile_picture_url, tags, created_at")
             .eq("company_id", companyId)
             .not("data_nascimento", "is", null);
           
@@ -265,6 +279,7 @@ export function LeadsAdvancedFilter({ onApplyFilter, activeFilter }: LeadsAdvanc
   };
 
   const filterButtons = [
+    { type: "novos" as FilterType, label: "Novos", icon: UserPlus, color: "text-emerald-600" },
     { type: "ganhos" as FilterType, label: "Ganhos", icon: Trophy, color: "text-green-600" },
     { type: "perdidos" as FilterType, label: "Perdidos", icon: XCircle, color: "text-red-600" },
     { type: "valores" as FilterType, label: "Valores", icon: DollarSign, color: "text-yellow-600" },
@@ -405,6 +420,9 @@ export function LeadsAdvancedFilter({ onApplyFilter, activeFilter }: LeadsAdvanc
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{lead.name}</p>
                           <p className="text-xs text-muted-foreground">
+                            {filterType === "novos" && lead.created_at && (
+                              <>Criado em {format(new Date(lead.created_at), "dd/MM/yyyy 'às' HH:mm")}</>
+                            )}
                             {filterType === "ganhos" && lead.won_at && (
                               <>Ganho em {format(new Date(lead.won_at), "dd/MM/yyyy 'às' HH:mm")}</>
                             )}
