@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2, Download, CheckSquare, Square, Trash2, Edit, GitBranch, X, DollarSign, Trophy, XCircle } from "lucide-react";
+import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2, Download, CheckSquare, Square, Trash2, Edit, GitBranch, X, DollarSign, Trophy, XCircle, Filter } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
@@ -13,6 +13,7 @@ import { LeadTagsDialog } from "@/components/leads/LeadTagsDialog";
 import { TagsManager } from "@/components/leads/TagsManager";
 import { AttachmentsManager } from "@/components/leads/AttachmentsManager";
 import { AniversariantesManager } from "@/components/leads/AniversariantesManager";
+import { LeadsAdvancedFilter } from "@/components/leads/LeadsAdvancedFilter";
 import { NovoLeadDialog } from "@/components/funil/NovoLeadDialog";
 import { EditarLeadDialog } from "@/components/funil/EditarLeadDialog";
 import { ImportarLeadsDialog } from "@/components/funil/ImportarLeadsDialog";
@@ -69,6 +70,9 @@ export default function Leads() {
   const [leadParaTarefa, setLeadParaTarefa] = useState<Lead | null>(null);
   const [showTarefaDialog, setShowTarefaDialog] = useState(false);
   const [leadAvatars, setLeadAvatars] = useState<Record<string, string>>({});
+  
+  // Estado para filtro avançado
+  const [advancedFilterLeadIds, setAdvancedFilterLeadIds] = useState<string[] | null>(null);
 
   // Estados para seleção em massa
   const [selectionMode, setSelectionMode] = useState(false);
@@ -443,7 +447,7 @@ export default function Leads() {
   };
   useEffect(() => {
     filterLeads();
-  }, [searchTerm, selectedStatus, selectedTag, filterWithValue, leads]);
+  }, [searchTerm, selectedStatus, selectedTag, filterWithValue, leads, advancedFilterLeadIds]);
   const carregarLeads = async (reset = false) => {
     if (loading || !companyIdRef.current) return;
     setLoading(true);
@@ -610,6 +614,10 @@ export default function Leads() {
     // Filtrar leads com valor de venda
     if (filterWithValue) {
       filtered = filtered.filter(lead => lead.value > 0);
+    }
+    // Aplicar filtro avançado (IDs específicos)
+    if (advancedFilterLeadIds && advancedFilterLeadIds.length > 0) {
+      filtered = filtered.filter(lead => advancedFilterLeadIds.includes(lead.id));
     }
     setFilteredLeads(filtered);
   };
@@ -872,6 +880,10 @@ export default function Leads() {
         </div>
         <div className="flex flex-wrap gap-2">
           <TagsManager onTagSelected={setSelectedTag} selectedTag={selectedTag} />
+          <LeadsAdvancedFilter 
+            onApplyFilter={setAdvancedFilterLeadIds} 
+            activeFilter={advancedFilterLeadIds !== null && advancedFilterLeadIds.length > 0}
+          />
           <AttachmentsManager />
           <AniversariantesManager />
           <Button variant="outline" size="sm" className="md:size-default" onClick={exportarLeads}>
