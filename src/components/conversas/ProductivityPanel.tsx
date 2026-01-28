@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, Bell, CheckSquare, FileText, Clock, User, BarChart3, Loader2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Calendar, Bell, CheckSquare, FileText, Clock, User, BarChart3, Loader2, ChevronDown, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format } from "date-fns";
@@ -13,6 +15,16 @@ interface ProductivityPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   companyId: string;
+}
+
+interface LeadActivity {
+  leadId: string;
+  leadName: string;
+  compromissos: number;
+  lembretes: number;
+  tarefas: number;
+  prontuarios: number;
+  mensagensAgendadas: number;
 }
 
 interface ProductivityData {
@@ -27,6 +39,7 @@ interface UserProductivity {
   userId: string;
   userName: string;
   data: ProductivityData;
+  leadsWorked: LeadActivity[];
 }
 
 type PeriodType = "today" | "week" | "month";
@@ -85,11 +98,11 @@ export function ProductivityPanel({ open, onOpenChange, companyId }: Productivit
       const startDate = dateRange.start.toISOString();
       const endDate = dateRange.end.toISOString();
 
-      // Fetch all data in parallel
-      const [compromissosRes, lembretesRes, tarefasRes, prontuariosRes, mensagensRes] = await Promise.all([
+      // Fetch all data in parallel - now including lead info
+      const [compromissosRes, lembretesRes, tarefasRes, prontuariosRes, mensagensRes, leadsRes] = await Promise.all([
         supabase
           .from("compromissos")
-          .select("id, owner_id")
+          .select("id, owner_id, lead_id")
           .eq("company_id", companyId)
           .gte("created_at", startDate)
           .lte("created_at", endDate),
@@ -101,13 +114,13 @@ export function ProductivityPanel({ open, onOpenChange, companyId }: Productivit
           .lte("created_at", endDate),
         supabase
           .from("tasks")
-          .select("id, owner_id")
+          .select("id, owner_id, lead_id")
           .eq("company_id", companyId)
           .gte("created_at", startDate)
           .lte("created_at", endDate),
         supabase
           .from("lead_attachments")
-          .select("id, uploaded_by")
+          .select("id, uploaded_by, lead_id")
           .eq("company_id", companyId)
           .gte("created_at", startDate)
           .lte("created_at", endDate),
@@ -117,6 +130,10 @@ export function ProductivityPanel({ open, onOpenChange, companyId }: Productivit
           .eq("company_id", companyId)
           .gte("created_at", startDate)
           .lte("created_at", endDate),
+        supabase
+          .from("leads")
+          .select("id, name")
+          .eq("company_id", companyId),
       ]);
 
       const compromissos = compromissosRes.data || [];
@@ -124,6 +141,13 @@ export function ProductivityPanel({ open, onOpenChange, companyId }: Productivit
       const tarefas = tarefasRes.data || [];
       const prontuarios = prontuariosRes.data || [];
       const mensagens = mensagensRes.data || [];
+      const leads = leadsRes.data || [];
+
+      // Create lead name lookup
+      const leadNameMap = new Map<string, string>();
+      leads.forEach(lead => {
+        leadNameMap.set(lead.id, lead.name || "Lead sem nome");
+      });
 
       // Filter by selected user if not "all"
       const filterByUser = (items: any[], userField: string) => {
@@ -146,56 +170,86 @@ export function ProductivityPanel({ open, onOpenChange, companyId }: Productivit
         mensagensAgendadas: filteredMensagens.length,
       });
 
-      // Calculate per-user productivity
-      const userMap = new Map<string, ProductivityData>();
+      // Calculate per-user productivity with lead tracking
+      const userMap = new Map<string, { data: ProductivityData; leadActivities: Map<string, LeadActivity> }>();
       
       // Initialize map with all team members
       members.forEach(member => {
         userMap.set(member.id, {
-          compromissos: 0,
-          lembretes: 0,
-          tarefas: 0,
-          prontuarios: 0,
-          mensagensAgendadas: 0,
+          data: {
+            compromissos: 0,
+            lembretes: 0,
+            tarefas: 0,
+            prontuarios: 0,
+            mensagensAgendadas: 0,
+          },
+          leadActivities: new Map(),
         });
       });
 
-      // Count per user
-      compromissos.forEach(item => {
-        if (item.owner_id && userMap.has(item.owner_id)) {
-          userMap.get(item.owner_id)!.compromissos++;
+      // Helper to track lead activity
+      const trackLeadActivity = (userId: string, leadId: string | null, activityType: keyof ProductivityData) => {
+        if (!userId || !userMap.has(userId)) return;
+        
+        const userData = userMap.get(userId)!;
+        userData.data[activityType]++;
+        
+        if (leadId) {
+          if (!userData.leadActivities.has(leadId)) {
+            userData.leadActivities.set(leadId, {
+              leadId,
+              leadName: leadNameMap.get(leadId) || "Lead desconhecido",
+              compromissos: 0,
+              lembretes: 0,
+              tarefas: 0,
+              prontuarios: 0,
+              mensagensAgendadas: 0,
+            });
+          }
+          userData.leadActivities.get(leadId)![activityType]++;
         }
+      };
+
+      // Count per user with lead tracking
+      compromissos.forEach(item => {
+        trackLeadActivity(item.owner_id, item.lead_id, "compromissos");
       });
       lembretes.forEach(item => {
+        // Lembretes não tem lead_id, apenas contabilizar
         if (item.created_by && userMap.has(item.created_by)) {
-          userMap.get(item.created_by)!.lembretes++;
+          userMap.get(item.created_by)!.data.lembretes++;
         }
       });
       tarefas.forEach(item => {
-        if (item.owner_id && userMap.has(item.owner_id)) {
-          userMap.get(item.owner_id)!.tarefas++;
-        }
+        trackLeadActivity(item.owner_id, item.lead_id, "tarefas");
       });
       prontuarios.forEach(item => {
-        if (item.uploaded_by && userMap.has(item.uploaded_by)) {
-          userMap.get(item.uploaded_by)!.prontuarios++;
-        }
+        trackLeadActivity(item.uploaded_by, item.lead_id, "prontuarios");
       });
       mensagens.forEach(item => {
+        // Mensagens agendadas não tem lead_id, apenas contabilizar
         if (item.owner_id && userMap.has(item.owner_id)) {
-          userMap.get(item.owner_id)!.mensagensAgendadas++;
+          userMap.get(item.owner_id)!.data.mensagensAgendadas++;
         }
       });
 
       // Convert to array and sort by total activity
       const userProductivityArray: UserProductivity[] = [];
-      userMap.forEach((data, userId) => {
+      userMap.forEach((userData, userId) => {
         const member = members.find(m => m.id === userId);
         if (member) {
+          // Convert lead activities map to array and sort by total
+          const leadsWorked = Array.from(userData.leadActivities.values()).sort((a, b) => {
+            const totalA = a.compromissos + a.lembretes + a.tarefas + a.prontuarios + a.mensagensAgendadas;
+            const totalB = b.compromissos + b.lembretes + b.tarefas + b.prontuarios + b.mensagensAgendadas;
+            return totalB - totalA;
+          });
+
           userProductivityArray.push({
             userId,
             userName: member.full_name || member.email,
-            data,
+            data: userData.data,
+            leadsWorked,
           });
         }
       });
@@ -206,7 +260,6 @@ export function ProductivityPanel({ open, onOpenChange, companyId }: Productivit
         const totalB = b.data.compromissos + b.data.lembretes + b.data.tarefas + b.data.prontuarios + b.data.mensagensAgendadas;
         return totalB - totalA;
       });
-
       // Filter if specific user selected
       if (selectedUserId !== "all") {
         setUserProductivity(userProductivityArray.filter(u => u.userId === selectedUserId));
@@ -290,7 +343,7 @@ export function ProductivityPanel({ open, onOpenChange, companyId }: Productivit
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-blue-500" />
+                    <Calendar className="h-4 w-4 text-primary" />
                     Compromissos
                   </CardTitle>
                 </CardHeader>
@@ -302,7 +355,7 @@ export function ProductivityPanel({ open, onOpenChange, companyId }: Productivit
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <Bell className="h-4 w-4 text-yellow-500" />
+                    <Bell className="h-4 w-4 text-primary" />
                     Lembretes
                   </CardTitle>
                 </CardHeader>
@@ -314,7 +367,7 @@ export function ProductivityPanel({ open, onOpenChange, companyId }: Productivit
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <CheckSquare className="h-4 w-4 text-green-500" />
+                    <CheckSquare className="h-4 w-4 text-primary" />
                     Tarefas
                   </CardTitle>
                 </CardHeader>
@@ -326,7 +379,7 @@ export function ProductivityPanel({ open, onOpenChange, companyId }: Productivit
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-purple-500" />
+                    <FileText className="h-4 w-4 text-primary" />
                     Prontuários
                   </CardTitle>
                 </CardHeader>
@@ -338,7 +391,7 @@ export function ProductivityPanel({ open, onOpenChange, companyId }: Productivit
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-orange-500" />
+                    <Clock className="h-4 w-4 text-primary" />
                     Msg Agendadas
                   </CardTitle>
                 </CardHeader>
@@ -375,52 +428,115 @@ export function ProductivityPanel({ open, onOpenChange, companyId }: Productivit
                     if (userTotal === 0) return null;
                     
                     return (
-                      <Card key={user.userId} className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                            <User className="h-5 w-5 text-primary" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-medium">{user.userName}</p>
-                            <div className="flex flex-wrap gap-3 text-sm text-muted-foreground mt-1">
-                              {user.data.compromissos > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <Calendar className="h-3 w-3 text-blue-500" />
-                                  {user.data.compromissos}
-                                </span>
-                              )}
-                              {user.data.lembretes > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <Bell className="h-3 w-3 text-yellow-500" />
-                                  {user.data.lembretes}
-                                </span>
-                              )}
-                              {user.data.tarefas > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <CheckSquare className="h-3 w-3 text-green-500" />
-                                  {user.data.tarefas}
-                                </span>
-                              )}
-                              {user.data.prontuarios > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <FileText className="h-3 w-3 text-purple-500" />
-                                  {user.data.prontuarios}
-                                </span>
-                              )}
-                              {user.data.mensagensAgendadas > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3 text-orange-500" />
-                                  {user.data.mensagensAgendadas}
-                                </span>
+                      <Collapsible key={user.userId}>
+                        <Card className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                              <User className="h-5 w-5 text-primary" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium">{user.userName}</p>
+                              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground mt-1">
+                                {user.data.compromissos > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3 text-primary" />
+                                    {user.data.compromissos}
+                                  </span>
+                                )}
+                                {user.data.lembretes > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <Bell className="h-3 w-3 text-primary" />
+                                    {user.data.lembretes}
+                                  </span>
+                                )}
+                                {user.data.tarefas > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <CheckSquare className="h-3 w-3 text-primary" />
+                                    {user.data.tarefas}
+                                  </span>
+                                )}
+                                {user.data.prontuarios > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <FileText className="h-3 w-3 text-primary" />
+                                    {user.data.prontuarios}
+                                  </span>
+                                )}
+                                {user.data.mensagensAgendadas > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3 text-primary" />
+                                    {user.data.mensagensAgendadas}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right flex items-center gap-2">
+                              <div>
+                                <p className="text-lg font-bold">{userTotal}</p>
+                                <p className="text-xs text-muted-foreground">atividades</p>
+                              </div>
+                              {user.leadsWorked.length > 0 && (
+                                <CollapsibleTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </CollapsibleTrigger>
                               )}
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold">{userTotal}</p>
-                            <p className="text-xs text-muted-foreground">atividades</p>
-                          </div>
-                        </div>
-                      </Card>
+                          
+                          {/* Leads trabalhados - Expandível */}
+                          {user.leadsWorked.length > 0 && (
+                            <CollapsibleContent className="mt-4 pt-4 border-t">
+                              <div className="space-y-2">
+                                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                                  <Users className="h-3 w-3" />
+                                  Leads Trabalhados ({user.leadsWorked.length})
+                                </p>
+                                <div className="grid gap-2 max-h-48 overflow-y-auto">
+                                  {user.leadsWorked.slice(0, 10).map((lead) => {
+                                    const leadTotal = lead.compromissos + lead.tarefas + lead.prontuarios;
+                                    return (
+                                      <div key={lead.leadId} className="flex items-center justify-between bg-muted/30 rounded-md px-3 py-2">
+                                        <span className="text-sm font-medium truncate max-w-[200px]">
+                                          {lead.leadName}
+                                        </span>
+                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                          {lead.compromissos > 0 && (
+                                            <span className="flex items-center gap-0.5">
+                                              <Calendar className="h-3 w-3" />
+                                              {lead.compromissos}
+                                            </span>
+                                          )}
+                                          {lead.tarefas > 0 && (
+                                            <span className="flex items-center gap-0.5">
+                                              <CheckSquare className="h-3 w-3" />
+                                              {lead.tarefas}
+                                            </span>
+                                          )}
+                                          {lead.prontuarios > 0 && (
+                                            <span className="flex items-center gap-0.5">
+                                              <FileText className="h-3 w-3" />
+                                              {lead.prontuarios}
+                                            </span>
+                                          )}
+                                          <Badge variant="secondary" className="text-xs">
+                                            {leadTotal}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                  {user.leadsWorked.length > 10 && (
+                                    <p className="text-xs text-muted-foreground text-center">
+                                      +{user.leadsWorked.length - 10} leads adicionais
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </CollapsibleContent>
+                          )}
+                        </Card>
+                      </Collapsible>
                     );
                   })}
                 </div>
