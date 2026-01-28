@@ -2861,6 +2861,51 @@ export type Database = {
           },
         ]
       }
+      lead_tag_history: {
+        Row: {
+          action: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          lead_id: string
+          tag_name: string
+        }
+        Insert: {
+          action: string
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          lead_id: string
+          tag_name: string
+        }
+        Update: {
+          action?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          lead_id?: string
+          tag_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_tag_history_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_tag_history_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_value_history: {
         Row: {
           change_type: string

@@ -143,9 +143,11 @@ export function useTagsManager(): TagsManagerHook {
 
   const addTagToLead = useCallback(async (leadId: string, tag: string) => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
       const { data: lead } = await supabase
         .from("leads")
-        .select("tags, company_id") // 🔒 Incluir company_id na busca
+        .select("tags, company_id")
         .eq("id", leadId)
         .single();
 
@@ -160,9 +162,22 @@ export function useTagsManager(): TagsManagerHook {
         .from("leads")
         .update({ 
           tags: newTags,
-          company_id: lead.company_id // 🔒 Preservar company_id
+          company_id: lead.company_id
         })
         .eq("id", leadId);
+
+      // Register in tag history
+      if (lead.company_id) {
+        await supabase
+          .from("lead_tag_history")
+          .insert({
+            lead_id: leadId,
+            company_id: lead.company_id,
+            tag_name: tag,
+            action: "added",
+            created_by: session?.user?.id || null
+          });
+      }
 
       await refreshTags();
     } catch (error) {
@@ -173,9 +188,11 @@ export function useTagsManager(): TagsManagerHook {
 
   const removeTagFromLead = useCallback(async (leadId: string, tag: string) => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
       const { data: lead } = await supabase
         .from("leads")
-        .select("tags, company_id") // 🔒 Incluir company_id na busca
+        .select("tags, company_id")
         .eq("id", leadId)
         .single();
 
@@ -188,9 +205,22 @@ export function useTagsManager(): TagsManagerHook {
         .from("leads")
         .update({ 
           tags: newTags.length > 0 ? newTags : null,
-          company_id: lead.company_id // 🔒 Preservar company_id
+          company_id: lead.company_id
         })
         .eq("id", leadId);
+
+      // Register in tag history
+      if (lead.company_id) {
+        await supabase
+          .from("lead_tag_history")
+          .insert({
+            lead_id: leadId,
+            company_id: lead.company_id,
+            tag_name: tag,
+            action: "removed",
+            created_by: session?.user?.id || null
+          });
+      }
 
       await refreshTags();
     } catch (error) {
