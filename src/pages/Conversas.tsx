@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle, Eye, ChevronDown, Mail, Building2, Globe, Pencil, MapPin, Key, Shield, Package, PenLine } from "lucide-react";
+import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle, Eye, ChevronDown, Mail, Building2, Globe, Pencil, MapPin, Key, Shield, Package, PenLine, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FinalizarNegociacaoDialog } from "@/components/leads/FinalizarNegociacaoDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -40,6 +40,7 @@ import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { LeadAttachments } from "@/components/leads/LeadAttachments";
 import { ProdutoSelectorDialog } from "@/components/conversas/ProdutoSelectorDialog";
 import { VendasLeadPanel } from "@/components/conversas/VendasLeadPanel";
+import { ProductivityPanel } from "@/components/conversas/ProductivityPanel";
 import { formatPhoneNumber, safeFormatPhoneNumber, normalizePhoneForComparison } from "@/utils/phoneFormatter";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { getMediaUrl, MediaExpiredError } from "@/utils/mediaLoader";
@@ -285,12 +286,21 @@ const initialConversations: Conversation[] = [{
 function Conversas() {
   const isMobile = useIsMobile();
   const {
-    isAdmin
+    isAdmin,
+    userRoles
   } = usePermissions();
   const {
     allTags,
     refreshTags
   } = useTagsManager();
+
+  // 📊 Controle de acesso ao painel de produtividade (gestores e admins)
+  const canViewProductivity = useMemo(() => {
+    return isAdmin || userRoles.some(r => 
+      ['super_admin', 'company_admin', 'gestor'].includes(r.role)
+    );
+  }, [isAdmin, userRoles]);
+  const [productivityPanelOpen, setProductivityPanelOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userCompanyId, setUserCompanyId] = useState<string | null>(null); // Declarar primeiro
 
@@ -7804,6 +7814,12 @@ function Conversas() {
                 toast.error('Erro ao criar contato');
               }
             }} />
+              {/* 📊 Botão Produtividade - apenas para gestores/admins */}
+              {canViewProductivity && (
+                <Button size="icon" variant="outline" onClick={() => setProductivityPanelOpen(true)} className="gap-0" aria-label="Produtividade" title="Relatório de Produtividade">
+                  <BarChart3 className="h-4 w-4" />
+                </Button>
+              )}
               <Button size="icon" variant="outline" onClick={() => {
               console.log('🔄 Botão Recarregar clicado');
               loadSupabaseConversations();
@@ -10324,6 +10340,13 @@ function Conversas() {
         messageType={forwardData.type}
         mediaUrl={forwardData.mediaUrl}
         fileName={forwardData.fileName}
+        companyId={userCompanyId || ""}
+      />
+
+      {/* 📊 Painel de Produtividade */}
+      <ProductivityPanel
+        open={productivityPanelOpen}
+        onOpenChange={setProductivityPanelOpen}
         companyId={userCompanyId || ""}
       />
     </div>;

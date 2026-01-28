@@ -3190,6 +3190,7 @@ export type Database = {
           company_id: string | null
           compromisso_id: string
           created_at: string | null
+          created_by: string | null
           data_envio: string | null
           data_hora_envio: string | null
           destinatario: string
@@ -3210,6 +3211,7 @@ export type Database = {
           company_id?: string | null
           compromisso_id: string
           created_at?: string | null
+          created_by?: string | null
           data_envio?: string | null
           data_hora_envio?: string | null
           destinatario?: string
@@ -3230,6 +3232,7 @@ export type Database = {
           company_id?: string | null
           compromisso_id?: string
           created_at?: string | null
+          created_by?: string | null
           data_envio?: string | null
           data_hora_envio?: string | null
           destinatario?: string
