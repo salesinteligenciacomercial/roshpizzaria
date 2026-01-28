@@ -1,32 +1,38 @@
 
 
-## Plano: Assinatura na Mensagem Enviada ao Cliente
+## Plano: Painel de Produtividade por Usuário no Menu Conversas
 
-### Entendimento do Pedido
-Atualmente, o sistema já rastreia quem envia cada mensagem (campo `sent_by` no banco) e exibe essa informação como badge na interface. O pedido é adicionar uma **opção para incluir a assinatura no corpo da mensagem** que é enviada ao cliente, permitindo que o contato saiba exatamente quem está atendendo.
+### Resumo do Pedido
+Criar um painel/relatório no menu Conversas que mostra a produtividade de cada usuário, exibindo:
+- Compromissos criados
+- Lembretes criados
+- Tarefas criadas
+- Fichas técnicas/prontuários adicionados
+- Mensagens agendadas
 
-### Exemplo Prático
-**Sem assinatura na mensagem:**
-```
-Olá! Tudo bem?
-```
-
-**Com assinatura na mensagem:**
-```
-Olá! Tudo bem?
-
-- Maria Silva
-```
+**Acesso restrito** a Gestores e Administradores (roles: `super_admin`, `company_admin`, `gestor`)
 
 ---
 
-### Solução Proposta
+### Arquitetura da Solução
 
-#### Componentes da Solução
+#### Novo Componente: `ProductivityPanel.tsx`
+Um painel/diálogo que será acessível via botão no menu Conversas, mostrando:
+- Filtro por período (hoje, esta semana, este mês, personalizado)
+- Filtro por usuário (dropdown com todos usuários da empresa)
+- Cards com métricas por tipo de criação
+- Tabela detalhada com histórico
 
-1. **Toggle de Assinatura no Input** - Um botão ao lado do input que permite ativar/desativar a inclusão da assinatura
-2. **Configuração Persistente** - Preferência salva no localStorage para manter entre sessões
-3. **Formatação da Mensagem** - Ao enviar, se ativo, concatenar assinatura ao final
+---
+
+### Alteração de Schema Necessária
+
+A tabela `lembretes` não possui campo para rastrear o criador. Precisamos adicionar:
+
+```sql
+ALTER TABLE public.lembretes 
+ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES auth.users(id);
+```
 
 ---
 
@@ -34,108 +40,169 @@ Olá! Tudo bem?
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
-│ [📎] [Escreva sua mensagem...                          ] [🎤] [✓] [⚡] [➤]│
-│       ↑ Textarea                                       ↑   ↑   ↑   ↑     │
-│                                               Assinatura  Correção Rápidas Enviar│
+│ 📊 Relatório de Produtividade                              [X]     │
+├─────────────────────────────────────────────────────────────────────┤
+│ Período: [Hoje ▼] [Esta Semana] [Este Mês] [📅 Personalizado]      │
+│ Usuário: [Todos ▼] ou [Selecionar usuário específico]              │
+├─────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐│
+│  │📅 Compromissos│ │🔔 Lembretes  │ │✅ Tarefas    │ │📋 Prontuários││
+│  │     12       │ │     8        │ │     15       │ │     5        ││
+│  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘│
+│  ┌──────────────┐                                                   │
+│  │⏰ Msg Agendada│                                                   │
+│  │     3        │                                                   │
+│  └──────────────┘                                                   │
+├─────────────────────────────────────────────────────────────────────┤
+│ Detalhamento por Usuário:                                           │
+│ ┌───────────────────────────────────────────────────────────────────┐
+│ │ 👤 Maria Silva                                                    │
+│ │ Compromissos: 5 | Tarefas: 8 | Lembretes: 3 | Prontuários: 2     │
+│ ├───────────────────────────────────────────────────────────────────┤
+│ │ 👤 João Santos                                                    │
+│ │ Compromissos: 7 | Tarefas: 7 | Lembretes: 5 | Prontuários: 3     │
+│ └───────────────────────────────────────────────────────────────────┘
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-Botão de assinatura:
-- **Desativado**: Ícone cinza (PenLine ou Signature)
-- **Ativado**: Ícone verde com fundo, indicando que assinatura será adicionada
-
-Tooltip: "Incluir assinatura na mensagem" / "Assinatura incluída"
-
 ---
 
-### Fluxo de Funcionamento
+### Consultas SQL por Categoria
 
-1. Usuário ativa o toggle de assinatura (fica verde)
-2. Ao enviar mensagem, o sistema:
-   - Busca o nome do usuário logado
-   - Concatena ao final: `\n\n- ${nomeUsuario}`
-3. Mensagem é enviada com assinatura para o cliente
-4. No banco, `sent_by` continua sendo salvo normalmente
-5. Preferência é salva no localStorage
-
----
-
-### Detalhes Técnicos
-
-#### Estado Novo em Conversas.tsx
+**Compromissos criados (por owner_id):**
 ```typescript
-// Estado para controlar inclusão de assinatura na mensagem
-const [includeSignature, setIncludeSignature] = useState<boolean>(() => {
-  const saved = localStorage.getItem('waze_include_signature');
-  return saved ? JSON.parse(saved) : false;
-});
+supabase.from("compromissos")
+  .select("id, created_at, owner_id, titulo, tipo_servico")
+  .eq("company_id", companyId)
+  .gte("created_at", startDate)
+  .lte("created_at", endDate)
 ```
 
-#### Modificação no handleSendMessage
+**Tarefas criadas (por owner_id):**
 ```typescript
-const handleSendMessage = async (content?: string, type: Message["type"] = "text") => {
-  let messageContent = content || messageInput.trim();
-  if (!messageContent || !selectedConv) return;
-  
-  // ✅ NOVO: Adicionar assinatura se habilitada (apenas para texto)
-  if (includeSignature && type === "text" && userName) {
-    messageContent = `${messageContent}\n\n- ${userName}`;
-  }
-  
-  // ... resto do código existente
-};
+supabase.from("tasks")
+  .select("id, created_at, owner_id, title, priority")
+  .eq("company_id", companyId)
+  .gte("created_at", startDate)
+  .lte("created_at", endDate)
 ```
 
-#### Botão na Área de Input
-```tsx
-{/* Botão de Assinatura */}
-<Button 
-  variant="outline" 
-  size="icon" 
-  className={`${includeSignature 
-    ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-300 bg-blue-50/50' 
-    : 'text-muted-foreground hover:text-foreground border-border'}`}
-  title={includeSignature 
-    ? `Assinatura ativada (${userName})` 
-    : "Incluir assinatura na mensagem"}
-  onClick={() => {
-    const newValue = !includeSignature;
-    setIncludeSignature(newValue);
-    localStorage.setItem('waze_include_signature', JSON.stringify(newValue));
-    toast.success(newValue 
-      ? `Assinatura ativada: "- ${userName}"` 
-      : "Assinatura desativada");
-  }}
->
-  <PenLine className="h-5 w-5" />
-</Button>
+**Lembretes criados (por created_by - NOVO CAMPO):**
+```typescript
+supabase.from("lembretes")
+  .select("id, created_at, created_by, canal, destinatario")
+  .eq("company_id", companyId)
+  .gte("created_at", startDate)
+  .lte("created_at", endDate)
+```
+
+**Prontuários/Fichas (por uploaded_by):**
+```typescript
+supabase.from("lead_attachments")
+  .select("id, created_at, uploaded_by, file_name, category")
+  .eq("company_id", companyId)
+  .gte("created_at", startDate)
+  .lte("created_at", endDate)
+```
+
+**Mensagens Agendadas (por owner_id):**
+```typescript
+supabase.from("scheduled_whatsapp_messages")
+  .select("id, created_at, owner_id, contact_name, status")
+  .eq("company_id", companyId)
+  .gte("created_at", startDate)
+  .lte("created_at", endDate)
 ```
 
 ---
 
-### Arquivos a Modificar
+### Controle de Acesso
 
-| Arquivo | Modificação |
-|---------|-------------|
-| `src/pages/Conversas.tsx` | Adicionar estado, botão e lógica no handleSendMessage |
+O botão para abrir o painel só será visível para usuários com roles permitidos:
+
+```typescript
+// No componente Conversas.tsx
+const { isAdmin, userRoles } = usePermissions();
+
+// Verificar se é gestor ou admin
+const canViewProductivity = useMemo(() => {
+  return isAdmin || userRoles.some(r => 
+    ['super_admin', 'company_admin', 'gestor'].includes(r.role)
+  );
+}, [isAdmin, userRoles]);
+
+// No JSX
+{canViewProductivity && (
+  <Button onClick={() => setProductivityPanelOpen(true)}>
+    <BarChart className="h-4 w-4 mr-2" />
+    Produtividade
+  </Button>
+)}
+```
 
 ---
 
-### Comportamento Esperado
+### Arquivos a Criar/Modificar
 
-| Ação | Resultado |
-|------|-----------|
-| Toggle OFF + Enviar "Olá" | Cliente recebe: "Olá" |
-| Toggle ON + Enviar "Olá" | Cliente recebe: "Olá\n\n- Maria Silva" |
-| Toggle ON + Enviar mídia | Mídia enviada SEM assinatura (apenas texto) |
-| Recarregar página | Preferência mantida (localStorage) |
+| Arquivo | Ação | Descrição |
+|---------|------|-----------|
+| `src/components/conversas/ProductivityPanel.tsx` | Criar | Componente do painel de produtividade |
+| `src/pages/Conversas.tsx` | Modificar | Adicionar botão e controle de acesso |
+| **Migração SQL** | Executar | Adicionar `created_by` na tabela `lembretes` |
 
 ---
 
-### Considerações
+### Detalhes do Componente ProductivityPanel
 
-- Assinatura só é adicionada em mensagens de **texto** (não faz sentido em áudio/imagem)
-- A assinatura usa o `userName` já carregado no componente (nome do usuário logado)
-- O campo `sent_by` continua sendo salvo normalmente no banco para rastreamento interno
-- O formato `\n\n- Nome` é elegante e usado comumente em comunicações profissionais
+O componente incluirá:
+
+1. **Filtros:**
+   - Período: Hoje, Esta Semana, Este Mês, Personalizado
+   - Usuário: Dropdown com todos usuários da empresa
+
+2. **KPIs em Cards:**
+   - Total de compromissos criados
+   - Total de lembretes criados
+   - Total de tarefas criadas
+   - Total de fichas/prontuários adicionados
+   - Total de mensagens agendadas
+
+3. **Tabela de Ranking:**
+   - Lista de usuários ordenados por produtividade
+   - Métricas individuais por usuário
+   - Possibilidade de expandir para ver detalhes
+
+4. **Gráfico (opcional):**
+   - Visualização de produtividade ao longo do tempo
+   - Comparativo entre usuários
+
+---
+
+### Fluxo de Uso
+
+1. Gestor/Admin clica no botão "Produtividade" no menu Conversas
+2. Painel abre em modal/diálogo
+3. Seleciona período desejado
+4. Opcionalmente filtra por usuário específico
+5. Visualiza métricas consolidadas e detalhadas
+6. Pode exportar dados (futuro)
+
+---
+
+### Considerações de Segurança
+
+- O botão só aparece para `super_admin`, `company_admin` e `gestor`
+- Dados são filtrados por `company_id` automaticamente
+- RLS garante que usuários só veem dados da própria empresa
+- Vendedores e Suporte não têm acesso ao painel
+
+---
+
+### Métricas Adicionais (Futuro)
+
+Com esta estrutura, será possível expandir para incluir:
+- Tempo médio de resposta
+- Taxa de conversão por usuário
+- Leads atendidos por período
+- Mensagens enviadas/recebidas por usuário
 
