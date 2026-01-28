@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle, Eye, ChevronDown, Mail, Building2, Globe, Pencil, MapPin, Key, Shield, Package } from "lucide-react";
+import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle, Eye, ChevronDown, Mail, Building2, Globe, Pencil, MapPin, Key, Shield, Package, PenLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FinalizarNegociacaoDialog } from "@/components/leads/FinalizarNegociacaoDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -181,6 +181,7 @@ const SCHEDULED_MESSAGES_KEY = "continuum_scheduled_messages";
 const MEETINGS_KEY = "continuum_meetings";
 const AI_MODE_KEY = "continuum_ai_mode";
 const AUTO_CORRECT_KEY = "continuum_auto_correct_enabled"; // Chave para salvar preferência de correção automática
+const INCLUDE_SIGNATURE_KEY = "waze_include_signature"; // Chave para salvar preferência de assinatura
 const PINNED_CONVERSATIONS_KEY = "continuum_pinned_conversations"; // Chave para salvar conversas fixadas
 const CACHE_MAX_AGE = 30 * 60 * 1000; // Cache válido por 30 minutos (carregamento instantâneo)
 
@@ -450,6 +451,12 @@ function Conversas() {
     return saved !== null ? JSON.parse(saved) : true; // Habilitado por padrão
   });
   const [isCorrectingText, setIsCorrectingText] = useState(false); // Estado de loading durante correção
+
+  // ✍️ Estado para assinatura na mensagem
+  const [includeSignature, setIncludeSignature] = useState<boolean>(() => {
+    const saved = localStorage.getItem(INCLUDE_SIGNATURE_KEY);
+    return saved !== null ? JSON.parse(saved) : false; // Desabilitado por padrão
+  });
 
   // 📌 Estado para conversas fixadas
   const [pinnedConversations, setPinnedConversations] = useState<Set<string>>(() => {
@@ -4866,8 +4873,14 @@ function Conversas() {
         console.error('❌ [CORREÇÃO] Erro ao corrigir texto:', err);
         // Continua com texto original em caso de erro
       } finally {
-        setIsCorrectingText(false);
+      setIsCorrectingText(false);
       }
+    }
+    
+    // ✍️ ASSINATURA: Adicionar assinatura se habilitada (apenas para texto)
+    if (includeSignature && type === "text" && userName) {
+      messageContent = `${messageContent}\n\n- ${userName}`;
+      console.log('✍️ [ASSINATURA] Assinatura adicionada:', userName);
     }
     
     console.log('📤 [ENVIO] Iniciando envio de mensagem:', {
@@ -8297,6 +8310,28 @@ function Conversas() {
                       ) : (
                         <SpellCheck className="h-5 w-5" />
                       )}
+                    </Button>
+                    
+                    {/* Botão de Assinatura na Mensagem */}
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className={`${includeSignature 
+                        ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-300 bg-blue-50/50' 
+                        : 'text-muted-foreground hover:text-foreground border-border'}`}
+                      title={includeSignature 
+                        ? `Assinatura ativada: "- ${userName}"` 
+                        : "Incluir assinatura na mensagem"}
+                      onClick={() => {
+                        const newValue = !includeSignature;
+                        setIncludeSignature(newValue);
+                        localStorage.setItem(INCLUDE_SIGNATURE_KEY, JSON.stringify(newValue));
+                        toast.success(newValue 
+                          ? `Assinatura ativada: "- ${userName}"` 
+                          : "Assinatura desativada");
+                      }}
+                    >
+                      <PenLine className="h-5 w-5" />
                     </Button>
                     
                     {/* Botão de Respostas Rápidas */}
