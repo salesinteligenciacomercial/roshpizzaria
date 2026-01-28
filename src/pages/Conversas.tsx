@@ -4878,9 +4878,10 @@ function Conversas() {
     }
     
     // ✍️ ASSINATURA: Adicionar assinatura se habilitada (apenas para texto)
+    // Assinatura fica NA PARTE SUPERIOR da mensagem, separada do conteúdo
     if (includeSignature && type === "text" && userName) {
-      messageContent = `${messageContent}\n\n- ${userName}`;
-      console.log('✍️ [ASSINATURA] Assinatura adicionada:', userName);
+      messageContent = `- ${userName}\n\n${messageContent}`;
+      console.log('✍️ [ASSINATURA] Assinatura adicionada no topo:', userName);
     }
     
     console.log('📤 [ENVIO] Iniciando envio de mensagem:', {
