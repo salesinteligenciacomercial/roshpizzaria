@@ -1409,8 +1409,14 @@ function Conversas() {
           console.warn('⚠️ [REALTIME-MULTIUSER] Mensagem de outra company ignorada');
           return;
         }
-        const telefone = (novaMensagem.telefone_formatado || novaMensagem.numero || '').replace(/[^0-9]/g, '');
-        if (telefone.length < 11 || telefone.length > 13) {
+        // ✅ CORREÇÃO: Para grupos, usar o número original com @g.us
+        const isGroupMessage = novaMensagem.is_group === true || /@g\.us$/.test(novaMensagem.numero || '');
+        const telefone = isGroupMessage 
+          ? (novaMensagem.numero || '') // Manter formato original para grupos
+          : (novaMensagem.telefone_formatado || novaMensagem.numero || '').replace(/[^0-9]/g, '');
+        
+        // Validar telefone apenas para contatos individuais (grupos têm formato diferente)
+        if (!isGroupMessage && (telefone.length < 11 || telefone.length > 13)) {
           console.warn('⚠️ [REALTIME-MULTIUSER] Telefone inválido ignorado:', telefone);
           return;
         }
