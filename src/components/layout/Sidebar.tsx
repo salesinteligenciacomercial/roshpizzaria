@@ -84,7 +84,7 @@ const navigation = [{
   name: "Treinamento",
   href: "/treinamento",
   icon: GraduationCap,
-  menuKey: "treinamento"
+  menuKey: "treinamento" // Central de vídeos do YouTube
 }, {
   name: "Configurações",
   href: "/configuracoes",
