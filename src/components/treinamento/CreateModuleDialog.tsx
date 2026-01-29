@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Book, Users, MessageSquare, LayoutDashboard, Settings, 
   Calendar, Bot, Video, PhoneCall, Target, DollarSign,
@@ -29,11 +30,25 @@ const iconOptions = [
   { value: 'help-circle', label: 'Ajuda', icon: HelpCircle },
 ];
 
+const moduleAccessOptions = [
+  { key: 'leads', label: 'Leads' },
+  { key: 'funil-vendas', label: 'Funil de Vendas' },
+  { key: 'conversas', label: 'Conversas' },
+  { key: 'agenda', label: 'Agenda' },
+  { key: 'tarefas', label: 'Tarefas' },
+  { key: 'chat-equipe', label: 'Chat Equipe' },
+  { key: 'reunioes', label: 'Reuniões' },
+  { key: 'discador', label: 'Discador' },
+  { key: 'processos', label: 'Processos Comerciais' },
+  { key: 'automacao', label: 'Fluxos e Automação' },
+  { key: 'configuracoes', label: 'Configurações' },
+];
+
 interface CreateModuleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: { title: string; description?: string; icon?: string }) => Promise<void>;
-  editingModule?: { id: string; title: string; description: string | null; icon: string } | null;
+  onSubmit: (data: { title: string; description?: string; icon?: string; related_modules?: string[] }) => Promise<void>;
+  editingModule?: { id: string; title: string; description: string | null; icon: string; related_modules?: string[] } | null;
 }
 
 export function CreateModuleDialog({ 
@@ -42,10 +57,28 @@ export function CreateModuleDialog({
   onSubmit,
   editingModule 
 }: CreateModuleDialogProps) {
-  const [title, setTitle] = useState(editingModule?.title || "");
-  const [description, setDescription] = useState(editingModule?.description || "");
-  const [icon, setIcon] = useState(editingModule?.icon || "book");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [icon, setIcon] = useState("book");
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Reset form when dialog opens/closes or editingModule changes
+  useEffect(() => {
+    if (open) {
+      if (editingModule) {
+        setTitle(editingModule.title);
+        setDescription(editingModule.description || "");
+        setIcon(editingModule.icon);
+        setSelectedModules(editingModule.related_modules || []);
+      } else {
+        setTitle("");
+        setDescription("");
+        setIcon("book");
+        setSelectedModules([]);
+      }
+    }
+  }, [open, editingModule]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,32 +86,28 @@ export function CreateModuleDialog({
     
     setLoading(true);
     try {
-      await onSubmit({ title, description, icon });
+      await onSubmit({ title, description, icon, related_modules: selectedModules });
       setTitle("");
       setDescription("");
       setIcon("book");
+      setSelectedModules([]);
       onOpenChange(false);
     } finally {
       setLoading(false);
     }
   };
 
-  // Reset form when dialog opens with editing module
-  useState(() => {
-    if (editingModule) {
-      setTitle(editingModule.title);
-      setDescription(editingModule.description || "");
-      setIcon(editingModule.icon);
-    } else {
-      setTitle("");
-      setDescription("");
-      setIcon("book");
-    }
-  });
+  const toggleModule = (moduleKey: string) => {
+    setSelectedModules(prev => 
+      prev.includes(moduleKey) 
+        ? prev.filter(m => m !== moduleKey)
+        : [...prev, moduleKey]
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {editingModule ? "Editar Módulo" : "Novo Módulo de Treinamento"}
@@ -125,6 +154,30 @@ export function CreateModuleDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-3">
+            <Label>Módulos do Sistema Relacionados</Label>
+            <p className="text-xs text-muted-foreground">
+              Selecione quais módulos do sistema este treinamento aborda (visível para subcontas)
+            </p>
+            <div className="grid grid-cols-2 gap-2 p-3 border rounded-md bg-muted/30">
+              {moduleAccessOptions.map((module) => (
+                <div key={module.key} className="flex items-center space-x-2">
+                  <Checkbox 
+                    id={`module-${module.key}`}
+                    checked={selectedModules.includes(module.key)}
+                    onCheckedChange={() => toggleModule(module.key)}
+                  />
+                  <label 
+                    htmlFor={`module-${module.key}`}
+                    className="text-sm cursor-pointer select-none"
+                  >
+                    {module.label}
+                  </label>
+                </div>
+              ))}
+            </div>
           </div>
           
           <DialogFooter>
