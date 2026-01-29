@@ -948,7 +948,15 @@ function Conversas() {
     }).length;
   }, [conversations, hasActiveAttendance, activeAttendances]);
 
-  // ✅ FILTROS CORRIGIDOS + BUSCA NO BANCO: Priorizar resultados da busca quando existirem
+  // 🆕 NOVO: Contador de conversas onde o usuário atual é responsável (ativo + legado)
+  const responsibleCount = useMemo(() => {
+    return conversations.filter(conv => {
+      if (conv.isGroup) return false;
+      const telefone = (conv.phoneNumber || conv.id).replace(/[^0-9]/g, '');
+      // Incluir: atendimentos ativos do usuário atual OU responsáveis legados
+      return isCurrentUserAttending(telefone) || conv.responsavel === currentUserId || conv.assignedUser?.id === currentUserId;
+    }).length;
+  }, [conversations, isCurrentUserAttending, currentUserId, activeAttendances]);
   const filteredConversations = useMemo(() => {
     // 🔍 Se tem resultados de busca do banco de dados, usar esses resultados
     const hasValidSearch = debouncedSearchTerm.trim().length >= 2 && hasSearched;
@@ -8018,12 +8026,7 @@ function Conversas() {
             </Button>
             <Button variant={filter === "responsible" ? "default" : "ghost"} size="sm" onClick={() => setFilter("responsible")} className="relative flex flex-col items-center gap-0.5 h-auto py-1 px-2">
               <Badge variant="secondary" className="bg-green-500 hover:bg-green-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
-                {conversations.filter(c => {
-                  if (c.isGroup) return false;
-                  const telefone = (c.phoneNumber || c.id).replace(/[^0-9]/g, '');
-                  // 🆕 Incluir: atendimentos ativos do usuário atual OU responsáveis legados
-                  return isCurrentUserAttending(telefone) || c.responsavel === currentUserId || c.assignedUser?.id === currentUserId;
-                }).length}
+                {responsibleCount}
               </Badge>
               <span className="text-xs">Responsável</span>
             </Button>
