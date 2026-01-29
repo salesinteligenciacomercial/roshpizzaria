@@ -4983,10 +4983,10 @@ function Conversas() {
     }
     
     // ✍️ ASSINATURA: Adicionar assinatura se habilitada (apenas para texto)
-    // Assinatura fica NA PARTE SUPERIOR da mensagem, separada do conteúdo
+    // Formato: "Atendente - Nome do Usuário" na parte superior da mensagem
     if (includeSignature && type === "text" && userName) {
-      messageContent = `- ${userName}\n\n${messageContent}`;
-      console.log('✍️ [ASSINATURA] Assinatura adicionada no topo:', userName);
+      messageContent = `Atendente - ${userName}\n\n${messageContent}`;
+      console.log('✍️ [ASSINATURA] Assinatura adicionada no topo: Atendente -', userName);
     }
     
     console.log('📤 [ENVIO] Iniciando envio de mensagem:', {
@@ -8476,14 +8476,14 @@ function Conversas() {
                         ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-300 bg-blue-50/50' 
                         : 'text-muted-foreground hover:text-foreground border-border'}`}
                       title={includeSignature 
-                        ? `Assinatura ativada: "- ${userName}"` 
+                        ? `Assinatura ativada: "Atendente - ${userName}"` 
                         : "Incluir assinatura na mensagem"}
                       onClick={() => {
                         const newValue = !includeSignature;
                         setIncludeSignature(newValue);
                         localStorage.setItem(INCLUDE_SIGNATURE_KEY, JSON.stringify(newValue));
                         toast.success(newValue 
-                          ? `Assinatura ativada: "- ${userName}"` 
+                          ? `Assinatura ativada: "Atendente - ${userName}"` 
                           : "Assinatura desativada");
                       }}
                     >
