@@ -8018,7 +8018,12 @@ function Conversas() {
             </Button>
             <Button variant={filter === "responsible" ? "default" : "ghost"} size="sm" onClick={() => setFilter("responsible")} className="relative flex flex-col items-center gap-0.5 h-auto py-1 px-2">
               <Badge variant="secondary" className="bg-green-500 hover:bg-green-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
-                {conversations.filter(c => !c.isGroup && (c.responsavel === currentUserId || c.assignedUser?.id === currentUserId)).length}
+                {conversations.filter(c => {
+                  if (c.isGroup) return false;
+                  const telefone = (c.phoneNumber || c.id).replace(/[^0-9]/g, '');
+                  // 🆕 Incluir: atendimentos ativos do usuário atual OU responsáveis legados
+                  return isCurrentUserAttending(telefone) || c.responsavel === currentUserId || c.assignedUser?.id === currentUserId;
+                }).length}
               </Badge>
               <span className="text-xs">Responsável</span>
             </Button>
