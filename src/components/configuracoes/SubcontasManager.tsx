@@ -2,13 +2,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Building2, Plus, Pencil, Trash2, Users, RefreshCw, CheckCircle2, AlertCircle, UsersRound, Bot, MessageSquare, Video, Phone, Target, Workflow } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Users, RefreshCw, CheckCircle2, AlertCircle, UsersRound, Bot, MessageSquare, Video, Phone, Target, Workflow, KeyRound } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { NovaSubcontaDialog } from "./NovaSubcontaDialog";
 import { EditarSubcontaDialog } from "./EditarSubcontaDialog";
 import { UsuariosSubcontaDialog } from "./UsuariosSubcontaDialog";
+import { CredenciaisSubcontaDialog } from "./CredenciaisSubcontaDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +48,7 @@ export function SubcontasManager() {
   const [novaSubcontaOpen, setNovaSubcontaOpen] = useState(false);
   const [editarSubcontaOpen, setEditarSubcontaOpen] = useState(false);
   const [usuariosDialogOpen, setUsuariosDialogOpen] = useState(false);
+  const [credenciaisDialogOpen, setCredenciaisDialogOpen] = useState(false);
   const [subcontaSelecionada, setSubcontaSelecionada] = useState<Subconta | null>(null);
   const [atualizando, setAtualizando] = useState(false);
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
@@ -147,6 +149,11 @@ export function SubcontasManager() {
   const abrirGerenciarUsuarios = (subconta: Subconta) => {
     setSubcontaSelecionada(subconta);
     setUsuariosDialogOpen(true);
+  };
+
+  const abrirCredenciais = (subconta: Subconta) => {
+    setSubcontaSelecionada(subconta);
+    setCredenciaisDialogOpen(true);
   };
 
   const deletarSubconta = async (id: string, nome: string) => {
@@ -576,6 +583,15 @@ export function SubcontasManager() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      onClick={() => abrirCredenciais(subconta)}
+                      title="Ver credenciais"
+                      className="text-primary hover:text-primary hover:bg-primary/10"
+                    >
+                      <KeyRound className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => abrirGerenciarUsuarios(subconta)}
                       title="Gerenciar usuários"
                     >
@@ -750,6 +766,14 @@ export function SubcontasManager() {
           <UsuariosSubcontaDialog
             open={usuariosDialogOpen}
             onOpenChange={setUsuariosDialogOpen}
+            company={{
+              id: subcontaSelecionada.id,
+              name: subcontaSelecionada.name
+            }}
+          />
+          <CredenciaisSubcontaDialog
+            open={credenciaisDialogOpen}
+            onOpenChange={setCredenciaisDialogOpen}
             company={{
               id: subcontaSelecionada.id,
               name: subcontaSelecionada.name
