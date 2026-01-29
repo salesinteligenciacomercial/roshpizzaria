@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      active_attendances: {
+        Row: {
+          attending_user_id: string
+          attending_user_name: string | null
+          company_id: string
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          last_activity_at: string | null
+          started_at: string | null
+          telefone_formatado: string
+          updated_at: string | null
+        }
+        Insert: {
+          attending_user_id: string
+          attending_user_name?: string | null
+          company_id: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          last_activity_at?: string | null
+          started_at?: string | null
+          telefone_formatado: string
+          updated_at?: string | null
+        }
+        Update: {
+          attending_user_id?: string
+          attending_user_name?: string | null
+          company_id?: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          last_activity_at?: string | null
+          started_at?: string | null
+          telefone_formatado?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "active_attendances_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agendas: {
         Row: {
           capacidade_simultanea: number | null

@@ -51,6 +51,7 @@ import { useConversationsCache } from "@/hooks/useConversationsCache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTagsManager } from "@/hooks/useTagsManager";
 import { useConversationSearch, loadAllUniqueConversations } from "@/hooks/useConversationSearch";
+import { useActiveAttendance, TEMPO_ATENDIMENTO_ATIVO } from "@/hooks/useActiveAttendance";
 import * as evolutionAPI from "@/services/evolutionApi";
 
 // Função auxiliar para extrair fileSize do JSON de mídia
@@ -334,6 +335,15 @@ function Conversas() {
     searchConversations,
     clearSearch
   } = useConversationSearch(userCompanyId);
+
+  // 🆕 ATENDIMENTOS ATIVOS: Hook para gerenciar quem está atendendo cada conversa
+  const {
+    startOrRefreshAttendance,
+    refreshAttendance,
+    getAttendingUser,
+    hasActiveAttendance,
+    activeAttendances,
+  } = useActiveAttendance(userCompanyId);
 
   // ⚡ DESATIVADO: Carregamento de avatares movido para lazy loading
   // Para evitar loops e melhorar performance
@@ -897,30 +907,45 @@ function Conversas() {
   };
 
   // ✅ FASE 1 CORRIGIDA: Contador de conversas aguardando resposta
-  // Usa MESMA lógica do filtro real para consistência
+  // 🆕 NOVA LÓGICA: Conversas onde última msg é do contato E NÃO existe atendimento ativo
   const waitingCount = useMemo(() => {
     return conversations.filter(conv => {
       if (conv.isGroup === true) return false; // Excluir grupos
       if (conv.status === 'resolved') return false; // Excluir finalizadas
 
-      // ✅ CORRIGIDO: Mesma lógica do filtro "waiting"
       const lastMessage = conv.messages?.[conv.messages.length - 1];
       if (!lastMessage) return false;
-      return lastMessage.sender === 'contact';
+      
+      // Só é "Esperando" se última msg é do contato
+      if (lastMessage.sender !== 'contact') return false;
+      
+      // 🆕 NOVO: Verificar se existe atendimento ativo não expirado
+      const telefone = (conv.phoneNumber || conv.id).replace(/[^0-9]/g, '');
+      const temAtendimentoAtivo = hasActiveAttendance(telefone);
+      
+      // Se tem atendimento ativo, não é "Esperando" (vai para "Em Atendimento")
+      return !temAtendimentoAtivo;
     }).length;
-  }, [conversations]);
+  }, [conversations, hasActiveAttendance, activeAttendances]);
 
   // ✅ FASE 1 CORRIGIDA: Contador de conversas em atendimento
-  // Usa MESMA lógica do filtro real para consistência
+  // 🆕 NOVA LÓGICA: Conversas com atendimento ativo OU última msg é do usuário (dentro de 5min)
   const answeredCount = useMemo(() => {
     return conversations.filter(conv => {
       if (conv.isGroup === true) return false;
       if (conv.status === 'resolved') return false;
+      
+      const telefone = (conv.phoneNumber || conv.id).replace(/[^0-9]/g, '');
+      
+      // 🆕 NOVO: Se tem atendimento ativo não expirado, está "Em Atendimento"
+      if (hasActiveAttendance(telefone)) return true;
+      
+      // Fallback: Verificar se última mensagem é do usuário
       const lastMessage = conv.messages?.[conv.messages.length - 1];
       if (!lastMessage) return false;
       return lastMessage.sender === 'user';
     }).length;
-  }, [conversations]);
+  }, [conversations, hasActiveAttendance, activeAttendances]);
 
   // ✅ FILTROS CORRIGIDOS + BUSCA NO BANCO: Priorizar resultados da busca quando existirem
   const filteredConversations = useMemo(() => {
@@ -950,19 +975,35 @@ function Conversas() {
       // ✅ Filtro "Grupos": Mostrar APENAS grupos (bloqueados e não bloqueados aparecem aqui)
       filtered = filtered.filter(conv => conv.isGroup === true);
     } else if (filter === "waiting") {
-      // ✅ Filtro "Aguardando": Contatos que enviaram mensagem e ainda não foram respondidos
+      // ✅ Filtro "Aguardando": Contatos que enviaram mensagem E NÃO tem atendimento ativo
       filtered = filtered.filter(conv => {
         if (conv.isGroup === true) return false;
         if (conv.status === 'resolved') return false;
         const lastMessage = conv.messages?.[conv.messages.length - 1];
         if (!lastMessage) return false;
-        return lastMessage.sender === 'contact';
+        
+        // Só é "Esperando" se última msg é do contato
+        if (lastMessage.sender !== 'contact') return false;
+        
+        // 🆕 NOVO: Verificar se existe atendimento ativo não expirado
+        const telefone = (conv.phoneNumber || conv.id).replace(/[^0-9]/g, '');
+        const temAtendimentoAtivo = hasActiveAttendance(telefone);
+        
+        // Se tem atendimento ativo, não é "Esperando"
+        return !temAtendimentoAtivo;
       });
     } else if (filter === "answered") {
-      // ✅ Filtro "Em Atendimento": Conversas ativas onde já houve resposta nossa
+      // ✅ Filtro "Em Atendimento": Conversas com atendimento ativo OU última msg é do usuário
       filtered = filtered.filter(conv => {
         if (conv.isGroup === true) return false;
         if (conv.status === 'resolved') return false;
+        
+        const telefone = (conv.phoneNumber || conv.id).replace(/[^0-9]/g, '');
+        
+        // 🆕 NOVO: Se tem atendimento ativo não expirado, está "Em Atendimento"
+        if (hasActiveAttendance(telefone)) return true;
+        
+        // Fallback: Verificar se última mensagem é do usuário
         const lastMessage = conv.messages?.[conv.messages.length - 1];
         if (!lastMessage) return false;
         return lastMessage.sender === 'user';
@@ -4861,6 +4902,15 @@ function Conversas() {
     let messageContent = content || messageInput.trim();
     if (!messageContent || !selectedConv) return;
     
+    // 🆕 NOVO: Registrar atendimento ativo quando usuário responde
+    const telefoneFormatado = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
+    try {
+      await startOrRefreshAttendance(telefoneFormatado);
+      console.log('✅ [ATTENDANCE] Atendimento registrado para:', telefoneFormatado);
+    } catch (err) {
+      console.error('❌ [ATTENDANCE] Erro ao registrar atendimento:', err);
+    }
+    
     // 🔤 CORREÇÃO AUTOMÁTICA: Aplicar correção se habilitada e for mensagem de texto
     if (autoCorrectEnabled && type === "text" && messageContent.length >= 5 && !content) {
       try {
@@ -7988,7 +8038,7 @@ function Conversas() {
                 <p className="text-sm text-muted-foreground">Nenhuma conversa encontrada</p>
               )}
             </div>
-          ) : filteredConversations.map(conv => <ConversationListItem key={conv.id} contactName={conv.contactName} channel={conv.channel} lastMessage={conv.lastMessage} timestamp={new Date(conv.messages[conv.messages.length - 1]?.timestamp)} unread={conv.unread} isSelected={selectedConv?.id === conv.id} avatarUrl={conv.avatarUrl} tags={conv.tags} responsavel={conv.responsavel || conv.assignedUser?.name} funnelStage={conv.funnelStage} valor={conv.valor} conversationId={conv.id} leadId={conv.leadId || leadsVinculados[conv.id] || leadsVinculados[safeFormatPhoneNumber(conv.id)]} isGroup={conv.isGroup} isBlocked={blockedGroups.has(conv.phoneNumber || conv.id)} assignedUser={conv.assignedUser} status={conv.status} origemApi={conv.origemApi} isPinned={pinnedConversations.has(conv.id) || pinnedConversations.has(conv.phoneNumber || '')} onTogglePin={() => togglePinConversation(conv.id)} lastRespondedBy={(() => {
+          ) : filteredConversations.map(conv => <ConversationListItem key={conv.id} contactName={conv.contactName} channel={conv.channel} lastMessage={conv.lastMessage} timestamp={new Date(conv.messages[conv.messages.length - 1]?.timestamp)} unread={conv.unread} isSelected={selectedConv?.id === conv.id} avatarUrl={conv.avatarUrl} tags={conv.tags} responsavel={conv.responsavel || conv.assignedUser?.name} funnelStage={conv.funnelStage} valor={conv.valor} conversationId={conv.id} leadId={conv.leadId || leadsVinculados[conv.id] || leadsVinculados[safeFormatPhoneNumber(conv.id)]} isGroup={conv.isGroup} isBlocked={blockedGroups.has(conv.phoneNumber || conv.id)} assignedUser={conv.assignedUser} status={conv.status} origemApi={conv.origemApi} isPinned={pinnedConversations.has(conv.id) || pinnedConversations.has(conv.phoneNumber || '')} onTogglePin={() => togglePinConversation(conv.id)} attendingUser={getAttendingUser((conv.phoneNumber || conv.id).replace(/[^0-9]/g, ''))} lastRespondedBy={(() => {
           // ⚡ Buscar última mensagem enviada pelo usuário para mostrar quem respondeu
           const userMessages = conv.messages.filter(m => m.sender === "user");
           if (userMessages.length > 0) {

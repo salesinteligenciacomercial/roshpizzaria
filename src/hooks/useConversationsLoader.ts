@@ -346,7 +346,7 @@ export const useConversationsLoader = () => {
             } else {
               // ⚡ MELHORIA: Verificar se é uma conversa "ao vivo" (interação recente)
               // Se o usuário respondeu recentemente, manter em "Em Atendimento"
-              const TEMPO_CONVERSA_AO_VIVO = 10 * 60 * 1000; // 10 minutos (aumentado)
+              const TEMPO_CONVERSA_AO_VIVO = 5 * 60 * 1000; // 5 minutos (ajustado para atendimento ativo)
               const agora = Date.now();
               
               const ultimaMensagemDoUsuario = [...messagensFormatadas]

@@ -47,6 +47,11 @@ interface ConversationListItemProps {
   lastRespondedBy?: string; // ⚡ Nome do último usuário que respondeu
   status?: "waiting" | "answered" | "resolved"; // Status da conversa
   origemApi?: "evolution" | "meta"; // 🔥 NOVO: Identificação da API de origem
+  // 🆕 Atendimento ativo
+  attendingUser?: {
+    id: string;
+    name: string;
+  } | null;
 }
 
 function ConversationListItemComponent({
@@ -75,7 +80,8 @@ function ConversationListItemComponent({
   assignedUser,
   lastRespondedBy,
   status,
-  origemApi, // 🔥 NOVO
+  origemApi,
+  attendingUser, // 🆕 NOVO
 }: ConversationListItemProps) {
   const getChannelIcon = () => {
     switch (channel) {
@@ -217,8 +223,16 @@ function ConversationListItemComponent({
             )}
             
             <div className="flex flex-wrap gap-1.5 text-xs">
-              {/* ⚡ NOVO: Mostrar quem respondeu por último (Em Atendimento) */}
-              {status === "answered" && lastRespondedBy && (
+              {/* 🆕 NOVO: Mostrar usuário que está atendendo ativamente */}
+              {attendingUser && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-medium border border-emerald-200 dark:border-emerald-700">
+                  <User className="h-3 w-3" />
+                  <span className="font-semibold">{attendingUser.name}</span>
+                  <span className="opacity-70 text-[10px]">atendendo</span>
+                </span>
+              )}
+              {/* ⚡ ANTIGO: Mostrar quem respondeu por último (Em Atendimento) - apenas se não tiver attendingUser */}
+              {!attendingUser && status === "answered" && lastRespondedBy && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium">
                   <User className="h-3 w-3" />
                   {lastRespondedBy}
