@@ -7797,6 +7797,47 @@ function Conversas() {
       toast.error('Erro ao finalizar atendimento');
     }
   };
+
+  // 🆕 NOVO: Finalizar atendimento SEM enviar mensagem
+  const finalizarAtendimentoSilent = async () => {
+    if (!selectedConv) return;
+    try {
+      // Obter dados do usuário
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('company_id')
+        .eq('user_id', user?.id)
+        .single();
+
+      // Atualizar TODAS as mensagens desta conversa para status Resolvida
+      const telefoneFormatado = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
+      
+      await supabase
+        .from('conversas')
+        .update({ status: 'Resolvida' })
+        .eq('telefone_formatado', telefoneFormatado)
+        .eq('company_id', userRole?.company_id)
+        .neq('status', 'Resolvida');
+
+      console.log('✅ Conversa marcada como resolvida (sem mensagem)');
+
+      // Atualizar estados localmente
+      const updatedConv: Conversation = {
+        ...selectedConv,
+        status: 'resolved',
+      };
+      const updatedList = conversations.map(c => c.id === selectedConv.id ? updatedConv : c);
+      saveConversations(updatedList);
+      setConversations(updatedList);
+      setSelectedConv(updatedConv);
+      
+      toast.success('Atendimento finalizado');
+    } catch (e) {
+      console.error('❌ Erro ao finalizar atendimento:', e);
+      toast.error('Erro ao finalizar atendimento');
+    }
+  };
   return <div className="flex w-full bg-background overflow-hidden" style={{ height: 'calc(100vh - 80px)', maxHeight: 'calc(100vh - 80px)' }}>
       {/* Sidebar esquerda - tema cinza claro */}
       {/* No mobile: esconder quando uma conversa está selecionada */}
@@ -8211,7 +8252,7 @@ function Conversas() {
         {selectedConv ? <>
             {/* Header - FIXO NO TOPO */}
             <div className="flex-shrink-0 bg-background border-b z-10" style={{ minHeight: '56px', maxHeight: '60px' }}>
-              <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onTransferAtendimento={() => setTransferDialogOpen(true)} onToggleAI={() => toggleAiMode(selectedConv.id)} isAIActive={aiMode[selectedConv.id] || false} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} showBackButton={isMobile} onBack={() => setSelectedConv(null)} />
+              <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onFinalizeAtendimentoSilent={finalizarAtendimentoSilent} onTransferAtendimento={() => setTransferDialogOpen(true)} onToggleAI={() => toggleAiMode(selectedConv.id)} isAIActive={aiMode[selectedConv.id] || false} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} showBackButton={isMobile} onBack={() => setSelectedConv(null)} />
             </div>
             
             {/* Dialog de Transferir Atendimento */}

@@ -25,7 +25,8 @@ import { useEffect, useState } from "react";
    leadVinculado?: any;
    mostrarBotaoCriarLead?: boolean;
    onCriarLead?: () => void;
-   onFinalizeAtendimento?: (message: string) => void;
+  onFinalizeAtendimento?: (message: string) => void;
+  onFinalizeAtendimentoSilent?: () => void; // 🆕 Finalizar sem enviar mensagem
    onTransferAtendimento?: () => void;
    onToggleAI?: () => void;
    isAIActive?: boolean;
@@ -53,6 +54,7 @@ import { useEffect, useState } from "react";
    mostrarBotaoCriarLead = false,
    onCriarLead,
    onFinalizeAtendimento,
+   onFinalizeAtendimentoSilent,
    onTransferAtendimento,
    onToggleAI,
    isAIActive = false,
@@ -259,9 +261,10 @@ import { useEffect, useState } from "react";
                         value={finalizeMessage}
                         onChange={(e) => setFinalizeMessage(e.target.value)}
                       />
-                      <div className="flex justify-between">
+                      <div className="flex flex-col gap-3">
                         <Button
                           variant="ghost"
+                          size="sm"
                           onClick={() => {
                             localStorage.setItem("continuum_finalize_template", finalizeMessage);
                           }}
@@ -270,6 +273,17 @@ import { useEffect, useState } from "react";
                         </Button>
                         <div className="flex gap-2">
                           <Button variant="outline" onClick={() => setFinalizeOpen(false)}>Cancelar</Button>
+                          <Button
+                            variant="secondary"
+                            onClick={() => {
+                              if (onFinalizeAtendimentoSilent) {
+                                onFinalizeAtendimentoSilent();
+                              }
+                              setFinalizeOpen(false);
+                            }}
+                          >
+                            Só finalizar
+                          </Button>
                           <Button
                             onClick={() => {
                               onFinalizeAtendimento(finalizeMessage);
@@ -361,19 +375,32 @@ import { useEffect, useState } from "react";
                         value={finalizeMessage}
                         onChange={(e) => setFinalizeMessage(e.target.value)}
                       />
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-3">
                         <Button
                           variant="ghost"
+                          size="sm"
                           onClick={() => {
                             localStorage.setItem("continuum_finalize_template", finalizeMessage);
                           }}
                         >
                           Salvar como padrão
                         </Button>
-                        <div className="flex gap-2">
-                          <Button variant="outline" className="flex-1" onClick={() => setFinalizeOpen(false)}>Cancelar</Button>
+                        <div className="flex flex-col gap-2">
+                          <Button variant="outline" className="w-full" onClick={() => setFinalizeOpen(false)}>Cancelar</Button>
                           <Button
-                            className="flex-1"
+                            variant="secondary"
+                            className="w-full"
+                            onClick={() => {
+                              if (onFinalizeAtendimentoSilent) {
+                                onFinalizeAtendimentoSilent();
+                              }
+                              setFinalizeOpen(false);
+                            }}
+                          >
+                            Só finalizar
+                          </Button>
+                          <Button
+                            className="w-full"
                             onClick={() => {
                               onFinalizeAtendimento(finalizeMessage);
                               localStorage.setItem("continuum_finalize_template", finalizeMessage);
