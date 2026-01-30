@@ -9,7 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Session } from "@supabase/supabase-js";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, RefreshCw, Eye, EyeOff } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 export default function Auth() {
   const navigate = useNavigate();
@@ -20,6 +20,8 @@ export default function Auth() {
   const [session, setSession] = useState<Session | null>(null);
   const [backendDown, setBackendDown] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [showSignInPassword, setShowSignInPassword] = useState(false);
+  const [showSignUpPassword, setShowSignUpPassword] = useState(false);
   useEffect(() => {
     // ✅ CRÍTICO: Limpar TUDO ao carregar a página de login
     const cleanupOldData = async () => {
@@ -300,7 +302,29 @@ export default function Auth() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signin-password">Senha</Label>
-                  <Input id="signin-password" name="signin-password" type="password" placeholder="••••••••" required autoComplete="current-password" />
+                  <div className="relative">
+                    <Input 
+                      id="signin-password" 
+                      name="signin-password" 
+                      type={showSignInPassword ? "text" : "password"} 
+                      placeholder="••••••••" 
+                      required 
+                      autoComplete="current-password" 
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowSignInPassword(!showSignInPassword)}
+                    >
+                      {showSignInPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Entrando..." : "Entrar"}
@@ -355,7 +379,29 @@ export default function Auth() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-password">Senha</Label>
-                  <Input id="signup-password" name="signup-password" type="password" placeholder="••••••••" required minLength={6} />
+                  <div className="relative">
+                    <Input 
+                      id="signup-password" 
+                      name="signup-password" 
+                      type={showSignUpPassword ? "text" : "password"} 
+                      placeholder="••••••••" 
+                      required 
+                      minLength={6} 
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowSignUpPassword(!showSignUpPassword)}
+                    >
+                      {showSignUpPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Criando conta..." : "Criar conta"}
