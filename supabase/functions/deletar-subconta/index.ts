@@ -10,6 +10,59 @@ interface DeletarSubcontaRequest {
   subcontaId: string;
 }
 
+// Função para deletar em lotes para evitar timeout
+async function deletarEmLotes(
+  supabaseAdmin: any,
+  tabela: string,
+  companyId: string,
+  batchSize: number = 500
+): Promise<number> {
+  let totalDeletados = 0;
+  let continuar = true;
+
+  while (continuar) {
+    // Buscar IDs para deletar
+    const { data: registros, error: selectError } = await supabaseAdmin
+      .from(tabela)
+      .select('id')
+      .eq('company_id', companyId)
+      .limit(batchSize);
+
+    if (selectError) {
+      console.error(`❌ Erro ao buscar ${tabela}:`, selectError);
+      break;
+    }
+
+    if (!registros || registros.length === 0) {
+      continuar = false;
+      break;
+    }
+
+    const ids = registros.map((r: any) => r.id);
+
+    // Deletar os registros encontrados
+    const { error: deleteError, count } = await supabaseAdmin
+      .from(tabela)
+      .delete()
+      .in('id', ids);
+
+    if (deleteError) {
+      console.error(`❌ Erro ao deletar ${tabela}:`, deleteError);
+      break;
+    }
+
+    totalDeletados += count || ids.length;
+    console.log(`✅ ${tabela}: ${ids.length} registros deletados (total: ${totalDeletados})`);
+
+    // Se deletou menos que o batch, não há mais registros
+    if (registros.length < batchSize) {
+      continuar = false;
+    }
+  }
+
+  return totalDeletados;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -80,75 +133,69 @@ serve(async (req) => {
       throw new Error('Apenas administradores podem deletar subcontas');
     }
 
-    // Contar registros associados
-    const [leadsCount, tasksCount, conversasCount, compromissosCount] = await Promise.all([
-      supabaseAdmin.from('leads').select('id', { count: 'exact', head: true }).eq('company_id', subcontaId),
-      supabaseAdmin.from('tasks').select('id', { count: 'exact', head: true }).eq('company_id', subcontaId),
-      supabaseAdmin.from('conversas').select('id', { count: 'exact', head: true }).eq('company_id', subcontaId),
-      supabaseAdmin.from('compromissos').select('id', { count: 'exact', head: true }).eq('company_id', subcontaId),
-    ]);
-
-    const totalRecords = (leadsCount.count || 0) + (tasksCount.count || 0) + (conversasCount.count || 0) + (compromissosCount.count || 0);
-
-    console.log(`📊 Total de registros a deletar: ${totalRecords}`);
-
-    // Deletar em ordem (dependências primeiro)
-    const deletionSteps = [
-      { name: 'conversas', count: conversasCount.count || 0 },
-      { name: 'scheduled_whatsapp_messages', count: 0 },
-      { name: 'lembretes', count: 0 },
-      { name: 'compromissos', count: compromissosCount.count || 0 },
-      { name: 'tasks', count: tasksCount.count || 0 },
-      { name: 'leads', count: leadsCount.count || 0 },
-      { name: 'agendas', count: 0 },
-      { name: 'automation_flow_logs', count: 0 },
-      { name: 'automation_flows', count: 0 },
-      { name: 'etapas', count: 0 },
-      { name: 'funis', count: 0 },
-      { name: 'task_columns', count: 0 },
-      { name: 'task_boards', count: 0 },
-      { name: 'quick_messages', count: 0 },
-      { name: 'quick_message_categories', count: 0 },
-      { name: 'ia_training_data', count: 0 },
-      { name: 'ia_recommendations', count: 0 },
-      { name: 'ia_patterns', count: 0 },
-      { name: 'ia_metrics', count: 0 },
-      { name: 'ia_configurations', count: 0 },
-      { name: 'whatsapp_connections', count: 0 },
-      { name: 'conversation_assignments', count: 0 },
-      { name: 'blocked_groups', count: 0 },
-    ];
-
     let deletedRecords = 0;
 
+    // IMPORTANTE: Deletar conversas primeiro em lotes (tabela com mais registros)
+    console.log('📨 Deletando conversas em lotes...');
+    const conversasDeletadas = await deletarEmLotes(supabaseAdmin, 'conversas', subcontaId, 200);
+    deletedRecords += conversasDeletadas;
+    console.log(`✅ Total de conversas deletadas: ${conversasDeletadas}`);
+
+    // Lista de tabelas para deletar (ordem de dependências)
+    const tabelasParaDeletar = [
+      'scheduled_whatsapp_messages',
+      'lembretes',
+      'compromissos',
+      'tasks',
+      'leads',
+      'agendas',
+      'automation_flow_logs',
+      'automation_flows',
+      'etapas',
+      'funis',
+      'task_columns',
+      'task_boards',
+      'quick_messages',
+      'quick_message_categories',
+      'ia_training_data',
+      'ia_recommendations',
+      'ia_patterns',
+      'ia_metrics',
+      'ia_configurations',
+      'whatsapp_connections',
+      'conversation_assignments',
+      'blocked_groups',
+    ];
+
     // Deletar dados de cada tabela
-    for (const step of deletionSteps) {
+    for (const tabela of tabelasParaDeletar) {
       const { error, count } = await supabaseAdmin
-        .from(step.name)
+        .from(tabela)
         .delete()
         .eq('company_id', subcontaId);
 
       if (error) {
-        console.error(`❌ Erro ao deletar ${step.name}:`, error);
-      } else {
-        deletedRecords += count || 0;
-        if (count && count > 0) {
-          console.log(`✅ ${step.name}: ${count} registros deletados`);
-        }
+        console.error(`⚠️ Erro ao deletar ${tabela}:`, error.message);
+      } else if (count && count > 0) {
+        deletedRecords += count;
+        console.log(`✅ ${tabela}: ${count} registros deletados`);
       }
     }
 
     // Deletar user_roles da subconta
-    const { error: rolesError } = await supabaseAdmin
+    const { error: rolesError, count: rolesCount } = await supabaseAdmin
       .from('user_roles')
       .delete()
       .eq('company_id', subcontaId);
 
     if (rolesError) {
       console.error('⚠️ Erro ao deletar user_roles:', rolesError);
+    } else if (rolesCount) {
+      deletedRecords += rolesCount;
+      console.log(`✅ user_roles: ${rolesCount} registros deletados`);
     }
 
-    // Deletar a empresa
+    // Agora deletar a empresa (após todas as dependências terem sido removidas)
     const { error: companyError } = await supabaseAdmin
       .from('companies')
       .delete()
