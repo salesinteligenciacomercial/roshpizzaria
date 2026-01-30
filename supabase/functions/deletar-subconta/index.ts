@@ -10,56 +10,103 @@ interface DeletarSubcontaRequest {
   subcontaId: string;
 }
 
-// Função para deletar em lotes para evitar timeout
+// Função para deletar em lotes menores para evitar timeout
 async function deletarEmLotes(
   supabaseAdmin: any,
   tabela: string,
   companyId: string,
-  batchSize: number = 500
+  batchSize: number = 100
 ): Promise<number> {
   let totalDeletados = 0;
-  let continuar = true;
+  let tentativas = 0;
+  const maxTentativas = 50; // Máximo de iterações para evitar loop infinito
 
-  while (continuar) {
-    // Buscar IDs para deletar
-    const { data: registros, error: selectError } = await supabaseAdmin
-      .from(tabela)
-      .select('id')
-      .eq('company_id', companyId)
-      .limit(batchSize);
+  while (tentativas < maxTentativas) {
+    tentativas++;
+    
+    try {
+      // Deletar diretamente com limit para evitar timeout no SELECT
+      const { error: deleteError, count } = await supabaseAdmin
+        .from(tabela)
+        .delete({ count: 'exact' })
+        .eq('company_id', companyId)
+        .limit(batchSize);
 
-    if (selectError) {
-      console.error(`❌ Erro ao buscar ${tabela}:`, selectError);
+      if (deleteError) {
+        // Se timeout, tentar com batch menor
+        if (deleteError.code === '57014') {
+          console.log(`⏱️ Timeout em ${tabela}, tentando batch menor...`);
+          batchSize = Math.max(10, Math.floor(batchSize / 2));
+          continue;
+        }
+        console.error(`❌ Erro ao deletar ${tabela}:`, deleteError);
+        break;
+      }
+
+      const deletados = count || 0;
+      if (deletados === 0) {
+        // Não há mais registros
+        break;
+      }
+
+      totalDeletados += deletados;
+      console.log(`✅ ${tabela}: ${deletados} registros deletados (total: ${totalDeletados})`);
+      
+    } catch (err) {
+      console.error(`❌ Exceção ao deletar ${tabela}:`, err);
       break;
-    }
-
-    if (!registros || registros.length === 0) {
-      continuar = false;
-      break;
-    }
-
-    const ids = registros.map((r: any) => r.id);
-
-    // Deletar os registros encontrados
-    const { error: deleteError, count } = await supabaseAdmin
-      .from(tabela)
-      .delete()
-      .in('id', ids);
-
-    if (deleteError) {
-      console.error(`❌ Erro ao deletar ${tabela}:`, deleteError);
-      break;
-    }
-
-    totalDeletados += count || ids.length;
-    console.log(`✅ ${tabela}: ${ids.length} registros deletados (total: ${totalDeletados})`);
-
-    // Se deletou menos que o batch, não há mais registros
-    if (registros.length < batchSize) {
-      continuar = false;
     }
   }
 
+  return totalDeletados;
+}
+
+// Função alternativa para deletar usando RPC (mais rápido para tabelas grandes)
+async function deletarConversasRapido(
+  supabaseAdmin: any,
+  companyId: string
+): Promise<number> {
+  let totalDeletados = 0;
+  let continuar = true;
+  let batchSize = 50;
+  
+  while (continuar) {
+    try {
+      // Deletar diretamente sem SELECT prévio
+      const { count, error } = await supabaseAdmin
+        .from('conversas')
+        .delete({ count: 'exact' })
+        .eq('company_id', companyId)
+        .limit(batchSize);
+      
+      if (error) {
+        if (error.code === '57014') {
+          // Timeout - reduzir batch
+          batchSize = Math.max(10, Math.floor(batchSize / 2));
+          console.log(`⏱️ Timeout em conversas, reduzindo batch para ${batchSize}`);
+          continue;
+        }
+        console.error('❌ Erro ao deletar conversas:', error);
+        break;
+      }
+      
+      const deletados = count || 0;
+      totalDeletados += deletados;
+      
+      if (deletados > 0) {
+        console.log(`✅ conversas: ${deletados} deletadas (total: ${totalDeletados})`);
+      }
+      
+      if (deletados < batchSize) {
+        continuar = false;
+      }
+      
+    } catch (err) {
+      console.error('❌ Exceção ao deletar conversas:', err);
+      break;
+    }
+  }
+  
   return totalDeletados;
 }
 
@@ -135,9 +182,9 @@ serve(async (req) => {
 
     let deletedRecords = 0;
 
-    // IMPORTANTE: Deletar conversas primeiro em lotes (tabela com mais registros)
-    console.log('📨 Deletando conversas em lotes...');
-    const conversasDeletadas = await deletarEmLotes(supabaseAdmin, 'conversas', subcontaId, 200);
+    // IMPORTANTE: Deletar conversas primeiro (tabela com mais registros)
+    console.log('📨 Deletando conversas em lotes pequenos...');
+    const conversasDeletadas = await deletarConversasRapido(supabaseAdmin, subcontaId);
     deletedRecords += conversasDeletadas;
     console.log(`✅ Total de conversas deletadas: ${conversasDeletadas}`);
 
