@@ -4983,10 +4983,10 @@ function Conversas() {
     }
     
     // ✍️ ASSINATURA: Adicionar assinatura se habilitada (apenas para texto)
-    // Formato: "Atendente - Nome do Usuário" na parte superior da mensagem
+    // Formato: "*Atendente - Nome do Usuário*" com asteriscos para negrito no WhatsApp
     if (includeSignature && type === "text" && userName) {
-      messageContent = `Atendente - ${userName}\n\n${messageContent}`;
-      console.log('✍️ [ASSINATURA] Assinatura adicionada no topo: Atendente -', userName);
+      messageContent = `*Atendente - ${userName}*\n\n${messageContent}`;
+      console.log('✍️ [ASSINATURA] Assinatura adicionada no topo: *Atendente -', userName, '*');
     }
     
     console.log('📤 [ENVIO] Iniciando envio de mensagem:', {
