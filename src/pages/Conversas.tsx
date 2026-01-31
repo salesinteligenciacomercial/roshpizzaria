@@ -2972,7 +2972,7 @@ function Conversas() {
           for (let i = 0; i < phoneConditions.length; i += BATCH_SIZE) {
             const batch = phoneConditions.slice(i, i + BATCH_SIZE);
             const orCondition = batch.join(',');
-            const leadsResult = await supabase.from('leads').select('id, phone, name, telefone').eq('company_id', companyId).or(orCondition).limit(500); // Limite maior por lote
+            const leadsResult = await supabase.from('leads').select('id, phone, name, telefone, tags').eq('company_id', companyId).or(orCondition).limit(500); // Limite maior por lote
 
             if (!leadsResult.error && leadsResult.data) {
               allLeads = [...allLeads, ...leadsResult.data];
@@ -3110,6 +3110,7 @@ function Conversas() {
       const leadsMap = new Map<string, {
         name: string;
         leadId: string;
+        tags: string[];
       }>();
       leadsData.forEach(lead => {
         const phoneRaw = lead.phone || lead.telefone;
@@ -3118,7 +3119,8 @@ function Conversas() {
         if (phoneKey) {
           leadsMap.set(phoneKey, {
             name: lead.name || phoneKey,
-            leadId: lead.id
+            leadId: lead.id,
+            tags: lead.tags || []
           });
         }
       });
@@ -3347,7 +3349,7 @@ function Conversas() {
           lastMessage: messagensFormatadas[messagensFormatadas.length - 1]?.content || '',
           unread: messagensFormatadas.length > 0 && messagensFormatadas[messagensFormatadas.length - 1]?.sender === 'contact' ? 1 : 0,
           messages: messagensFormatadas,
-          tags: [],
+          tags: leadInfo?.tags || [],
           phoneNumber: telefone,
           avatarUrl: isGroup ? `https://ui-avatars.com/api/?name=${encodeURIComponent('Grupo')}&background=10b981&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`,
           isGroup: isGroup,
