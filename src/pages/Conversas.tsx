@@ -53,6 +53,7 @@ import { useTagsManager } from "@/hooks/useTagsManager";
 import { useConversationSearch, loadAllUniqueConversations } from "@/hooks/useConversationSearch";
 import { useActiveAttendance, TEMPO_ATENDIMENTO_ATIVO } from "@/hooks/useActiveAttendance";
 import * as evolutionAPI from "@/services/evolutionApi";
+import { ConversasAdvancedFilter, AdvancedFilters, defaultFilters } from "@/components/conversas/ConversasAdvancedFilter";
 
 // Função auxiliar para extrair fileSize do JSON de mídia
 function extractFileSizeFromMediaUrl(mediaUrl?: string): number | undefined {
@@ -354,6 +355,7 @@ function Conversas() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [filter, setFilter] = useState<"all" | "waiting" | "answered" | "resolved" | "group" | "responsible" | "transferred">("all");
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(defaultFilters);
   const [searchTerm, setSearchTerm] = useState("");
   // MELHORIA: Estado para busca debounced (otimização de performance)
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -1068,6 +1070,75 @@ function Conversas() {
     }
     console.log('📊 [DEBUG] Após filtro de status:', filtered.length);
 
+    // 🆕 FILTROS AVANÇADOS
+    // Filtrar por tags
+    if (advancedFilters.tags.length > 0) {
+      filtered = filtered.filter(conv => {
+        if (!conv.tags || conv.tags.length === 0) return false;
+        return advancedFilters.tags.some(tag => conv.tags.includes(tag));
+      });
+    }
+
+    // Filtrar por responsáveis
+    if (advancedFilters.responsaveis.length > 0) {
+      filtered = filtered.filter(conv => {
+        const respId = conv.responsavel || conv.assignedUser?.id;
+        return respId && advancedFilters.responsaveis.includes(respId);
+      });
+    }
+
+    // Filtrar por valor
+    if (advancedFilters.comValor !== null) {
+      filtered = filtered.filter(conv => {
+        const temValor = conv.valor && parseFloat(conv.valor.replace(/[^0-9.,]/g, '').replace(',', '.')) > 0;
+        return advancedFilters.comValor ? temValor : !temValor;
+      });
+    }
+
+    // Filtrar por funil/etapa (requer leadId para buscar no banco - filtro básico por funnelStage)
+    if (advancedFilters.funilId || advancedFilters.etapaId) {
+      filtered = filtered.filter(conv => {
+        // Por enquanto, filtrar pelo funnelStage da conversa
+        // TODO: Fazer join com leads para filtro mais preciso
+        if (advancedFilters.etapaId) {
+          return conv.funnelStage === advancedFilters.etapaId;
+        }
+        return conv.funnelStage ? true : false;
+      });
+    }
+
+    // Filtrar por temperatura (baseado nas tags)
+    if (advancedFilters.temperatura) {
+      filtered = filtered.filter(conv => {
+        const tagsLower = conv.tags?.map(t => t.toLowerCase()) || [];
+        if (advancedFilters.temperatura === 'quente') {
+          return tagsLower.some(t => t.includes('quente') || t.includes('hot'));
+        } else if (advancedFilters.temperatura === 'morno') {
+          return tagsLower.some(t => t.includes('morno') || t.includes('warm'));
+        } else if (advancedFilters.temperatura === 'frio') {
+          return tagsLower.some(t => t.includes('frio') || t.includes('cold'));
+        }
+        return true;
+      });
+    }
+
+    // Filtrar por status da venda
+    if (advancedFilters.statusVenda) {
+      filtered = filtered.filter(conv => {
+        const tagsLower = conv.tags?.map(t => t.toLowerCase()) || [];
+        if (advancedFilters.statusVenda === 'ganho') {
+          return tagsLower.some(t => t.includes('ganho') || t.includes('fechado') || t.includes('won'));
+        } else if (advancedFilters.statusVenda === 'perdido') {
+          return tagsLower.some(t => t.includes('perdido') || t.includes('lost'));
+        } else if (advancedFilters.statusVenda === 'em_negociacao') {
+          return !tagsLower.some(t => t.includes('ganho') || t.includes('perdido') || t.includes('won') || t.includes('lost'));
+        }
+        return true;
+      });
+    }
+
+    console.log('📊 [DEBUG] Após filtros avançados:', filtered.length);
+
     // Aplicar busca local (para buscas curtas < 2 caracteres)
     if (debouncedSearchTerm.trim() && debouncedSearchTerm.trim().length < 2) {
       const searchLower = debouncedSearchTerm.toLowerCase();
@@ -1094,7 +1165,7 @@ function Conversas() {
       return bTime - aTime;
     });
     return filtered;
-  }, [conversations, filter, debouncedSearchTerm, currentUserId, blockedGroups, hasSearched, searchResults, pinnedConversations, hasActiveAttendance, isCurrentUserAttending, activeAttendances, isSuperAdmin]);
+  }, [conversations, filter, debouncedSearchTerm, currentUserId, blockedGroups, hasSearched, searchResults, pinnedConversations, hasActiveAttendance, isCurrentUserAttending, activeAttendances, isSuperAdmin, advancedFilters]);
 
   // Mensagens exibidas: sempre refletir state atual da conversa selecionada (evitar cache obsoleto)
   // ⚡ CORREÇÃO: Não limitar mensagens exibidas - mostrar todas para preservar histórico
@@ -8121,6 +8192,14 @@ function Conversas() {
               </Badge>
               <span className="text-xs">Transferidos</span>
             </Button>
+            
+            {/* 🆕 Botão Filtros Avançados */}
+            <ConversasAdvancedFilter
+              companyId={userCompanyId}
+              filters={advancedFilters}
+              onFiltersChange={setAdvancedFilters}
+              allTags={allTags}
+            />
           </div>
         </div>
 
