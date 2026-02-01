@@ -20,7 +20,7 @@ const enviarWhatsAppSchema = z.object({
     return isDigits || isGroupJid || isContactJid;
   }, 'Informe dígitos (10-15), JID de contato @s.whatsapp.net ou grupo @g.us'),
   mensagem: z.string().max(65536, 'Mensagem muito longa').optional(),
-  tipo_mensagem: z.enum(['text', 'texto', 'image', 'audio', 'video', 'document', 'pdf']).optional(),
+  tipo_mensagem: z.enum(['text', 'texto', 'image', 'audio', 'video', 'document', 'pdf', 'template']).optional(),
   mediaUrl: z.string().url('URL de mídia inválida').optional(),
   mediaBase64: z.string().optional(),
   fileName: z.string().optional(),
@@ -668,7 +668,18 @@ serve(async (req) => {
       if (!evolutionConnected) {
         console.log("📘 Evolution desconectada - Usando Meta API diretamente...");
         
-        if (hasMetaCredentials && validatedData.mensagem) {
+        // Template message - prioridade máxima para disparo em massa
+        if (hasMetaCredentials && validatedData.template_name) {
+          console.log("📘 Enviando template via Meta API:", validatedData.template_name);
+          result = await sendMetaTemplateMessage(
+            connection.meta_phone_number_id,
+            connection.meta_access_token,
+            formattedNumber,
+            validatedData.template_name,
+            validatedData.template_language || 'pt_BR',
+            validatedData.template_components
+          );
+        } else if (hasMetaCredentials && validatedData.mensagem) {
           result = await sendMetaTextMessage(
             connection.meta_phone_number_id,
             connection.meta_access_token,
@@ -685,6 +696,7 @@ serve(async (req) => {
           let mediaType = validatedData.tipo_mensagem || 'image';
           if (mediaType === 'texto') mediaType = 'text';
           if (mediaType === 'pdf') mediaType = 'document';
+          if (mediaType === 'template') mediaType = 'document'; // Fallback
           
           result = await sendMetaMediaMessage(
             connection.meta_phone_number_id,
@@ -701,9 +713,9 @@ serve(async (req) => {
             { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         } else {
-          result = { success: false, provider: 'meta', error: 'Mensagem ou mídia é obrigatória' };
+          result = { success: false, provider: 'meta', error: 'Mensagem, mídia ou template é obrigatório' };
         }
-      } 
+      }
       // Evolution está conectada - usar como principal
       else {
         console.log("📗 Evolution conectada - Usando como principal, Meta como fallback...");
