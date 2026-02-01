@@ -29,11 +29,13 @@ import {
   FileText,
   Upload,
   Clock,
-  Pause
+  Pause,
+  LayoutTemplate
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { robustFormatPhoneNumber } from "@/utils/phoneFormatter";
+import { TemplateSelector, Template } from "./TemplateSelector";
 
 interface Lead {
   id: string;
@@ -63,13 +65,17 @@ export function DisparoEmMassa() {
   const [progress, setProgress] = useState<{ sent: number; total: number; errors: number; paused?: boolean } | null>(null);
   
   // Configurações de mídia e timing
-  const [messageType, setMessageType] = useState<"text" | "image" | "video">("text");
+  const [messageType, setMessageType] = useState<"text" | "image" | "video" | "template">("text");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [delayBetweenMessages, setDelayBetweenMessages] = useState<number>(7); // segundos
   const [pauseAfterMessages, setPauseAfterMessages] = useState<number>(15); // quantidade
   const [pauseDuration, setPauseDuration] = useState<number>(120); // segundos (2 minutos)
   const [campanhaNome, setCampanhaNome] = useState<string>("");
+  
+  // Estados para templates
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
 
   // Carregar company_id e leads
   useEffect(() => {
@@ -261,6 +267,58 @@ export function DisparoEmMassa() {
     });
   };
 
+  // Função para construir componentes do template com variáveis do lead
+  const buildTemplateComponents = (template: Template, lead: Lead): any[] => {
+    const components: any[] = [];
+    
+    if (!template.components) return components;
+    
+    // Processar variáveis para o BODY
+    const bodyComponent = template.components.find((c: any) => c.type === "BODY");
+    if (bodyComponent?.text?.includes("{{")) {
+      const matches = bodyComponent.text.match(/\{\{(\d+)\}\}/g) || [];
+      const parameters = matches.map((match: string) => {
+        const varNum = match.replace(/[{}]/g, '');
+        let value = templateVariables[varNum] || "";
+        
+        // Substituir placeholders dinâmicos
+        value = value.replace("{{nome}}", lead.name || "Cliente");
+        value = value.replace("{{telefone}}", lead.telefone || lead.phone || "");
+        value = value.replace("{{email}}", lead.email || "");
+        
+        return { type: "text", text: value || "Cliente" };
+      });
+      
+      if (parameters.length > 0) {
+        components.push({
+          type: "body",
+          parameters,
+        });
+      }
+    }
+    
+    // Processar variáveis para o HEADER (se houver)
+    const headerComponent = template.components.find((c: any) => c.type === "HEADER");
+    if (headerComponent?.text?.includes("{{")) {
+      const matches = headerComponent.text.match(/\{\{(\d+)\}\}/g) || [];
+      const parameters = matches.map((match: string) => {
+        const varNum = match.replace(/[{}]/g, '');
+        let value = templateVariables[varNum] || "";
+        value = value.replace("{{nome}}", lead.name || "Cliente");
+        return { type: "text", text: value || "Cliente" };
+      });
+      
+      if (parameters.length > 0) {
+        components.push({
+          type: "header",
+          parameters,
+        });
+      }
+    }
+    
+    return components;
+  };
+
   const handleDisparo = async () => {
     // Validações
     if (!campanhaNome.trim()) {
@@ -273,7 +331,12 @@ export function DisparoEmMassa() {
       return;
     }
 
-    if (messageType !== "text" && !mediaFile) {
+    if (messageType === "template" && !selectedTemplate) {
+      toast.error("Selecione um template para enviar");
+      return;
+    }
+
+    if ((messageType === "image" || messageType === "video") && !mediaFile) {
       toast.error("Selecione um arquivo de mídia");
       return;
     }
@@ -348,6 +411,13 @@ export function DisparoEmMassa() {
         if (messageType === "text") {
           payload.mensagem = message;
           payload.tipo_mensagem = "text";
+        } else if (messageType === "template" && selectedTemplate) {
+          // Envio de template via Meta API
+          payload.template_name = selectedTemplate.name;
+          payload.template_language = selectedTemplate.language;
+          payload.template_components = buildTemplateComponents(selectedTemplate, lead);
+          payload.tipo_mensagem = "template";
+          payload.mensagem = `[Template: ${selectedTemplate.name}]`;
         } else if (messageType === "image" && mediaData) {
           payload.caption = message || "";
           payload.mensagem = message || "";
@@ -701,12 +771,12 @@ export function DisparoEmMassa() {
 
           {/* Editor de Mensagem */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <Label className="font-semibold flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
                 Mensagem da Campanha
               </Label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   type="button"
                   variant={messageType === "text" ? "default" : "outline"}
@@ -715,6 +785,7 @@ export function DisparoEmMassa() {
                     setMessageType("text");
                     setMediaFile(null);
                     setMediaPreview(null);
+                    setSelectedTemplate(null);
                   }}
                   disabled={sending}
                 >
@@ -727,6 +798,7 @@ export function DisparoEmMassa() {
                   size="sm"
                   onClick={() => {
                     setMessageType("image");
+                    setSelectedTemplate(null);
                     if (!mediaFile) {
                       document.getElementById("media-upload")?.click();
                     }
@@ -742,6 +814,7 @@ export function DisparoEmMassa() {
                   size="sm"
                   onClick={() => {
                     setMessageType("video");
+                    setSelectedTemplate(null);
                     if (!mediaFile) {
                       document.getElementById("media-upload")?.click();
                     }
@@ -751,11 +824,50 @@ export function DisparoEmMassa() {
                   <Video className="h-4 w-4 mr-1" />
                   Vídeo
                 </Button>
+                <Button
+                  type="button"
+                  variant={messageType === "template" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setMessageType("template");
+                    setMediaFile(null);
+                    setMediaPreview(null);
+                  }}
+                  disabled={sending}
+                  className="border-primary/50"
+                >
+                  <LayoutTemplate className="h-4 w-4 mr-1" />
+                  Template
+                  <Badge variant="secondary" className="ml-1 text-xs">Meta</Badge>
+                </Button>
               </div>
             </div>
 
+            {/* Seletor de Template */}
+            {messageType === "template" && companyId && (
+              <Card className="border-primary/30 bg-primary/5">
+                <CardContent className="pt-4">
+                  <TemplateSelector
+                    companyId={companyId}
+                    selectedTemplate={selectedTemplate}
+                    onSelectTemplate={setSelectedTemplate}
+                    templateVariables={templateVariables}
+                    onVariablesChange={setTemplateVariables}
+                    disabled={sending}
+                  />
+                  <Alert className="mt-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="text-sm">
+                      <strong>Templates Meta API:</strong> Mensagens com templates são enviadas via API oficial do WhatsApp 
+                      e funcionam mesmo para contatos fora da janela de 24 horas.
+                    </AlertDescription>
+                  </Alert>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Upload de Mídia */}
-            {messageType !== "text" && (
+            {(messageType === "image" || messageType === "video") && (
               <div className="space-y-2">
                 <Label>Arquivo de {messageType === "image" ? "Imagem" : "Vídeo"}</Label>
                 <div className="flex items-center gap-2">
@@ -808,44 +920,76 @@ export function DisparoEmMassa() {
               </div>
             )}
 
-            {/* Editor de Texto */}
-            <Textarea
-              placeholder={
-                messageType === "text"
-                  ? "Digite a mensagem que será enviada para todos os leads selecionados..."
-                  : messageType === "image"
-                  ? "Digite a legenda da imagem (opcional)..."
-                  : "Digite a legenda do vídeo (opcional)..."
-              }
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              rows={6}
-              className="resize-none"
-              disabled={sending}
-            />
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>{message.length} caracteres</span>
-              <span>
-                {selectedCount > 0
-                  ? `${selectedCount} destinatário${selectedCount !== 1 ? "s" : ""}`
-                  : "Selecione leads para enviar"}
-              </span>
-            </div>
+            {/* Editor de Texto - Ocultar quando usando template */}
+            {messageType !== "template" && (
+              <>
+                <Textarea
+                  placeholder={
+                    messageType === "text"
+                      ? "Digite a mensagem que será enviada para todos os leads selecionados..."
+                      : messageType === "image"
+                      ? "Digite a legenda da imagem (opcional)..."
+                      : "Digite a legenda do vídeo (opcional)..."
+                  }
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  rows={6}
+                  className="resize-none"
+                  disabled={sending}
+                />
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>{message.length} caracteres</span>
+                  <span>
+                    {selectedCount > 0
+                      ? `${selectedCount} destinatário${selectedCount !== 1 ? "s" : ""}`
+                      : "Selecione leads para enviar"}
+                  </span>
+                </div>
+              </>
+            )}
+
+            {/* Info para template */}
+            {messageType === "template" && (
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <span>
+                  {selectedTemplate 
+                    ? `Template selecionado: ${selectedTemplate.name}` 
+                    : "Nenhum template selecionado"}
+                </span>
+                <span>
+                  {selectedCount > 0
+                    ? `${selectedCount} destinatário${selectedCount !== 1 ? "s" : ""}`
+                    : "Selecione leads para enviar"}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Preview */}
-          {((message || mediaFile) && selectedCount > 0) && (
+          {((message || mediaFile || selectedTemplate) && selectedCount > 0) && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                <strong>Preview:</strong> Esta {messageType === "text" ? "mensagem" : messageType === "image" ? "imagem" : "vídeo"} será enviada para{" "}
+                <strong>Preview:</strong> {messageType === "template" ? "Este template" : messageType === "text" ? "Esta mensagem" : messageType === "image" ? "Esta imagem" : "Este vídeo"} será enviado para{" "}
                 <strong>{selectedCount}</strong> lead{selectedCount !== 1 ? "s" : ""}.
                 {messageType === "text" && message && (
                   <div className="mt-2 p-3 bg-muted rounded border-l-2 border-primary">
                     {message}
                   </div>
                 )}
-                {messageType !== "text" && mediaPreview && (
+                {messageType === "template" && selectedTemplate && (
+                  <div className="mt-2 p-3 bg-muted rounded border-l-2 border-primary">
+                    <div className="flex items-center gap-2 mb-1">
+                      <LayoutTemplate className="h-4 w-4" />
+                      <strong>{selectedTemplate.name}</strong>
+                      <Badge variant="outline" className="text-xs">{selectedTemplate.category}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Idioma: {selectedTemplate.language} | Variáveis serão substituídas com dados de cada lead
+                    </p>
+                  </div>
+                )}
+                {(messageType === "image" || messageType === "video") && mediaPreview && (
                   <div className="mt-2">
                     {messageType === "image" ? (
                       <img
@@ -931,6 +1075,8 @@ export function DisparoEmMassa() {
                 setSelectedStatus("all");
                 setSelectedTag("all");
                 setSelectedSegmentacao("all");
+                setSelectedTemplate(null);
+                setTemplateVariables({});
               }}
               disabled={sending}
             >
@@ -943,7 +1089,8 @@ export function DisparoEmMassa() {
                 sending ||
                 !campanhaNome.trim() ||
                 (messageType === "text" && !message.trim()) ||
-                (messageType !== "text" && !mediaFile) ||
+                (messageType === "template" && !selectedTemplate) ||
+                ((messageType === "image" || messageType === "video") && !mediaFile) ||
                 selectedCount === 0 ||
                 !companyId
               }
