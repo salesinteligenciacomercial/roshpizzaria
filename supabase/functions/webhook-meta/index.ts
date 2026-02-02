@@ -47,6 +47,112 @@ function buildMetaMediaJson(mediaId: string, mimeType?: string, sha256?: string,
   });
 }
 
+// Buscar e reconstruir o texto completo do template
+async function getTemplateContent(
+  supabase: any, 
+  templateName: string, 
+  templateComponents: any[], 
+  companyId?: string
+): Promise<string> {
+  try {
+    // Buscar definição do template no banco de dados
+    let query = supabase
+      .from('whatsapp_templates')
+      .select('name, components, status')
+      .eq('name', templateName);
+    
+    if (companyId) {
+      query = query.eq('company_id', companyId);
+    }
+    
+    const { data: templates } = await query.limit(1);
+    
+    if (!templates || templates.length === 0) {
+      console.log('⚠️ Template não encontrado no banco:', templateName);
+      // Fallback: usar os parâmetros disponíveis
+      return buildTemplateContentFromParams(templateName, templateComponents);
+    }
+    
+    const templateDef = templates[0];
+    const components = templateDef.components || [];
+    
+    // Extrair parâmetros enviados
+    const bodyParams: string[] = [];
+    const headerParams: string[] = [];
+    
+    for (const comp of templateComponents || []) {
+      if (comp.type === 'body' && comp.parameters) {
+        comp.parameters.forEach((p: any) => bodyParams.push(p.text || ''));
+      }
+      if (comp.type === 'header' && comp.parameters) {
+        comp.parameters.forEach((p: any) => headerParams.push(p.text || ''));
+      }
+    }
+    
+    let fullText = '';
+    
+    // Processar HEADER
+    const headerDef = components.find((c: any) => c.type === 'HEADER');
+    if (headerDef?.text) {
+      let headerText = headerDef.text;
+      headerParams.forEach((val, idx) => {
+        headerText = headerText.replace(`{{${idx + 1}}}`, val);
+      });
+      fullText += `*${headerText}*\n\n`;
+    }
+    
+    // Processar BODY
+    const bodyDef = components.find((c: any) => c.type === 'BODY');
+    if (bodyDef?.text) {
+      let bodyText = bodyDef.text;
+      bodyParams.forEach((val, idx) => {
+        bodyText = bodyText.replace(`{{${idx + 1}}}`, val);
+      });
+      fullText += bodyText;
+    }
+    
+    // Processar FOOTER
+    const footerDef = components.find((c: any) => c.type === 'FOOTER');
+    if (footerDef?.text) {
+      fullText += `\n\n_${footerDef.text}_`;
+    }
+    
+    // Processar BUTTONS
+    const buttonsDef = components.find((c: any) => c.type === 'BUTTONS');
+    if (buttonsDef?.buttons && buttonsDef.buttons.length > 0) {
+      fullText += '\n\n';
+      buttonsDef.buttons.forEach((btn: any) => {
+        fullText += `↪ ${btn.text}\n`;
+      });
+    }
+    
+    return fullText.trim() || `[Template: ${templateName}]`;
+  } catch (error) {
+    console.error('❌ Erro ao buscar template:', error);
+    return buildTemplateContentFromParams(templateName, templateComponents);
+  }
+}
+
+// Fallback: construir conteúdo a partir dos parâmetros
+function buildTemplateContentFromParams(templateName: string, templateComponents: any[]): string {
+  let content = '';
+  for (const comp of templateComponents || []) {
+    if (comp.type === 'body' && comp.parameters) {
+      const texts = comp.parameters.map((p: any) => p.text || '').filter(Boolean);
+      if (texts.length > 0) {
+        content = texts.join(' ');
+      }
+    }
+    if (comp.type === 'header' && comp.parameters) {
+      const texts = comp.parameters.map((p: any) => p.text || '').filter(Boolean);
+      if (texts.length > 0) {
+        content = `*${texts.join(' ')}*\n\n` + content;
+      }
+    }
+  }
+  return content || `[Template: ${templateName}]`;
+}
+
 // Transformar payload do WhatsApp Meta para formato interno
 function transformWhatsAppPayload(entry: any) {
   const messages: any[] = [];
@@ -168,8 +274,8 @@ function transformWhatsAppPayload(entry: any) {
                             '[Resposta interativa]';
             break;
           case 'template':
-            messageType = 'text';
-            messageContent = '[Template]';
+            messageType = 'template';
+            messageContent = '[Template WhatsApp recebido]';
             break;
           default:
             messageType = 'text';
@@ -220,17 +326,11 @@ function transformWhatsAppPayload(entry: any) {
             messageContent = message.text?.body || '';
             break;
           case 'template':
-            messageType = 'text';
-            // Extrair conteúdo do template
-            const templateName = message.template?.name || 'template';
-            const templateComponents = message.template?.components || [];
-            let templateBody = '';
-            for (const component of templateComponents) {
-              if (component.type === 'body' && component.parameters) {
-                templateBody = component.parameters.map((p: any) => p.text || '').join(' ');
-              }
-            }
-            messageContent = templateBody || `[Template: ${templateName}]`;
+            messageType = 'template';
+            // Extrair conteúdo do template usando função helper
+            const echoTemplateName = message.template?.name || 'template';
+            const echoTemplateComponents = message.template?.components || [];
+            messageContent = buildTemplateContentFromParams(echoTemplateName, echoTemplateComponents);
             break;
           case 'image':
             messageType = 'image';

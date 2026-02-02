@@ -319,6 +319,62 @@ export function DisparoEmMassa() {
     return components;
   };
 
+  // Função para construir o texto legível do template para salvar no banco
+  const buildTemplateTextContent = (template: Template, lead: Lead): string => {
+    if (!template.components) return `[Template: ${template.name}]`;
+    
+    let textContent = "";
+    
+    // Header
+    const headerComponent = template.components.find((c: any) => c.type === "HEADER");
+    if (headerComponent?.text) {
+      let headerText = headerComponent.text;
+      // Substituir variáveis
+      const matches = headerText.match(/\{\{(\d+)\}\}/g) || [];
+      matches.forEach((match: string) => {
+        const varNum = match.replace(/[{}]/g, '');
+        let value = templateVariables[varNum] || "";
+        value = value.replace("{{nome}}", lead.name || "Cliente");
+        headerText = headerText.replace(match, value || "Cliente");
+      });
+      textContent += `*${headerText}*\n\n`;
+    }
+    
+    // Body
+    const bodyComponent = template.components.find((c: any) => c.type === "BODY");
+    if (bodyComponent?.text) {
+      let bodyText = bodyComponent.text;
+      // Substituir variáveis
+      const matches = bodyText.match(/\{\{(\d+)\}\}/g) || [];
+      matches.forEach((match: string) => {
+        const varNum = match.replace(/[{}]/g, '');
+        let value = templateVariables[varNum] || "";
+        value = value.replace("{{nome}}", lead.name || "Cliente");
+        value = value.replace("{{telefone}}", lead.telefone || lead.phone || "");
+        value = value.replace("{{email}}", lead.email || "");
+        bodyText = bodyText.replace(match, value || "Cliente");
+      });
+      textContent += bodyText;
+    }
+    
+    // Footer
+    const footerComponent = template.components.find((c: any) => c.type === "FOOTER");
+    if (footerComponent?.text) {
+      textContent += `\n\n_${footerComponent.text}_`;
+    }
+    
+    // Buttons
+    const buttonsComponent = template.components.find((c: any) => c.type === "BUTTONS");
+    if (buttonsComponent?.buttons && buttonsComponent.buttons.length > 0) {
+      textContent += "\n\n";
+      buttonsComponent.buttons.forEach((btn: any) => {
+        textContent += `↪ ${btn.text}\n`;
+      });
+    }
+    
+    return textContent.trim() || `[Template: ${template.name}]`;
+  };
+
   const handleDisparo = async () => {
     // Validações
     if (!campanhaNome.trim()) {
@@ -447,10 +503,22 @@ export function DisparoEmMassa() {
 
           // Salvar no banco de dados - importante para aparecer no CRM
           // Usar telefone normalizado (apenas números) para garantir agrupamento correto
+          // Gerar conteúdo da mensagem baseado no tipo
+          let mensagemConteudo = message;
+          if (messageType === "template" && selectedTemplate) {
+            // Construir texto do template para salvar
+            const templateText = buildTemplateTextContent(selectedTemplate, lead);
+            mensagemConteudo = templateText || `[Template: ${selectedTemplate.name}]`;
+          } else if (messageType === "image" && !message) {
+            mensagemConteudo = "[Imagem]";
+          } else if (messageType === "video" && !message) {
+            mensagemConteudo = "[Vídeo]";
+          }
+          
           const conversaData: any = {
             numero: telefoneNormalizado, // Número normalizado (apenas dígitos)
             telefone_formatado: telefoneNormalizado, // Mesmo formato para agrupamento consistente
-            mensagem: message || (messageType === "image" ? "[Imagem]" : messageType === "video" ? "[Vídeo]" : ""),
+            mensagem: mensagemConteudo,
             origem: "WhatsApp",
             status: "Enviada",
             tipo_mensagem: messageType,

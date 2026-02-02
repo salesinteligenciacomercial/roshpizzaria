@@ -26,7 +26,7 @@ interface MessageActionsProps {
   messageId: string;
   content: string;
   sender: "user" | "contact";
-  messageType?: "text" | "image" | "audio" | "pdf" | "video" | "contact" | "document";
+  messageType?: "text" | "image" | "audio" | "pdf" | "video" | "contact" | "document" | "template";
   mediaUrl?: string;
   fileName?: string;
   onReply: (messageId: string) => void;

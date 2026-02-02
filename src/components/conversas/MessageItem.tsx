@@ -17,7 +17,8 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  LayoutTemplate
 } from "lucide-react";
 import { MessageActions } from "./MessageActions";
 import { PDFPreview } from "./PDFPreview";
@@ -30,7 +31,7 @@ import { TextWithLinks } from "./LinkPreview";
 interface Message {
   id: string;
   content: string;
-  type: "text" | "image" | "audio" | "pdf" | "video" | "contact" | "document";
+  type: "text" | "image" | "audio" | "pdf" | "video" | "contact" | "document" | "template";
   sender: "user" | "contact";
   timestamp: Date;
   delivered: boolean;
@@ -307,6 +308,23 @@ function MessageItemComponent({
               {message.edited && (
                 <span className="text-[10px] text-muted-foreground italic"> (editado)</span>
               )}
+            </div>
+          )}
+          
+          {/* Template Message */}
+          {message.type === "template" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-primary mb-1">
+                <LayoutTemplate className="h-4 w-4" />
+                <span className="text-xs font-semibold uppercase">Template WhatsApp</span>
+              </div>
+              <div className="max-w-full">
+                {message.content ? (
+                  <TextWithLinks text={message.content} />
+                ) : (
+                  <span className="text-muted-foreground italic">[Mensagem de template enviada]</span>
+                )}
+              </div>
             </div>
           )}
           

@@ -398,6 +398,25 @@ async function transformEvolutionPayload(body: any, supabase: any) {
         type: 'document'
       });
     }
+  } else if (data.message.templateMessage) {
+    // Template message da Evolution API
+    const template = data.message.templateMessage;
+    const templateName = template.hydratedTemplate?.hydratedTitleText || 
+                         template.hydratedFourRowTemplate?.hydratedTitleText ||
+                         'Template';
+    const templateBody = template.hydratedTemplate?.hydratedContentText || 
+                         template.hydratedFourRowTemplate?.hydratedContentText ||
+                         '';
+    mensagem = templateBody ? `*${templateName}*\n\n${templateBody}` : `[Template: ${templateName}]`;
+    tipo_mensagem = 'template';
+  } else if (data.message.buttonsResponseMessage) {
+    // Resposta de botão
+    mensagem = data.message.buttonsResponseMessage.selectedDisplayText || '[Resposta de botão]';
+    tipo_mensagem = 'text';
+  } else if (data.message.listResponseMessage) {
+    // Resposta de lista
+    mensagem = data.message.listResponseMessage.title || '[Resposta de lista]';
+    tipo_mensagem = 'text';
   } else {
     mensagem = '[Mensagem não suportada]';
     tipo_mensagem = 'text';
