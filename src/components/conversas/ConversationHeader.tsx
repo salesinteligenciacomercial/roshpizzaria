@@ -148,7 +148,9 @@ import { useEffect, useState } from "react";
             {/* Avatar do Lead */}
             <div className="relative flex-shrink-0">
               <Avatar className="h-10 w-10 border-2 border-primary/20">
-                <AvatarImage src={avatarUrl} alt={contactName} />
+                {avatarUrl && avatarUrl.trim() !== '' ? (
+                  <AvatarImage src={avatarUrl} alt={contactName} />
+                ) : null}
                 <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold text-sm">
                   {getInitials(contactName)}
                 </AvatarFallback>

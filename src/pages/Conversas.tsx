@@ -618,7 +618,9 @@ function Conversas() {
         timeout: 8000,
         fallback: () => {
           // Fallback diferente para grupos e contatos individuais
-          const fallbackUrl = isGroup ? `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'Grupo')}&background=10b981&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || normalized)}&background=0ea5e9&color=fff`;
+          const fallbackUrl = isGroup 
+            ? `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'Grupo')}&background=10b981&color=fff&bold=true` 
+            : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || normalized)}&background=0ea5e9&color=fff&bold=true`;
           return Promise.resolve({
             profilePictureUrl: fallbackUrl
           });
@@ -627,7 +629,17 @@ function Conversas() {
           console.error('❌ [PROFILE-PICTURE] In-flight erro:', error);
         }
       });
-      const url = result?.profilePictureUrl || (isGroup ? `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'Grupo')}&background=10b981&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || normalized)}&background=0ea5e9&color=fff`);
+      
+      // ⚡ CORREÇÃO: Garantir que temos sempre uma URL válida
+      const receivedUrl = result?.profilePictureUrl;
+      const hasValidUrl = receivedUrl && typeof receivedUrl === 'string' && receivedUrl.trim() !== '' && !receivedUrl.includes('undefined') && !receivedUrl.includes('null');
+      
+      // Criar fallback com iniciais
+      const fallbackUrl = isGroup 
+        ? `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'Grupo')}&background=10b981&color=fff&bold=true` 
+        : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || normalized)}&background=0ea5e9&color=fff&bold=true`;
+      
+      const url = hasValidUrl ? receivedUrl : fallbackUrl;
       avatarCacheRef.current.set(cacheKey, url);
       inflightAvatarPromisesRef.current.delete(cacheKey);
       return url;

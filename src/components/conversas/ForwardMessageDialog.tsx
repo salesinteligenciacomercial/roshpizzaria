@@ -305,7 +305,9 @@ export function ForwardMessageDialog({
                     }`}
                   >
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={contact.avatar} />
+                      {contact.avatar && contact.avatar.trim() !== '' ? (
+                        <AvatarImage src={contact.avatar} />
+                      ) : null}
                       <AvatarFallback>
                         <User className="h-5 w-5" />
                       </AvatarFallback>
