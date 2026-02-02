@@ -7,6 +7,8 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import CampaignEmptyState from "./CampaignEmptyState";
+import LeadsBySourceSection from "./LeadsBySourceSection";
 
 interface MetaCampaign {
   id: string;
@@ -92,8 +94,9 @@ const DATE_PRESETS = [
   { value: 'last_90d', label: 'Últimos 90 dias' },
   { value: 'this_month', label: 'Este mês' },
   { value: 'last_month', label: 'Mês passado' },
+  { value: 'this_year', label: 'Este ano' },
+  { value: 'lifetime', label: 'Todo o histórico' },
 ];
-
 export default function CampaignAnalytics({ userCompanyId }: CampaignAnalyticsProps) {
   const [metaData, setMetaData] = useState<MetaInsightsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -483,13 +486,13 @@ export default function CampaignAnalytics({ userCompanyId }: CampaignAnalyticsPr
               })}
             </div>
           ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <Megaphone className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>Nenhuma campanha encontrada para o período selecionado</p>
-            </div>
+            <CampaignEmptyState accountName={account_info.name} />
           )}
         </CardContent>
       </Card>
+
+      {/* Seção de Leads por Origem - sempre visível */}
+      <LeadsBySourceSection companyId={userCompanyId} />
 
       {/* Última atualização */}
       <p className="text-xs text-muted-foreground text-center">
