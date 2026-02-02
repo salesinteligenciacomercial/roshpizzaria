@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Users, MessageSquare, Share2, Globe, Link2, Mail, Phone, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Users, MessageSquare, Share2, Globe, Link2, Mail, Phone, Loader2, Megaphone, MousePointerClick, Target, Instagram } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -22,6 +23,13 @@ const SOURCE_ICONS: Record<string, React.ReactNode> = {
   website: <Link2 className="h-4 w-4 text-purple-500" />,
   email: <Mail className="h-4 w-4 text-orange-500" />,
   telefone: <Phone className="h-4 w-4 text-cyan-500" />,
+  facebook: <Megaphone className="h-4 w-4 text-blue-600" />,
+  instagram: <Instagram className="h-4 w-4 text-pink-500" />,
+  lead_ads: <Target className="h-4 w-4 text-blue-500" />,
+  pixel: <MousePointerClick className="h-4 w-4 text-purple-600" />,
+  click_to_whatsapp: <MessageSquare className="h-4 w-4 text-green-600" />,
+  meta_ads: <Megaphone className="h-4 w-4 text-blue-500" />,
+  google: <Globe className="h-4 w-4 text-red-500" />,
   default: <Users className="h-4 w-4 text-muted-foreground" />
 };
 
@@ -30,13 +38,20 @@ const SOURCE_LABELS: Record<string, string> = {
   indicacao: 'Indicação',
   organic: 'Orgânico',
   website: 'Website',
+  site: 'Site',
   email: 'E-mail',
   telefone: 'Telefone',
   facebook: 'Facebook',
   instagram: 'Instagram',
   google: 'Google Ads',
+  lead_ads: 'Lead Ads',
+  pixel: 'Pixel do Site',
+  click_to_whatsapp: 'Click-to-WhatsApp',
+  meta_ads: 'Meta Ads',
   default: 'Outros'
 };
+
+const PAID_SOURCES = ['lead_ads', 'pixel', 'click_to_whatsapp', 'meta_ads', 'facebook', 'google'];
 
 export default function LeadsBySourceSection({ companyId }: LeadsBySourceSectionProps) {
   const [leadSources, setLeadSources] = useState<LeadSource[]>([]);
@@ -150,8 +165,10 @@ export default function LeadsBySourceSection({ companyId }: LeadsBySourceSection
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {leadSources.slice(0, 8).map((source, index) => {
+          {leadSources.slice(0, 10).map((source, index) => {
             const percentage = totalLeads > 0 ? (source.count / totalLeads) * 100 : 0;
+            const sourceKey = (source.source || 'default').toLowerCase();
+            const isPaid = PAID_SOURCES.includes(sourceKey);
             
             return (
               <div key={index} className="space-y-2">
@@ -159,6 +176,11 @@ export default function LeadsBySourceSection({ companyId }: LeadsBySourceSection
                   <div className="flex items-center gap-2">
                     {getIcon(source.source)}
                     <span className="text-sm font-medium">{getLabel(source.source)}</span>
+                    {isPaid && (
+                      <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                        Pago
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <span className="font-semibold">{source.count.toLocaleString('pt-BR')}</span>
@@ -170,9 +192,9 @@ export default function LeadsBySourceSection({ companyId }: LeadsBySourceSection
             );
           })}
           
-          {leadSources.length > 8 && (
+          {leadSources.length > 10 && (
             <p className="text-xs text-muted-foreground text-center pt-2">
-              +{leadSources.length - 8} outras origens
+              +{leadSources.length - 10} outras origens
             </p>
           )}
         </div>

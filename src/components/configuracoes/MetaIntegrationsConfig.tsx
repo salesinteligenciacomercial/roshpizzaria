@@ -22,6 +22,7 @@ import {
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import PixelSetupCard from "@/components/integrations/PixelSetupCard";
 
 interface MetaIntegrationsConfigProps {
   companyId: string;
@@ -691,6 +692,11 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
+              </div>
+
+              {/* Pixel & Conversions API */}
+              <div className="pt-4 border-t">
+                <PixelSetupCard companyId={companyId} />
               </div>
             </div>
           </TabsContent>
