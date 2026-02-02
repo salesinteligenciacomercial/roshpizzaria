@@ -3504,6 +3504,84 @@ export type Database = {
         }
         Relationships: []
       }
+      pixel_events: {
+        Row: {
+          company_id: string
+          created_at: string
+          custom_data: Json | null
+          event_name: string
+          event_source_url: string | null
+          event_time: string
+          fbc: string | null
+          fbp: string | null
+          id: string
+          lead_id: string | null
+          meta_response: Json | null
+          user_email: string | null
+          user_phone: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          custom_data?: Json | null
+          event_name: string
+          event_source_url?: string | null
+          event_time?: string
+          fbc?: string | null
+          fbp?: string | null
+          id?: string
+          lead_id?: string | null
+          meta_response?: Json | null
+          user_email?: string | null
+          user_phone?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          custom_data?: Json | null
+          event_name?: string
+          event_source_url?: string | null
+          event_time?: string
+          fbc?: string | null
+          fbp?: string | null
+          id?: string
+          lead_id?: string | null
+          meta_response?: Json | null
+          user_email?: string | null
+          user_phone?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pixel_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pixel_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       process_blocks: {
         Row: {
           block_type: string
@@ -4738,6 +4816,7 @@ export type Database = {
           meta_app_scoped_user_id: string | null
           meta_refresh_token: string | null
           meta_token_expires_at: string | null
+          pixel_id: string | null
           provider_priority: string | null
           updated_at: string | null
           waba_id: string | null
@@ -4769,6 +4848,7 @@ export type Database = {
           meta_app_scoped_user_id?: string | null
           meta_refresh_token?: string | null
           meta_token_expires_at?: string | null
+          pixel_id?: string | null
           provider_priority?: string | null
           updated_at?: string | null
           waba_id?: string | null
@@ -4800,6 +4880,7 @@ export type Database = {
           meta_app_scoped_user_id?: string | null
           meta_refresh_token?: string | null
           meta_token_expires_at?: string | null
+          pixel_id?: string | null
           provider_priority?: string | null
           updated_at?: string | null
           waba_id?: string | null
