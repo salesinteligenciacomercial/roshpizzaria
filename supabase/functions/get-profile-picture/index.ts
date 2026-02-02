@@ -130,6 +130,7 @@ serve(async (req) => {
 
     let profilePictureUrl: string | null = null;
     let supabase: any = null;
+    let leadName: string | null = null;
 
     if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -153,51 +154,83 @@ serve(async (req) => {
         if (phoneVar.length >= 8) {
           const { data: lead } = await supabase
             .from('leads')
-            .select('profile_picture_url')
+            .select('profile_picture_url, name')
             .eq('company_id', company_id)
             .or(`telefone.ilike.%${phoneVar}%,phone.ilike.%${phoneVar}%`)
-            .not('profile_picture_url', 'is', null)
             .limit(1)
             .maybeSingle();
           
-          if (lead?.profile_picture_url) {
-            console.log('✅ [PROFILE-PICTURE] Foto encontrada no lead com variação:', phoneVar);
-            profilePictureUrl = lead.profile_picture_url;
-            break;
+          if (lead) {
+            // Capturar nome para fallback
+            if (lead.name) leadName = lead.name;
+            
+            if (lead.profile_picture_url) {
+              console.log('✅ [PROFILE-PICTURE] Foto encontrada no lead com variação:', phoneVar);
+              profilePictureUrl = lead.profile_picture_url;
+              break;
+            }
           }
         }
       }
     }
 
-    // Se não encontrou no lead, buscar via Evolution API da subconta
+    // Se não encontrou no lead, buscar via Evolution API (mesmo se api_provider='both' ou 'meta')
+    // A Evolution pode estar configurada mesmo quando Meta é o principal
     if (!profilePictureUrl && company_id && supabase) {
+      // Buscar conexão SEM filtrar por status='connected' para obter credenciais Evolution
       const { data: conn } = await supabase
         .from('whatsapp_connections')
-        .select('instance_name, evolution_api_key, evolution_api_url')
+        .select('instance_name, evolution_api_key, evolution_api_url, api_provider, status')
         .eq('company_id', company_id)
-        .eq('status', 'connected')
         .maybeSingle();
       
       console.log('🔍 [PROFILE-PICTURE] Conexão encontrada:', { 
         found: !!conn, 
         instanceName: conn?.instance_name,
         hasEvolutionKey: !!conn?.evolution_api_key,
-        hasApiUrl: !!conn?.evolution_api_url
+        hasApiUrl: !!conn?.evolution_api_url,
+        apiProvider: conn?.api_provider,
+        status: conn?.status
       });
 
+      // Tentar Evolution API se tiver credenciais (independente do api_provider)
       if (conn?.instance_name && conn?.evolution_api_key && conn?.evolution_api_url) {
-        console.log('📗 Tentando Evolution API para foto de perfil...');
-        profilePictureUrl = await getEvolutionProfilePicture(
-          conn.evolution_api_url.replace(/\/$/, ''),
-          conn.instance_name,
-          conn.evolution_api_key,
-          String(number),
-          isGroup
-        );
+        console.log('📗 Tentando Evolution API para foto de perfil (api_provider:', conn?.api_provider, ')...');
+        
+        // Verificar se Evolution está realmente acessível antes de tentar
+        try {
+          const stateUrl = `${conn.evolution_api_url.replace(/\/$/, '')}/instance/connectionState/${conn.instance_name}`;
+          const stateResp = await fetch(stateUrl, {
+            headers: { 'apikey': conn.evolution_api_key },
+          });
+          
+          if (stateResp.ok) {
+            const stateData = await stateResp.json();
+            const isEvolutionConnected = stateData?.instance?.state === 'open' || 
+                                         stateData?.state === 'open' ||
+                                         stateData?.status === 'open';
+            
+            console.log('📗 [PROFILE-PICTURE] Status Evolution:', stateData?.instance?.state || stateData?.state || stateData?.status);
+            
+            if (isEvolutionConnected) {
+              profilePictureUrl = await getEvolutionProfilePicture(
+                conn.evolution_api_url.replace(/\/$/, ''),
+                conn.instance_name,
+                conn.evolution_api_key,
+                String(number),
+                isGroup
+              );
 
-        // Salvar foto no lead para cache persistente
-        if (profilePictureUrl && supabase && company_id && !isGroup) {
-          await saveProfilePictureToLead(supabase, company_id, String(number), profilePictureUrl);
+              // Salvar foto no lead para cache persistente
+              if (profilePictureUrl && supabase && company_id && !isGroup) {
+                await saveProfilePictureToLead(supabase, company_id, String(number), profilePictureUrl);
+              }
+            } else {
+              console.log('⚠️ [PROFILE-PICTURE] Evolution não está conectada, não é possível buscar foto');
+            }
+          }
+        } catch (evolutionError) {
+          console.log('⚠️ [PROFILE-PICTURE] Erro ao verificar/usar Evolution API:', evolutionError);
         }
       }
     }
@@ -208,10 +241,14 @@ serve(async (req) => {
       timestamp: Date.now()
     });
 
-    console.log('✅ Resultado:', profilePictureUrl ? 'Foto encontrada' : 'Sem foto');
+    console.log('✅ Resultado:', profilePictureUrl ? 'Foto encontrada' : 'Sem foto (usar placeholder no frontend)');
 
+    // Retornar também o nome do lead para ajudar no fallback
     return new Response(
-      JSON.stringify({ profilePictureUrl }),
+      JSON.stringify({ 
+        profilePictureUrl,
+        leadName: leadName || null
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
