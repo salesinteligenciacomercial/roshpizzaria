@@ -123,14 +123,18 @@ function ConversationListItemComponent({
       <div className="flex gap-3 items-start">
         <div className="relative flex-shrink-0">
           <Avatar className="h-12 w-12">
-            <AvatarImage src={avatarUrl} alt={contactName} />
+            {avatarUrl && avatarUrl.trim() !== '' ? (
+              <AvatarImage src={avatarUrl} alt={contactName} />
+            ) : null}
             <AvatarFallback className="bg-primary/10 text-primary">
               {getInitials(contactName)}
             </AvatarFallback>
           </Avatar>
           {assignedUser && (
             <Avatar className="h-5 w-5 absolute -bottom-1 -right-1 ring-2 ring-background border border-border">
-              <AvatarImage src={assignedUser.avatar} alt={assignedUser.name} />
+              {assignedUser.avatar && assignedUser.avatar.trim() !== '' ? (
+                <AvatarImage src={assignedUser.avatar} alt={assignedUser.name} />
+              ) : null}
               <AvatarFallback className="bg-accent text-accent-foreground text-[10px]">
                 {getInitials(assignedUser.name)}
               </AvatarFallback>

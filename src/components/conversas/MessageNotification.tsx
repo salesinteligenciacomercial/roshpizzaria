@@ -21,7 +21,9 @@ export function MessageNotification({
     <div className="bg-card border border-border rounded-lg shadow-lg p-4 max-w-md animate-slide-in-right">
       <div className="flex items-start gap-3">
         <Avatar className="h-10 w-10">
-          <AvatarImage src={avatarUrl} alt={contactName} />
+          {avatarUrl && avatarUrl.trim() !== '' ? (
+            <AvatarImage src={avatarUrl} alt={contactName} />
+          ) : null}
           <AvatarFallback className="bg-primary/10 text-primary">
             {contactName.charAt(0).toUpperCase()}
           </AvatarFallback>
