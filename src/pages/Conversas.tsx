@@ -2684,7 +2684,7 @@ function Conversas() {
     setConversations(initialConversations);
   };
 
-  // 🆕 RESTAURAR CONVERSA ANTIGA
+  // 🆕 RESTAURAR CONVERSA ANTIGA - Puxa histórico do WhatsApp via Evolution API
   const handleRestoreConversation = async () => {
     if (!selectedConv?.phoneNumber || !userCompanyId) {
       toast.error("Número de telefone ou empresa inválidos");
@@ -2692,26 +2692,26 @@ function Conversas() {
     }
     try {
       setRestoringConversation(true);
-      const instanceName = await evolutionAPI.getInstanceName(userCompanyId);
-      if (!instanceName) {
-        toast.error("Instância WhatsApp não configurada");
-        return;
-      }
-      console.log("🔄 Restaurando conversa de:", selectedConv.phoneNumber);
-      const messages = await evolutionAPI.getMessages(instanceName, selectedConv.phoneNumber, 15);
+      console.log("🔄 Puxando histórico do WhatsApp:", selectedConv.phoneNumber);
+      
+      // Buscar mensagens via edge function (seguro, sem CORS)
+      const messages = await evolutionAPI.getMessages(userCompanyId, selectedConv.phoneNumber, 50);
+      
       if (messages.length === 0) {
-        toast.info("Nenhuma mensagem encontrada no WhatsApp");
+        toast.info("Nenhuma mensagem encontrada no WhatsApp para este número");
         return;
       }
+      
+      // Salvar mensagens no banco
       await evolutionAPI.saveMessagesToDatabase(messages, userCompanyId, leadVinculado?.id);
       toast.success(`${messages.length} mensagens restauradas com sucesso!`);
 
-      // Recarregar conversas
+      // Recarregar conversas para exibir as novas mensagens
       await loadSupabaseConversations();
       setIsContactInactive(false);
     } catch (error) {
       console.error("❌ Erro ao restaurar conversa:", error);
-      toast.error("Erro ao restaurar conversa");
+      toast.error("Erro ao restaurar histórico. Verifique a conexão WhatsApp.");
     } finally {
       setRestoringConversation(false);
     }

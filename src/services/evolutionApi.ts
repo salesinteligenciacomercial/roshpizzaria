@@ -59,40 +59,34 @@ export async function getContacts(instanceName: string): Promise<EvolutionContac
 }
 
 export async function getMessages(
-  instanceName: string, 
+  companyId: string, 
   phoneNumber: string, 
-  limit: number = 15
+  limit: number = 50
 ): Promise<any[]> {
   try {
-    // Formatar número para o padrão do WhatsApp
-    const formattedNumber = phoneNumber.replace(/[^0-9]/g, "") + "@s.whatsapp.net";
+    console.log("🔄 Buscando histórico via edge function:", { companyId, phoneNumber, limit });
     
-    const response = await fetch(
-      `${EVOLUTION_API_URL}/chat/findMessages/${instanceName}`,
-      {
-        method: "POST",
-        headers: {
-          "apikey": EVOLUTION_API_KEY || "",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          where: {
-            key: {
-              remoteJid: formattedNumber,
-            },
-          },
-          limit,
-        }),
+    // Usar edge function como proxy para evitar problemas de CORS e segurança
+    const { data, error } = await supabase.functions.invoke('fetch-whatsapp-messages', {
+      body: { 
+        phoneNumber,
+        companyId,
+        limit 
       }
-    );
+    });
 
-    if (!response.ok) {
-      console.error("❌ Erro ao buscar mensagens:", response.statusText);
+    if (error) {
+      console.error("❌ Erro ao chamar edge function:", error);
       return [];
     }
 
-    const data = await response.json();
-    return data || [];
+    if (!data?.success) {
+      console.error("❌ Erro na resposta:", data?.error || "Erro desconhecido");
+      return [];
+    }
+
+    console.log(`✅ ${data.count || 0} mensagens encontradas`);
+    return data.messages || [];
   } catch (error) {
     console.error("❌ Erro ao buscar mensagens da Evolution API:", error);
     return [];
