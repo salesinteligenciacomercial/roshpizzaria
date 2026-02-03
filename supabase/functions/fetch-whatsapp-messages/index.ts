@@ -101,14 +101,35 @@ serve(async (req) => {
       );
     }
 
-    const messages = await response.json();
-    console.log(`✅ ${messages?.length || 0} mensagens encontradas`);
+    const responseData = await response.json();
+    
+    // Evolution API retorna estrutura aninhada: { messages: { records: [...] } } ou { messages: { messages: { records: [...] } } }
+    let messagesArray: any[] = [];
+    
+    if (Array.isArray(responseData)) {
+      // Resposta direta como array
+      messagesArray = responseData;
+    } else if (responseData?.messages?.messages?.records) {
+      // Estrutura nova: { messages: { messages: { records: [...] } } }
+      messagesArray = responseData.messages.messages.records;
+    } else if (responseData?.messages?.records) {
+      // Estrutura alternativa: { messages: { records: [...] } }
+      messagesArray = responseData.messages.records;
+    } else if (responseData?.messages && Array.isArray(responseData.messages)) {
+      // Estrutura: { messages: [...] }
+      messagesArray = responseData.messages;
+    } else if (responseData?.records && Array.isArray(responseData.records)) {
+      // Estrutura: { records: [...] }
+      messagesArray = responseData.records;
+    }
+    
+    console.log(`✅ ${messagesArray.length} mensagens encontradas`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        messages: messages || [],
-        count: messages?.length || 0 
+        messages: messagesArray,
+        count: messagesArray.length 
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
