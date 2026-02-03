@@ -8016,7 +8016,60 @@ function Conversas() {
                   return;
                 }
 
-                // Inserir conversa no banco com número normalizado
+                // 🔥 CORREÇÃO CRÍTICA: Verificar se já existe lead com este número
+                // Preparar variações do número para busca abrangente
+                const numeroSem55 = numeroNormalizado.startsWith('55') ? numeroNormalizado.substring(2) : numeroNormalizado;
+                const numeroCom55 = numeroNormalizado.startsWith('55') ? numeroNormalizado : `55${numeroNormalizado}`;
+                
+                console.log('📱 [NovaConversa] Buscando lead existente:', {
+                  numeroNormalizado,
+                  numeroSem55,
+                  numeroCom55
+                });
+
+                // Buscar lead existente por qualquer variação do número
+                const { data: existingLead } = await supabase
+                  .from('leads')
+                  .select('id, name')
+                  .eq('company_id', userRole.company_id)
+                  .or(`telefone.eq.${numeroNormalizado},telefone.eq.${numeroSem55},telefone.eq.${numeroCom55},phone.eq.${numeroNormalizado},phone.eq.${numeroSem55},phone.eq.${numeroCom55}`)
+                  .limit(1)
+                  .maybeSingle();
+
+                let leadId = existingLead?.id || null;
+
+                // Se não existe lead, criar um novo
+                if (!leadId) {
+                  console.log('📝 [NovaConversa] Criando novo lead para:', nome);
+                  const { data: newLead, error: leadError } = await supabase
+                    .from('leads')
+                    .insert({
+                      name: nome,
+                      phone: numeroNormalizado,
+                      telefone: numeroNormalizado,
+                      company_id: userRole.company_id,
+                      source: 'manual',
+                      status: 'novo',
+                      stage: 'prospeccao'
+                    })
+                    .select('id')
+                    .single();
+
+                  if (leadError) {
+                    console.error('Erro ao criar lead:', leadError);
+                    // Não retornar erro, continuar mesmo sem lead
+                  } else {
+                    leadId = newLead?.id;
+                    console.log('✅ [NovaConversa] Lead criado com sucesso:', leadId);
+                  }
+                } else {
+                  console.log('✅ [NovaConversa] Lead existente encontrado:', {
+                    leadId,
+                    leadName: existingLead?.name
+                  });
+                }
+
+                // Inserir conversa no banco com número normalizado e lead_id vinculado
                 const {
                   error: insertError
                 } = await supabase.from('conversas').insert({
@@ -8026,6 +8079,7 @@ function Conversas() {
                   telefone_formatado: numeroNormalizado,
                   company_id: userRole.company_id,
                   owner_id: user.id,
+                  lead_id: leadId, // 🔥 CRÍTICO: Vincular ao lead para evitar duplicação
                   fromme: true,
                   status: 'Enviada',
                   origem: 'WhatsApp',
@@ -8037,7 +8091,7 @@ function Conversas() {
                   toast.error('Erro ao salvar contato no banco de dados');
                   return;
                 }
-                console.log('✅ [NovaConversa] Conversa salva com número:', numeroNormalizado);
+                console.log('✅ [NovaConversa] Conversa salva com número:', numeroNormalizado, 'lead_id:', leadId);
 
                 // Criar conversa local com número normalizado
                 const novaConversa: Conversation = {
@@ -8049,7 +8103,8 @@ function Conversas() {
                   unread: 0,
                   messages: [],
                   tags: [],
-                  phoneNumber: numeroNormalizado
+                  phoneNumber: numeroNormalizado,
+                  leadId: leadId || undefined
                 };
                 const updated = [novaConversa, ...conversations];
                 setConversations(updated);
