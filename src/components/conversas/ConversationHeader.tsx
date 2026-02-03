@@ -190,27 +190,27 @@ import { useEffect, useState } from "react";
               </div>
             </div>
          </div>
-              {/* Ações - Versão Desktop */}
+            {/* Ações - Versão Desktop */}
               <div className="hidden md:flex items-center gap-1">
-               {/* Botão Restaurar Conversa */}
-               {isContactInactive && onRestoreConversation && (
+               {/* Botão Restaurar Histórico do WhatsApp - SEMPRE VISÍVEL */}
+               {onRestoreConversation && (
                  <Button
                    variant="outline"
                    size="sm"
                    onClick={onRestoreConversation}
                    disabled={restoringConversation}
                    className="mr-2 gap-1.5"
-                   title="Restaurar últimas mensagens do WhatsApp"
+                   title="Puxar histórico de mensagens do WhatsApp"
                  >
                    {restoringConversation ? (
                      <>
                        <Loader2 className="h-4 w-4 animate-spin" />
-                       Restaurando...
+                       Puxando...
                      </>
                    ) : (
                      <>
                        <RotateCcw className="h-4 w-4" />
-                       Restaurar Conversa
+                       Puxar Histórico
                      </>
                    )}
                  </Button>
@@ -330,6 +330,23 @@ import { useEffect, useState } from "react";
 
             {/* Ações - Versão Mobile (apenas ícones) */}
             <div className="flex md:hidden items-center gap-0.5">
+              {/* Botão Puxar Histórico do WhatsApp - Mobile */}
+              {onRestoreConversation && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onRestoreConversation}
+                  disabled={restoringConversation}
+                  className="h-8 w-8"
+                  title="Puxar histórico do WhatsApp"
+                >
+                  {restoringConversation ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
               {/* Botão IA */}
               {onToggleAI && (
                 <Button
