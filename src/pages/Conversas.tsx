@@ -8990,12 +8990,20 @@ function Conversas() {
                             [safeFormatPhoneNumber(selectedConv.id)]: leadAtualizado.id
                           }));
 
-                          // ⚡ SINCRONIZAÇÃO COMPLETA: Atualizar nome na conversa também
-                          const novoNome = leadAtualizado.name;
+                          // ⚡ SINCRONIZAÇÃO COMPLETA: Atualizar TODAS as informações do lead
+                          const novoNome = leadAtualizado.name || selectedConv.contactName;
+                          const novasTags = leadAtualizado.tags || [];
+                          const novoValor = leadAtualizado.value ? `R$ ${Number(leadAtualizado.value).toLocaleString('pt-BR')}` : '';
+                          const novoResponsavel = (leadAtualizado as any).responsavel?.full_name || '';
+                          
+                          console.log('🔄 Sincronizando informações completas do lead:', {
+                            nome: novoNome,
+                            tags: novasTags,
+                            valor: novoValor
+                          });
+                          
+                          // Atualizar nome_contato na tabela conversas (se mudou)
                           if (novoNome && novoNome !== selectedConv.contactName) {
-                            console.log('🔄 Sincronizando nome do lead para conversa:', novoNome);
-                            
-                            // Atualizar nome_contato na tabela conversas
                             const isGroup = /@g\.us$/.test(String(selectedConv.id));
                             const numeroNormalizado = isGroup ? null : normalizePhoneForComparison(selectedConv.phoneNumber || selectedConv.id);
                             
@@ -9006,36 +9014,30 @@ function Conversas() {
                                 .eq('company_id', userCompanyId)
                                 .eq('telefone_formatado', numeroNormalizado);
                             }
-                            
-                            // Atualizar lista de conversas localmente
-                            setConversations(prev => prev.map(conv => 
-                              conv.id === selectedConv.id ? { ...conv, contactName: novoNome } : conv
-                            ));
-                            
-                            // Atualizar conversa selecionada com nome e outras informações
-                            setSelectedConv(prev => prev ? {
-                              ...prev,
-                              contactName: novoNome,
-                              responsavel: (leadAtualizado as any).responsavel?.full_name || 'Sem responsável',
-                              tags: leadAtualizado.tags || prev.tags,
-                              valor: leadAtualizado.value ? `R$ ${Number(leadAtualizado.value).toLocaleString('pt-BR')}` : prev.valor
-                            } : null);
-                            
-                            // Salvar no cache
-                            saveConversations(conversations.map(conv => 
-                              conv.id === selectedConv.id ? { ...conv, contactName: novoNome } : conv
-                            ));
-                            
-                            toast.success("Nome sincronizado com sucesso!");
-                          } else {
-                            // Atualizar conversa com outras informações (responsável, tags, valor)
-                            setSelectedConv(prev => prev ? {
-                              ...prev,
-                              responsavel: (leadAtualizado as any).responsavel?.full_name || 'Sem responsável',
-                              tags: leadAtualizado.tags || prev.tags,
-                              valor: leadAtualizado.value ? `R$ ${Number(leadAtualizado.value).toLocaleString('pt-BR')}` : prev.valor
-                            } : null);
                           }
+                          
+                          // ⚡ SEMPRE atualizar lista de conversas com TODAS as informações (tags, valor, nome)
+                          const dadosAtualizados = {
+                            contactName: novoNome,
+                            tags: novasTags,
+                            valor: novoValor,
+                            responsavel: novoResponsavel,
+                            leadId: leadAtualizado.id
+                          };
+                          
+                          setConversations(prev => prev.map(conv => 
+                            conv.id === selectedConv.id ? { ...conv, ...dadosAtualizados } : conv
+                          ));
+                          
+                          // Atualizar conversa selecionada
+                          setSelectedConv(prev => prev ? { ...prev, ...dadosAtualizados } : null);
+                          
+                          // Salvar no cache para persistência
+                          saveConversations(conversations.map(conv => 
+                            conv.id === selectedConv.id ? { ...conv, ...dadosAtualizados } : conv
+                          ));
+                          
+                          toast.success("Informações sincronizadas com sucesso!");
                         }
                       }
                     }} triggerButton={<Button size="sm" variant="outline" className="w-full">
