@@ -76,6 +76,7 @@ export function DisparoEmMassa() {
   // Estados para templates
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
+  const [templateMediaUrl, setTemplateMediaUrl] = useState<string>("");
 
   // Carregar company_id e leads
   useEffect(() => {
@@ -273,6 +274,62 @@ export function DisparoEmMassa() {
     
     if (!template.components) return components;
     
+    // Processar HEADER (mídia ou texto)
+    const headerComponent = template.components.find((c: any) => c.type === "HEADER");
+    if (headerComponent) {
+      // Header com mídia (VIDEO, IMAGE, DOCUMENT)
+      if (headerComponent.format && headerComponent.format !== "TEXT") {
+        const mediaFormat = headerComponent.format.toLowerCase(); // video, image, document
+        
+        // Verificar se temos URL de mídia para o template
+        if (templateMediaUrl) {
+          const headerParams: any = {
+            type: "header",
+            parameters: [{
+              type: mediaFormat,
+              [mediaFormat]: {
+                link: templateMediaUrl
+              }
+            }]
+          };
+          components.push(headerParams);
+        } else if (headerComponent.example?.header_handle?.[0]) {
+          // Usar handle do exemplo se disponível (mídia pré-registrada na Meta)
+          const headerParams: any = {
+            type: "header",
+            parameters: [{
+              type: mediaFormat,
+              [mediaFormat]: {
+                id: headerComponent.example.header_handle[0]
+              }
+            }]
+          };
+          components.push(headerParams);
+        }
+        // Se não tem mídia, Meta pode rejeitar - log de aviso
+        else {
+          console.warn("⚠️ Template com header de mídia mas sem URL fornecida:", headerComponent.format);
+        }
+      }
+      // Header com texto e variáveis
+      else if (headerComponent.text?.includes("{{")) {
+        const matches = headerComponent.text.match(/\{\{(\d+)\}\}/g) || [];
+        const parameters = matches.map((match: string) => {
+          const varNum = match.replace(/[{}]/g, '');
+          let value = templateVariables[varNum] || "";
+          value = value.replace("{{nome}}", lead.name || "Cliente");
+          return { type: "text", text: value || "Cliente" };
+        });
+        
+        if (parameters.length > 0) {
+          components.push({
+            type: "header",
+            parameters,
+          });
+        }
+      }
+    }
+    
     // Processar variáveis para o BODY
     const bodyComponent = template.components.find((c: any) => c.type === "BODY");
     if (bodyComponent?.text?.includes("{{")) {
@@ -292,25 +349,6 @@ export function DisparoEmMassa() {
       if (parameters.length > 0) {
         components.push({
           type: "body",
-          parameters,
-        });
-      }
-    }
-    
-    // Processar variáveis para o HEADER (se houver)
-    const headerComponent = template.components.find((c: any) => c.type === "HEADER");
-    if (headerComponent?.text?.includes("{{")) {
-      const matches = headerComponent.text.match(/\{\{(\d+)\}\}/g) || [];
-      const parameters = matches.map((match: string) => {
-        const varNum = match.replace(/[{}]/g, '');
-        let value = templateVariables[varNum] || "";
-        value = value.replace("{{nome}}", lead.name || "Cliente");
-        return { type: "text", text: value || "Cliente" };
-      });
-      
-      if (parameters.length > 0) {
-        components.push({
-          type: "header",
           parameters,
         });
       }
@@ -395,6 +433,18 @@ export function DisparoEmMassa() {
     if ((messageType === "image" || messageType === "video") && !mediaFile) {
       toast.error("Selecione um arquivo de mídia");
       return;
+    }
+
+    // Validar URL de mídia para templates com header de vídeo/imagem
+    if (messageType === "template" && selectedTemplate) {
+      const headerComponent = selectedTemplate.components?.find((c: any) => c.type === "HEADER");
+      if (headerComponent?.format && headerComponent.format !== "TEXT") {
+        const hasHandle = headerComponent.example?.header_handle?.[0];
+        if (!hasHandle && !templateMediaUrl) {
+          toast.error(`Este template requer uma URL de ${headerComponent.format === "VIDEO" ? "vídeo" : headerComponent.format === "IMAGE" ? "imagem" : "documento"} no cabeçalho`);
+          return;
+        }
+      }
     }
 
     const leadsToSend = getSelectedLeadsData();
@@ -918,9 +968,15 @@ export function DisparoEmMassa() {
                   <TemplateSelector
                     companyId={companyId}
                     selectedTemplate={selectedTemplate}
-                    onSelectTemplate={setSelectedTemplate}
+                    onSelectTemplate={(template) => {
+                      setSelectedTemplate(template);
+                      // Limpar URL de mídia quando trocar template
+                      setTemplateMediaUrl("");
+                    }}
                     templateVariables={templateVariables}
                     onVariablesChange={setTemplateVariables}
+                    mediaUrl={templateMediaUrl}
+                    onMediaUrlChange={setTemplateMediaUrl}
                     disabled={sending}
                   />
                   <Alert className="mt-4">
