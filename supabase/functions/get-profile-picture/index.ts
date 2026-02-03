@@ -11,7 +11,7 @@ const corsHeaders = {
 const profilePictureCache = new Map<string, { url: string | null; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
-// Buscar foto de perfil via Evolution API
+// Buscar foto de perfil via Evolution API - versão melhorada com mais variações de número
 async function getEvolutionProfilePicture(
   apiUrl: string,
   instanceName: string,
@@ -21,19 +21,27 @@ async function getEvolutionProfilePicture(
 ): Promise<string | null> {
   try {
     const url = `${apiUrl}/chat/fetchProfilePictureUrl/${instanceName}`;
-    console.log('📗 [EVOLUTION] Buscando foto de perfil:', url);
+    console.log('📗 [EVOLUTION] Buscando foto de perfil:', url, 'para:', phoneNumber);
 
-    // Tentar múltiplas variações do número
+    // Normalizar número - remover todos os caracteres não numéricos
+    const cleanNumber = String(phoneNumber).replace(/\D/g, '');
+    
+    // Gerar múltiplas variações do número para aumentar chances de encontrar a foto
+    // A Evolution API pode exigir formatos diferentes dependendo de como o contato foi salvo
     const numberVariations = isGroup 
       ? [String(phoneNumber)]
       : [
-          String(phoneNumber).replace(/\D/g, ''),
-          String(phoneNumber),
-          // Com código do país
-          String(phoneNumber).replace(/\D/g, '').replace(/^55/, ''),
-          // Sem código do país  
-          '55' + String(phoneNumber).replace(/\D/g, '').replace(/^55/, '')
-        ];
+          cleanNumber, // Número limpo completo
+          `55${cleanNumber.replace(/^55/, '')}`, // Garantir código do país BR
+          cleanNumber.replace(/^55/, ''), // Sem código do país
+          cleanNumber.slice(-11), // Últimos 11 dígitos (celular BR com DDD)
+          cleanNumber.slice(-10), // Últimos 10 dígitos (fixo BR com DDD)
+          cleanNumber.slice(-9), // Últimos 9 dígitos (celular sem DDD)
+          `55${cleanNumber.slice(-11)}`, // BR + últimos 11
+          `55${cleanNumber.slice(-10)}`, // BR + últimos 10
+        ].filter((v, i, arr) => v.length >= 8 && arr.indexOf(v) === i); // Remover duplicados e números muito curtos
+
+    console.log('📗 [EVOLUTION] Tentando variações:', numberVariations.join(', '));
 
     for (const numberToTry of numberVariations) {
       try {
@@ -48,8 +56,9 @@ async function getEvolutionProfilePicture(
 
         if (response.ok) {
           const data = await response.json();
-          const pictureUrl = data.profilePictureUrl || data.url || data.profilePicture || data.picture;
-          if (pictureUrl) {
+          // Verificar múltiplos campos possíveis na resposta da Evolution API
+          const pictureUrl = data.profilePictureUrl || data.url || data.profilePicture || data.picture || data.imgUrl || data.profileUrl;
+          if (pictureUrl && typeof pictureUrl === 'string' && pictureUrl.startsWith('http')) {
             console.log('✅ [EVOLUTION] Foto encontrada para variação:', numberToTry);
             return pictureUrl;
           }
@@ -60,7 +69,7 @@ async function getEvolutionProfilePicture(
       }
     }
 
-    console.log('⚠️ [EVOLUTION] Nenhuma variação retornou foto');
+    console.log('⚠️ [EVOLUTION] Nenhuma variação retornou foto para:', phoneNumber);
     return null;
   } catch (error) {
     console.error('❌ [EVOLUTION] Erro ao buscar foto de perfil:', error);
@@ -98,9 +107,9 @@ serve(async (req) => {
   }
 
   try {
-    const { number, company_id } = await req.json();
+    const { number, company_id, force_refresh } = await req.json();
 
-    console.log('📥 [PROFILE-PICTURE] Requisição recebida:', { number, company_id: company_id || 'NÃO FORNECIDO' });
+    console.log('📥 [PROFILE-PICTURE] Requisição recebida:', { number, company_id: company_id || 'NÃO FORNECIDO', force_refresh: !!force_refresh });
 
     if (!number) {
       console.error('❌ Número não fornecido');
@@ -117,11 +126,15 @@ serve(async (req) => {
     const isGroup = /@g\.us$/.test(String(number));
     console.log('📋 Tipo de contato:', isGroup ? 'GRUPO' : 'CONTATO INDIVIDUAL');
 
-    // Verificar cache em memória
+    // Verificar cache em memória (pular se force_refresh)
     const cacheKey = `${company_id || 'global'}:${number}`;
     const cached = profilePictureCache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-      console.log('📦 [CACHE] Retornando foto do cache em memória');
+    
+    // Cache mais curto para resultados nulos (2 minutos) vs resultados com foto (5 minutos)
+    const effectiveTTL = cached?.url ? CACHE_TTL : 2 * 60 * 1000;
+    
+    if (!force_refresh && cached && (Date.now() - cached.timestamp) < effectiveTTL) {
+      console.log('📦 [CACHE] Retornando foto do cache em memória:', cached.url ? 'COM FOTO' : 'SEM FOTO');
       return new Response(
         JSON.stringify({ profilePictureUrl: cached.url }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
