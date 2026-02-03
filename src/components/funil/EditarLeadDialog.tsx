@@ -97,33 +97,44 @@ export function EditarLeadDialog({
   const [attachmentsCount, setAttachmentsCount] = useState(0);
   const [userCompanyId, setUserCompanyId] = useState<string | null>(null);
 
-  // Reset form data when lead changes
+  // Estado para controlar se deve resetar o formulário
+  const [lastLeadId, setLastLeadId] = useState<string | null>(null);
+
+  // Reset form data ONLY when:
+  // 1. Dialog opens (open changes to true)
+  // 2. Lead ID changes (different lead selected)
+  // NOT when other lead properties change while dialog is open
   useEffect(() => {
-    setFormData({
-      nome: lead.nome || "",
-      telefone: lead.telefone || "",
-      email: lead.email || "",
-      cpf: lead.cpf || "",
-      valor: lead.value?.toString() || "",
-      company: lead.company || "",
-      source: lead.source || "",
-      notes: lead.notes || "",
-      funil_id: lead.funil_id || "",
-      etapa_id: lead.etapa_id || "",
-      responsavel_id: (lead as any).responsavel_id || "",
-      tags: lead.tags || [],
-      data_nascimento: lead.data_nascimento || "",
-      endereco_cep: lead.endereco_cep || "",
-      endereco_logradouro: lead.endereco_logradouro || "",
-      endereco_numero: lead.endereco_numero || "",
-      endereco_complemento: lead.endereco_complemento || "",
-      endereco_bairro: lead.endereco_bairro || "",
-      endereco_cidade: lead.endereco_cidade || "",
-      endereco_estado: lead.endereco_estado || "",
-      govbr_login: lead.govbr_login || "",
-      govbr_senha: lead.govbr_senha || ""
-    });
-  }, [lead]);
+    const shouldResetForm = !open || lead.id !== lastLeadId;
+    
+    if (shouldResetForm) {
+      setFormData({
+        nome: lead.nome || "",
+        telefone: lead.telefone || "",
+        email: lead.email || "",
+        cpf: lead.cpf || "",
+        valor: lead.value?.toString() || "",
+        company: lead.company || "",
+        source: lead.source || "",
+        notes: lead.notes || "",
+        funil_id: lead.funil_id || "",
+        etapa_id: lead.etapa_id || "",
+        responsavel_id: (lead as any).responsavel_id || "",
+        tags: lead.tags || [],
+        data_nascimento: lead.data_nascimento || "",
+        endereco_cep: lead.endereco_cep || "",
+        endereco_logradouro: lead.endereco_logradouro || "",
+        endereco_numero: lead.endereco_numero || "",
+        endereco_complemento: lead.endereco_complemento || "",
+        endereco_bairro: lead.endereco_bairro || "",
+        endereco_cidade: lead.endereco_cidade || "",
+        endereco_estado: lead.endereco_estado || "",
+        govbr_login: lead.govbr_login || "",
+        govbr_senha: lead.govbr_senha || ""
+      });
+      setLastLeadId(lead.id);
+    }
+  }, [lead.id, open]);
 
   useEffect(() => {
     if (open) {
