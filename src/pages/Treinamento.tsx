@@ -26,13 +26,14 @@ export default function Treinamento() {
 
   const [selectedModule, setSelectedModule] = useState<TrainingModule | null>(null);
   const [selectedLesson, setSelectedLesson] = useState<TrainingLesson | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("training");
 
   useEffect(() => {
     const checkAdminStatus = async () => {
       const { data } = await supabase.rpc('get_my_role');
-      setIsAdmin(['super_admin', 'company_admin', 'gestor'].includes(data as string));
+      // Apenas super_admin pode gerenciar treinamentos (são globais para todas as subcontas)
+      setIsSuperAdmin(data === 'super_admin');
     };
     checkAdminStatus();
   }, []);
@@ -97,7 +98,7 @@ export default function Treinamento() {
           </div>
         </div>
 
-        {isAdmin && !selectedModule && (
+        {isSuperAdmin && !selectedModule && (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="training">
@@ -153,7 +154,7 @@ export default function Treinamento() {
             </Card>
           </div>
         </div>
-      ) : isAdmin && activeTab === "admin" ? (
+      ) : isSuperAdmin && activeTab === "admin" ? (
         // Admin Panel
         <TrainingAdminPanel
           modules={modules}
@@ -173,10 +174,7 @@ export default function Treinamento() {
                 <GraduationCap className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Nenhum treinamento disponível</h3>
                 <p className="text-muted-foreground">
-                  {isAdmin 
-                    ? "Clique em 'Gerenciar' para criar módulos de treinamento."
-                    : "Os treinamentos ainda não foram configurados pela administração."
-                  }
+                  Os treinamentos ainda não foram configurados pela administração.
                 </p>
               </CardContent>
             </Card>

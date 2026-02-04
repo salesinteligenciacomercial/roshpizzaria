@@ -75,11 +75,24 @@ export function useTraining() {
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Fetch modules
+      // Verificar se é subconta e obter company_id da conta mestre
+      const { data: companyData } = await supabase
+        .from('companies')
+        .select('id, is_master_account, parent_company_id')
+        .eq('id', cid)
+        .single();
+      
+      // Se for subconta, buscar treinamentos da conta mestre
+      // Se for conta mestre, buscar da própria conta
+      const trainingCompanyId = companyData?.is_master_account 
+        ? cid 
+        : (companyData?.parent_company_id || cid);
+      
+      // Fetch modules da conta mestre (treinamentos são globais)
       const { data: modulesData, error: modulesError } = await supabase
         .from('training_modules')
         .select('*')
-        .eq('company_id', cid)
+        .eq('company_id', trainingCompanyId)
         .eq('is_active', true)
         .order('order_index', { ascending: true });
       
