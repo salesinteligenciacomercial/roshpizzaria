@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bot, Sparkles, TrendingUp, Target, Workflow, BarChart3, Send, Brain, Lightbulb, BookOpen, Zap, AlertTriangle } from "lucide-react";
+import { Bot, Sparkles, Target, Workflow, BarChart3, Send, AlertTriangle } from "lucide-react";
 import { N8nIntegration } from "@/components/ia/N8nIntegration";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FluxoAutomacaoBuilder } from "@/components/fluxos/FluxoAutomacaoBuilder";
@@ -7,9 +7,6 @@ import { IAAgentCard } from "@/components/ia/IAAgentCard";
 import { PainelInsights } from "@/components/ia/PainelInsights";
 import { DisparoEmMassa } from "@/components/campanhas/DisparoEmMassa";
 import { CampanhasDashboard } from "@/components/campanhas/CampanhasDashboard";
-import { TreinamentoIA } from "@/components/ia/TreinamentoIA";
-import { RecomendacoesIA } from "@/components/ia/RecomendacoesIA";
-import { BaseConhecimentoIA } from "@/components/ia/BaseConhecimentoIA";
 import { useEffect, useState } from "react";
 import { useAIAgents } from "@/hooks/useAIAgents";
 import { supabase } from "@/integrations/supabase/client";
@@ -138,22 +135,10 @@ export default function IA() {
       )}
 
       <Tabs defaultValue="agentes" className="w-full">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="agentes" className="gap-2">
             <Bot className="h-4 w-4" />
             Agentes
-          </TabsTrigger>
-          <TabsTrigger value="conhecimento" className="gap-2">
-            <BookOpen className="h-4 w-4" />
-            Conhecimento
-          </TabsTrigger>
-          <TabsTrigger value="treinamento" className="gap-2">
-            <Brain className="h-4 w-4" />
-            Treinamento
-          </TabsTrigger>
-          <TabsTrigger value="recomendacoes" className="gap-2">
-            <Lightbulb className="h-4 w-4" />
-            Recomendações
           </TabsTrigger>
           <TabsTrigger value="fluxos" className="gap-2">
             <Workflow className="h-4 w-4" />
@@ -248,9 +233,6 @@ export default function IA() {
           )}
         </TabsContent>
 
-        <TabsContent value="conhecimento" className="space-y-6 mt-6">
-          <BaseConhecimentoIA />
-        </TabsContent>
 
         <TabsContent value="fluxos" className="space-y-4 mt-6">
           <FluxoAutomacaoBuilder />
@@ -277,20 +259,6 @@ export default function IA() {
           </Tabs>
         </TabsContent>
 
-        <TabsContent value="treinamento" className="space-y-4 mt-6">
-          <TreinamentoIA />
-        </TabsContent>
-
-        <TabsContent value="recomendacoes" className="space-y-4 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recomendações Inteligentes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RecomendacoesIA />
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="insights" className="space-y-4 mt-6">
           <PainelInsights />
