@@ -58,7 +58,8 @@ export function LeadValueEditor({ lead, open, onOpenChange, onUpdated }: LeadVal
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [formData, setFormData] = useState({
-    value: lead.value?.toString() || "0",
+    // Converter valor de reais para centavos (formato interno do input)
+    value: lead.value ? Math.round(lead.value * 100).toString() : "0",
     probability: lead.probability ?? 0,
     expected_close_date: lead.expected_close_date ? new Date(lead.expected_close_date) : undefined as Date | undefined,
     loss_reason: lead.loss_reason || "",
@@ -69,7 +70,8 @@ export function LeadValueEditor({ lead, open, onOpenChange, onUpdated }: LeadVal
   // Reset form when lead.id changes (not when other properties update)
   useEffect(() => {
     setFormData({
-      value: lead.value?.toString() || "0",
+      // Converter valor de reais para centavos (formato interno do input)
+      value: lead.value ? Math.round(lead.value * 100).toString() : "0",
       probability: lead.probability ?? 0,
       expected_close_date: lead.expected_close_date ? new Date(lead.expected_close_date) : undefined,
       loss_reason: lead.loss_reason || "",
