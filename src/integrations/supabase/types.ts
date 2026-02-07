@@ -368,6 +368,38 @@ export type Database = {
         }
         Relationships: []
       }
+      bancos_disponiveis: {
+        Row: {
+          ativo: boolean | null
+          company_id: string
+          created_at: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          company_id: string
+          created_at?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          ativo?: boolean | null
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bancos_disponiveis_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_automation_config: {
         Row: {
           auto_generate_invoices: boolean | null
@@ -4166,6 +4198,66 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      propostas_bancarias: {
+        Row: {
+          banco: string
+          company_id: string
+          created_at: string | null
+          id: string
+          lead_id: string
+          motivo_cancelamento: string | null
+          notas: string | null
+          responsavel_id: string | null
+          status: string
+          tipo: string
+          updated_at: string | null
+          valor_liberado: number
+        }
+        Insert: {
+          banco: string
+          company_id: string
+          created_at?: string | null
+          id?: string
+          lead_id: string
+          motivo_cancelamento?: string | null
+          notas?: string | null
+          responsavel_id?: string | null
+          status?: string
+          tipo: string
+          updated_at?: string | null
+          valor_liberado?: number
+        }
+        Update: {
+          banco?: string
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          lead_id?: string
+          motivo_cancelamento?: string | null
+          notas?: string | null
+          responsavel_id?: string | null
+          status?: string
+          tipo?: string
+          updated_at?: string | null
+          valor_liberado?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "propostas_bancarias_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "propostas_bancarias_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
             referencedColumns: ["id"]
           },
         ]

@@ -40,6 +40,7 @@ import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { LeadAttachments } from "@/components/leads/LeadAttachments";
 import { ProdutoSelectorDialog } from "@/components/conversas/ProdutoSelectorDialog";
 import { VendasLeadPanel } from "@/components/conversas/VendasLeadPanel";
+import { PropostasBancariasPanel } from "@/components/conversas/PropostasBancariasPanel";
 import { ProductivityPanel } from "@/components/conversas/ProductivityPanel";
 import { formatPhoneNumber, safeFormatPhoneNumber, normalizePhoneForComparison } from "@/utils/phoneFormatter";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
@@ -9051,6 +9052,28 @@ function Conversas() {
                                 companyId={userCompanyId || ""}
                                 onVendaUpdated={async () => {
                                   // Recarregar lead após atualização de venda
+                                  if (selectedConv && (selectedConv.phoneNumber || selectedConv.id)) {
+                                    const telefoneFormatado = safeFormatPhoneNumber(selectedConv.phoneNumber || selectedConv.id);
+                                    const { data: leadAtualizado } = await supabase
+                                      .from('leads')
+                                      .select('*')
+                                      .or(`phone.eq.${telefoneFormatado},telefone.eq.${telefoneFormatado}`)
+                                      .maybeSingle();
+                                    if (leadAtualizado) {
+                                      setLeadVinculado(leadAtualizado);
+                                    }
+                                  }
+                                }}
+                              />
+                            </div>
+
+                            {/* ✅ Painel de Propostas Bancárias - Promotora/Correspondente */}
+                            <div className="mt-3">
+                              <PropostasBancariasPanel
+                                leadId={leadVinculado.id}
+                                companyId={userCompanyId || ""}
+                                onPropostaUpdated={async () => {
+                                  // Recarregar lead após atualização de proposta
                                   if (selectedConv && (selectedConv.phoneNumber || selectedConv.id)) {
                                     const telefoneFormatado = safeFormatPhoneNumber(selectedConv.phoneNumber || selectedConv.id);
                                     const { data: leadAtualizado } = await supabase
