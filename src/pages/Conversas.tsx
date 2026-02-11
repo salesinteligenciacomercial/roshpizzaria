@@ -7212,6 +7212,42 @@ function Conversas() {
         return null;
       }
 
+      // 🔒 Verificar se lead já existe antes de criar
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        toast.error('Usuário não autenticado');
+        return null;
+      }
+      const { data: existingUserRole } = await supabase.from('user_roles').select('company_id').eq('user_id', currentUser.id).maybeSingle();
+      if (existingUserRole?.company_id) {
+        const phoneVariationsToCheck = variations.length > 0 ? variations : [phoneNormalized];
+        const orConditions = phoneVariationsToCheck.map(v => `phone.eq.${v},telefone.eq.${v}`).join(',');
+        const { data: existingLeads } = await supabase
+          .from('leads')
+          .select('id, name, phone, telefone')
+          .eq('company_id', existingUserRole.company_id)
+          .is('lead_origem_id', null)
+          .or(orConditions)
+          .limit(1);
+        
+        if (existingLeads && existingLeads.length > 0) {
+          const existingLead = existingLeads[0];
+          console.log('⚠️ [LEAD] Lead já existe no CRM:', existingLead.id, existingLead.name);
+          toast.info(`Este contato já está salvo no CRM como "${existingLead.name}"`);
+          // Vincular conversa ao lead existente
+          const phoneKey = conversation.phoneNumber || conversation.id;
+          const formatted = safeFormatPhoneNumber(phoneKey);
+          setLeadsVinculados(prev => {
+            const newMap = { ...prev };
+            phoneVariationsToCheck.forEach(v => { newMap[v] = existingLead.id; });
+            newMap[phoneKey] = existingLead.id;
+            if (formatted) newMap[formatted] = existingLead.id;
+            return newMap;
+          });
+          return existingLead as any;
+        }
+      }
+
       // Buscar user_id do usuário autenticado
       const {
         data: {
