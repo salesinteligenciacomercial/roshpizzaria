@@ -222,34 +222,28 @@ serve(async (req) => {
         .eq('company_id', company_id)
         .maybeSingle();
 
-      // 2a. Tentar Evolution API
+      // 2a. Tentar Evolution API DIRETAMENTE (sem verificar estado - mais confiável)
       if (!profilePictureUrl && conn?.instance_name && conn?.evolution_api_key && conn?.evolution_api_url) {
+        console.log('📗 [PROFILE-PICTURE] Tentando Evolution API diretamente...');
         try {
-          const stateUrl = `${conn.evolution_api_url.replace(/\/$/, '')}/instance/connectionState/${conn.instance_name}`;
-          const stateResp = await fetch(stateUrl, {
-            headers: { 'apikey': conn.evolution_api_key },
-          });
-          
-          if (stateResp.ok) {
-            const stateData = await stateResp.json();
-            const isConnected = stateData?.instance?.state === 'open' || stateData?.state === 'open' || stateData?.status === 'open';
-            
-            if (isConnected) {
-              profilePictureUrl = await getEvolutionProfilePicture(
-                conn.evolution_api_url.replace(/\/$/, ''),
-                conn.instance_name,
-                conn.evolution_api_key,
-                String(number),
-                isGroup
-              );
-            }
+          profilePictureUrl = await getEvolutionProfilePicture(
+            conn.evolution_api_url.replace(/\/$/, ''),
+            conn.instance_name,
+            conn.evolution_api_key,
+            String(number),
+            isGroup
+          );
+          if (profilePictureUrl) {
+            console.log('✅ [PROFILE-PICTURE] Foto encontrada via Evolution!');
+          } else {
+            console.log('⚠️ [PROFILE-PICTURE] Evolution não retornou foto');
           }
         } catch (e) {
           console.log('⚠️ [PROFILE-PICTURE] Evolution falhou:', e);
         }
       }
 
-      // 2b. Tentar Meta API como fallback
+      // 2b. Tentar Meta API como fallback (limitado - pode não funcionar para todos)
       if (!profilePictureUrl && !isGroup && conn?.meta_access_token && conn?.meta_phone_number_id) {
         profilePictureUrl = await getMetaProfilePicture(
           conn.meta_access_token,

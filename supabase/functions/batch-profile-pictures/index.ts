@@ -116,22 +116,7 @@ serve(async (req) => {
     const hasEvolution = conn?.instance_name && conn?.evolution_api_key && conn?.evolution_api_url;
     const hasMeta = conn?.meta_access_token && conn?.meta_phone_number_id;
 
-    // Verificar se Evolution está conectada
-    let evolutionConnected = false;
-    if (hasEvolution) {
-      try {
-        const stateResp = await fetch(
-          `${conn!.evolution_api_url.replace(/\/$/, '')}/instance/connectionState/${conn!.instance_name}`,
-          { headers: { 'apikey': conn!.evolution_api_key } }
-        );
-        if (stateResp.ok) {
-          const stateData = await stateResp.json();
-          evolutionConnected = stateData?.instance?.state === 'open' || stateData?.state === 'open';
-        }
-      } catch { /* not connected */ }
-    }
-
-    if (!evolutionConnected && !hasMeta) {
+    if (!hasEvolution && !hasMeta) {
       return new Response(JSON.stringify({ error: 'Nenhuma API disponível para buscar fotos' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -145,8 +130,8 @@ serve(async (req) => {
 
       let pictureUrl: string | null = null;
 
-      // Tentar Evolution primeiro
-      if (evolutionConnected && hasEvolution) {
+      // Tentar Evolution diretamente (sem verificar estado)
+      if (hasEvolution) {
         pictureUrl = await fetchProfilePicViaEvolution(
           conn!.evolution_api_url.replace(/\/$/, ''),
           conn!.instance_name,
