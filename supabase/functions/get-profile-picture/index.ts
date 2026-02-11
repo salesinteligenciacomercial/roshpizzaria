@@ -12,6 +12,24 @@ const profilePictureCache = new Map<string, { url: string | null; timestamp: num
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos para resultados com foto
 const NULL_CACHE_TTL = 30 * 60 * 1000; // 30 minutos para resultados sem foto
 
+// Verificar se URL do WhatsApp expirou (pps.whatsapp.net URLs têm parâmetro oe= com timestamp hex)
+function isWhatsAppUrlExpired(url: string): boolean {
+  if (!url || !url.includes('pps.whatsapp.net')) return false;
+  try {
+    const oeMatch = url.match(/[?&]oe=([0-9a-fA-F]+)/);
+    if (oeMatch) {
+      const expiryTimestamp = parseInt(oeMatch[1], 16);
+      const now = Math.floor(Date.now() / 1000);
+      // Considerar expirada se faltam menos de 1 hora
+      if (expiryTimestamp < now + 3600) {
+        console.log(`⏰ [PROFILE-PICTURE] URL expirada! oe=${oeMatch[1]} (${new Date(expiryTimestamp * 1000).toISOString()}) < agora`);
+        return true;
+      }
+    }
+  } catch { /* ignore parse errors */ }
+  return false;
+}
+
 // Buscar foto de perfil via Evolution API
 async function getEvolutionProfilePicture(
   apiUrl: string,
@@ -51,7 +69,6 @@ async function getEvolutionProfilePicture(
         if (response.ok || response.status === 200) {
           try {
             const data = JSON.parse(responseText);
-            // Verificar todas as possíveis estruturas de resposta
             const pictureUrl = data.profilePictureUrl || data.url || data.profilePicture || 
               data.picture || data.imgUrl || data.profileUrl ||
               data?.data?.profilePictureUrl || data?.data?.url ||
@@ -81,12 +98,10 @@ async function getMetaProfilePicture(
 ): Promise<string | null> {
   try {
     const cleanNumber = String(contactPhone).replace(/\D/g, '');
-    // Garantir formato internacional com +
     const internationalNumber = cleanNumber.startsWith('55') ? `+${cleanNumber}` : `+55${cleanNumber}`;
     
     console.log('📘 [META] Buscando foto de perfil para:', internationalNumber);
     
-    // Meta Business API - buscar contato e foto de perfil
     const url = `https://graph.facebook.com/v21.0/${phoneNumberId}/contacts`;
     const response = await fetch(url, {
       method: 'POST',
@@ -106,9 +121,7 @@ async function getMetaProfilePicture(
       const contacts = data?.contacts;
       if (contacts && contacts.length > 0) {
         const contact = contacts[0];
-        // O wa_id confirma que o número está no WhatsApp
         if (contact.status === 'valid' && contact.wa_id) {
-          // Tentar buscar foto do perfil via endpoint de perfil
           const profileUrl = `https://graph.facebook.com/v21.0/${contact.wa_id}/profile_picture`;
           const profileResp = await fetch(profileUrl, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
@@ -137,7 +150,7 @@ async function saveProfilePictureToLead(
   supabase: any,
   companyId: string,
   phoneNumber: string,
-  profilePictureUrl: string
+  profilePictureUrl: string | null
 ): Promise<void> {
   try {
     const formattedNumber = String(phoneNumber).replace(/\D/g, '');
@@ -173,10 +186,12 @@ serve(async (req) => {
     const cacheKey = `${company_id || 'global'}:${number}`;
     const cached = profilePictureCache.get(cacheKey);
     
-    // Cache mais longo para resultados nulos (30 min) vs resultados com foto (5 min)
+    // Verificar se cache em memória é válido (não expirado e URL não expirada)
     const effectiveTTL = cached?.url ? CACHE_TTL : NULL_CACHE_TTL;
+    const cacheValid = cached && (Date.now() - cached.timestamp) < effectiveTTL;
+    const cachedUrlExpired = cached?.url ? isWhatsAppUrlExpired(cached.url) : false;
     
-    if (!force_refresh && cached && (Date.now() - cached.timestamp) < effectiveTTL) {
+    if (!force_refresh && cacheValid && !cachedUrlExpired) {
       return new Response(
         JSON.stringify({ profilePictureUrl: cached.url }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -186,6 +201,7 @@ serve(async (req) => {
     let profilePictureUrl: string | null = null;
     let supabase: any = null;
     let leadName: string | null = null;
+    let needsRefresh = false;
 
     if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -215,7 +231,14 @@ serve(async (req) => {
           if (lead) {
             if (lead.name) leadName = lead.name;
             if (lead.profile_picture_url) {
-              profilePictureUrl = lead.profile_picture_url;
+              // ⚡ CORREÇÃO: Verificar se a URL do WhatsApp expirou
+              if (isWhatsAppUrlExpired(lead.profile_picture_url)) {
+                console.log('⏰ [PROFILE-PICTURE] URL salva no lead está EXPIRADA, será renovada');
+                needsRefresh = true;
+                // Não usar a URL expirada
+              } else {
+                profilePictureUrl = lead.profile_picture_url;
+              }
               break;
             }
           }
@@ -223,8 +246,8 @@ serve(async (req) => {
       }
     }
 
-    // 2. Buscar via Evolution API ou Meta API
-    if (!profilePictureUrl && company_id && supabase) {
+    // 2. Buscar via Evolution API ou Meta API (se não tem foto válida ou precisa renovar)
+    if ((!profilePictureUrl || needsRefresh) && company_id && supabase) {
       const { data: conn } = await supabase
         .from('whatsapp_connections')
         .select('instance_name, evolution_api_key, evolution_api_url, api_provider, status, meta_access_token, meta_phone_number_id')
@@ -235,15 +258,16 @@ serve(async (req) => {
       if (!profilePictureUrl && conn?.instance_name && conn?.evolution_api_key && conn?.evolution_api_url) {
         console.log('📗 [PROFILE-PICTURE] Tentando Evolution API diretamente...');
         try {
-          profilePictureUrl = await getEvolutionProfilePicture(
+          const freshUrl = await getEvolutionProfilePicture(
             conn.evolution_api_url.replace(/\/$/, ''),
             conn.instance_name,
             conn.evolution_api_key,
             String(number),
             isGroup
           );
-          if (profilePictureUrl) {
-            console.log('✅ [PROFILE-PICTURE] Foto encontrada via Evolution!');
+          if (freshUrl) {
+            profilePictureUrl = freshUrl;
+            console.log('✅ [PROFILE-PICTURE] Foto encontrada/renovada via Evolution!');
           } else {
             console.log('⚠️ [PROFILE-PICTURE] Evolution não retornou foto');
           }
@@ -252,7 +276,7 @@ serve(async (req) => {
         }
       }
 
-      // 2b. Tentar Meta API como fallback (limitado - pode não funcionar para todos)
+      // 2b. Tentar Meta API como fallback
       if (!profilePictureUrl && !isGroup && conn?.meta_access_token && conn?.meta_phone_number_id) {
         profilePictureUrl = await getMetaProfilePicture(
           conn.meta_access_token,
@@ -261,9 +285,15 @@ serve(async (req) => {
         );
       }
 
-      // Salvar foto encontrada no lead
-      if (profilePictureUrl && supabase && company_id && !isGroup) {
-        await saveProfilePictureToLead(supabase, company_id, String(number), profilePictureUrl);
+      // Salvar foto encontrada (ou limpar URL expirada se não encontrou nova)
+      if (supabase && company_id && !isGroup) {
+        if (profilePictureUrl) {
+          await saveProfilePictureToLead(supabase, company_id, String(number), profilePictureUrl);
+        } else if (needsRefresh) {
+          // Limpar URL expirada do banco para não ficar tentando usar
+          console.log('🗑️ [PROFILE-PICTURE] Limpando URL expirada do banco');
+          await saveProfilePictureToLead(supabase, company_id, String(number), null);
+        }
       }
     }
 
