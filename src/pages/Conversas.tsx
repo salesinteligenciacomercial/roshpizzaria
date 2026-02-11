@@ -5961,7 +5961,9 @@ function Conversas() {
         conversation_id: selectedConv.id,
         phone_number: phoneNumber,
         contact_name: selectedConv.contactName,
-        message_content: scheduledContent,
+        message_content: includeSignature && userName 
+          ? `*Atendente - ${userName}*\n\n${scheduledContent}` 
+          : scheduledContent,
         scheduled_datetime: scheduledDate.toISOString(),
         status: 'pending'
       }]);
