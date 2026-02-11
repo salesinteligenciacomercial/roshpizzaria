@@ -599,14 +599,15 @@ function Conversas() {
     return null;
   };
 
-  // MELHORIA: Avatar com cache + fallback
+  // MELHORIA: Avatar com cache + fallback (NÃO cacheia placeholders para permitir retentativas)
   const getProfilePictureWithFallback = async (number: string, companyId: string, contactName: string): Promise<string | undefined> => {
     if (!number) return undefined;
     const isGroup = /@g\.us$/.test(String(number));
     const normalized = isGroup ? number : normalizePhoneForWA(number);
     const cacheKey = `${companyId || 'no-company'}:${normalized}`;
     const cached = avatarCacheRef.current.get(cacheKey);
-    if (cached) return cached;
+    // Só retornar cache se for uma URL real (não placeholder)
+    if (cached && !cached.includes('ui-avatars.com')) return cached;
     const inflight = inflightAvatarPromisesRef.current.get(cacheKey);
     if (inflight) return await inflight;
     const promise = (async () => {
@@ -619,30 +620,28 @@ function Conversas() {
         maxRetries: 2,
         timeout: 8000,
         fallback: () => {
-          // Fallback diferente para grupos e contatos individuais
           const fallbackUrl = isGroup 
             ? `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'Grupo')}&background=10b981&color=fff&bold=true` 
             : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || normalized)}&background=0ea5e9&color=fff&bold=true`;
-          return Promise.resolve({
-            profilePictureUrl: fallbackUrl
-          });
+          return Promise.resolve({ profilePictureUrl: fallbackUrl });
         },
         onError: error => {
           console.error('❌ [PROFILE-PICTURE] In-flight erro:', error);
         }
       });
       
-      // ⚡ CORREÇÃO: Garantir que temos sempre uma URL válida
       const receivedUrl = result?.profilePictureUrl;
       const hasValidUrl = receivedUrl && typeof receivedUrl === 'string' && receivedUrl.trim() !== '' && !receivedUrl.includes('undefined') && !receivedUrl.includes('null');
       
-      // Criar fallback com iniciais
       const fallbackUrl = isGroup 
         ? `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || 'Grupo')}&background=10b981&color=fff&bold=true` 
         : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName || normalized)}&background=0ea5e9&color=fff&bold=true`;
       
       const url = hasValidUrl ? receivedUrl : fallbackUrl;
-      avatarCacheRef.current.set(cacheKey, url);
+      // ⚡ CORREÇÃO: Só cachear URLs reais, não placeholders - permite retentativas futuras
+      if (hasValidUrl) {
+        avatarCacheRef.current.set(cacheKey, url);
+      }
       inflightAvatarPromisesRef.current.delete(cacheKey);
       return url;
     })();
@@ -1284,33 +1283,16 @@ function Conversas() {
           return merged;
         });
 
-        // ⚡ LAZY LOADING: Carregar avatares que ainda são placeholder
+        // ⚡ LAZY LOADING: Carregar avatares em batches de 5 com throttling
         const conversasComPlaceholder = allConversations.filter(conv => !conv.avatarUrl || conv.avatarUrl.includes('ui-avatars.com'));
         if (conversasComPlaceholder.length > 0) {
-          console.log(`📸 [LOAD-ALL] Carregando ${conversasComPlaceholder.length} avatares em background...`);
+          console.log(`📸 [LOAD-ALL] Carregando ${conversasComPlaceholder.length} avatares em background (batches de 5)...`);
 
-          // Carregar primeiros 5 imediatamente
-          const primeiros = conversasComPlaceholder.slice(0, 5);
-          primeiros.forEach(async conv => {
-            if (conv.phoneNumber) {
-              try {
-                const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, userCompanyId, conv.contactName);
-                if (profilePicUrl && !profilePicUrl.includes('ui-avatars.com')) {
-                  setConversations(prev => prev.map(c => c.phoneNumber === conv.phoneNumber || c.id === conv.id ? {
-                    ...c,
-                    avatarUrl: profilePicUrl
-                  } : c));
-                }
-              } catch (error) {
-                // Silenciar erros de avatar
-              }
-            }
-          });
-
-          // Restantes em background com delay
-          const restantes = conversasComPlaceholder.slice(5);
-          restantes.forEach((conv, index) => {
-            setTimeout(async () => {
+          const BATCH_SIZE = 5;
+          const BATCH_DELAY = 500;
+          
+          const loadBatch = async (batch: typeof conversasComPlaceholder) => {
+            await Promise.all(batch.map(async conv => {
               if (conv.phoneNumber) {
                 try {
                   const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, userCompanyId, conv.contactName);
@@ -1320,12 +1302,21 @@ function Conversas() {
                       avatarUrl: profilePicUrl
                     } : c));
                   }
-                } catch (error) {
-                  // Silenciar erros de avatar
-                }
+                } catch { /* silenciar */ }
               }
-            }, index * 200); // Espaçar requisições
-          });
+            }));
+          };
+
+          // Processar em batches com delay
+          (async () => {
+            for (let i = 0; i < conversasComPlaceholder.length; i += BATCH_SIZE) {
+              const batch = conversasComPlaceholder.slice(i, i + BATCH_SIZE);
+              await loadBatch(batch);
+              if (i + BATCH_SIZE < conversasComPlaceholder.length) {
+                await new Promise(r => setTimeout(r, BATCH_DELAY));
+              }
+            }
+          })().catch(() => {});
         }
       }
     } catch (error) {
@@ -3668,42 +3659,29 @@ function Conversas() {
       // ⚡ OTIMIZAÇÃO: Finalizar loading ANTES de carregar avatares
       setLoadingConversations(false);
 
-      // ⚡ LAZY LOADING DE AVATARES: Carregar imediatamente (sem delays)
-      const primeiros = novasConversas.slice(0, 3);
-      Promise.all(primeiros.map(async conv => {
-        if (conv.phoneNumber) {
-          try {
-            const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, companyId, conv.contactName);
-            if (profilePicUrl) {
-              setConversations(prev => prev.map(c => c.id === conv.id ? {
-                ...c,
-                avatarUrl: profilePicUrl
-              } : c));
-            }
-          } catch (error) {
-            // Silenciar erros de foto
-          }
-        }
-      })).catch(() => {}); // Não bloquear se houver erro
-
-      // ⚡ CARREGAR RESTANTES EM BACKGROUND (baixa prioridade)
-      const restantes = novasConversas.slice(3);
-      if (restantes.length > 0) {
-        restantes.forEach(async conv => {
-          if (conv.phoneNumber) {
-            try {
-              const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, companyId, conv.contactName);
-              if (profilePicUrl) {
-                setConversations(prev => prev.map(c => c.id === conv.id ? {
-                  ...c,
-                  avatarUrl: profilePicUrl
-                } : c));
+      // ⚡ LAZY LOADING DE AVATARES: Batches de 5 com throttling
+      const conversasSemFoto = novasConversas.filter(c => !c.avatarUrl || c.avatarUrl.includes('ui-avatars.com'));
+      if (conversasSemFoto.length > 0) {
+        (async () => {
+          const BATCH_SIZE = 5;
+          const BATCH_DELAY = 500;
+          for (let i = 0; i < conversasSemFoto.length; i += BATCH_SIZE) {
+            const batch = conversasSemFoto.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(async conv => {
+              if (conv.phoneNumber) {
+                try {
+                  const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, companyId, conv.contactName);
+                  if (profilePicUrl && !profilePicUrl.includes('ui-avatars.com')) {
+                    setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, avatarUrl: profilePicUrl } : c));
+                  }
+                } catch { /* silenciar */ }
               }
-            } catch (error) {
-              // Silenciar erros de foto
+            }));
+            if (i + BATCH_SIZE < conversasSemFoto.length) {
+              await new Promise(r => setTimeout(r, BATCH_DELAY));
             }
           }
-        });
+        })().catch(() => {});
       }
     } catch (error) {
       console.error('Erro ao carregar conversas:', error);
@@ -8177,6 +8155,27 @@ function Conversas() {
                   <BarChart3 className="h-4 w-4" />
                 </Button>
               )}
+              <Button size="icon" variant="outline" onClick={async () => {
+                console.log('📸 Botão Atualizar Fotos clicado');
+                toast.info('Buscando fotos de perfil em massa...');
+                try {
+                  const { data, error } = await supabase.functions.invoke('batch-profile-pictures', {
+                    body: { company_id: userCompanyId }
+                  });
+                  if (error) throw error;
+                  toast.success(`Fotos atualizadas: ${data?.updated || 0} de ${data?.total || 0}`);
+                  // Recarregar conversas para mostrar novas fotos
+                  if (data?.updated > 0) {
+                    avatarCacheRef.current.clear();
+                    loadSupabaseConversations();
+                  }
+                } catch (err) {
+                  console.error('Erro ao atualizar fotos:', err);
+                  toast.error('Erro ao buscar fotos de perfil');
+                }
+              }} className="gap-0" aria-label="Atualizar fotos" title="Buscar fotos de perfil em massa">
+                <ImageIcon className="h-4 w-4" />
+              </Button>
               <Button size="icon" variant="outline" onClick={() => {
               console.log('🔄 Botão Recarregar clicado');
               loadSupabaseConversations();

@@ -9,9 +9,10 @@ const corsHeaders = {
 
 // Cache em memória para evitar chamadas repetidas
 const profilePictureCache = new Map<string, { url: string | null; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos para resultados com foto
+const NULL_CACHE_TTL = 30 * 60 * 1000; // 30 minutos para resultados sem foto
 
-// Buscar foto de perfil via Evolution API - versão melhorada com mais variações de número
+// Buscar foto de perfil via Evolution API
 async function getEvolutionProfilePicture(
   apiUrl: string,
   instanceName: string,
@@ -21,58 +22,103 @@ async function getEvolutionProfilePicture(
 ): Promise<string | null> {
   try {
     const url = `${apiUrl}/chat/fetchProfilePictureUrl/${instanceName}`;
-    console.log('📗 [EVOLUTION] Buscando foto de perfil:', url, 'para:', phoneNumber);
-
-    // Normalizar número - remover todos os caracteres não numéricos
     const cleanNumber = String(phoneNumber).replace(/\D/g, '');
     
-    // Gerar múltiplas variações do número para aumentar chances de encontrar a foto
-    // A Evolution API pode exigir formatos diferentes dependendo de como o contato foi salvo
     const numberVariations = isGroup 
       ? [String(phoneNumber)]
       : [
-          cleanNumber, // Número limpo completo
-          `55${cleanNumber.replace(/^55/, '')}`, // Garantir código do país BR
-          cleanNumber.replace(/^55/, ''), // Sem código do país
-          cleanNumber.slice(-11), // Últimos 11 dígitos (celular BR com DDD)
-          cleanNumber.slice(-10), // Últimos 10 dígitos (fixo BR com DDD)
-          cleanNumber.slice(-9), // Últimos 9 dígitos (celular sem DDD)
-          `55${cleanNumber.slice(-11)}`, // BR + últimos 11
-          `55${cleanNumber.slice(-10)}`, // BR + últimos 10
-        ].filter((v, i, arr) => v.length >= 8 && arr.indexOf(v) === i); // Remover duplicados e números muito curtos
-
-    console.log('📗 [EVOLUTION] Tentando variações:', numberVariations.join(', '));
+          cleanNumber,
+          `55${cleanNumber.replace(/^55/, '')}`,
+          cleanNumber.replace(/^55/, ''),
+          cleanNumber.slice(-11),
+          cleanNumber.slice(-10),
+          cleanNumber.slice(-9),
+          `55${cleanNumber.slice(-11)}`,
+          `55${cleanNumber.slice(-10)}`,
+        ].filter((v, i, arr) => v.length >= 8 && arr.indexOf(v) === i);
 
     for (const numberToTry of numberVariations) {
       try {
         const response = await fetch(url, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': apiKey,
-          },
+          headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
           body: JSON.stringify({ number: numberToTry }),
         });
 
         if (response.ok) {
           const data = await response.json();
-          // Verificar múltiplos campos possíveis na resposta da Evolution API
           const pictureUrl = data.profilePictureUrl || data.url || data.profilePicture || data.picture || data.imgUrl || data.profileUrl;
           if (pictureUrl && typeof pictureUrl === 'string' && pictureUrl.startsWith('http')) {
-            console.log('✅ [EVOLUTION] Foto encontrada para variação:', numberToTry);
+            console.log('✅ [EVOLUTION] Foto encontrada para:', numberToTry);
             return pictureUrl;
           }
         }
-      } catch (varError) {
-        // Ignorar erro individual e tentar próxima variação
-        console.log(`⚠️ [EVOLUTION] Variação ${numberToTry} falhou, tentando próxima...`);
+      } catch {
+        // Tentar próxima variação
       }
     }
-
-    console.log('⚠️ [EVOLUTION] Nenhuma variação retornou foto para:', phoneNumber);
     return null;
   } catch (error) {
-    console.error('❌ [EVOLUTION] Erro ao buscar foto de perfil:', error);
+    console.error('❌ [EVOLUTION] Erro:', error);
+    return null;
+  }
+}
+
+// Buscar foto de perfil via Meta Cloud API
+async function getMetaProfilePicture(
+  accessToken: string,
+  phoneNumberId: string,
+  contactPhone: string
+): Promise<string | null> {
+  try {
+    const cleanNumber = String(contactPhone).replace(/\D/g, '');
+    // Garantir formato internacional com +
+    const internationalNumber = cleanNumber.startsWith('55') ? `+${cleanNumber}` : `+55${cleanNumber}`;
+    
+    console.log('📘 [META] Buscando foto de perfil para:', internationalNumber);
+    
+    // Meta Business API - buscar contato e foto de perfil
+    const url = `https://graph.facebook.com/v21.0/${phoneNumberId}/contacts`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        blocking: 'wait',
+        contacts: [internationalNumber],
+        force_check: true,
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const contacts = data?.contacts;
+      if (contacts && contacts.length > 0) {
+        const contact = contacts[0];
+        // O wa_id confirma que o número está no WhatsApp
+        if (contact.status === 'valid' && contact.wa_id) {
+          // Tentar buscar foto do perfil via endpoint de perfil
+          const profileUrl = `https://graph.facebook.com/v21.0/${contact.wa_id}/profile_picture`;
+          const profileResp = await fetch(profileUrl, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+          });
+          if (profileResp.ok) {
+            const profileData = await profileResp.json();
+            if (profileData?.data?.url) {
+              console.log('✅ [META] Foto encontrada');
+              return profileData.data.url;
+            }
+          }
+        }
+      }
+    }
+    
+    console.log('⚠️ [META] Foto não encontrada para:', internationalNumber);
+    return null;
+  } catch (error) {
+    console.log('⚠️ [META] Erro ao buscar foto:', error);
     return null;
   }
 }
@@ -86,22 +132,17 @@ async function saveProfilePictureToLead(
 ): Promise<void> {
   try {
     const formattedNumber = String(phoneNumber).replace(/\D/g, '');
-    
-    // Atualizar lead se existir
     await supabase
       .from('leads')
       .update({ profile_picture_url: profilePictureUrl })
       .eq('company_id', companyId)
       .or(`telefone.ilike.%${formattedNumber}%,phone.ilike.%${formattedNumber}%`);
-      
-    console.log('💾 [PROFILE-PICTURE] Foto salva no lead para cache persistente');
   } catch (error) {
     console.log('⚠️ [PROFILE-PICTURE] Não foi possível salvar foto no lead:', error);
   }
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -109,10 +150,7 @@ serve(async (req) => {
   try {
     const { number, company_id, force_refresh } = await req.json();
 
-    console.log('📥 [PROFILE-PICTURE] Requisição recebida:', { number, company_id: company_id || 'NÃO FORNECIDO', force_refresh: !!force_refresh });
-
     if (!number) {
-      console.error('❌ Número não fornecido');
       return new Response(
         JSON.stringify({ error: 'Número é obrigatório' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -122,19 +160,14 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    // Verificar se é um grupo (termina com @g.us)
     const isGroup = /@g\.us$/.test(String(number));
-    console.log('📋 Tipo de contato:', isGroup ? 'GRUPO' : 'CONTATO INDIVIDUAL');
-
-    // Verificar cache em memória (pular se force_refresh)
     const cacheKey = `${company_id || 'global'}:${number}`;
     const cached = profilePictureCache.get(cacheKey);
     
-    // Cache mais curto para resultados nulos (2 minutos) vs resultados com foto (5 minutos)
-    const effectiveTTL = cached?.url ? CACHE_TTL : 2 * 60 * 1000;
+    // Cache mais longo para resultados nulos (30 min) vs resultados com foto (5 min)
+    const effectiveTTL = cached?.url ? CACHE_TTL : NULL_CACHE_TTL;
     
     if (!force_refresh && cached && (Date.now() - cached.timestamp) < effectiveTTL) {
-      console.log('📦 [CACHE] Retornando foto do cache em memória:', cached.url ? 'COM FOTO' : 'SEM FOTO');
       return new Response(
         JSON.stringify({ profilePictureUrl: cached.url }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -149,12 +182,9 @@ serve(async (req) => {
       supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     }
 
-    // Primeiro, tentar buscar foto de perfil salva no lead (capturada via webhook Meta)
+    // 1. Buscar foto salva no lead (mais rápido)
     if (company_id && supabase && !isGroup) {
       const formattedNumber = String(number).replace(/\D/g, '');
-      console.log('🔍 [PROFILE-PICTURE] Buscando foto de perfil no lead para:', formattedNumber);
-      
-      // Buscar com múltiplas variações de telefone
       const phoneVariations = [
         formattedNumber,
         formattedNumber.replace(/^55/, ''),
@@ -174,11 +204,8 @@ serve(async (req) => {
             .maybeSingle();
           
           if (lead) {
-            // Capturar nome para fallback
             if (lead.name) leadName = lead.name;
-            
             if (lead.profile_picture_url) {
-              console.log('✅ [PROFILE-PICTURE] Foto encontrada no lead com variação:', phoneVar);
               profilePictureUrl = lead.profile_picture_url;
               break;
             }
@@ -187,30 +214,16 @@ serve(async (req) => {
       }
     }
 
-    // Se não encontrou no lead, buscar via Evolution API (mesmo se api_provider='both' ou 'meta')
-    // A Evolution pode estar configurada mesmo quando Meta é o principal
+    // 2. Buscar via Evolution API ou Meta API
     if (!profilePictureUrl && company_id && supabase) {
-      // Buscar conexão SEM filtrar por status='connected' para obter credenciais Evolution
       const { data: conn } = await supabase
         .from('whatsapp_connections')
-        .select('instance_name, evolution_api_key, evolution_api_url, api_provider, status')
+        .select('instance_name, evolution_api_key, evolution_api_url, api_provider, status, meta_access_token, meta_phone_number_id')
         .eq('company_id', company_id)
         .maybeSingle();
-      
-      console.log('🔍 [PROFILE-PICTURE] Conexão encontrada:', { 
-        found: !!conn, 
-        instanceName: conn?.instance_name,
-        hasEvolutionKey: !!conn?.evolution_api_key,
-        hasApiUrl: !!conn?.evolution_api_url,
-        apiProvider: conn?.api_provider,
-        status: conn?.status
-      });
 
-      // Tentar Evolution API se tiver credenciais (independente do api_provider)
-      if (conn?.instance_name && conn?.evolution_api_key && conn?.evolution_api_url) {
-        console.log('📗 Tentando Evolution API para foto de perfil (api_provider:', conn?.api_provider, ')...');
-        
-        // Verificar se Evolution está realmente acessível antes de tentar
+      // 2a. Tentar Evolution API
+      if (!profilePictureUrl && conn?.instance_name && conn?.evolution_api_key && conn?.evolution_api_url) {
         try {
           const stateUrl = `${conn.evolution_api_url.replace(/\/$/, '')}/instance/connectionState/${conn.instance_name}`;
           const stateResp = await fetch(stateUrl, {
@@ -219,13 +232,9 @@ serve(async (req) => {
           
           if (stateResp.ok) {
             const stateData = await stateResp.json();
-            const isEvolutionConnected = stateData?.instance?.state === 'open' || 
-                                         stateData?.state === 'open' ||
-                                         stateData?.status === 'open';
+            const isConnected = stateData?.instance?.state === 'open' || stateData?.state === 'open' || stateData?.status === 'open';
             
-            console.log('📗 [PROFILE-PICTURE] Status Evolution:', stateData?.instance?.state || stateData?.state || stateData?.status);
-            
-            if (isEvolutionConnected) {
+            if (isConnected) {
               profilePictureUrl = await getEvolutionProfilePicture(
                 conn.evolution_api_url.replace(/\/$/, ''),
                 conn.instance_name,
@@ -233,45 +242,40 @@ serve(async (req) => {
                 String(number),
                 isGroup
               );
-
-              // Salvar foto no lead para cache persistente
-              if (profilePictureUrl && supabase && company_id && !isGroup) {
-                await saveProfilePictureToLead(supabase, company_id, String(number), profilePictureUrl);
-              }
-            } else {
-              console.log('⚠️ [PROFILE-PICTURE] Evolution não está conectada, não é possível buscar foto');
             }
           }
-        } catch (evolutionError) {
-          console.log('⚠️ [PROFILE-PICTURE] Erro ao verificar/usar Evolution API:', evolutionError);
+        } catch (e) {
+          console.log('⚠️ [PROFILE-PICTURE] Evolution falhou:', e);
         }
+      }
+
+      // 2b. Tentar Meta API como fallback
+      if (!profilePictureUrl && !isGroup && conn?.meta_access_token && conn?.meta_phone_number_id) {
+        profilePictureUrl = await getMetaProfilePicture(
+          conn.meta_access_token,
+          conn.meta_phone_number_id,
+          String(number)
+        );
+      }
+
+      // Salvar foto encontrada no lead
+      if (profilePictureUrl && supabase && company_id && !isGroup) {
+        await saveProfilePictureToLead(supabase, company_id, String(number), profilePictureUrl);
       }
     }
 
-    // Cachear resultado em memória (mesmo se nulo para evitar chamadas repetidas)
-    profilePictureCache.set(cacheKey, {
-      url: profilePictureUrl,
-      timestamp: Date.now()
-    });
+    // Cachear resultado
+    profilePictureCache.set(cacheKey, { url: profilePictureUrl, timestamp: Date.now() });
 
-    console.log('✅ Resultado:', profilePictureUrl ? 'Foto encontrada' : 'Sem foto (usar placeholder no frontend)');
-
-    // Retornar também o nome do lead para ajudar no fallback
     return new Response(
-      JSON.stringify({ 
-        profilePictureUrl,
-        leadName: leadName || null
-      }),
+      JSON.stringify({ profilePictureUrl, leadName: leadName || null }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (err) {
     console.error('⚠️ Erro interno:', err);
     return new Response(
-      JSON.stringify({ 
-        error: 'Erro interno ao buscar foto de perfil',
-        details: err instanceof Error ? err.message : 'Erro desconhecido'
-      }),
+      JSON.stringify({ error: 'Erro interno', details: err instanceof Error ? err.message : 'Erro desconhecido' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

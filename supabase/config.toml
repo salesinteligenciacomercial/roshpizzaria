@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.fetch-whatsapp-messages]
 verify_jwt = true
+
+[functions.batch-profile-pictures]
+verify_jwt = true
