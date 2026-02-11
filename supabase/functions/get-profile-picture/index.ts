@@ -45,16 +45,25 @@ async function getEvolutionProfilePicture(
           body: JSON.stringify({ number: numberToTry }),
         });
 
-        if (response.ok) {
-          const data = await response.json();
-          const pictureUrl = data.profilePictureUrl || data.url || data.profilePicture || data.picture || data.imgUrl || data.profileUrl;
-          if (pictureUrl && typeof pictureUrl === 'string' && pictureUrl.startsWith('http')) {
-            console.log('✅ [EVOLUTION] Foto encontrada para:', numberToTry);
-            return pictureUrl;
-          }
+        const responseText = await response.text();
+        console.log(`📸 [EVOLUTION] Tentativa ${numberToTry} - Status: ${response.status} - Resposta: ${responseText.substring(0, 300)}`);
+        
+        if (response.ok || response.status === 200) {
+          try {
+            const data = JSON.parse(responseText);
+            // Verificar todas as possíveis estruturas de resposta
+            const pictureUrl = data.profilePictureUrl || data.url || data.profilePicture || 
+              data.picture || data.imgUrl || data.profileUrl ||
+              data?.data?.profilePictureUrl || data?.data?.url ||
+              data?.response?.profilePictureUrl;
+            if (pictureUrl && typeof pictureUrl === 'string' && pictureUrl.startsWith('http')) {
+              console.log('✅ [EVOLUTION] Foto encontrada para:', numberToTry, pictureUrl.substring(0, 80));
+              return pictureUrl;
+            }
+          } catch { /* parse error */ }
         }
-      } catch {
-        // Tentar próxima variação
+      } catch (err) {
+        console.log(`⚠️ [EVOLUTION] Erro na tentativa ${numberToTry}:`, err);
       }
     }
     return null;

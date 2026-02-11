@@ -3195,12 +3195,22 @@ function Conversas() {
         if (!phoneRaw) return;
         const phoneKey = phoneRaw.replace(/[^0-9]/g, '');
         if (phoneKey) {
-          leadsMap.set(phoneKey, {
+          const leadEntry = {
             name: lead.name || phoneKey,
             leadId: lead.id,
             tags: lead.tags || [],
             profilePictureUrl: lead.profile_picture_url || undefined
-          });
+          };
+          // Armazenar com chave original
+          leadsMap.set(phoneKey, leadEntry);
+          // Armazenar também com prefixo 55 para matching com conversas normalizadas
+          if (!phoneKey.startsWith('55') && phoneKey.length >= 10) {
+            leadsMap.set(`55${phoneKey}`, leadEntry);
+          }
+          // E sem o prefixo 55 caso a conversa não tenha
+          if (phoneKey.startsWith('55') && phoneKey.length >= 12) {
+            leadsMap.set(phoneKey.substring(2), leadEntry);
+          }
         }
       });
 
