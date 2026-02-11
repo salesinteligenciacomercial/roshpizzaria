@@ -57,6 +57,20 @@ import { useActiveAttendance, TEMPO_ATENDIMENTO_ATIVO } from "@/hooks/useActiveA
 import * as evolutionAPI from "@/services/evolutionApi";
 import { ConversasAdvancedFilter, AdvancedFilters, defaultFilters } from "@/components/conversas/ConversasAdvancedFilter";
 
+// Verificar se URL do WhatsApp (pps.whatsapp.net) expirou
+function isExpiredWhatsAppUrl(url: string): boolean {
+  if (!url || !url.includes('pps.whatsapp.net')) return false;
+  try {
+    const oeMatch = url.match(/[?&]oe=([0-9a-fA-F]+)/);
+    if (oeMatch) {
+      const expiryTimestamp = parseInt(oeMatch[1], 16);
+      const now = Math.floor(Date.now() / 1000);
+      return expiryTimestamp < now + 3600; // expirada ou expira em menos de 1 hora
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
 // Função auxiliar para extrair fileSize do JSON de mídia
 function extractFileSizeFromMediaUrl(mediaUrl?: string): number | undefined {
   if (!mediaUrl) return undefined;
@@ -3442,7 +3456,9 @@ function Conversas() {
           phoneNumber: telefone,
           avatarUrl: isGroup 
             ? `https://ui-avatars.com/api/?name=${encodeURIComponent('Grupo')}&background=10b981&color=fff` 
-            : (leadInfo?.profilePictureUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`),
+            : (leadInfo?.profilePictureUrl && !isExpiredWhatsAppUrl(leadInfo.profilePictureUrl) 
+              ? leadInfo.profilePictureUrl 
+              : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`),
           isGroup: isGroup,
           // ⚡ CORREÇÃO: Incluir assignedUser com id e nome para filtros funcionarem
           responsavel: assignedUserData?.id || undefined,
