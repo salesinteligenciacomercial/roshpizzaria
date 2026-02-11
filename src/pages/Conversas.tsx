@@ -3058,7 +3058,7 @@ function Conversas() {
           for (let i = 0; i < phoneConditions.length; i += BATCH_SIZE) {
             const batch = phoneConditions.slice(i, i + BATCH_SIZE);
             const orCondition = batch.join(',');
-            const leadsResult = await supabase.from('leads').select('id, phone, name, telefone, tags').eq('company_id', companyId).or(orCondition).limit(500); // Limite maior por lote
+            const leadsResult = await supabase.from('leads').select('id, phone, name, telefone, tags, profile_picture_url').eq('company_id', companyId).or(orCondition).limit(500); // Limite maior por lote
 
             if (!leadsResult.error && leadsResult.data) {
               allLeads = [...allLeads, ...leadsResult.data];
@@ -3197,6 +3197,7 @@ function Conversas() {
         name: string;
         leadId: string;
         tags: string[];
+        profilePictureUrl?: string;
       }>();
       leadsData.forEach(lead => {
         const phoneRaw = lead.phone || lead.telefone;
@@ -3206,7 +3207,8 @@ function Conversas() {
           leadsMap.set(phoneKey, {
             name: lead.name || phoneKey,
             leadId: lead.id,
-            tags: lead.tags || []
+            tags: lead.tags || [],
+            profilePictureUrl: lead.profile_picture_url || undefined
           });
         }
       });
@@ -3437,7 +3439,9 @@ function Conversas() {
           messages: messagensFormatadas,
           tags: leadInfo?.tags || [],
           phoneNumber: telefone,
-          avatarUrl: isGroup ? `https://ui-avatars.com/api/?name=${encodeURIComponent('Grupo')}&background=10b981&color=fff` : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`,
+          avatarUrl: isGroup 
+            ? `https://ui-avatars.com/api/?name=${encodeURIComponent('Grupo')}&background=10b981&color=fff` 
+            : (leadInfo?.profilePictureUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`),
           isGroup: isGroup,
           // ⚡ CORREÇÃO: Incluir assignedUser com id e nome para filtros funcionarem
           responsavel: assignedUserData?.id || undefined,
