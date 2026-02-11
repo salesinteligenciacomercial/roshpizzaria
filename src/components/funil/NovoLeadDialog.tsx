@@ -147,6 +147,25 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
         }
       }
 
+      // 🔒 Verificar se lead já existe com esse telefone
+      if (telefoneFormatado) {
+        const phoneWithout55 = telefoneFormatado.startsWith("55") ? telefoneFormatado.slice(2) : telefoneFormatado;
+        const phoneWith55 = telefoneFormatado.startsWith("55") ? telefoneFormatado : "55" + telefoneFormatado;
+        const { data: existingLeads } = await supabase
+          .from("leads")
+          .select("id, name")
+          .eq("company_id", userRole.company_id)
+          .is("lead_origem_id", null)
+          .or(`phone.eq.${phoneWith55},telefone.eq.${phoneWith55},phone.eq.${phoneWithout55},telefone.eq.${phoneWithout55}`)
+          .limit(1);
+        
+        if (existingLeads && existingLeads.length > 0) {
+          toast.error(`Este contato já está salvo no CRM como "${existingLeads[0].name}"`);
+          setLoading(false);
+          return;
+        }
+      }
+
       const { data, error } = await supabase
         .from("leads")
         .insert([{
