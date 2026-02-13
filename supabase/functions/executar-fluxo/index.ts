@@ -68,7 +68,7 @@ serve(async (req) => {
       if (!startNodeId) {
         // Encontrar trigger node que corresponde ao triggerType
         const triggerNode = nodes.find((n: any) => 
-          n.type === 'trigger' && n.data?.triggerType === triggerType
+          n.type === 'trigger' && (n.data?.triggerType === triggerType || n.data?.triggerType === 'palavra_chave')
         );
         if (!triggerNode) {
           throw new Error(`Gatilho '${triggerType}' não encontrado no fluxo`);

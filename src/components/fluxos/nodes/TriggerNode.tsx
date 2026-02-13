@@ -1,5 +1,5 @@
 import { Handle, Position } from 'reactflow';
-import { MessageSquare, UserPlus, GitBranch, Clock, Zap } from 'lucide-react';
+import { MessageSquare, UserPlus, GitBranch, Clock, Zap, Hash } from 'lucide-react';
 
 export function TriggerNode({ data }: any) {
   const getTriggerIcon = () => {
@@ -12,6 +12,8 @@ export function TriggerNode({ data }: any) {
         return <GitBranch className="h-5 w-5" />;
       case 'horario':
         return <Clock className="h-5 w-5" />;
+      case 'palavra_chave':
+        return <Hash className="h-5 w-5" />;
       default:
         return <Zap className="h-5 w-5" />;
     }

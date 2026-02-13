@@ -1727,8 +1727,23 @@ serve(async (req) => {
           if (activeFlows && activeFlows.length > 0) {
             for (const flow of activeFlows) {
               const nodes = (flow.nodes as any[]) || [];
+              
+              // Check for keyword trigger first (more specific)
+              const keywordTrigger = nodes.find((n: any) => 
+                n.type === 'trigger' && n.data?.triggerType === 'palavra_chave' && n.data?.keyword
+              );
+              
+              if (keywordTrigger) {
+                const keyword = keywordTrigger.data.keyword.toLowerCase().trim();
+                const msg = (validatedData.mensagem || '').toLowerCase().trim();
+                if (!msg.includes(keyword)) {
+                  continue; // Keyword doesn't match, skip this flow
+                }
+                console.log(`🔑 [WEBHOOK-FLOW] Palavra-chave "${keyword}" encontrada na mensagem`);
+              }
+              
               const hasTrigger = nodes.some((n: any) => 
-                n.type === 'trigger' && n.data?.triggerType === 'nova_mensagem'
+                n.type === 'trigger' && (n.data?.triggerType === 'nova_mensagem' || n.data?.triggerType === 'palavra_chave')
               );
               
               if (hasTrigger) {
