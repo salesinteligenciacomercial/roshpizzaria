@@ -461,7 +461,7 @@ serve(async (req) => {
     console.log("🔀 Router - Provider:", apiProvider, "| Grupo:", isGroup, "| Número formatado:", formattedNumber);
 
     // ============= INTERACTIVE MESSAGE HANDLING =============
-    // Convert interactive_buttons/interactive_list to plain text for sending
+    // Convert interactive_buttons/interactive_list to native interactive messages
     if (validatedData.tipo_mensagem === 'interactive_buttons' || validatedData.tipo_mensagem === 'interactive_list') {
       const interactive = (body as any).interactive;
       console.log("🔘 Mensagem interativa detectada:", validatedData.tipo_mensagem);
@@ -497,14 +497,111 @@ serve(async (req) => {
             );
           } else {
             console.error("❌ Meta API Interactive Error:", data);
-            // Fall through to text fallback
+            // Fall through to Evolution or text fallback
           }
         } catch (e) {
           console.error("❌ Meta Interactive Exception:", e);
         }
       }
       
-      // Fallback: convert to numbered text menu
+      // For Evolution API: try sending as native buttons via /message/sendButtons/
+      if ((apiProvider === 'evolution' || apiProvider === 'both') && hasEvolutionConfig) {
+        try {
+          const rawBaseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
+          const baseUrl = rawBaseUrl.replace(/\/(manager|api|v1|v2)?\/?$/i, '').replace(/\/$/, '');
+          const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+          const targetNumber = formattedNumber;
+          
+          const bodyText = interactive?.body?.text || validatedData.mensagem || '';
+          
+          if (interactive?.type === 'button' && interactive?.action?.buttons) {
+            // Use Evolution sendButtons endpoint
+            const evolutionButtons = interactive.action.buttons.map((btn: any) => ({
+              type: 'reply',
+              displayText: btn.reply?.title || 'Opção',
+              id: btn.reply?.id || `btn_${Math.random().toString(36).substring(7)}`,
+            }));
+            
+            const buttonsPayload = {
+              number: targetNumber,
+              title: '',
+              description: bodyText,
+              footer: '',
+              buttons: evolutionButtons,
+            };
+            
+            const sendButtonsUrl = `${baseUrl}/message/sendButtons/${connection.instance_name}`;
+            console.log("📱 Evolution API - Enviando botões interativos:", sendButtonsUrl);
+            
+            const response = await fetch(sendButtonsUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': apiKey,
+              },
+              body: JSON.stringify(buttonsPayload),
+            });
+            
+            const data = await response.json();
+            if (response.ok) {
+              console.log("✅ Evolution API - Botões interativos enviados com sucesso!");
+              return new Response(
+                JSON.stringify({ success: true, provider: 'evolution', data }),
+                { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            } else {
+              console.error("❌ Evolution API sendButtons Error:", data);
+              // Fall through to text fallback
+            }
+          } else if (interactive?.type === 'list' && interactive?.action?.sections) {
+            // Use Evolution sendList endpoint
+            const listPayload = {
+              number: targetNumber,
+              title: '',
+              description: bodyText,
+              buttonText: interactive.action.button || 'Ver opções',
+              footerText: '',
+              sections: interactive.action.sections.map((section: any) => ({
+                title: section.title || 'Opções',
+                rows: (section.rows || []).map((row: any) => ({
+                  title: row.title || 'Opção',
+                  description: row.description || '',
+                  rowId: row.id || `row_${Math.random().toString(36).substring(7)}`,
+                })),
+              })),
+            };
+            
+            const sendListUrl = `${baseUrl}/message/sendList/${connection.instance_name}`;
+            console.log("📱 Evolution API - Enviando lista interativa:", sendListUrl);
+            
+            const response = await fetch(sendListUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': apiKey,
+              },
+              body: JSON.stringify(listPayload),
+            });
+            
+            const data = await response.json();
+            if (response.ok) {
+              console.log("✅ Evolution API - Lista interativa enviada com sucesso!");
+              return new Response(
+                JSON.stringify({ success: true, provider: 'evolution', data }),
+                { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            } else {
+              console.error("❌ Evolution API sendList Error:", data);
+              // Fall through to text fallback
+            }
+          }
+        } catch (e) {
+          console.error("❌ Evolution API Interactive Exception:", e);
+        }
+      }
+      
+      // Final Fallback: convert to numbered text menu
+      console.log("⚠️ Fallback: convertendo interativo para texto simples");
       if (interactive?.body?.text && interactive?.action) {
         let textMenu = interactive.body.text + "\n\n";
         if (interactive.type === 'button' && interactive.action.buttons) {
