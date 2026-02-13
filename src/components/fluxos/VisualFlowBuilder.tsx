@@ -28,6 +28,8 @@ import { IANode } from './nodes/IANode';
 import { DelayNode } from './nodes/DelayNode';
 import { MediaNode } from './nodes/MediaNode';
 import { AIAgentNode } from './nodes/AIAgentNode';
+import { InteractiveMenuNode } from './nodes/InteractiveMenuNode';
+import { RouteDepartmentNode } from './nodes/RouteDepartmentNode';
 import { NodePropertiesPanel } from './NodePropertiesPanel';
 import { NodesSidebar } from './NodesSidebar';
 import { FlowSettingsDialog } from './FlowSettingsDialog';
@@ -70,6 +72,8 @@ const nodeTypes = {
   delay: DelayNode,
   media: MediaNode,
   aiagent: AIAgentNode,
+  interactive_menu: InteractiveMenuNode,
+  route_department: RouteDepartmentNode,
 };
 
 interface VisualFlowBuilderProps {
@@ -195,6 +199,8 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
           case 'delay': return 'delayType';
           case 'media': return 'mediaType';
           case 'aiagent': return 'agentType';
+          case 'interactive_menu': return 'menuType';
+          case 'route_department': return 'routeType';
           default: return 'type';
         }
       };
@@ -498,6 +504,8 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
                   case 'ia': return '#3b82f6';
                   case 'delay': return '#64748b';
                   case 'media': return '#ec4899';
+                  case 'interactive_menu': return '#14b8a6';
+                  case 'route_department': return '#f43f5e';
                   case 'aiagent': return '#06b6d4';
                   default: return '#6b7280';
                 }

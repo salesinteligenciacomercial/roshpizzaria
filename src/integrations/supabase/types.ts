@@ -1380,6 +1380,60 @@ export type Database = {
           },
         ]
       }
+      conversation_flow_state: {
+        Row: {
+          company_id: string
+          context_data: Json | null
+          conversation_number: string
+          created_at: string | null
+          current_node_id: string
+          expires_at: string | null
+          flow_id: string
+          id: string
+          updated_at: string | null
+          waiting_for_input: boolean | null
+        }
+        Insert: {
+          company_id: string
+          context_data?: Json | null
+          conversation_number: string
+          created_at?: string | null
+          current_node_id: string
+          expires_at?: string | null
+          flow_id: string
+          id?: string
+          updated_at?: string | null
+          waiting_for_input?: boolean | null
+        }
+        Update: {
+          company_id?: string
+          context_data?: Json | null
+          conversation_number?: string
+          created_at?: string | null
+          current_node_id?: string
+          expires_at?: string | null
+          flow_id?: string
+          id?: string
+          updated_at?: string | null
+          waiting_for_input?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_flow_state_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_flow_state_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "automation_flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cost_alert_history: {
         Row: {
           alert_id: string | null

@@ -28,7 +28,9 @@ import {
   CreditCard,
   Globe,
   Database,
-  RefreshCw
+  RefreshCw,
+  LayoutList,
+  Building2,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +56,7 @@ const nodeCategories = [
     color: 'text-amber-400',
     nodes: [
       { type: 'action', label: 'Enviar Texto', icon: <Send className="h-4 w-4" />, color: 'bg-amber-500', subType: 'enviar_mensagem' },
+      { type: 'interactive_menu', label: 'Menu Interativo', icon: <LayoutList className="h-4 w-4" />, color: 'bg-teal-500', subType: 'buttons' },
       { type: 'media', label: 'Enviar Imagem', icon: <Image className="h-4 w-4" />, color: 'bg-pink-500', subType: 'imagem' },
       { type: 'media', label: 'Enviar Vídeo', icon: <Video className="h-4 w-4" />, color: 'bg-pink-500', subType: 'video' },
       { type: 'media', label: 'Enviar Áudio', icon: <Mic className="h-4 w-4" />, color: 'bg-pink-500', subType: 'audio' },
@@ -96,6 +99,7 @@ const nodeCategories = [
       { type: 'action', label: 'Mover no Funil', icon: <Target className="h-4 w-4" />, color: 'bg-amber-500', subType: 'mover_funil' },
       { type: 'action', label: 'Adicionar Tag', icon: <Tag className="h-4 w-4" />, color: 'bg-amber-500', subType: 'adicionar_tag' },
       { type: 'action', label: 'Criar Tarefa', icon: <Calendar className="h-4 w-4" />, color: 'bg-amber-500', subType: 'criar_tarefa' },
+      { type: 'route_department', label: 'Rotear Departamento', icon: <Building2 className="h-4 w-4" />, color: 'bg-rose-500', subType: 'department' },
       { type: 'action', label: 'Atribuir Responsável', icon: <Users className="h-4 w-4" />, color: 'bg-amber-500', subType: 'atribuir_responsavel' },
       { type: 'action', label: 'Adicionar Nota', icon: <FileText className="h-4 w-4" />, color: 'bg-amber-500', subType: 'adicionar_nota' },
       { type: 'action', label: 'Notificar Usuário', icon: <Bell className="h-4 w-4" />, color: 'bg-amber-500', subType: 'notificar_usuario' },

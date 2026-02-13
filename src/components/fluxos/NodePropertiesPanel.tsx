@@ -540,6 +540,156 @@ export function NodePropertiesPanel({ selectedNode, onUpdate }: NodePropertiesPa
           </>
         );
 
+      case 'interactive_menu':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label className="text-slate-300 text-xs font-medium">Título do Menu</Label>
+              <Input
+                value={selectedNode.data.label || ''}
+                onChange={(e) => updateNodeData('label', e.target.value)}
+                className="bg-slate-800 border-slate-700 text-white"
+                placeholder="Ex: Menu Principal"
+                {...inputProps}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-slate-300 text-xs font-medium">Mensagem de Boas-Vindas</Label>
+              <Textarea
+                value={selectedNode.data.welcomeMessage || ''}
+                onChange={(e) => updateNodeData('welcomeMessage', e.target.value)}
+                className="bg-slate-800 border-slate-700 text-white resize-none"
+                placeholder="Olá! Como posso ajudar? Escolha uma opção:"
+                rows={3}
+                {...inputProps}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-slate-300 text-xs font-medium">Botões (máx. 3 para botões, 10 para lista)</Label>
+              {(selectedNode.data.buttons || []).map((btn: any, i: number) => (
+                <div key={i} className="flex gap-2">
+                  <Input
+                    value={btn.label || ''}
+                    onChange={(e) => {
+                      const buttons = [...(selectedNode.data.buttons || [])];
+                      buttons[i] = { ...buttons[i], label: e.target.value };
+                      updateNodeData('buttons', buttons);
+                    }}
+                    className="bg-slate-800 border-slate-700 text-white text-xs"
+                    placeholder={`Botão ${i + 1}`}
+                    {...inputProps}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-red-400 hover:text-red-300 px-2"
+                    onClick={() => {
+                      const buttons = [...(selectedNode.data.buttons || [])];
+                      buttons.splice(i, 1);
+                      updateNodeData('buttons', buttons);
+                    }}
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ))}
+              {(selectedNode.data.buttons || []).length < 10 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full border-slate-700 text-slate-300"
+                  onClick={() => {
+                    const buttons = [...(selectedNode.data.buttons || []), { label: '', id: crypto.randomUUID() }];
+                    updateNodeData('buttons', buttons);
+                  }}
+                >
+                  + Adicionar Botão
+                </Button>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label className="text-slate-300 text-xs font-medium">Tipo de Menu</Label>
+              <Select 
+                value={selectedNode.data.menuStyle || 'buttons'} 
+                onValueChange={(v) => updateNodeData('menuStyle', v)}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="buttons">🔘 Botões (máx 3)</SelectItem>
+                  <SelectItem value="list">📋 Lista (máx 10)</SelectItem>
+                  <SelectItem value="text">📝 Texto numerado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <Label className="text-slate-300 text-xs font-medium">IA entende texto livre</Label>
+              <Switch
+                checked={selectedNode.data.aiUnderstandsFreeText !== false}
+                onCheckedChange={(v) => updateNodeData('aiUnderstandsFreeText', v)}
+              />
+            </div>
+            <p className="text-[10px] text-slate-500">
+              Se ativado, a IA entende texto livre e áudio além dos botões
+            </p>
+          </>
+        );
+
+      case 'route_department':
+        return (
+          <>
+            <div className="space-y-2">
+              <Label className="text-slate-300 text-xs font-medium">Título</Label>
+              <Input
+                value={selectedNode.data.label || ''}
+                onChange={(e) => updateNodeData('label', e.target.value)}
+                className="bg-slate-800 border-slate-700 text-white"
+                placeholder="Ex: Direcionar para Financeiro"
+                {...inputProps}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-slate-300 text-xs font-medium">Departamento</Label>
+              <Input
+                value={selectedNode.data.department || ''}
+                onChange={(e) => updateNodeData('department', e.target.value)}
+                className="bg-slate-800 border-slate-700 text-white"
+                placeholder="Ex: Financeiro, Suporte, Vendas"
+                {...inputProps}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-slate-300 text-xs font-medium">ID do Usuário Responsável</Label>
+              <Input
+                value={selectedNode.data.assignedUserId || ''}
+                onChange={(e) => updateNodeData('assignedUserId', e.target.value)}
+                className="bg-slate-800 border-slate-700 text-white"
+                placeholder="UUID do usuário responsável"
+                {...inputProps}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-slate-300 text-xs font-medium">Mensagem ao Transferir</Label>
+              <Textarea
+                value={selectedNode.data.transferMessage || ''}
+                onChange={(e) => updateNodeData('transferMessage', e.target.value)}
+                className="bg-slate-800 border-slate-700 text-white resize-none"
+                placeholder="Estou transferindo você para o setor..."
+                rows={2}
+                {...inputProps}
+              />
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <Label className="text-slate-300 text-xs font-medium">Notificar Responsável</Label>
+              <Switch
+                checked={selectedNode.data.notifyAssigned !== false}
+                onCheckedChange={(v) => updateNodeData('notifyAssigned', v)}
+              />
+            </div>
+          </>
+        );
+
       default:
         return null;
     }
@@ -554,6 +704,8 @@ export function NodePropertiesPanel({ selectedNode, onUpdate }: NodePropertiesPa
       case 'aiagent': return 'Agente IA';
       case 'delay': return 'Controle';
       case 'media': return 'Mídia';
+      case 'interactive_menu': return 'Menu Interativo';
+      case 'route_department': return 'Roteamento';
       default: return 'Componente';
     }
   };
@@ -567,6 +719,8 @@ export function NodePropertiesPanel({ selectedNode, onUpdate }: NodePropertiesPa
       case 'aiagent': return 'bg-cyan-500';
       case 'delay': return 'bg-slate-500';
       case 'media': return 'bg-pink-500';
+      case 'interactive_menu': return 'bg-teal-500';
+      case 'route_department': return 'bg-rose-500';
       default: return 'bg-slate-500';
     }
   };
