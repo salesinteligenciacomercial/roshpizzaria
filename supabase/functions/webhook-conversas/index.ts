@@ -1725,6 +1725,7 @@ serve(async (req) => {
           let flowStarted = false;
           
           if (activeFlows && activeFlows.length > 0) {
+            console.log(`🔍 [WEBHOOK-FLOW] ${activeFlows.length} fluxo(s) ativo(s) encontrado(s), mensagem: "${validatedData.mensagem}"`);
             for (const flow of activeFlows) {
               const nodes = (flow.nodes as any[]) || [];
               
@@ -1733,55 +1734,63 @@ serve(async (req) => {
                 n.type === 'trigger' && n.data?.triggerType === 'palavra_chave' && n.data?.keyword
               );
               
+              let matchedTriggerType = 'nova_mensagem';
+              
               if (keywordTrigger) {
                 const keyword = keywordTrigger.data.keyword.toLowerCase().trim();
                 const msg = (validatedData.mensagem || '').toLowerCase().trim();
+                console.log(`🔑 [WEBHOOK-FLOW] Verificando palavra-chave: "${keyword}" na mensagem: "${msg}"`);
                 if (!msg.includes(keyword)) {
-                  continue; // Keyword doesn't match, skip this flow
+                  console.log(`⏭️ [WEBHOOK-FLOW] Palavra-chave "${keyword}" NÃO encontrada, pulando fluxo`);
+                  continue;
                 }
-                console.log(`🔑 [WEBHOOK-FLOW] Palavra-chave "${keyword}" encontrada na mensagem`);
+                console.log(`✅ [WEBHOOK-FLOW] Palavra-chave "${keyword}" encontrada!`);
+                matchedTriggerType = 'palavra_chave';
+              } else {
+                // Only activate if flow has nova_mensagem trigger
+                const hasNovaMensagem = nodes.some((n: any) => 
+                  n.type === 'trigger' && n.data?.triggerType === 'nova_mensagem'
+                );
+                if (!hasNovaMensagem) {
+                  console.log(`⏭️ [WEBHOOK-FLOW] Fluxo ${flow.id} não tem gatilho nova_mensagem nem palavra_chave`);
+                  continue;
+                }
               }
               
-              const hasTrigger = nodes.some((n: any) => 
-                n.type === 'trigger' && (n.data?.triggerType === 'nova_mensagem' || n.data?.triggerType === 'palavra_chave')
-              );
+              console.log('🚀 [WEBHOOK-FLOW] Iniciando fluxo:', flow.id, 'triggerType:', matchedTriggerType);
               
-              if (hasTrigger) {
-                console.log('🚀 [WEBHOOK-FLOW] Iniciando fluxo:', flow.id);
+              const supabaseUrlEnv = Deno.env.get('SUPABASE_URL')!;
+              const supabaseKeyEnv = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+              
+              fetch(`${supabaseUrlEnv}/functions/v1/executar-fluxo`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${supabaseKeyEnv}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  flowId: flow.id,
+                  leadId,
+                  conversationId: data.id,
+                  conversationNumber: numeroLimpo,
+                  companyId,
+                  triggerType: matchedTriggerType,
+                  triggerData: {
+                    message: validatedData.mensagem,
+                    tipo_mensagem: validatedData.tipo_mensagem,
+                    midia_url: validatedData.midia_url,
+                    nome_contato: nomeContatoFinal,
+                  }
+                })
+              }).then(async (r) => {
+                const result = await r.json();
+                console.log('✅ [WEBHOOK-FLOW] Fluxo iniciado:', result);
+              }).catch((e) => {
+                console.error('❌ [WEBHOOK-FLOW] Erro ao iniciar fluxo:', e);
+              });
                 
-                const supabaseUrlEnv = Deno.env.get('SUPABASE_URL')!;
-                const supabaseKeyEnv = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-                
-                fetch(`${supabaseUrlEnv}/functions/v1/executar-fluxo`, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${supabaseKeyEnv}`,
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    flowId: flow.id,
-                    leadId,
-                    conversationId: data.id,
-                    conversationNumber: numeroLimpo,
-                    companyId,
-                    triggerType: 'nova_mensagem',
-                    triggerData: {
-                      message: validatedData.mensagem,
-                      tipo_mensagem: validatedData.tipo_mensagem,
-                      midia_url: validatedData.midia_url,
-                      nome_contato: nomeContatoFinal,
-                    }
-                  })
-                }).then(async (r) => {
-                  const result = await r.json();
-                  console.log('✅ [WEBHOOK-FLOW] Fluxo iniciado:', result);
-                }).catch((e) => {
-                  console.error('❌ [WEBHOOK-FLOW] Erro ao iniciar fluxo:', e);
-                });
-                
-                flowStarted = true;
-                break; // Usar apenas o primeiro fluxo com gatilho correspondente
-              }
+              flowStarted = true;
+              break; // Usar apenas o primeiro fluxo com gatilho correspondente
             }
           }
           
