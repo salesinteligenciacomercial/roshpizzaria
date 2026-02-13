@@ -3,7 +3,7 @@ import { Node, Edge } from 'reactflow';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { X, Send, RotateCcw, Bot, User } from 'lucide-react';
+import { X, Send, RotateCcw, Bot } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -38,71 +38,103 @@ export function FlowPreviewSimulator({ nodes, edges, open, onClose }: FlowPrevie
     setMessages([]);
     setUserInput('');
     setWaitingForInput(false);
-    // Find trigger node and start
+    setCurrentNodeId(null);
+
     const triggerNode = nodes.find(n => n.type === 'trigger');
     if (!triggerNode) {
       setMessages([{ id: '0', text: '⚠️ Nenhum gatilho encontrado no fluxo.', from: 'bot' }]);
       return;
     }
+
+    // Show a prompt so the user "sends" a message to trigger the flow
+    setMessages([{
+      id: '0',
+      text: '💬 Envie uma mensagem para iniciar o fluxo.',
+      from: 'bot',
+    }]);
     setCurrentNodeId(triggerNode.id);
-    setTimeout(() => executeNode(triggerNode.id), 300);
+    setWaitingForInput(true);
+  };
+
+  const getNodeMessage = (node: Node): string => {
+    const d = node.data || {};
+    return d.message || d.welcomeMessage || d.description || d.label || '';
   };
 
   const executeNode = (nodeId: string) => {
     const node = nodes.find(n => n.id === nodeId);
-    if (!node) return;
+    if (!node) {
+      addBotMessage('✅ Fim do fluxo.');
+      return;
+    }
 
-    const label = node.data?.label || '';
-    const description = node.data?.description || '';
+    setCurrentNodeId(nodeId);
 
     switch (node.type) {
       case 'trigger': {
-        const text = description || label || 'Fluxo iniciado';
-        addBotMessage(text);
+        // Trigger is just entry point — move to next node
         goToNext(nodeId);
         break;
       }
+
       case 'action': {
-        const text = description || label || 'Ação executada';
-        addBotMessage(`📤 ${text}`);
+        const actionType = node.data?.actionType;
+        const msg = getNodeMessage(node);
+
+        if (actionType === 'enviar_mensagem' && msg) {
+          addBotMessage(msg);
+        } else {
+          addBotMessage(`⚡ ${node.data?.label || 'Ação executada'}`);
+        }
         goToNext(nodeId);
         break;
       }
+
       case 'interactive_menu': {
         const buttons = node.data?.buttons || [];
-        const text = description || label || 'Escolha uma opção:';
-        addBotMessage(text, buttons.map((b: any, i: number) => ({
+        const msg = node.data?.welcomeMessage || node.data?.description || node.data?.label || 'Escolha uma opção:';
+        addBotMessage(msg, buttons.map((b: any, i: number) => ({
           label: b.label || `Opção ${i + 1}`,
           value: b.label || `${i + 1}`,
         })));
-        setCurrentNodeId(nodeId);
         setWaitingForInput(true);
         break;
       }
+
       case 'route_department': {
         const dept = node.data?.department || 'departamento';
+        const transferMsg = node.data?.transferMessage;
+        if (transferMsg) {
+          addBotMessage(transferMsg);
+        }
         addBotMessage(`🔀 Direcionando para: ${dept}`);
         goToNext(nodeId);
         break;
       }
+
       case 'condition': {
-        addBotMessage(`🔍 Verificando condição: ${label}`);
-        // Follow first edge (simulated as "true")
+        addBotMessage(`🔍 Condição: ${node.data?.label || 'verificando...'} → (simulado como verdadeiro)`);
         goToNext(nodeId);
         break;
       }
-      case 'ia': {
-        addBotMessage(`🤖 IA processando: ${label}`);
+
+      case 'ia':
+      case 'aiagent': {
+        addBotMessage(`🤖 IA responderia aqui: "${node.data?.label || 'processando...'}"`);
         goToNext(nodeId);
         break;
       }
+
       case 'delay': {
-        addBotMessage(`⏳ Aguardando: ${label}`);
+        const val = node.data?.delayValue || '?';
+        const unit = node.data?.delayUnit || 's';
+        addBotMessage(`⏳ Aguardando ${val}${unit}...`);
         setTimeout(() => goToNext(nodeId), 1000);
-        break;
+        return; // don't fall through
       }
+
       default: {
-        addBotMessage(`▶️ ${label || node.type}`);
+        addBotMessage(`▶️ ${node.data?.label || node.type}`);
         goToNext(nodeId);
       }
     }
@@ -111,11 +143,10 @@ export function FlowPreviewSimulator({ nodes, edges, open, onClose }: FlowPrevie
   const goToNext = (fromNodeId: string) => {
     const outEdges = edges.filter(e => e.source === fromNodeId);
     if (outEdges.length === 0) {
-      setTimeout(() => addBotMessage('✅ Fim do fluxo.'), 500);
+      setTimeout(() => addBotMessage('✅ Fim do fluxo.'), 400);
       return;
     }
-    // Follow first edge
-    setTimeout(() => executeNode(outEdges[0].target), 600);
+    setTimeout(() => executeNode(outEdges[0].target), 500);
   };
 
   const addBotMessage = (text: string, buttons?: { label: string; value: string }[]) => {
@@ -135,30 +166,41 @@ export function FlowPreviewSimulator({ nodes, edges, open, onClose }: FlowPrevie
 
     if (!currentNodeId) return;
 
-    // Find matching edge based on button click or text
     const node = nodes.find(n => n.id === currentNodeId);
-    const outEdges = edges.filter(e => e.source === currentNodeId);
+    if (!node) return;
 
-    if (node?.type === 'interactive_menu') {
+    // If we're at a trigger node, the user just "sent a message" to start the flow
+    if (node.type === 'trigger') {
+      executeNode(currentNodeId);
+      return;
+    }
+
+    // Interactive menu: match button
+    if (node.type === 'interactive_menu') {
       const buttons = node.data?.buttons || [];
-      const matchIndex = buttons.findIndex((b: any) =>
-        b.label?.toLowerCase() === response.toLowerCase() ||
-        response === `${buttons.indexOf(b) + 1}`
-      );
+      const outEdges = edges.filter(e => e.source === currentNodeId);
 
-      // Try to find a matching edge by label or use index
+      const matchIndex = buttons.findIndex((b: any, i: number) => {
+        const r = response.trim().toLowerCase();
+        return r === b.label?.toLowerCase() || r === String(i + 1);
+      });
+
       const targetEdge = outEdges[matchIndex >= 0 ? matchIndex : 0];
       if (targetEdge) {
-        setTimeout(() => executeNode(targetEdge.target), 500);
-        return;
+        setTimeout(() => executeNode(targetEdge.target), 400);
+      } else {
+        addBotMessage('⚠️ Opção não reconhecida. Tente novamente.');
+        setWaitingForInput(true);
       }
+      return;
     }
 
     // Default: follow first edge
+    const outEdges = edges.filter(e => e.source === currentNodeId);
     if (outEdges.length > 0) {
-      setTimeout(() => executeNode(outEdges[0].target), 500);
+      setTimeout(() => executeNode(outEdges[0].target), 400);
     } else {
-      setTimeout(() => addBotMessage('✅ Fim do fluxo.'), 500);
+      setTimeout(() => addBotMessage('✅ Fim do fluxo.'), 400);
     }
   };
 
@@ -199,7 +241,7 @@ export function FlowPreviewSimulator({ nodes, edges, open, onClose }: FlowPrevie
                       <button
                         key={i}
                         onClick={() => handleUserResponse(btn.value)}
-                        className="text-xs bg-slate-700 hover:bg-slate-600 text-white rounded px-3 py-1.5 text-left transition-colors"
+                        className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded px-3 py-1.5 text-left transition-colors"
                       >
                         {btn.label}
                       </button>
@@ -228,7 +270,7 @@ export function FlowPreviewSimulator({ nodes, edges, open, onClose }: FlowPrevie
             size="icon"
             onClick={() => handleUserResponse(userInput)}
             disabled={!waitingForInput || !userInput.trim()}
-            className="bg-blue-600 hover:bg-blue-700 shrink-0"
+            className="bg-emerald-600 hover:bg-emerald-500 shrink-0"
           >
             <Send className="h-4 w-4" />
           </Button>
