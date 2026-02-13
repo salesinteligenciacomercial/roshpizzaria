@@ -1675,7 +1675,40 @@ serve(async (req) => {
           .gt('expires_at', new Date().toISOString())
           .maybeSingle();
         
+        // 🔑 PRIORIDADE: Verificar se a mensagem é uma palavra-chave de algum fluxo ANTES de continuar fluxo existente
+        let keywordOverride = false;
         if (flowState) {
+          const { data: allActiveFlows } = await supabase
+            .from('automation_flows')
+            .select('id, nodes')
+            .eq('company_id', companyId)
+            .eq('active', true);
+          
+          if (allActiveFlows) {
+            for (const flow of allActiveFlows) {
+              const nodes = (flow.nodes as any[]) || [];
+              const kwTrigger = nodes.find((n: any) => 
+                n.type === 'trigger' && n.data?.triggerType === 'palavra_chave' && n.data?.keyword
+              );
+              if (kwTrigger) {
+                const kw = kwTrigger.data.keyword.toLowerCase().trim();
+                const msg = (validatedData.mensagem || '').toLowerCase().trim();
+                if (msg.includes(kw)) {
+                  console.log(`🔑 [WEBHOOK-FLOW] Palavra-chave "${kw}" detectada! Resetando estado anterior e iniciando novo fluxo.`);
+                  // Limpar estado antigo
+                  await supabase.from('conversation_flow_state')
+                    .delete()
+                    .eq('conversation_number', numeroLimpo)
+                    .eq('company_id', companyId);
+                  keywordOverride = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        if (flowState && !keywordOverride) {
           console.log('✅ [WEBHOOK-FLOW] Estado de fluxo ativo encontrado:', {
             flowId: flowState.flow_id,
             currentNode: flowState.current_node_id,
