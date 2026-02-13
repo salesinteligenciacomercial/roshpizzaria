@@ -20,7 +20,8 @@ const enviarWhatsAppSchema = z.object({
     return isDigits || isGroupJid || isContactJid;
   }, 'Informe dígitos (10-15), JID de contato @s.whatsapp.net ou grupo @g.us'),
   mensagem: z.string().max(65536, 'Mensagem muito longa').optional(),
-  tipo_mensagem: z.enum(['text', 'texto', 'image', 'audio', 'video', 'document', 'pdf', 'template']).optional(),
+  tipo_mensagem: z.enum(['text', 'texto', 'image', 'audio', 'video', 'document', 'pdf', 'template', 'interactive_buttons', 'interactive_list']).optional(),
+  interactive: z.any().optional(),
   mediaUrl: z.string().url('URL de mídia inválida').optional(),
   mediaBase64: z.string().optional(),
   fileName: z.string().optional(),
@@ -458,6 +459,73 @@ serve(async (req) => {
     }
 
     console.log("🔀 Router - Provider:", apiProvider, "| Grupo:", isGroup, "| Número formatado:", formattedNumber);
+
+    // ============= INTERACTIVE MESSAGE HANDLING =============
+    // Convert interactive_buttons/interactive_list to plain text for sending
+    if (validatedData.tipo_mensagem === 'interactive_buttons' || validatedData.tipo_mensagem === 'interactive_list') {
+      const interactive = (body as any).interactive;
+      console.log("🔘 Mensagem interativa detectada:", validatedData.tipo_mensagem);
+      
+      // For Meta API: try sending as interactive message
+      if (apiProvider === 'meta' && hasMetaCredentials) {
+        try {
+          const url = `${META_API_BASE_URL}/${META_API_VERSION}/${connection.meta_phone_number_id}/messages`;
+          const interactivePayload: any = {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: formattedNumber,
+            type: 'interactive',
+            interactive: interactive,
+          };
+          
+          console.log("📘 Meta API - Enviando mensagem interativa...");
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${connection.meta_access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(interactivePayload),
+          });
+          
+          const data = await response.json();
+          if (response.ok) {
+            console.log("✅ Meta API - Mensagem interativa enviada:", data.messages?.[0]?.id);
+            return new Response(
+              JSON.stringify({ success: true, provider: 'meta', message_id: data.messages?.[0]?.id, data }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          } else {
+            console.error("❌ Meta API Interactive Error:", data);
+            // Fall through to text fallback
+          }
+        } catch (e) {
+          console.error("❌ Meta Interactive Exception:", e);
+        }
+      }
+      
+      // Fallback: convert to numbered text menu
+      if (interactive?.body?.text && interactive?.action) {
+        let textMenu = interactive.body.text + "\n\n";
+        if (interactive.type === 'button' && interactive.action.buttons) {
+          interactive.action.buttons.forEach((btn: any, i: number) => {
+            textMenu += `${i + 1}️⃣ ${btn.reply?.title || `Opção ${i + 1}`}\n`;
+          });
+        } else if (interactive.type === 'list' && interactive.action.sections) {
+          for (const section of interactive.action.sections) {
+            for (const row of (section.rows || [])) {
+              textMenu += `▪️ ${row.title}\n`;
+            }
+          }
+        }
+        validatedData.mensagem = textMenu.trim();
+        validatedData.tipo_mensagem = 'text';
+        console.log("📝 Convertido para texto:", validatedData.mensagem);
+      } else {
+        // Just use the original message text
+        validatedData.tipo_mensagem = 'text';
+      }
+    }
 
     // ============= ROTEAMENTO DE MENSAGENS =============
     let result: { success: boolean; provider: string; data?: any; error?: string };
