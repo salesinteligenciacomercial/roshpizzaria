@@ -1,4 +1,5 @@
 import { 
+  Hash,
   Zap, 
   Send, 
   GitBranch, 
@@ -48,6 +49,7 @@ const nodeCategories = [
       { type: 'trigger', label: 'Webhook', icon: <Webhook className="h-4 w-4" />, color: 'bg-emerald-500', subType: 'webhook' },
       { type: 'trigger', label: 'Tag Adicionada', icon: <Tag className="h-4 w-4" />, color: 'bg-emerald-500', subType: 'tag_added' },
       { type: 'trigger', label: 'Compromisso Criado', icon: <Calendar className="h-4 w-4" />, color: 'bg-emerald-500', subType: 'compromisso' },
+      { type: 'trigger', label: 'Palavra-Chave', icon: <Hash className="h-4 w-4" />, color: 'bg-emerald-500', subType: 'palavra_chave' },
     ]
   },
   {

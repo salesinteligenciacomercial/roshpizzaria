@@ -77,6 +77,7 @@ export function NodePropertiesPanel({ selectedNode, onUpdate }: NodePropertiesPa
                   <SelectItem value="webhook">🔗 Webhook recebido</SelectItem>
                   <SelectItem value="tag_added">🏷️ Tag adicionada</SelectItem>
                   <SelectItem value="compromisso">📅 Compromisso criado</SelectItem>
+                  <SelectItem value="palavra_chave">#️⃣ Palavra-chave recebida</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -112,6 +113,19 @@ export function NodePropertiesPanel({ selectedNode, onUpdate }: NodePropertiesPa
                   placeholder="Nome da tag"
                   {...inputProps}
                 />
+              </div>
+            )}
+            {selectedNode.data.triggerType === 'palavra_chave' && (
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-xs font-medium">Palavra-Chave</Label>
+                <Input
+                  value={selectedNode.data.keyword || ''}
+                  onChange={(e) => updateNodeData('keyword', e.target.value)}
+                  className="bg-slate-800 border-slate-700 text-white"
+                  placeholder="Ex: teste, oi, menu"
+                  {...inputProps}
+                />
+                <p className="text-xs text-slate-500">O fluxo será ativado quando a mensagem contiver esta palavra</p>
               </div>
             )}
             <div className="space-y-2">
