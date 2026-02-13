@@ -466,8 +466,10 @@ serve(async (req) => {
       const interactive = (body as any).interactive;
       console.log("🔘 Mensagem interativa detectada:", validatedData.tipo_mensagem);
       
-      // For Meta API: try sending as interactive message
-      if (apiProvider === 'meta' && hasMetaCredentials) {
+      // IMPORTANT: Evolution API v2.3.x has a confirmed bug where sendButtons wraps
+      // messages in viewOnceMessage, making buttons non-clickable (GitHub issues #2028, #2390, #2404).
+      // Therefore, ALWAYS prefer Meta API for interactive messages when available.
+      if (hasMetaCredentials) {
         try {
           const url = `${META_API_BASE_URL}/${META_API_VERSION}/${connection.meta_phone_number_id}/messages`;
           const interactivePayload: any = {
@@ -478,7 +480,7 @@ serve(async (req) => {
             interactive: interactive,
           };
           
-          console.log("📘 Meta API - Enviando mensagem interativa...");
+          console.log("📘 Meta API - Forçando envio interativo via Meta (Evolution não suporta botões clicáveis)...");
           const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -490,14 +492,14 @@ serve(async (req) => {
           
           const data = await response.json();
           if (response.ok) {
-            console.log("✅ Meta API - Mensagem interativa enviada:", data.messages?.[0]?.id);
+            console.log("✅ Meta API - Mensagem interativa com botões clicáveis enviada:", data.messages?.[0]?.id);
             return new Response(
               JSON.stringify({ success: true, provider: 'meta', message_id: data.messages?.[0]?.id, data }),
               { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           } else {
             console.error("❌ Meta API Interactive Error:", data);
-            // Fall through to Evolution or text fallback
+            // Fall through to Evolution text fallback
           }
         } catch (e) {
           console.error("❌ Meta Interactive Exception:", e);
