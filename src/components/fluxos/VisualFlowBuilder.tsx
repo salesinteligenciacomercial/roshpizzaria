@@ -19,7 +19,7 @@ import 'reactflow/dist/style.css';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Save, Play, Download, Upload, ArrowLeft, Settings2, Zap, AlertCircle } from 'lucide-react';
+import { Save, Play, Download, Upload, ArrowLeft, Settings2, Zap, AlertCircle, MessageSquareText } from 'lucide-react';
 import { toast } from 'sonner';
 import { TriggerNode } from './nodes/TriggerNode';
 import { ActionNode } from './nodes/ActionNode';
@@ -33,6 +33,7 @@ import { RouteDepartmentNode } from './nodes/RouteDepartmentNode';
 import { NodePropertiesPanel } from './NodePropertiesPanel';
 import { NodesSidebar } from './NodesSidebar';
 import { FlowSettingsDialog } from './FlowSettingsDialog';
+import { FlowPreviewSimulator } from './FlowPreviewSimulator';
 import { supabase } from '@/integrations/supabase/client';
 
 interface AutomationFlow {
@@ -94,6 +95,7 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
   const [flowSettings, setFlowSettings] = useState<FlowSettings>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
 
   useEffect(() => {
     if (fluxoId) {
@@ -242,7 +244,6 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
         nodes: nodes as any,
         edges: edges as any,
         active: flowActive,
-        settings: flowSettings as any,
         company_id: userRoles.company_id,
         owner_id: user.id,
         updated_at: new Date().toISOString(),
@@ -317,7 +318,7 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
       return;
     }
     
-    toast.info('Iniciando simulação do fluxo...');
+    setSimulatorOpen(true);
   };
 
   const handleUpdateNode = useCallback((updatedNode: Node) => {
@@ -446,7 +447,7 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
             Salvar
           </Button>
           <Button onClick={handleTestFlow} size="sm" variant="outline" className="border-slate-700 text-slate-300 hover:text-white">
-            <Play className="h-4 w-4 mr-2" />
+            <MessageSquareText className="h-4 w-4 mr-2" />
             Testar
           </Button>
           <Button onClick={handleExportFlow} size="sm" variant="outline" className="border-slate-700 text-slate-300 hover:text-white">
@@ -539,6 +540,14 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
           setSettingsOpen(false);
           toast.success('Regras atualizadas!');
         }}
+      />
+
+      {/* Simulador de Fluxo */}
+      <FlowPreviewSimulator
+        nodes={nodes}
+        edges={edges}
+        open={simulatorOpen}
+        onClose={() => setSimulatorOpen(false)}
       />
     </div>
   );
