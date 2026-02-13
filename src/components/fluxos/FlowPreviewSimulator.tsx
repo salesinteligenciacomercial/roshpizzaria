@@ -72,8 +72,20 @@ export function FlowPreviewSimulator({ nodes, edges, open, onClose }: FlowPrevie
 
     switch (node.type) {
       case 'trigger': {
-        // Trigger is just entry point — move to next node
-        goToNext(nodeId);
+        // Show the trigger's message if it has one
+        const triggerMsg = getNodeMessage(node);
+        if (triggerMsg) {
+          addBotMessage(`📩 ${triggerMsg}`);
+        }
+        
+        const triggerOutEdges = edges.filter(e => e.source === nodeId);
+        if (triggerOutEdges.length === 0) {
+          // No connected nodes — tell user to connect more nodes
+          setTimeout(() => addBotMessage('⚠️ O gatilho não tem nodes conectados. Conecte ações, menus ou outros componentes ao gatilho para continuar o fluxo.'), 500);
+          setWaitingForInput(true); // keep input open for retry
+        } else {
+          goToNext(nodeId);
+        }
         break;
       }
 
