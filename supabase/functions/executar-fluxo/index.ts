@@ -136,9 +136,15 @@ async function executeFromNode(nodeId: string, nodes: any[], edges: any[], conte
   console.log(`▶️ Executando node: ${node.id} (${node.type})`);
 
   switch (node.type) {
-    case 'trigger':
-      // Triggers são apenas pontos de entrada, seguir para próximo
+    case 'trigger': {
+      // Enviar mensagem de boas-vindas do trigger, se configurada
+      const triggerMessage = node.data?.description || node.data?.message || node.data?.welcomeMessage;
+      if (triggerMessage && context.conversationNumber) {
+        console.log("📩 Enviando mensagem do trigger:", triggerMessage);
+        await sendWhatsAppMessage(supabase, context.conversationNumber, triggerMessage, context.companyId);
+      }
       break;
+    }
 
     case 'action':
       await executeAction(node, context, supabase);
@@ -441,10 +447,11 @@ async function executeInteractiveMenu(node: any, context: any, supabase: any, fl
   // Enviar menu interativo
   const messageText = welcomeMessage || "Como posso ajudar? Escolha uma opção:";
   
-  if (menuStyle === 'buttons' && (buttons || []).length <= 3) {
+  const effectiveMenuStyle = menuStyle || node.data?.menuType || 'text';
+  if (effectiveMenuStyle === 'buttons' && (buttons || []).length <= 3) {
     // Enviar como botões interativos do WhatsApp
     await sendInteractiveButtons(supabase, context.conversationNumber, messageText, buttons || [], context.companyId);
-  } else if (menuStyle === 'list') {
+  } else if (effectiveMenuStyle === 'list') {
     // Enviar como lista interativa
     await sendInteractiveList(supabase, context.conversationNumber, messageText, buttons || [], context.companyId);
   } else {
