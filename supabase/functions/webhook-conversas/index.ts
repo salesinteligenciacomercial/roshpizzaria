@@ -1676,12 +1676,30 @@ serve(async (req) => {
           .maybeSingle();
         
         // 🔑 PRIORIDADE: Verificar se a mensagem é uma palavra-chave de algum fluxo ANTES de continuar fluxo existente
+        // 🔑 Buscar parent_company_id para também verificar fluxos da company mãe
+        let parentCompanyId: string | null = null;
+        {
+          const { data: companyData } = await supabase
+            .from('companies')
+            .select('parent_company_id')
+            .eq('id', companyId)
+            .single();
+          parentCompanyId = companyData?.parent_company_id || null;
+          if (parentCompanyId) {
+            console.log(`🏢 [WEBHOOK-FLOW] Subconta detectada, parent_company_id: ${parentCompanyId}`);
+          }
+        }
+
+        // Buscar fluxos ativos da company atual E da company mãe (se for subconta)
+        const companyIdsToSearch = [companyId];
+        if (parentCompanyId) companyIdsToSearch.push(parentCompanyId);
+
         let keywordOverride = false;
         if (flowState) {
           const { data: allActiveFlows } = await supabase
             .from('automation_flows')
-            .select('id, nodes')
-            .eq('company_id', companyId)
+            .select('id, nodes, company_id')
+            .in('company_id', companyIdsToSearch)
             .eq('active', true);
           
           if (allActiveFlows) {
@@ -1694,7 +1712,7 @@ serve(async (req) => {
                 const kw = kwTrigger.data.keyword.toLowerCase().trim();
                 const msg = (validatedData.mensagem || '').toLowerCase().trim();
                 if (msg.includes(kw)) {
-                  console.log(`🔑 [WEBHOOK-FLOW] Palavra-chave "${kw}" detectada! Resetando estado anterior e iniciando novo fluxo.`);
+                  console.log(`🔑 [WEBHOOK-FLOW] Palavra-chave "${kw}" detectada! Resetando estado anterior e iniciando novo fluxo. (flow company: ${flow.company_id})`);
                   // Limpar estado antigo
                   await supabase.from('conversation_flow_state')
                     .delete()
@@ -1751,8 +1769,8 @@ serve(async (req) => {
           // 2. Verificar se empresa tem fluxo ativo com gatilho "nova_mensagem"
           const { data: activeFlows } = await supabase
             .from('automation_flows')
-            .select('id, nodes')
-            .eq('company_id', companyId)
+            .select('id, nodes, company_id')
+            .in('company_id', companyIdsToSearch)
             .eq('active', true);
           
           let flowStarted = false;
