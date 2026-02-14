@@ -4,7 +4,7 @@ import { N8nIntegration } from "@/components/ia/N8nIntegration";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FluxoAutomacaoBuilder } from "@/components/fluxos/FluxoAutomacaoBuilder";
 import { IAAgentCard } from "@/components/ia/IAAgentCard";
-import { PainelInsights } from "@/components/ia/PainelInsights";
+
 import { DisparoEmMassa } from "@/components/campanhas/DisparoEmMassa";
 import { CampanhasDashboard } from "@/components/campanhas/CampanhasDashboard";
 import { useEffect, useState } from "react";
@@ -135,7 +135,7 @@ export default function IA() {
       )}
 
       <Tabs defaultValue="agentes" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="agentes" className="gap-2">
             <Bot className="h-4 w-4" />
             Agentes
@@ -147,10 +147,6 @@ export default function IA() {
           <TabsTrigger value="campanhas" className="gap-2">
             <Send className="h-4 w-4" />
             Campanhas
-          </TabsTrigger>
-          <TabsTrigger value="insights" className="gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Insights
           </TabsTrigger>
         </TabsList>
 
@@ -260,9 +256,6 @@ export default function IA() {
         </TabsContent>
 
 
-        <TabsContent value="insights" className="space-y-4 mt-6">
-          <PainelInsights />
-        </TabsContent>
       </Tabs>
     </div>
   );
