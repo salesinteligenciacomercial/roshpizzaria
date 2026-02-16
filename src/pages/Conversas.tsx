@@ -4331,25 +4331,16 @@ function Conversas() {
       } : msg)
     });
 
-    // Enviar mensagem editada via WhatsApp (com retry)
+    // Atualizar no banco de dados
     try {
-      const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
-      const {
-        error
-      } = await enviarWhatsApp({
-        numero: numeroNormalizado,
-        mensagem: `✏️ *[Mensagem editada]*\n\n${newContent}`,
-        tipo_mensagem: 'text'
-      });
-      if (error) {
-        console.error('Erro ao enviar edição para WhatsApp:', error);
-        toast.error('Mensagem editada localmente, mas não enviada ao WhatsApp');
-      } else {
-        toast.success("Mensagem editada e enviada ao cliente!");
-      }
+      await supabase
+        .from('conversas')
+        .update({ mensagem: newContent })
+        .eq('id', messageId);
+      toast.success("Mensagem editada com sucesso!");
     } catch (error) {
-      console.error('Erro ao processar edição:', error);
-      toast.error('Mensagem editada localmente');
+      console.error('Erro ao salvar edição:', error);
+      toast.error('Erro ao salvar edição');
     }
   };
   const handleDelete = (messageId: string, forEveryone: boolean) => {
