@@ -491,6 +491,8 @@ function Conversas() {
     return saved !== null ? JSON.parse(saved) : true; // Habilitado por padrão
   });
   const [isCorrectingText, setIsCorrectingText] = useState(false); // Estado de loading durante correção
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const sendingMessageRef = useRef(false);
 
   // ✍️ Estado para assinatura na mensagem
   const [includeSignature, setIncludeSignature] = useState<boolean>(() => {
@@ -5035,6 +5037,9 @@ function Conversas() {
   const handleSendMessage = async (content?: string, type: Message["type"] = "text") => {
     let messageContent = content || messageInput.trim();
     if (!messageContent || !selectedConv) return;
+    if (sendingMessageRef.current) return;
+    sendingMessageRef.current = true;
+    setIsSendingMessage(true);
     
     // 🆕 NOVO: Registrar atendimento ativo quando usuário responde
     const telefoneFormatado = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
@@ -5312,6 +5317,9 @@ function Conversas() {
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
       toast.error('Erro ao processar envio');
+    } finally {
+      sendingMessageRef.current = false;
+      setIsSendingMessage(false);
     }
   };
   const handleFileAttach = (type: "image" | "audio" | "pdf") => {
@@ -8850,8 +8858,8 @@ function Conversas() {
                     <Button onClick={() => {
                   handleSendMessage();
                   setReplyingTo(null);
-                }} size="icon" className="bg-[#25D366] hover:bg-[#128C7E] text-white" disabled={!messageInput.trim() || isCorrectingText}>
-                      {isCorrectingText ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                }} size="icon" className="bg-[#25D366] hover:bg-[#128C7E] text-white" disabled={!messageInput.trim() || isCorrectingText || isSendingMessage}>
+                      {isCorrectingText || isSendingMessage ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                     </Button>
                   </div>
                 </div>
