@@ -18,7 +18,8 @@ import {
   Angry,
   Download,
   FileText,
-  Forward
+  Forward,
+  Pencil
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -185,6 +186,20 @@ export function MessageActions({
             <DropdownMenuItem onClick={handleForward}>
               <Forward className="h-4 w-4 mr-2" />
               Encaminhar
+            </DropdownMenuItem>
+          )}
+
+          {/* Opção de Editar - apenas para mensagens do usuário e tipo texto */}
+          {sender === "user" && messageType === "text" && (
+            <DropdownMenuItem onClick={() => {
+              const newContent = prompt("Editar mensagem:", content);
+              if (newContent !== null && newContent.trim() !== "") {
+                onEdit(messageId, newContent.trim());
+              }
+              setShowEmojiPicker(false);
+            }}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Editar
             </DropdownMenuItem>
           )}
           
