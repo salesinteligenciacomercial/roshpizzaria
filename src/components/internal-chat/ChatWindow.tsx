@@ -24,6 +24,7 @@ interface ChatWindowProps {
 export const ChatWindow = ({ conversation, currentUserId }: ChatWindowProps) => {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -62,7 +63,8 @@ export const ChatWindow = ({ conversation, currentUserId }: ChatWindowProps) => 
 
   const handleSend = async () => {
     if (!message.trim() && !selectedFile) return;
-
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setSending(true);
     try {
       if (selectedFile) {
@@ -80,6 +82,7 @@ export const ChatWindow = ({ conversation, currentUserId }: ChatWindowProps) => 
       }
     } finally {
       setSending(false);
+      sendingRef.current = false;
     }
   };
 
