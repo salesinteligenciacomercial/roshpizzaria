@@ -179,11 +179,31 @@ export const useInternalMessages = (conversationId: string | null) => {
     }
   }, [currentUserId]);
 
+  const editMessage = useCallback(async (messageId: string, newContent: string): Promise<boolean> => {
+    if (!currentUserId) return false;
+    try {
+      const { error } = await supabase
+        .from('internal_messages')
+        .update({ content: newContent })
+        .eq('id', messageId)
+        .eq('sender_id', currentUserId);
+
+      if (error) throw error;
+
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content: newContent } : m));
+      return true;
+    } catch (error) {
+      console.error('Error editing message:', error);
+      return false;
+    }
+  }, [currentUserId]);
+
   return {
     messages,
     loading,
     currentUserId,
     sendMessage,
+    editMessage,
     uploadMedia,
     refresh: loadMessages
   };

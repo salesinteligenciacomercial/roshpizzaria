@@ -40,7 +40,7 @@ export const ChatWindow = ({ conversation, currentUserId }: ChatWindowProps) => 
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { messages, loading, sendMessage, uploadMedia } = useInternalMessages(conversation.id);
+  const { messages, loading, sendMessage, editMessage, uploadMedia } = useInternalMessages(conversation.id);
 
   useEffect(() => {
     scrollToBottom();
@@ -249,6 +249,7 @@ export const ChatWindow = ({ conversation, currentUserId }: ChatWindowProps) => 
                 key={msg.id}
                 message={msg}
                 isOwn={msg.sender_id === currentUserId}
+                onEdit={editMessage}
               />
             ))
           )}

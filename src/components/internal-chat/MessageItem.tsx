@@ -1,20 +1,23 @@
 import { InternalMessage } from '@/hooks/useInternalMessages';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { format } from 'date-fns';
-import { Download, ExternalLink, Image, Video, Music, MessageCircle, Users } from 'lucide-react';
+import { Download, ExternalLink, Image, Video, Music, MessageCircle, Users, Pencil, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MediaPreviewDialog } from './MediaPreviewDialog';
 import { PDFThumbnail } from './PDFThumbnail';
 import { downloadFile } from '@/utils/downloadFile';
 import { ConversaPopup } from '@/components/leads/ConversaPopup';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface MessageItemProps {
   message: InternalMessage;
   isOwn: boolean;
+  onEdit?: (messageId: string, newContent: string) => Promise<boolean>;
 }
 
 interface LeadInfo {
@@ -24,11 +27,14 @@ interface LeadInfo {
   phone?: string;
 }
 
-export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
+export const MessageItem = ({ message, isOwn, onEdit }: MessageItemProps) => {
   const navigate = useNavigate();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [conversaPopupOpen, setConversaPopupOpen] = useState(false);
   const [leadInfo, setLeadInfo] = useState<LeadInfo | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(message.content || '');
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   // Carregar info do lead quando for shared_item do tipo lead
   useEffect(() => {
@@ -86,6 +92,17 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
     e.stopPropagation();
     if (leadInfo) {
       setConversaPopupOpen(true);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editContent.trim() || !onEdit) return;
+    const success = await onEdit(message.id, editContent.trim());
+    if (success) {
+      setIsEditing(false);
+      toast.success('Mensagem editada');
+    } else {
+      toast.error('Erro ao editar mensagem');
     }
   };
 
@@ -274,6 +291,29 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
         );
 
       default:
+        if (isEditing) {
+          return (
+            <div className="flex items-center gap-1">
+              <Input
+                ref={editInputRef}
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveEdit();
+                  if (e.key === 'Escape') setIsEditing(false);
+                }}
+                className="text-sm h-7 bg-background/50 border-none"
+                autoFocus
+              />
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={handleSaveEdit}>
+                <Check className="h-3 w-3" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => { setIsEditing(false); setEditContent(message.content || ''); }}>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          );
+        }
         return <p className="text-sm whitespace-pre-wrap">{message.content}</p>;
     }
   };
@@ -296,15 +336,28 @@ export const MessageItem = ({ message, isOwn }: MessageItemProps) => {
           </p>
         )}
         
-        <div
-          className={cn(
-            'rounded-2xl px-4 py-2',
-            isOwn 
-              ? 'bg-primary text-primary-foreground rounded-br-md' 
-              : 'bg-muted rounded-bl-md'
+        <div className="group/msg relative">
+          <div
+            className={cn(
+              'rounded-2xl px-4 py-2',
+              isOwn 
+                ? 'bg-primary text-primary-foreground rounded-br-md' 
+                : 'bg-muted rounded-bl-md'
+            )}
+          >
+            {renderContent()}
+          </div>
+          {isOwn && message.message_type === 'text' && !isEditing && onEdit && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute -left-8 top-1/2 -translate-y-1/2 h-6 w-6 opacity-0 group-hover/msg:opacity-100 transition-opacity"
+              onClick={() => setIsEditing(true)}
+              title="Editar mensagem"
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
           )}
-        >
-          {renderContent()}
         </div>
         
         <p className={cn(
