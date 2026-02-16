@@ -56,6 +56,7 @@ import { useConversationSearch, loadAllUniqueConversations } from "@/hooks/useCo
 import { useActiveAttendance, TEMPO_ATENDIMENTO_ATIVO } from "@/hooks/useActiveAttendance";
 import * as evolutionAPI from "@/services/evolutionApi";
 import { ConversasAdvancedFilter, AdvancedFilters, defaultFilters } from "@/components/conversas/ConversasAdvancedFilter";
+import { ConversaTemplateSender } from "@/components/conversas/ConversaTemplateSender";
 
 // Verificar se URL do WhatsApp (pps.whatsapp.net) expirou
 function isExpiredWhatsAppUrl(url: string): boolean {
@@ -322,6 +323,7 @@ function Conversas() {
   const [productivityPanelOpen, setProductivityPanelOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userCompanyId, setUserCompanyId] = useState<string | null>(null); // Declarar primeiro
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
 
   // Estado para encaminhamento de mensagens
   const [forwardData, setForwardData] = useState<{
@@ -9457,6 +9459,20 @@ function Conversas() {
                     <div>
                       <h4 className="text-foreground font-medium mb-3">Ações Rápidas</h4>
                       <div className="space-y-2">
+                        {/* Quick Messages */}
+                        <Button variant="outline" className="w-full justify-start" onClick={() => setTemplateDialogOpen(true)}>
+                          <FileText className="h-4 w-4 mr-2" /> Enviar Template
+                        </Button>
+                        {userCompanyId && selectedConv && (
+                          <ConversaTemplateSender
+                            open={templateDialogOpen}
+                            onOpenChange={setTemplateDialogOpen}
+                            companyId={userCompanyId}
+                            contactName={selectedConv.contactName || ""}
+                            contactPhone={selectedConv.phoneNumber || selectedConv.id}
+                            origemApi={selectedConv.origemApi}
+                          />
+                        )}
                         {/* Quick Messages */}
                         <Dialog>
                           <DialogTrigger asChild>

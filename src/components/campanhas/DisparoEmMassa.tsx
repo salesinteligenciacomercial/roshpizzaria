@@ -36,6 +36,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { robustFormatPhoneNumber } from "@/utils/phoneFormatter";
 import { TemplateSelector, Template } from "./TemplateSelector";
+import { buildTemplateComponents as buildTemplateComponentsHelper, buildTemplateTextContent as buildTemplateTextContentHelper } from "@/utils/templateHelpers";
 
 interface Lead {
   id: string;
@@ -268,149 +269,13 @@ export function DisparoEmMassa() {
     });
   };
 
-  // Função para construir componentes do template com variáveis do lead
+  // Wrapper functions using shared helpers
   const buildTemplateComponents = (template: Template, lead: Lead): any[] => {
-    const components: any[] = [];
-    
-    if (!template.components) return components;
-    
-    // Processar HEADER (mídia ou texto)
-    const headerComponent = template.components.find((c: any) => c.type === "HEADER");
-    if (headerComponent) {
-      // Header com mídia (VIDEO, IMAGE, DOCUMENT)
-      if (headerComponent.format && headerComponent.format !== "TEXT") {
-        const mediaFormat = headerComponent.format.toLowerCase(); // video, image, document
-        
-        // Verificar se temos URL de mídia para o template
-        if (templateMediaUrl) {
-          const headerParams: any = {
-            type: "header",
-            parameters: [{
-              type: mediaFormat,
-              [mediaFormat]: {
-                link: templateMediaUrl
-              }
-            }]
-          };
-          components.push(headerParams);
-        } else if (headerComponent.example?.header_handle?.[0]) {
-          // Usar handle do exemplo se disponível (mídia pré-registrada na Meta)
-          const headerParams: any = {
-            type: "header",
-            parameters: [{
-              type: mediaFormat,
-              [mediaFormat]: {
-                id: headerComponent.example.header_handle[0]
-              }
-            }]
-          };
-          components.push(headerParams);
-        }
-        // Se não tem mídia, Meta pode rejeitar - log de aviso
-        else {
-          console.warn("⚠️ Template com header de mídia mas sem URL fornecida:", headerComponent.format);
-        }
-      }
-      // Header com texto e variáveis
-      else if (headerComponent.text?.includes("{{")) {
-        const matches = headerComponent.text.match(/\{\{(\d+)\}\}/g) || [];
-        const parameters = matches.map((match: string) => {
-          const varNum = match.replace(/[{}]/g, '');
-          let value = templateVariables[varNum] || "";
-          value = value.replace("{{nome}}", lead.name || "Cliente");
-          return { type: "text", text: value || "Cliente" };
-        });
-        
-        if (parameters.length > 0) {
-          components.push({
-            type: "header",
-            parameters,
-          });
-        }
-      }
-    }
-    
-    // Processar variáveis para o BODY
-    const bodyComponent = template.components.find((c: any) => c.type === "BODY");
-    if (bodyComponent?.text?.includes("{{")) {
-      const matches = bodyComponent.text.match(/\{\{(\d+)\}\}/g) || [];
-      const parameters = matches.map((match: string) => {
-        const varNum = match.replace(/[{}]/g, '');
-        let value = templateVariables[varNum] || "";
-        
-        // Substituir placeholders dinâmicos
-        value = value.replace("{{nome}}", lead.name || "Cliente");
-        value = value.replace("{{telefone}}", lead.telefone || lead.phone || "");
-        value = value.replace("{{email}}", lead.email || "");
-        
-        return { type: "text", text: value || "Cliente" };
-      });
-      
-      if (parameters.length > 0) {
-        components.push({
-          type: "body",
-          parameters,
-        });
-      }
-    }
-    
-    return components;
+    return buildTemplateComponentsHelper(template, lead, templateVariables, templateMediaUrl);
   };
 
-  // Função para construir o texto legível do template para salvar no banco
   const buildTemplateTextContent = (template: Template, lead: Lead): string => {
-    if (!template.components) return `[Template: ${template.name}]`;
-    
-    let textContent = "";
-    
-    // Header
-    const headerComponent = template.components.find((c: any) => c.type === "HEADER");
-    if (headerComponent?.text) {
-      let headerText = headerComponent.text;
-      // Substituir variáveis
-      const matches = headerText.match(/\{\{(\d+)\}\}/g) || [];
-      matches.forEach((match: string) => {
-        const varNum = match.replace(/[{}]/g, '');
-        let value = templateVariables[varNum] || "";
-        value = value.replace("{{nome}}", lead.name || "Cliente");
-        headerText = headerText.replace(match, value || "Cliente");
-      });
-      textContent += `*${headerText}*\n\n`;
-    }
-    
-    // Body
-    const bodyComponent = template.components.find((c: any) => c.type === "BODY");
-    if (bodyComponent?.text) {
-      let bodyText = bodyComponent.text;
-      // Substituir variáveis
-      const matches = bodyText.match(/\{\{(\d+)\}\}/g) || [];
-      matches.forEach((match: string) => {
-        const varNum = match.replace(/[{}]/g, '');
-        let value = templateVariables[varNum] || "";
-        value = value.replace("{{nome}}", lead.name || "Cliente");
-        value = value.replace("{{telefone}}", lead.telefone || lead.phone || "");
-        value = value.replace("{{email}}", lead.email || "");
-        bodyText = bodyText.replace(match, value || "Cliente");
-      });
-      textContent += bodyText;
-    }
-    
-    // Footer
-    const footerComponent = template.components.find((c: any) => c.type === "FOOTER");
-    if (footerComponent?.text) {
-      textContent += `\n\n_${footerComponent.text}_`;
-    }
-    
-    // Buttons
-    const buttonsComponent = template.components.find((c: any) => c.type === "BUTTONS");
-    if (buttonsComponent?.buttons && buttonsComponent.buttons.length > 0) {
-      textContent += "\n\n";
-      buttonsComponent.buttons.forEach((btn: any) => {
-        textContent += `↪ ${btn.text}\n`;
-      });
-    }
-    
-    return textContent.trim() || `[Template: ${template.name}]`;
+    return buildTemplateTextContentHelper(template, lead, templateVariables);
   };
 
   const handleDisparo = async () => {
