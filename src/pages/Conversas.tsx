@@ -1528,6 +1528,7 @@ function Conversas() {
               const novasMensagens = [...prevSelected.messages];
               novasMensagens[mensagemIndex] = {
                 ...novasMensagens[mensagemIndex],
+                content: novaMensagem.mensagem || novasMensagens[mensagemIndex].content,
                 read: novaMensagem.read === true,
                 delivered: novaMensagem.delivered === true || novaMensagem.status === 'Enviada'
               };
@@ -1546,6 +1547,7 @@ function Conversas() {
               const novasMensagens = [...conv.messages];
               novasMensagens[mensagemIndex] = {
                 ...novasMensagens[mensagemIndex],
+                content: novaMensagem.mensagem || novasMensagens[mensagemIndex].content,
                 read: novaMensagem.read === true,
                 delivered: novaMensagem.delivered === true || novaMensagem.status === 'Enviada'
               };
