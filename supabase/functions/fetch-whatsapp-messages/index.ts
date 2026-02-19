@@ -8,13 +8,67 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-// Fallback Evolution API config from environment
 const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "https://evo.continuum.tec.br";
 const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
+// Helper: extrair array de mensagens de diferentes formatos de resposta da Evolution API
+function extractMessages(responseData: any): any[] {
+  if (!responseData) return [];
+  if (Array.isArray(responseData)) return responseData;
+  if (responseData?.messages?.messages?.records) return responseData.messages.messages.records;
+  if (responseData?.messages?.records) return responseData.messages.records;
+  if (responseData?.messages && Array.isArray(responseData.messages)) return responseData.messages;
+  if (responseData?.records && Array.isArray(responseData.records)) return responseData.records;
+  return [];
+}
+
+// Helper: normalizar uma mensagem para formato consistente
+function normalizeMessage(msg: any, defaultJid: string): any {
+  const remoteJid = msg.key?.remoteJid || msg.remoteJid || defaultJid;
+  const fromMe = msg.key?.fromMe ?? msg.fromMe ?? false;
+
+  let messageContent = "[Mídia]";
+  if (msg.message?.conversation) {
+    messageContent = msg.message.conversation;
+  } else if (msg.message?.extendedTextMessage?.text) {
+    messageContent = msg.message.extendedTextMessage.text;
+  } else if (msg.message?.imageMessage?.caption) {
+    messageContent = msg.message.imageMessage.caption || "[Imagem]";
+  } else if (msg.message?.videoMessage?.caption) {
+    messageContent = msg.message.videoMessage.caption || "[Vídeo]";
+  } else if (msg.message?.audioMessage) {
+    messageContent = "[Áudio]";
+  } else if (msg.message?.documentMessage?.fileName) {
+    messageContent = `[Documento: ${msg.message.documentMessage.fileName}]`;
+  } else if (msg.message?.stickerMessage) {
+    messageContent = "[Sticker]";
+  } else if (msg.message?.contactMessage) {
+    messageContent = "[Contato]";
+  } else if (msg.message?.locationMessage) {
+    messageContent = "[Localização]";
+  } else if (msg.body) {
+    messageContent = msg.body;
+  } else if (typeof msg.message === 'string') {
+    messageContent = msg.message;
+  }
+
+  const timestamp = msg.messageTimestamp || msg.timestamp || Math.floor(Date.now() / 1000);
+
+  return {
+    key: {
+      id: msg.key?.id || msg.id || crypto.randomUUID(),
+      remoteJid,
+      fromMe,
+    },
+    message: msg.message || { conversation: messageContent },
+    messageTimestamp: timestamp,
+    pushName: msg.pushName || msg.senderName || null,
+    _originalFromMe: fromMe,
+    _messageContent: messageContent,
+  };
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -31,10 +85,8 @@ serve(async (req) => {
 
     console.log("📱 Buscando mensagens do WhatsApp:", { phoneNumber, companyId, limit });
 
-    // Criar cliente Supabase com service role
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Buscar configuração da conexão WhatsApp
     const { data: connection, error: connectionError } = await supabase
       .from("whatsapp_connections")
       .select("instance_name, evolution_api_url, evolution_api_key, status")
@@ -50,13 +102,11 @@ serve(async (req) => {
     }
 
     const instanceName = connection.instance_name;
-    // Sanitizar URL removendo paths extras
     const rawBaseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
     const baseUrl = rawBaseUrl.replace(/\/(manager|api|v1|v2)?\/?$/i, '').replace(/\/$/, '');
     const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
 
     if (!instanceName || !apiKey) {
-      console.error("❌ Instância ou API Key não configurada");
       return new Response(
         JSON.stringify({ error: "Instância WhatsApp não configurada corretamente", code: "INVALID_CONFIG" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -65,143 +115,110 @@ serve(async (req) => {
 
     console.log("🔗 Configuração Evolution:", { instanceName, baseUrl, hasApiKey: !!apiKey });
 
-    // Formatar número para o padrão do WhatsApp
     const formattedNumber = phoneNumber.replace(/[^0-9]/g, "") + "@s.whatsapp.net";
-
-    // Chamar Evolution API para buscar mensagens
     const evolutionUrl = `${baseUrl}/chat/findMessages/${instanceName}`;
     console.log("📤 Chamando Evolution API:", evolutionUrl);
 
-    const response = await fetch(evolutionUrl, {
-      method: "POST",
-      headers: {
-        "apikey": apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        where: {
-          key: {
-            remoteJid: formattedNumber,
-          },
-        },
-        limit,
-      }),
-    });
+    // ⚡ CORREÇÃO: Bug conhecido do findMessages - tentar múltiplas estratégias
+    let messagesFromResponse: any[] = [];
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("❌ Erro Evolution API:", response.status, errorText);
-      return new Response(
-        JSON.stringify({ 
-          error: `Erro ao buscar mensagens: ${response.statusText}`, 
-          code: "EVOLUTION_ERROR",
-          details: errorText 
+    // Estratégia 1: where.key.remoteJid (padrão documentado)
+    try {
+      const res1 = await fetch(evolutionUrl, {
+        method: "POST",
+        headers: { "apikey": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          where: { key: { remoteJid: formattedNumber } },
+          limit,
         }),
-        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      });
+      if (res1.ok) {
+        const data1 = await res1.json();
+        messagesFromResponse = extractMessages(data1);
+        console.log(`📊 Estratégia 1 (key.remoteJid): ${messagesFromResponse.length} mensagens`);
+      }
+    } catch (e) {
+      console.warn("⚠️ Estratégia 1 falhou:", e);
     }
 
-    const responseData = await response.json();
-    
-    console.log("📥 Estrutura da resposta Evolution:", JSON.stringify(Object.keys(responseData || {})));
-    
-    // Evolution API retorna estrutura aninhada - testar várias possibilidades
-    let messagesArray: any[] = [];
-    
-    if (Array.isArray(responseData)) {
-      // Resposta direta como array
-      messagesArray = responseData;
-      console.log("✅ Formato: array direto");
-    } else if (responseData?.messages?.messages?.records) {
-      // Estrutura nova: { messages: { messages: { records: [...] } } }
-      messagesArray = responseData.messages.messages.records;
-      console.log("✅ Formato: messages.messages.records");
-    } else if (responseData?.messages?.records) {
-      // Estrutura alternativa: { messages: { records: [...] } }
-      messagesArray = responseData.messages.records;
-      console.log("✅ Formato: messages.records");
-    } else if (responseData?.messages && Array.isArray(responseData.messages)) {
-      // Estrutura: { messages: [...] }
-      messagesArray = responseData.messages;
-      console.log("✅ Formato: messages array");
-    } else if (responseData?.records && Array.isArray(responseData.records)) {
-      // Estrutura: { records: [...] }
-      messagesArray = responseData.records;
-      console.log("✅ Formato: records");
-    }
-    
-    // Normalizar mensagens para garantir campos consistentes
-    const normalizedMessages = messagesArray.map((msg: any) => {
-      // Extrair o remoteJid corretamente - pode estar em diferentes lugares
-      const remoteJid = msg.key?.remoteJid || msg.remoteJid || formattedNumber;
-      
-      // Verificar se é mensagem enviada ou recebida
-      // fromMe pode estar em msg.key.fromMe ou msg.fromMe
-      const fromMe = msg.key?.fromMe ?? msg.fromMe ?? false;
-      
-      // Extrair conteúdo da mensagem de diferentes estruturas possíveis
-      let messageContent = "[Mídia]";
-      if (msg.message?.conversation) {
-        messageContent = msg.message.conversation;
-      } else if (msg.message?.extendedTextMessage?.text) {
-        messageContent = msg.message.extendedTextMessage.text;
-      } else if (msg.message?.imageMessage?.caption) {
-        messageContent = msg.message.imageMessage.caption || "[Imagem]";
-      } else if (msg.message?.videoMessage?.caption) {
-        messageContent = msg.message.videoMessage.caption || "[Vídeo]";
-      } else if (msg.message?.audioMessage) {
-        messageContent = "[Áudio]";
-      } else if (msg.message?.documentMessage?.fileName) {
-        messageContent = `[Documento: ${msg.message.documentMessage.fileName}]`;
-      } else if (msg.message?.stickerMessage) {
-        messageContent = "[Sticker]";
-      } else if (msg.message?.contactMessage) {
-        messageContent = "[Contato]";
-      } else if (msg.message?.locationMessage) {
-        messageContent = "[Localização]";
-      } else if (msg.body) {
-        // Algumas versões usam msg.body diretamente
-        messageContent = msg.body;
-      } else if (typeof msg.message === 'string') {
-        messageContent = msg.message;
+    // Estratégia 2: where.remoteJid direto (sem wrapper key)
+    if (messagesFromResponse.length === 0) {
+      try {
+        const res2 = await fetch(evolutionUrl, {
+          method: "POST",
+          headers: { "apikey": apiKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            where: { remoteJid: formattedNumber },
+            limit: limit * 5,
+          }),
+        });
+        if (res2.ok) {
+          const data2 = await res2.json();
+          let msgs2 = extractMessages(data2);
+          console.log(`📊 Estratégia 2 (remoteJid direto): ${msgs2.length} mensagens brutas`);
+          
+          // ⚡ CORREÇÃO: Evolution API pode ignorar o filtro - filtrar client-side
+          const phoneDigits = phoneNumber.replace(/[^0-9]/g, "");
+          msgs2 = msgs2.filter((msg: any) => {
+            const msgJid = (msg.key?.remoteJid || msg.remoteJid || "").replace("@s.whatsapp.net", "").replace("@g.us", "");
+            return msgJid.includes(phoneDigits) || phoneDigits.includes(msgJid);
+          }).slice(0, limit);
+          
+          messagesFromResponse = msgs2;
+          console.log(`📊 Estratégia 2 filtrada: ${messagesFromResponse.length} mensagens`);
+        }
+      } catch (e) {
+        console.warn("⚠️ Estratégia 2 falhou:", e);
       }
-      
-      // Extrair timestamp
-      const timestamp = msg.messageTimestamp || msg.timestamp || Math.floor(Date.now() / 1000);
-      
-      return {
-        key: {
-          id: msg.key?.id || msg.id || crypto.randomUUID(),
-          remoteJid: remoteJid,
-          fromMe: fromMe,
-        },
-        message: msg.message || { conversation: messageContent },
-        messageTimestamp: timestamp,
-        pushName: msg.pushName || msg.senderName || null,
-        _originalFromMe: fromMe, // Campo auxiliar para debug
-        _messageContent: messageContent, // Campo auxiliar para debug
-      };
-    });
-    
-    // Log amostra para debug
+    }
+
+    // Estratégia 3: Buscar TODAS as mensagens e filtrar client-side (workaround para bug)
+    if (messagesFromResponse.length === 0) {
+      console.log("⚠️ Tentando buscar todas e filtrar client-side...");
+      try {
+        const res3 = await fetch(evolutionUrl, {
+          method: "POST",
+          headers: { "apikey": apiKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            where: {},
+            limit: Math.min(limit * 10, 500),
+          }),
+        });
+        if (res3.ok) {
+          const data3 = await res3.json();
+          const allMessages = extractMessages(data3);
+          console.log(`📊 Estratégia 3: ${allMessages.length} mensagens totais retornadas`);
+
+          const phoneDigits = phoneNumber.replace(/[^0-9]/g, "");
+          messagesFromResponse = allMessages.filter((msg: any) => {
+            const msgJid = (msg.key?.remoteJid || msg.remoteJid || "").replace("@s.whatsapp.net", "").replace("@g.us", "");
+            return msgJid.includes(phoneDigits) || phoneDigits.includes(msgJid);
+          }).slice(0, limit);
+
+          console.log(`📊 Estratégia 3 filtrada: ${messagesFromResponse.length} mensagens para ${phoneDigits}`);
+        }
+      } catch (e) {
+        console.warn("⚠️ Estratégia 3 falhou:", e);
+      }
+    }
+
+    // Normalizar mensagens
+    const normalizedMessages = messagesFromResponse.map((msg: any) => normalizeMessage(msg, formattedNumber));
+
+    // Log para debug
     if (normalizedMessages.length > 0) {
-      console.log(`📊 Amostra primeira mensagem:`, JSON.stringify({
-        fromMe: normalizedMessages[0].key.fromMe,
-        content: normalizedMessages[0]._messageContent?.substring(0, 50),
-      }));
-      
       const sentCount = normalizedMessages.filter((m: any) => m.key.fromMe === true).length;
       const receivedCount = normalizedMessages.filter((m: any) => m.key.fromMe === false).length;
       console.log(`📊 Enviadas: ${sentCount}, Recebidas: ${receivedCount}`);
     }
-    
+
     console.log(`✅ ${normalizedMessages.length} mensagens encontradas e normalizadas`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         messages: normalizedMessages,
-        count: normalizedMessages.length 
+        count: normalizedMessages.length,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
