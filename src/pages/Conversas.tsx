@@ -676,6 +676,9 @@ function Conversas() {
     httpStatus?: number;
     message?: string;
     details?: any;
+    message_id?: string;
+    data?: any;
+    provider?: string;
   }> => {
     const maxRetries = 3;
     console.log('🔄 [SEND-WHATSAPP-RETRY] Iniciando envio (tentativa 1):', {
@@ -763,9 +766,12 @@ function Conversas() {
           };
         }
         if (data?.success) {
-          console.log('✅ [SEND-WHATSAPP-RETRY] Mensagem enviada com sucesso!');
+          console.log('✅ [SEND-WHATSAPP-RETRY] Mensagem enviada com sucesso! message_id:', data?.message_id);
           return {
-            success: true
+            success: true,
+            message_id: data?.message_id,
+            data: data?.data,
+            provider: data?.provider,
           };
         }
         // Falha desconhecida
