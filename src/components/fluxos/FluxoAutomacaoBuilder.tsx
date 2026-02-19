@@ -174,7 +174,7 @@ export function FluxoAutomacaoBuilder() {
           ))}
         </div>
       ) : fluxos.length > 0 ? (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-3">
           {fluxos.map((fluxo) => (
             <Card key={fluxo.id} className="border-0 shadow-card hover:shadow-lg transition-all">
               <CardHeader>
