@@ -93,7 +93,7 @@ serve(async (req) => {
           console.log('📝 [EDIT] Enviando edição para Evolution API:', editUrl);
 
           const response = await fetch(editUrl, {
-            method: 'PUT',
+            method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'apikey': EVOLUTION_API_KEY,
