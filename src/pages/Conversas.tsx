@@ -486,6 +486,7 @@ function Conversas() {
   // Estados para sincronização WhatsApp e restauração de conversas
   const [isContactInactive, setIsContactInactive] = useState(false);
   const [restoringConversation, setRestoringConversation] = useState(false);
+  const [restoreProgress, setRestoreProgress] = useState<{ step: number; label: string } | null>(null);
 
   // 🔤 Estado para correção automática de texto
   const [autoCorrectEnabled, setAutoCorrectEnabled] = useState<boolean>(() => {
@@ -2712,19 +2713,31 @@ function Conversas() {
     }
     try {
       setRestoringConversation(true);
+      setRestoreProgress({ step: 10, label: "Conectando ao WhatsApp..." });
       console.log("🔄 Puxando histórico do WhatsApp:", selectedConv.phoneNumber);
       
+      setRestoreProgress({ step: 35, label: "Buscando 200 mensagens..." });
       // Buscar mensagens via edge function (seguro, sem CORS)
-      const messages = await evolutionAPI.getMessages(userCompanyId, selectedConv.phoneNumber, 50);
+      const messages = await evolutionAPI.getMessages(userCompanyId, selectedConv.phoneNumber, 200);
       
       if (messages.length === 0) {
         toast.info("Nenhuma mensagem encontrada no WhatsApp para este número");
         return;
       }
       
+      setRestoreProgress({ step: 70, label: `Processando ${messages.length} mensagens encontradas...` });
+      await new Promise(r => setTimeout(r, 300)); // pequena pausa visual
+      
+      setRestoreProgress({ step: 90, label: "Salvando no banco de dados..." });
       // Salvar mensagens no banco
       await evolutionAPI.saveMessagesToDatabase(messages, userCompanyId, leadVinculado?.id);
-      toast.success(`${messages.length} mensagens restauradas com sucesso!`);
+      
+      setRestoreProgress({ step: 100, label: "Concluído!" });
+      await new Promise(r => setTimeout(r, 500)); // mostrar 100% por um momento
+
+      const enviadas = messages.filter((m: any) => m.key?.fromMe === true).length;
+      const recebidas = messages.filter((m: any) => m.key?.fromMe === false).length;
+      toast.success(`${messages.length} mensagens restauradas! (${enviadas} enviadas, ${recebidas} recebidas)`);
 
       // Recarregar conversas para exibir as novas mensagens
       await loadSupabaseConversations();
@@ -2734,6 +2747,7 @@ function Conversas() {
       toast.error("Erro ao restaurar histórico. Verifique a conexão WhatsApp.");
     } finally {
       setRestoringConversation(false);
+      setRestoreProgress(null);
     }
   };
 
@@ -8609,8 +8623,8 @@ function Conversas() {
       }}>
         {selectedConv ? <>
             {/* Header - FIXO NO TOPO */}
-            <div className="flex-shrink-0 bg-background border-b z-10" style={{ minHeight: '56px', maxHeight: '60px' }}>
-              <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onFinalizeAtendimentoSilent={finalizarAtendimentoSilent} onTransferAtendimento={() => setTransferDialogOpen(true)} onToggleAI={() => toggleAiMode(selectedConv.id)} isAIActive={aiMode[selectedConv.id] || false} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} showBackButton={isMobile} onBack={() => setSelectedConv(null)} />
+            <div className="flex-shrink-0 bg-background border-b z-10" style={{ minHeight: '56px', maxHeight: '84px' }}>
+              <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onFinalizeAtendimentoSilent={finalizarAtendimentoSilent} onTransferAtendimento={() => setTransferDialogOpen(true)} onToggleAI={() => toggleAiMode(selectedConv.id)} isAIActive={aiMode[selectedConv.id] || false} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} restoreProgress={restoreProgress} showBackButton={isMobile} onBack={() => setSelectedConv(null)} />
             </div>
             
             {/* Dialog de Transferir Atendimento */}

@@ -74,7 +74,7 @@ serve(async (req) => {
   }
 
   try {
-    const { phoneNumber, companyId, limit = 50 } = await req.json();
+    const { phoneNumber, companyId, limit = 200 } = await req.json();
 
     if (!phoneNumber || !companyId) {
       return new Response(
@@ -181,7 +181,7 @@ serve(async (req) => {
           headers: { "apikey": apiKey, "Content-Type": "application/json" },
           body: JSON.stringify({
             where: {},
-            limit: Math.min(limit * 10, 500),
+            limit: Math.min(limit * 5, 1000),
           }),
         });
         if (res3.ok) {

@@ -61,7 +61,7 @@ export async function getContacts(instanceName: string): Promise<EvolutionContac
 export async function getMessages(
   companyId: string, 
   phoneNumber: string, 
-  limit: number = 50
+  limit: number = 200
 ): Promise<any[]> {
   try {
     console.log("🔄 Buscando histórico via edge function:", { companyId, phoneNumber, limit });

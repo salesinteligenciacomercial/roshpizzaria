@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Phone, Video, Info, User, MessageSquare, Instagram, Facebook, FileText, DollarSign, RefreshCw, CheckCircle2, AlertCircle, Loader2, Check, Plus, RotateCcw, ArrowRightLeft, Bot, ArrowLeft } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Dialog, DialogContent, DialogHeader as UIDialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -26,7 +27,7 @@ import { useEffect, useState } from "react";
    mostrarBotaoCriarLead?: boolean;
    onCriarLead?: () => void;
   onFinalizeAtendimento?: (message: string) => void;
-  onFinalizeAtendimentoSilent?: () => void; // 🆕 Finalizar sem enviar mensagem
+  onFinalizeAtendimentoSilent?: () => void;
    onTransferAtendimento?: () => void;
    onToggleAI?: () => void;
    isAIActive?: boolean;
@@ -34,6 +35,7 @@ import { useEffect, useState } from "react";
    isContactInactive?: boolean;
    onRestoreConversation?: () => void;
    restoringConversation?: boolean;
+   restoreProgress?: { step: number; label: string } | null;
    onBack?: () => void;
    showBackButton?: boolean;
  }
@@ -62,6 +64,7 @@ import { useEffect, useState } from "react";
    isContactInactive = false,
    onRestoreConversation,
    restoringConversation = false,
+   restoreProgress = null,
    onBack,
    showBackButton = false,
   }: ConversationHeaderProps) {
@@ -129,7 +132,7 @@ import { useEffect, useState } from "react";
    };
 
   return (
-    <div className="w-full bg-background border-b border-border shadow-sm" style={{ maxHeight: '60px', overflow: 'hidden' }}>
+    <div className="w-full bg-background border-b border-border shadow-sm" style={{ maxHeight: restoreProgress ? '84px' : '60px', overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
        {/* Header compacto - tudo em uma linha */}
        <div className="px-2 py-1.5 flex items-center justify-between gap-2" style={{ height: '56px' }}>
          <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -431,7 +434,18 @@ import { useEffect, useState } from "react";
               </Button>
             </div>
        </div>
-          
+
+       {/* Barra de progresso - aparece durante o Puxar Histórico */}
+       {restoreProgress && (
+         <div className="px-3 pb-2 pt-0.5 space-y-1">
+           <div className="flex items-center justify-between">
+             <span className="text-xs text-muted-foreground">{restoreProgress.label}</span>
+             <span className="text-xs font-medium text-primary">{restoreProgress.step}%</span>
+           </div>
+           <Progress value={restoreProgress.step} className="h-1.5" />
+         </div>
+       )}
+
        {/* Botão criar lead - movido para dentro da mesma linha */}
     </div>
   );
