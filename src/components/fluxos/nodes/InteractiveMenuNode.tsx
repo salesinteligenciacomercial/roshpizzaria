@@ -8,7 +8,7 @@ export function InteractiveMenuNode({ data }: any) {
     <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-teal-500 to-teal-600 border-2 border-teal-400 min-w-[240px]">
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         className="w-3 h-3 !bg-teal-300 !border-2 !border-white"
       />
       
@@ -42,7 +42,7 @@ export function InteractiveMenuNode({ data }: any) {
       {/* Multiple output handles for each button */}
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         className="w-3 h-3 !bg-teal-300 !border-2 !border-white"
       />
     </div>
