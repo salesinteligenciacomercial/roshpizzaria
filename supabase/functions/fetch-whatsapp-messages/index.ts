@@ -11,7 +11,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "https://evo.continuum.tec.br";
 const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
-// Helper: extrair array de mensagens de diferentes formatos de resposta da Evolution API
+// Helper: extrair array de mensagens de diferentes formatos de resposta
 function extractMessages(responseData: any): any[] {
   if (!responseData) return [];
   if (Array.isArray(responseData)) return responseData;
@@ -68,6 +68,41 @@ function normalizeMessage(msg: any, defaultJid: string): any {
   };
 }
 
+// Helper: fazer fetch com retry
+async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response | null> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await fetch(url, options);
+      if (res.ok) return res;
+      console.warn(`⚠️ Tentativa ${i + 1} falhou com status ${res.status}`);
+    } catch (e) {
+      console.warn(`⚠️ Tentativa ${i + 1} erro:`, e);
+    }
+  }
+  return null;
+}
+
+// Helper: filtrar mensagens por número de telefone
+function filterByPhone(messages: any[], phoneDigits: string): any[] {
+  return messages.filter((msg: any) => {
+    const msgJid = (msg.key?.remoteJid || msg.remoteJid || "")
+      .replace("@s.whatsapp.net", "")
+      .replace("@g.us", "");
+    return msgJid.includes(phoneDigits) || phoneDigits.includes(msgJid);
+  });
+}
+
+// Helper: deduplicar mensagens por ID
+function deduplicateMessages(messages: any[]): any[] {
+  const seen = new Set<string>();
+  return messages.filter((msg) => {
+    const id = msg.key?.id || msg.id || "";
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -115,110 +150,156 @@ serve(async (req) => {
 
     console.log("🔗 Configuração Evolution:", { instanceName, baseUrl, hasApiKey: !!apiKey });
 
-    const formattedNumber = phoneNumber.replace(/[^0-9]/g, "") + "@s.whatsapp.net";
+    const phoneDigits = phoneNumber.replace(/[^0-9]/g, "");
+    const formattedNumber = phoneDigits + "@s.whatsapp.net";
     const evolutionUrl = `${baseUrl}/chat/findMessages/${instanceName}`;
+    const headers = { "apikey": apiKey, "Content-Type": "application/json" };
+
     console.log("📤 Chamando Evolution API:", evolutionUrl);
 
-    // ⚡ CORREÇÃO: Bug conhecido do findMessages - tentar múltiplas estratégias
-    let messagesFromResponse: any[] = [];
+    // =====================================================
+    // ESTRATÉGIA DUPLA: Buscar ENVIADAS e RECEBIDAS separadamente
+    // Bug conhecido da Evolution API: findMessages com remoteJid 
+    // pode não funcionar corretamente. Usamos múltiplas abordagens.
+    // =====================================================
+    
+    let allMessages: any[] = [];
 
-    // Estratégia 1: where.key.remoteJid (padrão documentado)
-    try {
-      const res1 = await fetch(evolutionUrl, {
+    // ── ABORDAGEM 1: Buscar com filtro por remoteJid (enviadas + recebidas juntas) ──
+    console.log("🔍 Abordagem 1: Filtro key.remoteJid...");
+    const res1 = await fetchWithRetry(evolutionUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        where: { key: { remoteJid: formattedNumber } },
+        limit: limit,
+      }),
+    });
+    if (res1) {
+      const data1 = await res1.json();
+      const msgs1 = extractMessages(data1);
+      const filtered1 = filterByPhone(msgs1, phoneDigits);
+      console.log(`📊 Abordagem 1: ${msgs1.length} brutas → ${filtered1.length} filtradas`);
+      
+      const sent1 = filtered1.filter((m: any) => m.key?.fromMe === true).length;
+      const recv1 = filtered1.filter((m: any) => m.key?.fromMe === false).length;
+      console.log(`📊 Abordagem 1 detalhe: ${sent1} enviadas, ${recv1} recebidas`);
+      
+      allMessages.push(...filtered1);
+    }
+
+    // ── ABORDAGEM 2: Buscar EXPLICITAMENTE recebidas (fromMe: false) ──
+    // Isso garante que mensagens recebidas sejam incluídas
+    console.log("🔍 Abordagem 2: Buscar recebidas explicitamente (fromMe: false)...");
+    const res2 = await fetchWithRetry(evolutionUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        where: { key: { remoteJid: formattedNumber, fromMe: false } },
+        limit: limit,
+      }),
+    });
+    if (res2) {
+      const data2 = await res2.json();
+      const msgs2 = extractMessages(data2);
+      const filtered2 = filterByPhone(msgs2, phoneDigits);
+      console.log(`📊 Abordagem 2 (recebidas): ${msgs2.length} brutas → ${filtered2.length} filtradas`);
+      allMessages.push(...filtered2);
+    }
+
+    // ── ABORDAGEM 3: Buscar EXPLICITAMENTE enviadas (fromMe: true) ──
+    console.log("🔍 Abordagem 3: Buscar enviadas explicitamente (fromMe: true)...");
+    const res3 = await fetchWithRetry(evolutionUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        where: { key: { remoteJid: formattedNumber, fromMe: true } },
+        limit: limit,
+      }),
+    });
+    if (res3) {
+      const data3 = await res3.json();
+      const msgs3 = extractMessages(data3);
+      const filtered3 = filterByPhone(msgs3, phoneDigits);
+      console.log(`📊 Abordagem 3 (enviadas): ${msgs3.length} brutas → ${filtered3.length} filtradas`);
+      allMessages.push(...filtered3);
+    }
+
+    // ── ABORDAGEM 4: remoteJid sem wrapper key ──
+    if (allMessages.length === 0) {
+      console.log("🔍 Abordagem 4: remoteJid direto (sem wrapper key)...");
+      const res4 = await fetchWithRetry(evolutionUrl, {
         method: "POST",
-        headers: { "apikey": apiKey, "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
-          where: { key: { remoteJid: formattedNumber } },
-          limit,
+          where: { remoteJid: formattedNumber },
+          limit: limit * 3,
         }),
       });
-      if (res1.ok) {
-        const data1 = await res1.json();
-        messagesFromResponse = extractMessages(data1);
-        console.log(`📊 Estratégia 1 (key.remoteJid): ${messagesFromResponse.length} mensagens`);
-      }
-    } catch (e) {
-      console.warn("⚠️ Estratégia 1 falhou:", e);
-    }
-
-    // Estratégia 2: where.remoteJid direto (sem wrapper key)
-    if (messagesFromResponse.length === 0) {
-      try {
-        const res2 = await fetch(evolutionUrl, {
-          method: "POST",
-          headers: { "apikey": apiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            where: { remoteJid: formattedNumber },
-            limit: limit * 5,
-          }),
-        });
-        if (res2.ok) {
-          const data2 = await res2.json();
-          let msgs2 = extractMessages(data2);
-          console.log(`📊 Estratégia 2 (remoteJid direto): ${msgs2.length} mensagens brutas`);
-          
-          // ⚡ CORREÇÃO: Evolution API pode ignorar o filtro - filtrar client-side
-          const phoneDigits = phoneNumber.replace(/[^0-9]/g, "");
-          msgs2 = msgs2.filter((msg: any) => {
-            const msgJid = (msg.key?.remoteJid || msg.remoteJid || "").replace("@s.whatsapp.net", "").replace("@g.us", "");
-            return msgJid.includes(phoneDigits) || phoneDigits.includes(msgJid);
-          }).slice(0, limit);
-          
-          messagesFromResponse = msgs2;
-          console.log(`📊 Estratégia 2 filtrada: ${messagesFromResponse.length} mensagens`);
-        }
-      } catch (e) {
-        console.warn("⚠️ Estratégia 2 falhou:", e);
+      if (res4) {
+        const data4 = await res4.json();
+        const msgs4 = extractMessages(data4);
+        const filtered4 = filterByPhone(msgs4, phoneDigits);
+        console.log(`📊 Abordagem 4: ${msgs4.length} brutas → ${filtered4.length} filtradas`);
+        allMessages.push(...filtered4);
       }
     }
 
-    // Estratégia 3: Buscar TODAS as mensagens e filtrar client-side (workaround para bug)
-    if (messagesFromResponse.length === 0) {
-      console.log("⚠️ Tentando buscar todas e filtrar client-side...");
-      try {
-        const res3 = await fetch(evolutionUrl, {
-          method: "POST",
-          headers: { "apikey": apiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            where: {},
-            limit: Math.min(limit * 5, 1000),
-          }),
-        });
-        if (res3.ok) {
-          const data3 = await res3.json();
-          const allMessages = extractMessages(data3);
-          console.log(`📊 Estratégia 3: ${allMessages.length} mensagens totais retornadas`);
-
-          const phoneDigits = phoneNumber.replace(/[^0-9]/g, "");
-          messagesFromResponse = allMessages.filter((msg: any) => {
-            const msgJid = (msg.key?.remoteJid || msg.remoteJid || "").replace("@s.whatsapp.net", "").replace("@g.us", "");
-            return msgJid.includes(phoneDigits) || phoneDigits.includes(msgJid);
-          }).slice(0, limit);
-
-          console.log(`📊 Estratégia 3 filtrada: ${messagesFromResponse.length} mensagens para ${phoneDigits}`);
-        }
-      } catch (e) {
-        console.warn("⚠️ Estratégia 3 falhou:", e);
+    // ── ABORDAGEM 5: VARREDURA TOTAL - Buscar TUDO e filtrar client-side ──
+    // Último recurso se nenhuma abordagem anterior trouxe recebidas
+    const uniqueBeforeSweep = deduplicateMessages(allMessages);
+    const recvBeforeSweep = uniqueBeforeSweep.filter((m: any) => 
+      (m.key?.fromMe === false) || (m.fromMe === false)
+    ).length;
+    
+    if (recvBeforeSweep === 0) {
+      console.log("⚠️ Nenhuma mensagem recebida ainda - Abordagem 5: VARREDURA TOTAL...");
+      const res5 = await fetchWithRetry(evolutionUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          where: {},
+          limit: Math.min(limit * 5, 2000),
+        }),
+      });
+      if (res5) {
+        const data5 = await res5.json();
+        const allRaw = extractMessages(data5);
+        console.log(`📊 Abordagem 5: ${allRaw.length} mensagens totais no banco`);
+        
+        const filtered5 = filterByPhone(allRaw, phoneDigits);
+        console.log(`📊 Abordagem 5 filtrada: ${filtered5.length} mensagens do contato ${phoneDigits}`);
+        
+        const sent5 = filtered5.filter((m: any) => m.key?.fromMe === true || m.fromMe === true).length;
+        const recv5 = filtered5.filter((m: any) => m.key?.fromMe === false || m.fromMe === false).length;
+        console.log(`📊 Abordagem 5 detalhe: ${sent5} enviadas, ${recv5} recebidas`);
+        
+        allMessages.push(...filtered5);
       }
     }
 
-    // Normalizar mensagens
-    const normalizedMessages = messagesFromResponse.map((msg: any) => normalizeMessage(msg, formattedNumber));
+    // ── DEDUPLICAR e NORMALIZAR ──
+    const deduplicated = deduplicateMessages(allMessages);
+    const normalizedMessages = deduplicated
+      .map((msg: any) => normalizeMessage(msg, formattedNumber))
+      .slice(0, limit);
 
-    // Log para debug
-    if (normalizedMessages.length > 0) {
-      const sentCount = normalizedMessages.filter((m: any) => m.key.fromMe === true).length;
-      const receivedCount = normalizedMessages.filter((m: any) => m.key.fromMe === false).length;
-      console.log(`📊 Enviadas: ${sentCount}, Recebidas: ${receivedCount}`);
+    // Log final detalhado
+    const sentCount = normalizedMessages.filter((m: any) => m.key.fromMe === true).length;
+    const receivedCount = normalizedMessages.filter((m: any) => m.key.fromMe === false).length;
+    console.log(`✅ RESULTADO FINAL: ${normalizedMessages.length} mensagens (${sentCount} enviadas, ${receivedCount} recebidas)`);
+    
+    if (receivedCount === 0 && normalizedMessages.length > 0) {
+      console.warn("⚠️ ATENÇÃO: Nenhuma mensagem recebida encontrada! A Evolution API pode não estar armazenando mensagens recebidas. Verifique se STORE_MESSAGES está habilitado na instância.");
     }
-
-    console.log(`✅ ${normalizedMessages.length} mensagens encontradas e normalizadas`);
 
     return new Response(
       JSON.stringify({
         success: true,
         messages: normalizedMessages,
         count: normalizedMessages.length,
+        sent: sentCount,
+        received: receivedCount,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

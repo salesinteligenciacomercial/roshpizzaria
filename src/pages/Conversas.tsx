@@ -2735,8 +2735,8 @@ function Conversas() {
       setRestoreProgress({ step: 100, label: "Concluído!" });
       await new Promise(r => setTimeout(r, 500)); // mostrar 100% por um momento
 
-      const enviadas = messages.filter((m: any) => m.key?.fromMe === true).length;
-      const recebidas = messages.filter((m: any) => m.key?.fromMe === false).length;
+      const enviadas = messages.filter((m: any) => m.key?.fromMe === true || m._originalFromMe === true).length;
+      const recebidas = messages.filter((m: any) => m.key?.fromMe === false && m._originalFromMe !== true).length;
       toast.success(`${messages.length} mensagens restauradas! (${enviadas} enviadas, ${recebidas} recebidas)`);
 
       // Recarregar conversas para exibir as novas mensagens
