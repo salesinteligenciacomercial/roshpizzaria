@@ -31,7 +31,7 @@ export function MediaNode({ data }: any) {
     <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-pink-500 to-rose-600 border-2 border-pink-400 min-w-[220px]">
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         className="w-3 h-3 !bg-pink-300 !border-2 !border-white"
       />
       
@@ -63,7 +63,7 @@ export function MediaNode({ data }: any) {
 
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         className="w-3 h-3 !bg-pink-300 !border-2 !border-white"
       />
     </div>

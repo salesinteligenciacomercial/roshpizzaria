@@ -21,7 +21,7 @@ export function ConditionNode({ data }: any) {
     <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-violet-500 to-violet-600 border-2 border-violet-400 min-w-[220px]">
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         className="w-3 h-3 !bg-violet-300 !border-2 !border-white"
       />
       
@@ -48,20 +48,20 @@ export function ConditionNode({ data }: any) {
       {/* Duas saídas: Sim e Não */}
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         id="true"
-        style={{ left: '30%' }}
+        style={{ top: '35%' }}
         className="w-3 h-3 !bg-green-400 !border-2 !border-white"
       />
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         id="false"
-        style={{ left: '70%' }}
+        style={{ top: '65%' }}
         className="w-3 h-3 !bg-red-400 !border-2 !border-white"
       />
       
-      <div className="flex justify-between mt-2 text-[10px] text-white/70 font-semibold">
+      <div className="absolute right-[-40px] top-0 bottom-0 flex flex-col justify-center gap-4 text-[10px] text-white/70 font-semibold">
         <span>SIM</span>
         <span>NÃO</span>
       </div>

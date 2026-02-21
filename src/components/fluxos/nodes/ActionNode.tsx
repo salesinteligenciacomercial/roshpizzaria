@@ -27,7 +27,7 @@ export function ActionNode({ data }: any) {
     <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 border-2 border-amber-400 min-w-[220px]">
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         className="w-3 h-3 !bg-amber-300 !border-2 !border-white"
       />
       
@@ -53,7 +53,7 @@ export function ActionNode({ data }: any) {
 
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         className="w-3 h-3 !bg-amber-300 !border-2 !border-white"
       />
     </div>
