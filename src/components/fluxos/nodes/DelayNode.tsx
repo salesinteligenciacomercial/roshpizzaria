@@ -21,7 +21,7 @@ export function DelayNode({ data }: any) {
   };
 
   return (
-    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-slate-600 to-slate-700 border-2 border-slate-500 min-w-[220px]">
+    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-slate-600 to-slate-700 border-2 border-slate-500 min-w-[220px] max-w-[260px] break-words">
       <Handle
         type="target"
         position={Position.Left}

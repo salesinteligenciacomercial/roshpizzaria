@@ -42,7 +42,7 @@ export function AIAgentNode({ data }: any) {
   };
 
   return (
-    <div className={`px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br ${getAgentColor()} border-2 min-w-[240px] relative overflow-hidden`}>
+    <div className={`px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br ${getAgentColor()} border-2 min-w-[240px] max-w-[260px] break-words relative overflow-hidden`}>
       {/* Efeito de brilho animado */}
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse" />
       

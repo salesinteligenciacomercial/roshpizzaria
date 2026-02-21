@@ -3,7 +3,7 @@ import { Bot, Sparkles } from 'lucide-react';
 
 export function IANode({ data }: any) {
   return (
-    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 border-2 border-blue-400 min-w-[240px] relative overflow-hidden">
+    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 border-2 border-blue-400 min-w-[240px] max-w-[260px] break-words relative overflow-hidden">
       {/* Efeito de brilho */}
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse" />
       

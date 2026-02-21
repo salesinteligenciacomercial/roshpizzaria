@@ -28,7 +28,7 @@ export function MediaNode({ data }: any) {
   };
 
   return (
-    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-pink-500 to-rose-600 border-2 border-pink-400 min-w-[220px]">
+    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-pink-500 to-rose-600 border-2 border-pink-400 min-w-[220px] max-w-[260px] break-words">
       <Handle
         type="target"
         position={Position.Left}

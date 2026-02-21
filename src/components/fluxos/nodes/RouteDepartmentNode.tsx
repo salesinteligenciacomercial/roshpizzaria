@@ -3,7 +3,7 @@ import { Building2 } from 'lucide-react';
 
 export function RouteDepartmentNode({ data }: any) {
   return (
-    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-rose-500 to-rose-600 border-2 border-rose-400 min-w-[220px]">
+    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-rose-500 to-rose-600 border-2 border-rose-400 min-w-[220px] max-w-[260px] break-words">
       <Handle
         type="target"
         position={Position.Left}
