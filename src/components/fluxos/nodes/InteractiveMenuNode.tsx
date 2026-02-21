@@ -5,7 +5,7 @@ export function InteractiveMenuNode({ data }: any) {
   const buttons = data.buttons || [];
 
   return (
-    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-teal-500 to-teal-600 border-2 border-teal-400 min-w-[240px]">
+    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-teal-500 to-teal-600 border-2 border-teal-400 min-w-[240px] max-w-[260px] break-words">
       <Handle
         type="target"
         position={Position.Left}

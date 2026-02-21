@@ -20,7 +20,7 @@ export function TriggerNode({ data }: any) {
   };
 
   return (
-    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 border-2 border-emerald-400 min-w-[220px]">
+    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 border-2 border-emerald-400 min-w-[220px] max-w-[260px] break-words">
       <div className="flex items-center gap-3 text-white">
         <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
           {getTriggerIcon()}

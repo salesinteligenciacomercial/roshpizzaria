@@ -24,7 +24,7 @@ export function ActionNode({ data }: any) {
   };
 
   return (
-    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 border-2 border-amber-400 min-w-[220px]">
+    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 border-2 border-amber-400 min-w-[220px] max-w-[260px] break-words">
       <Handle
         type="target"
         position={Position.Left}

@@ -18,7 +18,7 @@ export function ConditionNode({ data }: any) {
   };
 
   return (
-    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-violet-500 to-violet-600 border-2 border-violet-400 min-w-[220px]">
+    <div className="px-6 py-4 shadow-lg rounded-lg bg-gradient-to-br from-violet-500 to-violet-600 border-2 border-violet-400 min-w-[220px] max-w-[260px] break-words">
       <Handle
         type="target"
         position={Position.Left}
