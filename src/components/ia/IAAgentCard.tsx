@@ -99,6 +99,7 @@ export function IAAgentCard({
 }: IAAgentCardProps) {
   const [configOpen, setConfigOpen] = useState(false);
   const [customPrompt, setCustomPrompt] = useState("");
+  const [promptEditing, setPromptEditing] = useState(false);
   const [autoResponse, setAutoResponse] = useState(true);
   const [transferOnUnknown, setTransferOnUnknown] = useState(true);
   const [maxResponses, setMaxResponses] = useState(10);
@@ -2175,23 +2176,53 @@ export function IAAgentCard({
                   </TabsContent>
                   
                   <TabsContent value="prompt" className="space-y-4 mt-4">
-                    <div className="space-y-2">
-                      <Label>Prompt Personalizado</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Adicione instruções específicas para personalizar o comportamento da IA.
-                        Deixe em branco para usar o prompt padrão.
-                      </p>
-                      <Textarea
-                        placeholder={`Exemplo: 
+                    {customPrompt && !promptEditing ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-base">Prompt Personalizado</Label>
+                          <Badge variant="outline" className="gap-1">
+                            <CheckCircle className="h-3 w-3 text-green-500" />
+                            Salvo
+                          </Badge>
+                        </div>
+                        <div 
+                          className="p-4 border rounded-lg bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors group"
+                          onClick={() => setPromptEditing(true)}
+                        >
+                          <p className="text-sm text-muted-foreground line-clamp-3 font-mono">{customPrompt}</p>
+                          <p className="text-xs text-primary mt-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                            <Settings className="h-3 w-3" />
+                            Clique para editar
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label>Prompt Personalizado</Label>
+                          {customPrompt && (
+                            <Button variant="ghost" size="sm" onClick={() => setPromptEditing(false)}>
+                              <Eye className="h-4 w-4 mr-1" />
+                              Minimizar
+                            </Button>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Adicione instruções específicas para personalizar o comportamento da IA.
+                          Deixe em branco para usar o prompt padrão.
+                        </p>
+                        <Textarea
+                          placeholder={`Exemplo: 
 - Sempre mencione que oferecemos 30% de desconto para novos clientes
 - Foque em destacar os benefícios do nosso serviço
 - Se o cliente perguntar sobre preço, sugira uma consulta gratuita`}
-                        value={customPrompt}
-                        onChange={(e) => setCustomPrompt(e.target.value)}
-                        rows={10}
-                        className="font-mono text-sm"
-                      />
-                    </div>
+                          value={customPrompt}
+                          onChange={(e) => setCustomPrompt(e.target.value)}
+                          rows={10}
+                          className="font-mono text-sm"
+                        />
+                      </div>
+                    )}
                     
                     <div className="p-4 bg-muted/50 rounded-lg">
                       <h4 className="font-semibold mb-2">Variáveis disponíveis:</h4>
