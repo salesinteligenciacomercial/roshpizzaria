@@ -20,7 +20,7 @@ const navigation = [{
   icon: LayoutDashboard,
   menuKey: "analytics"
 }, {
-  name: "Leads",
+  name: "Contatos",
   href: "/leads",
   icon: Users,
   menuKey: "leads"
