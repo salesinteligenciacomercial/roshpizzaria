@@ -1167,22 +1167,14 @@ export default function Analytics() {
       </Card>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className={`grid w-full h-auto p-1 ${(isMasterAccount || isSegmentoFinanceiro(companySegmento)) ? 'grid-cols-10' : 'grid-cols-9'}`}>
+        <TabsList className={`grid w-full h-auto p-1 ${(isMasterAccount || isSegmentoFinanceiro(companySegmento)) ? 'grid-cols-8' : 'grid-cols-7'}`}>
           <TabsTrigger value="overview" className="gap-2 py-3">
             <Eye className="h-4 w-4" />
             <span className="hidden sm:inline">Visão Geral</span>
           </TabsTrigger>
           <TabsTrigger value="sales" className="gap-2 py-3">
             <TrendingUp className="h-4 w-4" />
-            <span className="hidden sm:inline">Vendas</span>
-          </TabsTrigger>
-          <TabsTrigger value="customers" className="gap-2 py-3">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Clientes</span>
-          </TabsTrigger>
-          <TabsTrigger value="products" className="gap-2 py-3">
-            <Package className="h-4 w-4" />
-            <span className="hidden sm:inline">Produtos</span>
+            <span className="hidden sm:inline">Vendas & Clientes</span>
           </TabsTrigger>
           {(isMasterAccount || isSegmentoFinanceiro(companySegmento)) && (
             <TabsTrigger value="propostas" className="gap-2 py-3">
@@ -1339,318 +1331,335 @@ export default function Analytics() {
           </Card>
         </TabsContent>
 
-        {/* Vendas & Pipeline */}
+        {/* Vendas, Clientes & Produtos - Unificado */}
         <TabsContent value="sales" className="space-y-6">
-          {/* Pipeline Financeiro Avançado */}
-          <PipelineFinanceiro userCompanyId={userCompanyId} globalFilters={globalFilters} />
-          
-          {/* KPIs de Vendas */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Card className="border-0 shadow-card group relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 to-green-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
-                  Leads Convertidos
-                </CardTitle>
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300">
-                  <Trophy className="h-5 w-5 text-green-600" />
-                </div>
-              </CardHeader>
-              <CardContent className="relative">
-                <div className="text-3xl font-bold text-green-600">{reportStats.totalGanhos}</div>
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-xs text-muted-foreground">R$ {reportStats.valorTotalGanhos.toLocaleString('pt-BR')}</p>
-                  <Badge variant="secondary" className="text-green-600 text-xs">
-                    <ArrowUpRight className="h-3 w-3 mr-1" />
-                    12%
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
+          <Tabs defaultValue="pipeline" className="w-full">
+            <TabsList className="grid w-full grid-cols-3 mb-4">
+              <TabsTrigger value="pipeline" className="gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Pipeline & Vendas
+              </TabsTrigger>
+              <TabsTrigger value="customers" className="gap-2">
+                <Users className="h-4 w-4" />
+                Clientes & LTV
+              </TabsTrigger>
+              <TabsTrigger value="products" className="gap-2">
+                <Package className="h-4 w-4" />
+                Produtos
+              </TabsTrigger>
+            </TabsList>
 
-            <Card className="border-0 shadow-card group relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
-                  Ticket Médio
-                </CardTitle>
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300">
-                  <DollarSign className="h-5 w-5 text-blue-600" />
-                </div>
-              </CardHeader>
-              <CardContent className="relative">
-                <div className="text-3xl font-bold text-blue-600">
-                  R$ {reportStats.totalGanhos > 0 ? (reportStats.valorTotalGanhos / reportStats.totalGanhos).toLocaleString('pt-BR', {
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0
-                }) : '0'}
-                </div>
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-xs text-muted-foreground">Por lead convertido</p>
-                  <Badge variant="secondary" className="text-blue-600 text-xs">
-                    <ArrowUpRight className="h-3 w-3 mr-1" />
-                    8%
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
+            <TabsContent value="pipeline" className="space-y-6">
+              {/* Pipeline Financeiro Avançado */}
+              <PipelineFinanceiro userCompanyId={userCompanyId} globalFilters={globalFilters} />
+              
+              {/* KPIs de Vendas */}
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <Card className="border-0 shadow-card group relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 to-green-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                      Leads Convertidos
+                    </CardTitle>
+                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300">
+                      <Trophy className="h-5 w-5 text-green-600" />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative">
+                    <div className="text-3xl font-bold text-green-600">{reportStats.totalGanhos}</div>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">R$ {reportStats.valorTotalGanhos.toLocaleString('pt-BR')}</p>
+                      <Badge variant="secondary" className="text-green-600 text-xs">
+                        <ArrowUpRight className="h-3 w-3 mr-1" />
+                        12%
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
 
-            <Card className="border-0 shadow-card group relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-purple-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
-                  Velocidade do Funil
-                </CardTitle>
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300">
-                  <Zap className="h-5 w-5 text-purple-600" />
-                </div>
-              </CardHeader>
-              <CardContent className="relative">
-                <div className="text-3xl font-bold text-purple-600">4.2</div>
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-xs text-muted-foreground">Dias médio no pipeline</p>
-                  <Badge variant="secondary" className="text-red-600 text-xs">
-                    <ArrowDownRight className="h-3 w-3 mr-1" />
-                    -5%
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
+                <Card className="border-0 shadow-card group relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                      Ticket Médio
+                    </CardTitle>
+                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300">
+                      <DollarSign className="h-5 w-5 text-blue-600" />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative">
+                    <div className="text-3xl font-bold text-blue-600">
+                      R$ {reportStats.totalGanhos > 0 ? (reportStats.valorTotalGanhos / reportStats.totalGanhos).toLocaleString('pt-BR', {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0
+                    }) : '0'}
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">Por lead convertido</p>
+                      <Badge variant="secondary" className="text-blue-600 text-xs">
+                        <ArrowUpRight className="h-3 w-3 mr-1" />
+                        8%
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
 
-            <Card className="border-0 shadow-card group relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-orange-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
-                  Previsão de Receita
-                </CardTitle>
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300">
-                  <TrendingUp className="h-5 w-5 text-orange-600" />
-                </div>
-              </CardHeader>
-              <CardContent className="relative">
-                <div className="text-3xl font-bold text-orange-600">
-                  R$ {(stats.totalValue * 0.3).toLocaleString('pt-BR')}
-                </div>
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-xs text-muted-foreground">Próximos 30 dias</p>
-                  <Badge variant="secondary" className="text-orange-600 text-xs">
-                    <ArrowUpRight className="h-3 w-3 mr-1" />
-                    15%
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                <Card className="border-0 shadow-card group relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-purple-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                      Velocidade do Funil
+                    </CardTitle>
+                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300">
+                      <Zap className="h-5 w-5 text-purple-600" />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative">
+                    <div className="text-3xl font-bold text-purple-600">4.2</div>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">Dias médio no pipeline</p>
+                      <Badge variant="secondary" className="text-red-600 text-xs">
+                        <ArrowDownRight className="h-3 w-3 mr-1" />
+                        -5%
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
 
-          {/* Pipeline Visual Interativo */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="border-0 shadow-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-primary" />
-                  Pipeline por Etapa
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Distribuição visual e valores no funil de vendas
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {etapas.map((etapa, index) => <div key={etapa.id} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{
-                        backgroundColor: etapa.cor
-                      }} />
-                          <span className="font-medium">{etapa.nome}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {etapa.quantidade} leads
-                          </Badge>
-                        </div>
-                        <div className="text-sm font-semibold">
-                          R$ {etapa.valor.toLocaleString("pt-BR")}
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <div className="w-full bg-muted rounded-full h-4">
-                          <div className="h-4 rounded-full transition-all duration-1000 ease-out" style={{
-                        backgroundColor: etapa.cor,
-                        width: `${stats.totalLeads > 0 ? etapa.quantidade / stats.totalLeads * 100 : 0}%`,
-                        animationDelay: `${index * 200}ms`
-                      }} />
-                        </div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-xs font-medium text-white drop-shadow-sm">
-                            {stats.totalLeads > 0 ? Math.round(etapa.quantidade / stats.totalLeads * 100) : 0}%
-                          </span>
-                        </div>
-                      </div>
-                    </div>)}
-                </div>
-              </CardContent>
-            </Card>
+                <Card className="border-0 shadow-card group relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 to-orange-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+                      Previsão de Receita
+                    </CardTitle>
+                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-background to-muted group-hover:scale-110 transition-transform duration-300">
+                      <TrendingUp className="h-5 w-5 text-orange-600" />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative">
+                    <div className="text-3xl font-bold text-orange-600">
+                      R$ {(stats.totalValue * 0.3).toLocaleString('pt-BR')}
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted-foreground">Próximos 30 dias</p>
+                      <Badge variant="secondary" className="text-orange-600 text-xs">
+                        <ArrowUpRight className="h-3 w-3 mr-1" />
+                        15%
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
 
-            <Card className="border-0 shadow-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <PieChart className="h-5 w-5 text-primary" />
-                  Distribuição de Valores
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Proporção dos valores em cada etapa do pipeline
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
-                  <Doughnut data={{
-                  labels: etapas.map(etapa => etapa.nome),
-                  datasets: [{
-                    data: etapas.map(etapa => etapa.valor),
-                    backgroundColor: etapas.map(etapa => etapa.cor),
-                    borderWidth: 2,
-                    borderColor: '#ffffff'
-                  }]
-                }} options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: {
-                      position: 'bottom' as const,
-                      labels: {
-                        padding: 20,
-                        usePointStyle: true
-                      }
-                    },
-                    tooltip: {
-                      callbacks: {
-                        label: function (context) {
-                          const value = context.parsed;
-                          const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
-                          const percentage = (value / total * 100).toFixed(1);
-                          return `R$ ${value.toLocaleString('pt-BR')} (${percentage}%)`;
+              {/* Pipeline Visual Interativo */}
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card className="border-0 shadow-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5 text-primary" />
+                      Pipeline por Etapa
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Distribuição visual e valores no funil de vendas
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {etapas.map((etapa, index) => <div key={etapa.id} className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full" style={{
+                            backgroundColor: etapa.cor
+                          }} />
+                              <span className="font-medium">{etapa.nome}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {etapa.quantidade} leads
+                              </Badge>
+                            </div>
+                            <div className="text-sm font-semibold">
+                              R$ {etapa.valor.toLocaleString("pt-BR")}
+                            </div>
+                          </div>
+                          <div className="relative">
+                            <div className="w-full bg-muted rounded-full h-4">
+                              <div className="h-4 rounded-full transition-all duration-1000 ease-out" style={{
+                            backgroundColor: etapa.cor,
+                            width: `${stats.totalLeads > 0 ? etapa.quantidade / stats.totalLeads * 100 : 0}%`,
+                            animationDelay: `${index * 200}ms`
+                          }} />
+                            </div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-xs font-medium text-white drop-shadow-sm">
+                                {stats.totalLeads > 0 ? Math.round(etapa.quantidade / stats.totalLeads * 100) : 0}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>)}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-0 shadow-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <PieChart className="h-5 w-5 text-primary" />
+                      Distribuição de Valores
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Proporção dos valores em cada etapa do pipeline
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-64">
+                      <Doughnut data={{
+                      labels: etapas.map(etapa => etapa.nome),
+                      datasets: [{
+                        data: etapas.map(etapa => etapa.valor),
+                        backgroundColor: etapas.map(etapa => etapa.cor),
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                      }]
+                    }} options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          position: 'bottom' as const,
+                          labels: {
+                            padding: 20,
+                            usePointStyle: true
+                          }
+                        },
+                        tooltip: {
+                          callbacks: {
+                            label: function (context) {
+                              const value = context.parsed;
+                              const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+                              const percentage = (value / total * 100).toFixed(1);
+                              return `R$ ${value.toLocaleString('pt-BR')} (${percentage}%)`;
+                            }
+                          }
                         }
                       }
-                    }
-                  }
-                }} />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Análise de Conversão por Etapa */}
-          <Card className="border-0 shadow-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                Taxa de Conversão por Etapa
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Eficiência de conversão entre as etapas do funil
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {etapas.map((etapa, index) => {
-                const conversionRate = index === 0 ? etapa.quantidade / stats.totalLeads * 100 : etapa.quantidade / (etapas[index - 1]?.quantidade || stats.totalLeads) * 100;
-                return <div key={etapa.id} className="flex items-center justify-between p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-4 h-4 rounded-full" style={{
-                      backgroundColor: etapa.cor
                     }} />
-                        <div>
-                          <p className="font-medium">{etapa.nome}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {etapa.quantidade} leads • R$ {etapa.valor.toLocaleString('pt-BR')}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{conversionRate.toFixed(1)}%</span>
-                          <Badge variant={conversionRate > 50 ? "default" : conversionRate > 25 ? "secondary" : "destructive"} className="text-xs">
-                            {conversionRate > 50 ? "Excelente" : conversionRate > 25 ? "Bom" : "Atenção"}
-                          </Badge>
-                        </div>
-                        <Progress value={conversionRate} className="w-24 h-2 mt-1" />
-                      </div>
-                    </div>;
-              })}
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Insights e Recomendações */}
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="border-0 shadow-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-amber-500" />
-                  Gargalos Identificados
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
-                    <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-amber-800">Etapa "Proposta" com alto tempo</p>
-                      <p className="text-sm text-amber-700">Tempo médio de 12 dias - considere otimizar o processo</p>
-                    </div>
+              {/* Análise de Conversão por Etapa */}
+              <Card className="border-0 shadow-card">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    Taxa de Conversão por Etapa
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Eficiência de conversão entre as etapas do funil
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {etapas.map((etapa, index) => {
+                    const conversionRate = index === 0 ? etapa.quantidade / stats.totalLeads * 100 : etapa.quantidade / (etapas[index - 1]?.quantidade || stats.totalLeads) * 100;
+                    return <div key={etapa.id} className="flex items-center justify-between p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className="w-4 h-4 rounded-full" style={{
+                          backgroundColor: etapa.cor
+                        }} />
+                            <div>
+                              <p className="font-medium">{etapa.nome}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {etapa.quantidade} leads • R$ {etapa.valor.toLocaleString('pt-BR')}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">{conversionRate.toFixed(1)}%</span>
+                              <Badge variant={conversionRate > 50 ? "default" : conversionRate > 25 ? "secondary" : "destructive"} className="text-xs">
+                                {conversionRate > 50 ? "Excelente" : conversionRate > 25 ? "Bom" : "Atenção"}
+                              </Badge>
+                            </div>
+                            <Progress value={conversionRate} className="w-24 h-2 mt-1" />
+                          </div>
+                        </div>;
+                  })}
                   </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50 border border-red-200">
-                    <XCircle className="h-5 w-5 text-red-500 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-red-800">Alta taxa de perda na qualificação</p>
-                      <p className="text-sm text-red-700">68% dos leads são perdidos - revise critérios</p>
+                </CardContent>
+              </Card>
+
+              {/* Insights e Recomendações */}
+              <div className="grid gap-6 md:grid-cols-2">
+                <Card className="border-0 shadow-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-amber-500" />
+                      Gargalos Identificados
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                        <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-amber-800">Etapa "Proposta" com alto tempo</p>
+                          <p className="text-sm text-amber-700">Tempo médio de 12 dias - considere otimizar o processo</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50 border border-red-200">
+                        <XCircle className="h-5 w-5 text-red-500 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-red-800">Alta taxa de perda na qualificação</p>
+                          <p className="text-sm text-red-700">68% dos leads são perdidos - revise critérios</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
 
-            <Card className="border-0 shadow-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-green-500" />
-                  Oportunidades de Melhoria
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
-                    <TrendingUp className="h-5 w-5 text-green-500 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-green-800">Aumente follow-ups na etapa "Contato"</p>
-                      <p className="text-sm text-green-700">Pode elevar conversão em até 25%</p>
+                <Card className="border-0 shadow-card">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Zap className="h-5 w-5 text-green-500" />
+                      Oportunidades de Melhoria
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                        <TrendingUp className="h-5 w-5 text-green-500 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-green-800">Aumente follow-ups na etapa "Contato"</p>
+                          <p className="text-sm text-green-700">Pode elevar conversão em até 25%</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                        <Target className="h-5 w-5 text-blue-500 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-blue-800">Otimize propostas para valores &gt; R$ 50k</p>
+                          <p className="text-sm text-blue-700">Maior margem de contribuição</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
-                    <Target className="h-5 w-5 text-blue-500 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-blue-800">Otimize propostas para valores &gt; R$ 50k</p>
-                      <p className="text-sm text-blue-700">Maior margem de contribuição</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                  </CardContent>
+                </Card>
+              </div>
 
-          {/* Relatório de Motivos de Perda */}
-          <LossReasonsReport userCompanyId={userCompanyId} globalFilters={globalFilters} />
-        </TabsContent>
+              {/* Relatório de Motivos de Perda */}
+              <LossReasonsReport userCompanyId={userCompanyId} globalFilters={globalFilters} />
+            </TabsContent>
 
-        {/* Clientes e LTV */}
-        <TabsContent value="customers" className="space-y-6">
-          {userCompanyId ? <CustomerLTVAnalytics companyId={userCompanyId} globalFilters={globalFilters} /> : <div className="flex items-center justify-center h-64 text-muted-foreground">
-              <p>Carregando dados de clientes...</p>
-            </div>}
-        </TabsContent>
+            <TabsContent value="customers" className="space-y-6">
+              {userCompanyId ? <CustomerLTVAnalytics companyId={userCompanyId} globalFilters={globalFilters} /> : <div className="flex items-center justify-center h-64 text-muted-foreground">
+                  <p>Carregando dados de clientes...</p>
+                </div>}
+            </TabsContent>
 
-        {/* Produtos & Serviços */}
-        <TabsContent value="products" className="space-y-6">
-          <ProductsAnalytics userCompanyId={userCompanyId} globalFilters={globalFilters} />
+            <TabsContent value="products" className="space-y-6">
+              <ProductsAnalytics userCompanyId={userCompanyId} globalFilters={globalFilters} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         {/* Propostas Bancárias - Apenas para segmentos financeiros */}
