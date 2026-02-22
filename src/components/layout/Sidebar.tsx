@@ -30,7 +30,7 @@ const navigation = [{
   icon: LayoutDashboard,
   menuKey: "funil"
 }, {
-  name: "Conversas",
+  name: "Bate-Papo",
   href: "/conversas",
   icon: MessageSquare,
   menuKey: "conversas",
