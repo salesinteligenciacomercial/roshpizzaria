@@ -407,21 +407,16 @@ const PublicMeeting = () => {
 
     const peerName = peerNamesRef.current.get(fromPeerId) || 'Participante';
     
+    // Always create a fresh peer connection for incoming offers to avoid glare
     let pc = peerConnectionsRef.current.get(fromPeerId);
-    if (!pc || pc.connectionState === 'closed' || pc.connectionState === 'failed') {
-      pc = createPeerConnection(fromPeerId, peerName, stream);
+    if (pc) {
+      // Close existing connection to avoid conflicts
+      pc.close();
+      peerConnectionsRef.current.delete(fromPeerId);
+      hasRemoteDescriptionsRef.current.delete(fromPeerId);
     }
-
-    const hasRemoteDesc = hasRemoteDescriptionsRef.current.get(fromPeerId);
-    if (hasRemoteDesc) {
-      console.log(`[${myPeerId}] Already has remote desc for ${fromPeerId}, skipping`);
-      return;
-    }
-
-    if (pc.signalingState !== 'stable') {
-      console.log(`[${myPeerId}] PC not stable for ${fromPeerId}, state: ${pc.signalingState}`);
-      return;
-    }
+    
+    pc = createPeerConnection(fromPeerId, peerName, stream);
 
     try {
       console.log(`[${myPeerId}] Setting remote description from ${peerName}...`);
@@ -830,15 +825,14 @@ const PublicMeeting = () => {
             const currentStream = localStreamRef.current;
             if (!currentStream) return;
 
-            // Connect to host
+            // Connect to host only - existing guests will send offers to us
             peerNamesRef.current.set('host', hostName || 'Anfitrião');
             await sendOfferToPeer('host', hostName || 'Anfitrião', currentStream);
 
-            // Connect to all existing guests
+            // Register names of existing peers so we can label them when they connect
             for (const peer of existingPeers) {
               if (peer.peerId !== guestIdRef.current) {
                 peerNamesRef.current.set(peer.peerId, peer.peerName);
-                await sendOfferToPeer(peer.peerId, peer.peerName, currentStream);
               }
             }
 
@@ -1509,7 +1503,7 @@ const PublicMeeting = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b">
         <div className="flex items-center gap-3">
@@ -1687,12 +1681,12 @@ const PublicMeeting = () => {
       )}
 
       {/* Video area - All participants in grid including self */}
-      <div className="flex-1 relative bg-muted/50 overflow-hidden">
+      <div className="flex-1 relative bg-muted/50 overflow-hidden min-h-0">
         {remoteParticipantsList.length > 0 ? (
-          <div className={`grid ${getVideoGridClass()} w-full h-full gap-0.5 p-0.5`}>
+          <div className={`grid ${getVideoGridClass()} w-full h-full gap-0.5 p-0.5 auto-rows-fr`}>
             {/* All remote participants */}
             {remoteParticipantsList.map(([peerId, participant]) => (
-              <div key={peerId} className="relative bg-muted/80 overflow-hidden rounded-sm min-h-0">
+              <div key={peerId} className="relative bg-muted/80 overflow-hidden rounded-sm min-h-0 min-w-0">
                 <video
                   autoPlay
                   playsInline
@@ -1710,7 +1704,7 @@ const PublicMeeting = () => {
               </div>
             ))}
             {/* Local video in grid */}
-            <div className="relative bg-muted/80 overflow-hidden rounded-sm min-h-0">
+            <div className="relative bg-muted/80 overflow-hidden rounded-sm min-h-0 min-w-0">
               <video
                 ref={localVideoRef}
                 autoPlay
