@@ -60,6 +60,8 @@ type DateFilter = "today" | "week" | "custom" | null;
 export function TagsManager({ onTagSelected, selectedTag }: TagsManagerProps) {
   const [open, setOpen] = useState(false);
   const [tagStats, setTagStats] = useState<TagStats[]>([]);
+  const [noTagCount, setNoTagCount] = useState(0);
+  const [noTagLeads, setNoTagLeads] = useState<Array<{ id: string; name: string }>>([]);
   const [newTagName, setNewTagName] = useState("");
   const [loading, setLoading] = useState(false);
   const { addStandaloneTag, removeStandaloneTag, allTags } = useTagsManager();
@@ -127,15 +129,16 @@ export function TagsManager({ onTagSelected, selectedTag }: TagsManagerProps) {
     try {
       const { data: leads, error } = await supabase
         .from("leads")
-        .select("id, name, tags")
-        .not("tags", "is", null);
+        .select("id, name, tags");
 
       if (error) throw error;
 
       const tagsMap = new Map<string, { count: number; leads: Array<{ id: string; name: string }> }>();
+      let leadsWithoutTags = 0;
+      const leadsWithoutTagsList: Array<{ id: string; name: string }> = [];
 
       leads?.forEach((lead) => {
-        if (lead.tags && Array.isArray(lead.tags)) {
+        if (lead.tags && Array.isArray(lead.tags) && lead.tags.length > 0) {
           lead.tags.forEach((tag) => {
             if (!tagsMap.has(tag)) {
               tagsMap.set(tag, { count: 0, leads: [] });
@@ -144,6 +147,9 @@ export function TagsManager({ onTagSelected, selectedTag }: TagsManagerProps) {
             tagData.count++;
             tagData.leads.push({ id: lead.id, name: lead.name });
           });
+        } else {
+          leadsWithoutTags++;
+          leadsWithoutTagsList.push({ id: lead.id, name: lead.name });
         }
       });
 
@@ -164,6 +170,8 @@ export function TagsManager({ onTagSelected, selectedTag }: TagsManagerProps) {
       stats = stats.sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag));
 
       setTagStats(stats);
+      setNoTagCount(leadsWithoutTags);
+      setNoTagLeads(leadsWithoutTagsList);
     } catch (error) {
       console.error("Erro ao carregar estatísticas de tags:", error);
       toast.error("Erro ao carregar tags");
@@ -368,7 +376,7 @@ export function TagsManager({ onTagSelected, selectedTag }: TagsManagerProps) {
           Gerenciar Tags
           {selectedTag && (
             <Badge variant="secondary" className="ml-1">
-              {selectedTag}
+              {selectedTag === "__sem_tags__" ? "Sem Tags" : selectedTag}
             </Badge>
           )}
         </Button>
@@ -530,61 +538,102 @@ export function TagsManager({ onTagSelected, selectedTag }: TagsManagerProps) {
                 <div className="space-y-2">
                   {loading ? (
                     <div className="text-center py-8 text-muted-foreground">Carregando...</div>
-                  ) : tagStats.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      Nenhuma tag cadastrada ainda
-                    </div>
                   ) : (
-                    tagStats.map((stat) => (
+                    <>
+                      {/* Sem Tags - botão especial */}
                       <Card
-                        key={stat.tag}
                         className={`transition-all hover:shadow-md cursor-pointer ${
-                          selectedTag === stat.tag ? "ring-2 ring-primary" : ""
+                          selectedTag === "__sem_tags__" ? "ring-2 ring-primary" : ""
                         }`}
-                        onClick={() => handleTagClick(stat.tag)}
+                        onClick={() => handleTagClick("__sem_tags__")}
                       >
                         <CardContent className="p-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 flex-1">
-                              <Badge variant="secondary" className="gap-1">
+                              <Badge variant="outline" className="gap-1 border-dashed text-muted-foreground">
                                 <Tag className="h-3 w-3" />
-                                {stat.tag}
+                                Sem Tags
                               </Badge>
                               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                                 <Users className="h-4 w-4" />
-                                <span>{stat.count} lead(s)</span>
+                                <span>{noTagCount} lead(s)</span>
                               </div>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteTag(stat.tag);
-                              }}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
                           </div>
-                          
-                          {stat.leads.length > 0 && (
+                          {noTagLeads.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-1">
-                              {stat.leads.slice(0, 3).map((lead) => (
+                              {noTagLeads.slice(0, 3).map((lead) => (
                                 <Badge key={lead.id} variant="outline" className="text-xs">
                                   {lead.name}
                                 </Badge>
                               ))}
-                              {stat.leads.length > 3 && (
+                              {noTagLeads.length > 3 && (
                                 <Badge variant="outline" className="text-xs">
-                                  +{stat.leads.length - 3} mais
+                                  +{noTagLeads.length - 3} mais
                                 </Badge>
                               )}
                             </div>
                           )}
                         </CardContent>
                       </Card>
-                    ))
+
+                      {tagStats.length === 0 ? (
+                        <div className="text-center py-4 text-muted-foreground">
+                          Nenhuma tag cadastrada ainda
+                        </div>
+                      ) : (
+                        tagStats.map((stat) => (
+                          <Card
+                            key={stat.tag}
+                            className={`transition-all hover:shadow-md cursor-pointer ${
+                              selectedTag === stat.tag ? "ring-2 ring-primary" : ""
+                            }`}
+                            onClick={() => handleTagClick(stat.tag)}
+                          >
+                            <CardContent className="p-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3 flex-1">
+                                  <Badge variant="secondary" className="gap-1">
+                                    <Tag className="h-3 w-3" />
+                                    {stat.tag}
+                                  </Badge>
+                                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                    <Users className="h-4 w-4" />
+                                    <span>{stat.count} lead(s)</span>
+                                  </div>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteTag(stat.tag);
+                                  }}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              
+                              {stat.leads.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {stat.leads.slice(0, 3).map((lead) => (
+                                    <Badge key={lead.id} variant="outline" className="text-xs">
+                                      {lead.name}
+                                    </Badge>
+                                  ))}
+                                  {stat.leads.length > 3 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      +{stat.leads.length - 3} mais
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))
+                      )}
+                    </>
                   )}
                 </div>
               </ScrollArea>

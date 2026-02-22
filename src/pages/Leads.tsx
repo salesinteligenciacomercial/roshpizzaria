@@ -611,7 +611,11 @@ export default function Leads() {
       filtered = filtered.filter(lead => lead.status === selectedStatus);
     }
     if (selectedTag) {
-      filtered = filtered.filter(lead => lead.tags?.includes(selectedTag));
+      if (selectedTag === "__sem_tags__") {
+        filtered = filtered.filter(lead => !lead.tags || lead.tags.length === 0);
+      } else {
+        filtered = filtered.filter(lead => lead.tags?.includes(selectedTag));
+      }
     }
     // Filtrar leads com valor de venda
     if (filterWithValue) {
