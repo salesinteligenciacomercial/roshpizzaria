@@ -67,8 +67,7 @@ const playJoinNotification = () => {
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
     
-    // Pleasant chime sound
-    oscillator.frequency.value = 587.33; // D5 note
+    oscillator.frequency.value = 587.33;
     oscillator.type = 'sine';
     
     gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
@@ -77,7 +76,6 @@ const playJoinNotification = () => {
     oscillator.start(audioContext.currentTime);
     oscillator.stop(audioContext.currentTime + 0.3);
     
-    // Second chime
     setTimeout(() => {
       const osc2 = audioContext.createOscillator();
       const gain2 = audioContext.createGain();
@@ -85,7 +83,7 @@ const playJoinNotification = () => {
       osc2.connect(gain2);
       gain2.connect(audioContext.destination);
       
-      osc2.frequency.value = 783.99; // G5 note
+      osc2.frequency.value = 783.99;
       osc2.type = 'sine';
       
       gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
@@ -105,6 +103,11 @@ interface PendingJoinRequest {
   timestamp: number;
 }
 
+interface RemoteParticipant {
+  stream: MediaStream;
+  name: string;
+}
+
 const PublicMeeting = () => {
   const { meetingId } = useParams<{ meetingId: string }>();
   const [guestName, setGuestName] = useState('');
@@ -119,7 +122,8 @@ const PublicMeeting = () => {
   
   // Call state
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  // Multi-participant: map of guestId -> { stream, name }
+  const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map());
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -171,15 +175,18 @@ const PublicMeeting = () => {
   const blurCanvasRef = useRef<HTMLCanvasElement>(null);
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  // Multi-participant: Map of guestId -> RTCPeerConnection
+  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const hasRemoteDescriptionsRef = useRef<Map<string, boolean>>(new Map());
+  const iceCandidateQueuesRef = useRef<Map<string, RTCIceCandidate[]>>(new Map());
+  // Keep track of accepted guest names for linking offers to names
+  const acceptedGuestNamesRef = useRef<Map<string, string>>(new Map());
+  
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const callIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const iceCandidateQueueRef = useRef<RTCIceCandidate[]>([]);
-  const hasRemoteDescriptionRef = useRef(false);
   const originalVideoTrackRef = useRef<MediaStreamTrack | null>(null);
   
   // Transcription refs
@@ -190,6 +197,13 @@ const PublicMeeting = () => {
   const guestIdRef = useRef<string>(`guest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
   const processedGuestJoinsRef = useRef<Set<string>>(new Set());
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Track processed offers to avoid duplicates
+  const processedOffersRef = useRef<Set<string>>(new Set());
+  
+  // For guest: single peer connection ref (guest only connects to host)
+  const guestPeerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const guestHasRemoteDescRef = useRef(false);
+  const guestIceCandidateQueueRef = useRef<RTCIceCandidate[]>([]);
   
   // Chat state
   const [showChat, setShowChat] = useState(false);
@@ -206,6 +220,12 @@ const PublicMeeting = () => {
     currentChatUserId, 
     currentChatUserName
   );
+
+  // Helper: get first remote stream (for backward compat in recording/transcription)
+  const getFirstRemoteStream = useCallback((): MediaStream | null => {
+    const entries = Array.from(remoteParticipants.values());
+    return entries.length > 0 ? entries[0].stream : null;
+  }, [remoteParticipants]);
 
   // ========== BACKGROUND BLUR PROCESSING ==========
   useEffect(() => {
@@ -244,7 +264,6 @@ const PublicMeeting = () => {
       setHostId(data.created_by);
       setPublicLink(data.public_link || `${window.location.origin}/meeting/${meetingId}`);
       
-      // Check if current user is the host
       const { data: { user } } = await supabase.auth.getUser();
       if (user && user.id === data.created_by) {
         setIsHost(true);
@@ -255,12 +274,9 @@ const PublicMeeting = () => {
     checkMeeting();
   }, [meetingId]);
 
-  // Poll for guest-joined signals when host is waiting (backup for realtime)
-  // This poll runs even after waitingForGuests becomes false to catch late arrivals
+  // Poll for guest-joined signals when host is waiting
   useEffect(() => {
     if (!isHost || !hasJoined || !meetingId) return;
-
-    console.log('[Host Poll] Starting guest polling for meeting:', meetingId);
 
     const pollForGuests = async () => {
       try {
@@ -272,12 +288,7 @@ const PublicMeeting = () => {
           .order('created_at', { ascending: false })
           .limit(10);
         
-        if (error) {
-          console.error('[Host Poll] Error:', error);
-          return;
-        }
-
-        console.log('[Host Poll] Found signals:', pendingJoins?.length || 0);
+        if (error) return;
         
         if (pendingJoins && pendingJoins.length > 0) {
           for (const join of pendingJoins) {
@@ -286,7 +297,6 @@ const PublicMeeting = () => {
             
             processedGuestJoinsRef.current.add(joinKey);
             const joinData = join.signal_data as any;
-            console.log('[Host Poll] New guest detected:', joinData?.guestName);
             playJoinNotification();
             toast.success(`${joinData?.guestName || 'Participante'} entrou na reunião`, {
               duration: 5000,
@@ -296,13 +306,11 @@ const PublicMeeting = () => {
           }
         }
       } catch (error) {
-        console.error('[Host Poll] Error polling for guests:', error);
+        console.error('[Host Poll] Error:', error);
       }
     };
 
-    // Poll every 2 seconds continuously
     pollIntervalRef.current = setInterval(pollForGuests, 2000);
-    // Also poll immediately
     pollForGuests();
 
     return () => {
@@ -312,33 +320,153 @@ const PublicMeeting = () => {
       }
     };
   }, [isHost, hasJoined, meetingId]);
-  // Process queued ICE candidates
-  const processIceCandidateQueue = useCallback(async () => {
-    const pc = peerConnectionRef.current;
-    if (!pc || !hasRemoteDescriptionRef.current) return;
 
-    while (iceCandidateQueueRef.current.length > 0) {
-      const candidate = iceCandidateQueueRef.current.shift();
-      if (candidate) {
-        try {
-          await pc.addIceCandidate(candidate);
-          console.log('Added queued ICE candidate');
-        } catch (e) {
-          console.error('Error adding queued ICE candidate:', e);
+  // ========== HOST: Create a new peer connection for a specific guest ==========
+  const createPeerConnectionForGuest = useCallback((guestPeerId: string, guestPeerName: string, existingLocalStream: MediaStream) => {
+    console.log(`[Host] Creating peer connection for guest: ${guestPeerName} (${guestPeerId})`);
+    
+    // Clean up existing connection for this guest if any
+    const existingPc = peerConnectionsRef.current.get(guestPeerId);
+    if (existingPc) {
+      existingPc.close();
+    }
+
+    const pc = new RTCPeerConnection(ICE_SERVERS);
+    peerConnectionsRef.current.set(guestPeerId, pc);
+    hasRemoteDescriptionsRef.current.set(guestPeerId, false);
+    iceCandidateQueuesRef.current.set(guestPeerId, []);
+
+    // Add local tracks to the new connection
+    existingLocalStream.getTracks().forEach(track => {
+      pc.addTrack(track, existingLocalStream);
+    });
+
+    pc.ontrack = (event) => {
+      console.log(`[Host] Received remote track from guest ${guestPeerName}`);
+      const remoteMediaStream = event.streams[0];
+      setRemoteParticipants(prev => {
+        const newMap = new Map(prev);
+        newMap.set(guestPeerId, { stream: remoteMediaStream, name: guestPeerName });
+        return newMap;
+      });
+      setIsConnecting(false);
+      setWaitingForGuests(false);
+      
+      if (!callIntervalRef.current) {
+        callIntervalRef.current = setInterval(() => {
+          setCallDuration(prev => prev + 1);
+        }, 1000);
+      }
+    };
+
+    pc.onicecandidate = async (event) => {
+      if (event.candidate) {
+        await supabase.from('meeting_signals').insert([{
+          meeting_id: meetingId!,
+          from_user: 'host',
+          to_user: guestPeerId,
+          signal_type: 'ice-candidate',
+          signal_data: JSON.parse(JSON.stringify({ candidate: event.candidate.toJSON() })),
+        }]);
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log(`[Host] Connection state for ${guestPeerName}:`, pc.connectionState);
+      if (pc.connectionState === 'connected') {
+        setIsConnecting(false);
+        setWaitingForGuests(false);
+        if (!callIntervalRef.current) {
+          callIntervalRef.current = setInterval(() => {
+            setCallDuration(prev => prev + 1);
+          }, 1000);
+        }
+      } else if (pc.connectionState === 'failed') {
+        pc.restartIce();
+      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+        // Remove participant when disconnected
+        console.log(`[Host] Guest ${guestPeerName} disconnected`);
+        setRemoteParticipants(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(guestPeerId);
+          return newMap;
+        });
+        peerConnectionsRef.current.delete(guestPeerId);
+        hasRemoteDescriptionsRef.current.delete(guestPeerId);
+        iceCandidateQueuesRef.current.delete(guestPeerId);
+      }
+    };
+
+    return pc;
+  }, [meetingId]);
+
+  // ========== HOST: Process offer from a specific guest ==========
+  const processGuestOffer = useCallback(async (guestPeerId: string, sdpData: any, existingLocalStream: MediaStream) => {
+    const offerKey = `${guestPeerId}-offer`;
+    if (processedOffersRef.current.has(offerKey)) {
+      console.log(`[Host] Already processed offer from ${guestPeerId}, skipping`);
+      return;
+    }
+    processedOffersRef.current.add(offerKey);
+
+    const guestPeerName = acceptedGuestNamesRef.current.get(guestPeerId) || 'Participante';
+    
+    let pc = peerConnectionsRef.current.get(guestPeerId);
+    if (!pc || pc.connectionState === 'closed' || pc.connectionState === 'failed') {
+      pc = createPeerConnectionForGuest(guestPeerId, guestPeerName, existingLocalStream);
+    }
+
+    const hasRemoteDesc = hasRemoteDescriptionsRef.current.get(guestPeerId);
+    if (hasRemoteDesc) {
+      console.log(`[Host] Already has remote desc for ${guestPeerId}, skipping`);
+      return;
+    }
+
+    if (pc.signalingState !== 'stable') {
+      console.log(`[Host] PC not stable for ${guestPeerId}, state: ${pc.signalingState}`);
+      return;
+    }
+
+    try {
+      console.log(`[Host] Setting remote description for ${guestPeerName}...`);
+      await pc.setRemoteDescription(new RTCSessionDescription(sdpData));
+      hasRemoteDescriptionsRef.current.set(guestPeerId, true);
+
+      // Process queued ICE candidates
+      const queue = iceCandidateQueuesRef.current.get(guestPeerId) || [];
+      while (queue.length > 0) {
+        const candidate = queue.shift();
+        if (candidate) {
+          try { await pc.addIceCandidate(candidate); } catch (e) { console.error('ICE err:', e); }
         }
       }
-    }
-  }, []);
 
-  // Initialize WebRTC as Host (waits for guest's offer)
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      await supabase.from('meeting_signals').insert([{
+        meeting_id: meetingId!,
+        from_user: 'host',
+        to_user: guestPeerId,
+        signal_type: 'answer',
+        signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
+      }]);
+      console.log(`[Host] Answer sent to ${guestPeerName}`);
+      setWaitingForGuests(false);
+      setIsConnecting(false);
+    } catch (error) {
+      console.error(`[Host] Error processing offer from ${guestPeerName}:`, error);
+      // Allow retry
+      processedOffersRef.current.delete(offerKey);
+    }
+  }, [meetingId, createPeerConnectionForGuest]);
+
+  // Initialize WebRTC as Host
   const initializeWebRTCAsHost = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
+        audio: { echoCancellation: true, noiseSuppression: true },
       });
       setLocalStream(stream);
       
@@ -346,71 +474,6 @@ const PublicMeeting = () => {
         localVideoRef.current.srcObject = stream;
         localVideoRef.current.play().catch(console.warn);
       }
-
-      const pc = new RTCPeerConnection(ICE_SERVERS);
-      peerConnectionRef.current = pc;
-      hasRemoteDescriptionRef.current = false;
-      iceCandidateQueueRef.current = [];
-
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-      });
-
-      pc.ontrack = (event) => {
-        console.log('[Host] Received remote track, streams:', event.streams.length);
-        const remoteMediaStream = event.streams[0];
-        setRemoteStream(remoteMediaStream);
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteMediaStream;
-          remoteVideoRef.current.play().catch(console.warn);
-        }
-        setIsConnecting(false);
-        setWaitingForGuests(false);
-        
-        // Start call timer when we receive remote track (connection established)
-        if (!callIntervalRef.current) {
-          console.log('[Host] Starting call timer from ontrack');
-          callIntervalRef.current = setInterval(() => {
-            setCallDuration(prev => prev + 1);
-          }, 1000);
-        }
-      };
-
-      pc.onicecandidate = async (event) => {
-        if (event.candidate) {
-          console.log('[Host] Sending ICE candidate');
-          await supabase.from('meeting_signals').insert([{
-            meeting_id: meetingId!,
-            from_user: 'host',
-            to_user: 'guest',
-            signal_type: 'ice-candidate',
-            signal_data: JSON.parse(JSON.stringify({ candidate: event.candidate.toJSON() })),
-          }]);
-        }
-      };
-
-      pc.onconnectionstatechange = () => {
-        console.log('[Host] Connection state changed to:', pc.connectionState);
-        if (pc.connectionState === 'connected') {
-          setIsConnecting(false);
-          setWaitingForGuests(false);
-          if (!callIntervalRef.current) {
-            console.log('[Host] Starting call timer from connectionState');
-            callIntervalRef.current = setInterval(() => {
-              setCallDuration(prev => prev + 1);
-            }, 1000);
-          }
-        } else if (pc.connectionState === 'failed') {
-          console.log('[Host] Connection failed, restarting ICE');
-          pc.restartIce();
-        } else if (pc.connectionState === 'disconnected') {
-          console.log('[Host] Connection disconnected');
-        }
-      };
-      
-      pc.oniceconnectionstatechange = () => {
-        console.log('[Host] ICE connection state:', pc.iceConnectionState);
-      };
 
       // Subscribe to signals from guests
       const channel = supabase
@@ -427,64 +490,23 @@ const PublicMeeting = () => {
             const signal = payload.new as any;
             if (signal.from_user === 'host') return;
             
-            console.log('[Host Realtime] Received signal:', signal.signal_type);
+            const guestPeerId = signal.from_user;
 
             if (signal.signal_type === 'offer') {
-              // Guest sent offer, respond with answer
-              console.log('[Host Realtime] Processing offer, signalingState:', pc.signalingState, 'hasRemote:', hasRemoteDescriptionRef.current);
-              
-              if (hasRemoteDescriptionRef.current) {
-                console.log('[Host Realtime] Already has remote description, skipping');
-                return;
-              }
-              
-              if (pc.signalingState !== 'stable') {
-                console.log('[Host Realtime] Not in stable state, skipping');
-                return;
-              }
-              
-              try {
-                console.log('[Host Realtime] Setting remote description...');
-                await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
-                hasRemoteDescriptionRef.current = true;
-                console.log('[Host Realtime] Remote description set successfully');
-                
-                await processIceCandidateQueue();
-                
-                console.log('[Host Realtime] Creating answer...');
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                console.log('[Host Realtime] Local description set');
-                
-                await supabase.from('meeting_signals').insert([{
-                  meeting_id: meetingId!,
-                  from_user: 'host',
-                  to_user: signal.from_user,
-                  signal_type: 'answer',
-                  signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
-                }]);
-                console.log('[Host Realtime] Answer sent to guest:', signal.from_user);
-                setWaitingForGuests(false);
-                setIsConnecting(false);
-              } catch (error) {
-                console.error('[Host Realtime] Error handling offer:', error);
-              }
-            } else if (signal.signal_type === 'answer') {
-              if (pc.signalingState === 'have-local-offer') {
-                await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
-                hasRemoteDescriptionRef.current = true;
-                await processIceCandidateQueue();
-              }
-            } else if (signal.signal_type === 'ice-candidate') {
+              console.log(`[Host Realtime] Offer from ${guestPeerId}`);
+              await processGuestOffer(guestPeerId, signal.signal_data.sdp, stream);
+            } else if (signal.signal_type === 'ice-candidate' && signal.from_user !== 'host') {
               const candidate = new RTCIceCandidate(signal.signal_data.candidate);
-              if (hasRemoteDescriptionRef.current) {
-                try {
-                  await pc.addIceCandidate(candidate);
-                } catch (e) {
-                  console.error('Error adding ICE candidate:', e);
-                }
+              const pc = peerConnectionsRef.current.get(guestPeerId);
+              const hasRemoteDesc = hasRemoteDescriptionsRef.current.get(guestPeerId);
+
+              if (pc && hasRemoteDesc) {
+                try { await pc.addIceCandidate(candidate); } catch (e) { console.error('ICE err:', e); }
               } else {
-                iceCandidateQueueRef.current.push(candidate);
+                // Queue it
+                const queue = iceCandidateQueuesRef.current.get(guestPeerId) || [];
+                queue.push(candidate);
+                iceCandidateQueuesRef.current.set(guestPeerId, queue);
               }
             } else if (signal.signal_type === 'guest-joined') {
               console.log('[Host Realtime] Guest joined:', signal.signal_data);
@@ -495,12 +517,10 @@ const PublicMeeting = () => {
               });
               setWaitingForGuests(false);
             } else if (signal.signal_type === 'join-request') {
-              // New admission request from guest
               const reqData = signal.signal_data as any;
               const guestReqId = reqData?.guestId || signal.from_user;
               if (!processedJoinRequestsRef.current.has(guestReqId)) {
                 processedJoinRequestsRef.current.add(guestReqId);
-                console.log('[Host Realtime] Join request from:', reqData?.guestName);
                 playJoinNotification();
                 setPendingJoinRequests(prev => [...prev, {
                   guestId: guestReqId,
@@ -514,11 +534,24 @@ const PublicMeeting = () => {
                 });
               }
             } else if (signal.signal_type === 'call-end') {
-              handleEndCall();
+              // A specific guest ended - remove their connection
+              const pc = peerConnectionsRef.current.get(guestPeerId);
+              if (pc) {
+                pc.close();
+                peerConnectionsRef.current.delete(guestPeerId);
+                setRemoteParticipants(prev => {
+                  const newMap = new Map(prev);
+                  newMap.delete(guestPeerId);
+                  return newMap;
+                });
+              }
+              // If signal is broadcast to all, end meeting
+              if (signal.to_user === 'host' || signal.to_user === 'all') {
+                // Just remove that guest
+              }
             } else if (signal.signal_type === 'screen-share-status') {
               const shareData = signal.signal_data as { isSharing: boolean };
               setRemoteIsScreenSharing(shareData.isSharing);
-              console.log('[Host] Remote screen share status:', shareData.isSharing);
             }
           }
         )
@@ -528,106 +561,44 @@ const PublicMeeting = () => {
 
       channelRef.current = channel;
       
-      // Wait for subscription to be ready
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Function to check and process pending offers
+      // Poll for pending offers from already-accepted guests
       const checkAndProcessOffers = async () => {
-        const currentPc = peerConnectionRef.current;
-        if (!currentPc) {
-          console.log('[Host Poll] No peer connection available');
-          return;
-        }
-        
-        if (hasRemoteDescriptionRef.current) {
-          console.log('[Host Poll] Already has remote description, skipping');
-          return;
-        }
-        
-        console.log('[Host Poll] Checking for offers, signalingState:', currentPc.signalingState);
-        
         const { data: pendingOffers, error } = await supabase
           .from('meeting_signals')
           .select('*')
           .eq('meeting_id', meetingId!)
           .eq('signal_type', 'offer')
           .order('created_at', { ascending: false })
-          .limit(1);
+          .limit(20);
         
-        if (error) {
-          console.error('[Host Poll] Error fetching offers:', error);
-          return;
-        }
+        if (error || !pendingOffers) return;
         
-        console.log('[Host Poll] Found offers:', pendingOffers?.length || 0);
-        
-        if (pendingOffers && pendingOffers.length > 0 && !hasRemoteDescriptionRef.current) {
-          const offer = pendingOffers[0];
-          const signalData = offer.signal_data as any;
-          
-          console.log('[Host Poll] Processing offer from:', offer.from_user, 'signalingState:', currentPc.signalingState);
-          
-          try {
-            // Only process if we haven't already set remote description
-            if (currentPc.signalingState === 'stable' && !hasRemoteDescriptionRef.current) {
-              console.log('[Host Poll] Setting remote description...');
-              await currentPc.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
-              hasRemoteDescriptionRef.current = true;
-              console.log('[Host Poll] Remote description set successfully');
-              
-              await processIceCandidateQueue();
-              
-              console.log('[Host Poll] Creating answer...');
-              const answer = await currentPc.createAnswer();
-              await currentPc.setLocalDescription(answer);
-              console.log('[Host Poll] Local description set');
-              
-              await supabase.from('meeting_signals').insert([{
-                meeting_id: meetingId!,
-                from_user: 'host',
-                to_user: offer.from_user,
-                signal_type: 'answer',
-                signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
-              }]);
-              console.log('[Host Poll] Answer sent to guest:', offer.from_user);
-              setWaitingForGuests(false);
-              setIsConnecting(false);
-            } else {
-              console.log('[Host Poll] Skipping - signalingState:', currentPc.signalingState, 'hasRemote:', hasRemoteDescriptionRef.current);
-            }
-          } catch (error) {
-            console.error('[Host Poll] Error processing offer:', error);
+        for (const offer of pendingOffers) {
+          const guestPeerId = offer.from_user;
+          if (processedOffersRef.current.has(`${guestPeerId}-offer`)) continue;
+          // Only process if this guest was accepted
+          if (acceptedGuestNamesRef.current.has(guestPeerId)) {
+            await processGuestOffer(guestPeerId, (offer.signal_data as any).sdp, stream);
           }
         }
       };
       
-      // Check for pending offers immediately
       await checkAndProcessOffers();
       
-      // Continuous polling for offers every 1.5 seconds (faster polling for better response)
+      // Continuous polling for new offers
       const offerPollInterval = setInterval(async () => {
-        if (hasRemoteDescriptionRef.current) {
-          console.log('[Host Poll] Connected, stopping poll');
-          clearInterval(offerPollInterval);
-          return;
-        }
         await checkAndProcessOffers();
-      }, 1500);
+      }, 2000);
       
-      // Store interval for cleanup - attach to pollIntervalRef
-      const existingPollCleanup = pollIntervalRef.current;
-      pollIntervalRef.current = setInterval(() => {
-        // This is a no-op interval just to trigger cleanup
-      }, 60000);
-      
-      // Override cleanup to include offer polling
-      const originalChannel = channelRef.current;
+      // Store cleanup
+      const originalCleanup = channelRef.current;
       channelRef.current = {
-        ...originalChannel,
+        ...originalCleanup,
         unsubscribe: () => {
           clearInterval(offerPollInterval);
-          if (existingPollCleanup) clearInterval(existingPollCleanup);
-          return originalChannel?.unsubscribe();
+          return originalCleanup?.unsubscribe();
         },
       } as any;
       
@@ -645,10 +616,7 @@ const PublicMeeting = () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
+        audio: { echoCancellation: true, noiseSuppression: true },
       });
       setLocalStream(stream);
       
@@ -658,27 +626,25 @@ const PublicMeeting = () => {
       }
 
       const pc = new RTCPeerConnection(ICE_SERVERS);
-      peerConnectionRef.current = pc;
-      hasRemoteDescriptionRef.current = false;
-      iceCandidateQueueRef.current = [];
+      guestPeerConnectionRef.current = pc;
+      guestHasRemoteDescRef.current = false;
+      guestIceCandidateQueueRef.current = [];
 
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
 
       pc.ontrack = (event) => {
-        console.log('[Guest] Received remote track, streams:', event.streams.length);
+        console.log('[Guest] Received remote track');
         const remoteMediaStream = event.streams[0];
-        setRemoteStream(remoteMediaStream);
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteMediaStream;
-          remoteVideoRef.current.play().catch(console.warn);
-        }
+        setRemoteParticipants(prev => {
+          const newMap = new Map(prev);
+          newMap.set('host', { stream: remoteMediaStream, name: hostName });
+          return newMap;
+        });
         setIsConnecting(false);
         
-        // Start call timer when we receive remote track (connection established)
         if (!callIntervalRef.current) {
-          console.log('[Guest] Starting call timer from ontrack');
           callIntervalRef.current = setInterval(() => {
             setCallDuration(prev => prev + 1);
           }, 1000);
@@ -687,7 +653,6 @@ const PublicMeeting = () => {
 
       pc.onicecandidate = async (event) => {
         if (event.candidate) {
-          console.log('[Guest] Sending ICE candidate');
           await supabase.from('meeting_signals').insert([{
             meeting_id: meetingId!,
             from_user: guestIdRef.current,
@@ -699,25 +664,17 @@ const PublicMeeting = () => {
       };
 
       pc.onconnectionstatechange = () => {
-        console.log('[Guest] Connection state changed to:', pc.connectionState);
+        console.log('[Guest] Connection state:', pc.connectionState);
         if (pc.connectionState === 'connected') {
           setIsConnecting(false);
           if (!callIntervalRef.current) {
-            console.log('[Guest] Starting call timer from connectionState');
             callIntervalRef.current = setInterval(() => {
               setCallDuration(prev => prev + 1);
             }, 1000);
           }
         } else if (pc.connectionState === 'failed') {
-          console.log('[Guest] Connection failed, restarting ICE');
           pc.restartIce();
-        } else if (pc.connectionState === 'disconnected') {
-          console.log('[Guest] Connection disconnected');
         }
-      };
-      
-      pc.oniceconnectionstatechange = () => {
-        console.log('[Guest] ICE connection state:', pc.iceConnectionState);
       };
 
       // Subscribe to signals
@@ -733,46 +690,43 @@ const PublicMeeting = () => {
           },
           async (payload) => {
             const signal = payload.new as any;
+            // Only process signals directed to this guest
             if (signal.to_user !== guestIdRef.current && signal.to_user !== 'guest') return;
-
-            console.log('Guest received signal:', signal.signal_type);
 
             if (signal.signal_type === 'answer') {
               if (pc.signalingState === 'have-local-offer') {
                 await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
-                hasRemoteDescriptionRef.current = true;
-                await processIceCandidateQueue();
+                guestHasRemoteDescRef.current = true;
+                // Process queued candidates
+                while (guestIceCandidateQueueRef.current.length > 0) {
+                  const candidate = guestIceCandidateQueueRef.current.shift();
+                  if (candidate) {
+                    try { await pc.addIceCandidate(candidate); } catch (e) { console.error('ICE err:', e); }
+                  }
+                }
               }
             } else if (signal.signal_type === 'ice-candidate' && signal.from_user !== guestIdRef.current) {
               const candidate = new RTCIceCandidate(signal.signal_data.candidate);
-              if (hasRemoteDescriptionRef.current) {
-                try {
-                  await pc.addIceCandidate(candidate);
-                } catch (e) {
-                  console.error('Error adding ICE candidate:', e);
-                }
+              if (guestHasRemoteDescRef.current) {
+                try { await pc.addIceCandidate(candidate); } catch (e) { console.error('ICE err:', e); }
               } else {
-                iceCandidateQueueRef.current.push(candidate);
+                guestIceCandidateQueueRef.current.push(candidate);
               }
             } else if (signal.signal_type === 'call-end') {
               handleEndCall();
             } else if (signal.signal_type === 'screen-share-status') {
               const shareData = signal.signal_data as { isSharing: boolean };
               setRemoteIsScreenSharing(shareData.isSharing);
-              console.log('Remote screen share status:', shareData.isSharing);
             }
           }
         )
-        .subscribe((status) => {
-          console.log('Guest subscription status:', status);
-        });
+        .subscribe();
 
       channelRef.current = channel;
       
-      // Wait for subscription to be ready
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Instead of immediately connecting, send a join-request and wait for host approval
+      // Send join-request and wait for host approval
       if (hostId) {
         await supabase.from('meeting_signals').insert([{
           meeting_id: meetingId!,
@@ -781,7 +735,6 @@ const PublicMeeting = () => {
           signal_type: 'join-request',
           signal_data: { guestName, guestId: guestIdRef.current },
         }]);
-        // Also send to host's UUID for global listener
         await supabase.from('meeting_signals').insert([{
           meeting_id: meetingId!,
           from_user: guestIdRef.current,
@@ -789,11 +742,69 @@ const PublicMeeting = () => {
           signal_type: 'join-request',
           signal_data: { guestName, guestId: guestIdRef.current },
         }]);
-        console.log('[Guest] Sent join-request to host, waiting for approval...');
         setWaitingForAdmission(true);
       }
 
-      // Listen for join-accepted or join-rejected signals
+      // Helper to send offer after admission
+      const sendOfferToHost = async () => {
+        const offer = await pc.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true,
+        });
+        await pc.setLocalDescription(offer);
+        
+        await supabase.from('meeting_signals').insert([{
+          meeting_id: meetingId!,
+          from_user: guestIdRef.current,
+          to_user: 'host',
+          signal_type: 'offer',
+          signal_data: JSON.parse(JSON.stringify({ sdp: offer })),
+        }]);
+
+        if (hostId) {
+          await supabase.from('meeting_signals').insert([{
+            meeting_id: meetingId!,
+            from_user: guestIdRef.current,
+            to_user: hostId,
+            signal_type: 'guest-joined',
+            signal_data: { guestName, guestId: guestIdRef.current },
+          }]);
+        }
+
+        console.log('[Guest] Offer sent after admission');
+        
+        // Poll for answer
+        const pollForAnswer = async () => {
+          if (guestHasRemoteDescRef.current) return;
+          const { data: answers } = await supabase
+            .from('meeting_signals')
+            .select('*')
+            .eq('meeting_id', meetingId!)
+            .eq('to_user', guestIdRef.current)
+            .eq('signal_type', 'answer')
+            .order('created_at', { ascending: false })
+            .limit(1);
+          
+          if (answers && answers.length > 0 && pc.signalingState === 'have-local-offer') {
+            const answerData = answers[0].signal_data as any;
+            await pc.setRemoteDescription(new RTCSessionDescription(answerData.sdp));
+            guestHasRemoteDescRef.current = true;
+            while (guestIceCandidateQueueRef.current.length > 0) {
+              const candidate = guestIceCandidateQueueRef.current.shift();
+              if (candidate) {
+                try { await pc.addIceCandidate(candidate); } catch (e) {}
+              }
+            }
+          }
+        };
+        
+        setTimeout(pollForAnswer, 1000);
+        setTimeout(pollForAnswer, 3000);
+        setTimeout(pollForAnswer, 5000);
+        setTimeout(pollForAnswer, 8000);
+      };
+
+      // Listen for admission response via realtime
       const admissionChannel = supabase
         .channel(`admission-${meetingId}-${guestIdRef.current}-${Date.now()}`)
         .on(
@@ -809,66 +820,11 @@ const PublicMeeting = () => {
             if (signal.to_user !== guestIdRef.current) return;
 
             if (signal.signal_type === 'join-accepted') {
-              console.log('[Guest] Admission accepted by host!');
+              console.log('[Guest] Admission accepted!');
               setWaitingForAdmission(false);
               supabase.removeChannel(admissionChannel);
-
-              // Now proceed with WebRTC offer
-              const offer = await pc.createOffer({
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: true,
-              });
-              await pc.setLocalDescription(offer);
-              
-              await supabase.from('meeting_signals').insert([{
-                meeting_id: meetingId!,
-                from_user: guestIdRef.current,
-                to_user: 'host',
-                signal_type: 'offer',
-                signal_data: JSON.parse(JSON.stringify({ sdp: offer })),
-              }]);
-
-              // Also notify host that guest joined
-              if (hostId) {
-                await supabase.from('meeting_signals').insert([{
-                  meeting_id: meetingId!,
-                  from_user: guestIdRef.current,
-                  to_user: hostId,
-                  signal_type: 'guest-joined',
-                  signal_data: { guestName, guestId: guestIdRef.current },
-                }]);
-              }
-
-              console.log('[Guest] Offer sent after admission');
-              
-              // Poll for answer
-              const pollForAnswer = async () => {
-                if (hasRemoteDescriptionRef.current) return;
-                
-                const { data: answers } = await supabase
-                  .from('meeting_signals')
-                  .select('*')
-                  .eq('meeting_id', meetingId!)
-                  .eq('to_user', guestIdRef.current)
-                  .eq('signal_type', 'answer')
-                  .order('created_at', { ascending: false })
-                  .limit(1);
-                
-                if (answers && answers.length > 0 && pc.signalingState === 'have-local-offer') {
-                  const answerData = answers[0].signal_data as any;
-                  console.log('Found pending answer from host');
-                  await pc.setRemoteDescription(new RTCSessionDescription(answerData.sdp));
-                  hasRemoteDescriptionRef.current = true;
-                  await processIceCandidateQueue();
-                }
-              };
-              
-              setTimeout(pollForAnswer, 1000);
-              setTimeout(pollForAnswer, 3000);
-              setTimeout(pollForAnswer, 5000);
-
+              await sendOfferToHost();
             } else if (signal.signal_type === 'join-rejected') {
-              console.log('[Guest] Admission rejected by host');
               setWaitingForAdmission(false);
               setAdmissionRejected(true);
               supabase.removeChannel(admissionChannel);
@@ -893,33 +849,9 @@ const PublicMeeting = () => {
           const resp = responses[0];
           if (resp.signal_type === 'join-accepted') {
             clearInterval(pollAdmission);
-            // Trigger the same logic as realtime
             setWaitingForAdmission(false);
             supabase.removeChannel(admissionChannel);
-
-            const offer = await pc.createOffer({
-              offerToReceiveAudio: true,
-              offerToReceiveVideo: true,
-            });
-            await pc.setLocalDescription(offer);
-            
-            await supabase.from('meeting_signals').insert([{
-              meeting_id: meetingId!,
-              from_user: guestIdRef.current,
-              to_user: 'host',
-              signal_type: 'offer',
-              signal_data: JSON.parse(JSON.stringify({ sdp: offer })),
-            }]);
-
-            if (hostId) {
-              await supabase.from('meeting_signals').insert([{
-                meeting_id: meetingId!,
-                from_user: guestIdRef.current,
-                to_user: hostId,
-                signal_type: 'guest-joined',
-                signal_data: { guestName, guestId: guestIdRef.current },
-              }]);
-            }
+            await sendOfferToHost();
           } else if (resp.signal_type === 'join-rejected') {
             clearInterval(pollAdmission);
             setWaitingForAdmission(false);
@@ -963,7 +895,9 @@ const PublicMeeting = () => {
   const handleAcceptGuest = async (guest: PendingJoinRequest) => {
     console.log('[Host] Accepting guest:', guest.guestName, guest.guestId);
     
-    // Send join-accepted signal to the guest
+    // Store accepted guest name for later when offer arrives
+    acceptedGuestNamesRef.current.set(guest.guestId, guest.guestName);
+    
     await supabase.from('meeting_signals').insert([{
       meeting_id: meetingId!,
       from_user: 'host',
@@ -972,14 +906,11 @@ const PublicMeeting = () => {
       signal_data: { guestName: guest.guestName },
     }]);
 
-    // Remove from pending list
     setPendingJoinRequests(prev => prev.filter(r => r.guestId !== guest.guestId));
     toast.success(`${guest.guestName} foi aceito na reunião`);
   };
 
   const handleRejectGuest = async (guest: PendingJoinRequest) => {
-    console.log('[Host] Rejecting guest:', guest.guestName, guest.guestId);
-    
     await supabase.from('meeting_signals').insert([{
       meeting_id: meetingId!,
       from_user: 'host',
@@ -1024,25 +955,29 @@ const PublicMeeting = () => {
   };
 
   const toggleScreenShare = async () => {
-    const pc = peerConnectionRef.current;
-    if (!pc) return;
+    // Get all peer connections
+    const allPcs = isHost 
+      ? Array.from(peerConnectionsRef.current.values()) 
+      : (guestPeerConnectionRef.current ? [guestPeerConnectionRef.current] : []);
+    
+    if (allPcs.length === 0) return;
 
     try {
       if (isScreenSharing) {
-        // Restore camera
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         const videoTrack = stream.getVideoTracks()[0];
         
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) {
-          await sender.replaceTrack(videoTrack);
+        for (const pc of allPcs) {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) {
+            await sender.replaceTrack(videoTrack);
+          }
         }
         
         if (originalVideoTrackRef.current) {
           originalVideoTrackRef.current.stop();
         }
         
-        // Update local stream
         const audioTracks = localStream?.getAudioTracks() || [];
         setLocalStream(new MediaStream([...audioTracks, videoTrack]));
         
@@ -1050,38 +985,37 @@ const PublicMeeting = () => {
           localVideoRef.current.srcObject = new MediaStream([...audioTracks, videoTrack]);
         }
         
-        // Notify remote participant that screen share stopped
-        const targetUser = isHost ? 'guest' : 'host';
+        // Notify all participants
         await supabase.from('meeting_signals').insert([{
           meeting_id: meetingId!,
           from_user: isHost ? 'host' : guestIdRef.current,
-          to_user: targetUser,
+          to_user: isHost ? 'guest' : 'host',
           signal_type: 'screen-share-status',
           signal_data: { isSharing: false },
         }]);
         
         setIsScreenSharing(false);
       } else {
-        // Start screen share
         const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
         const screenTrack = screenStream.getVideoTracks()[0];
         
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) {
-          originalVideoTrackRef.current = localStream?.getVideoTracks()[0] || null;
-          await sender.replaceTrack(screenTrack);
+        originalVideoTrackRef.current = localStream?.getVideoTracks()[0] || null;
+        
+        for (const pc of allPcs) {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) {
+            await sender.replaceTrack(screenTrack);
+          }
         }
         
         screenTrack.onended = () => {
           toggleScreenShare();
         };
         
-        // Notify remote participant that screen share started
-        const targetUser = isHost ? 'guest' : 'host';
         await supabase.from('meeting_signals').insert([{
           meeting_id: meetingId!,
           from_user: isHost ? 'host' : guestIdRef.current,
-          to_user: targetUser,
+          to_user: isHost ? 'guest' : 'host',
           signal_type: 'screen-share-status',
           signal_data: { isSharing: true },
         }]);
@@ -1096,7 +1030,8 @@ const PublicMeeting = () => {
   const startRecording = () => {
     const streams: MediaStream[] = [];
     if (localStream) streams.push(localStream);
-    if (remoteStream) streams.push(remoteStream);
+    const firstRemote = getFirstRemoteStream();
+    if (firstRemote) streams.push(firstRemote);
 
     if (streams.length === 0) {
       toast.error('Nenhum stream disponível');
@@ -1114,7 +1049,7 @@ const PublicMeeting = () => {
         }
       });
 
-      const videoTrack = localStream?.getVideoTracks()[0] || remoteStream?.getVideoTracks()[0];
+      const videoTrack = localStream?.getVideoTracks()[0] || firstRemote?.getVideoTracks()[0];
       const combinedStream = new MediaStream([
         ...destination.stream.getAudioTracks(),
         ...(videoTrack ? [videoTrack] : []),
@@ -1174,7 +1109,8 @@ const PublicMeeting = () => {
   const startTranscription = useCallback(async () => {
     const streams: MediaStream[] = [];
     if (localStream) streams.push(localStream);
-    if (remoteStream) streams.push(remoteStream);
+    const firstRemote = getFirstRemoteStream();
+    if (firstRemote) streams.push(firstRemote);
 
     if (streams.length === 0) {
       toast.error('Nenhum stream de áudio disponível');
@@ -1182,7 +1118,6 @@ const PublicMeeting = () => {
     }
 
     try {
-      // Create combined audio stream
       const audioContext = new AudioContext();
       const destination = audioContext.createMediaStreamDestination();
 
@@ -1211,22 +1146,19 @@ const PublicMeeting = () => {
         }
       };
 
-      recorder.start(100); // Collect data every 100ms
+      recorder.start(100);
       setIsTranscribing(true);
       setShowTranscriptions(true);
 
-      // Process audio every 10 seconds
       transcriptionIntervalRef.current = setInterval(async () => {
         if (transcriptionChunksRef.current.length === 0) return;
 
         const audioBlob = new Blob(transcriptionChunksRef.current, { type: mimeType });
-        transcriptionChunksRef.current = []; // Clear chunks
+        transcriptionChunksRef.current = [];
 
-        // Skip if audio is too small (less than 1KB)
         if (audioBlob.size < 1000) return;
 
         try {
-          // Convert blob to base64
           const reader = new FileReader();
           reader.readAsDataURL(audioBlob);
           
@@ -1238,16 +1170,11 @@ const PublicMeeting = () => {
               body: { audio: base64Audio, language: 'pt' }
             });
 
-            if (error) {
-              console.error('Transcription error:', error);
-              return;
-            }
+            if (error) return;
 
             if (data?.text && data.text.trim().length > 0) {
               const timestamp = new Date().toLocaleTimeString('pt-BR', { 
-                hour: '2-digit', 
-                minute: '2-digit',
-                second: '2-digit'
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
               });
               
               setTranscriptions(prev => [...prev, {
@@ -1260,14 +1187,14 @@ const PublicMeeting = () => {
         } catch (err) {
           console.error('Error processing transcription:', err);
         }
-      }, 10000); // Every 10 seconds
+      }, 10000);
 
       toast.success('Transcrição iniciada');
     } catch (error) {
       console.error('Error starting transcription:', error);
       toast.error('Erro ao iniciar transcrição');
     }
-  }, [localStream, remoteStream, isHost, guestName]);
+  }, [localStream, getFirstRemoteStream, isHost, guestName]);
 
   const stopTranscription = useCallback(() => {
     if (transcriptionRecorderRef.current && isTranscribing) {
@@ -1312,13 +1239,20 @@ const PublicMeeting = () => {
     if (callIntervalRef.current) clearInterval(callIntervalRef.current);
     
     localStream?.getTracks().forEach(track => track.stop());
-    peerConnectionRef.current?.close();
+    
+    // Close all peer connections
+    if (isHost) {
+      peerConnectionsRef.current.forEach(pc => pc.close());
+      peerConnectionsRef.current.clear();
+    } else {
+      guestPeerConnectionRef.current?.close();
+    }
     
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
     }
 
-    // Signal call end to other participant
+    // Signal call end
     if (isHost) {
       await supabase.from('meeting_signals').insert([{
         meeting_id: meetingId!,
@@ -1337,7 +1271,6 @@ const PublicMeeting = () => {
       }]);
     }
 
-    // Update meeting status
     await supabase
       .from('meetings')
       .update({
@@ -1354,6 +1287,10 @@ const PublicMeeting = () => {
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Get participants count
+  const participantCount = remoteParticipants.size + 1; // +1 for self
+  const remoteParticipantsList = Array.from(remoteParticipants.entries());
 
   // Meeting not found
   if (meetingExists === false) {
@@ -1501,7 +1438,18 @@ const PublicMeeting = () => {
     );
   }
 
-  // Call screen
+  // ========== CALL SCREEN ==========
+  // Determine grid layout based on participant count
+  const getVideoGridClass = () => {
+    const count = remoteParticipantsList.length;
+    if (count === 0) return '';
+    if (count === 1) return 'grid-cols-1';
+    if (count <= 2) return 'grid-cols-2';
+    if (count <= 4) return 'grid-cols-2 grid-rows-2';
+    if (count <= 6) return 'grid-cols-3 grid-rows-2';
+    return 'grid-cols-3 grid-rows-3';
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -1520,7 +1468,7 @@ const PublicMeeting = () => {
                   <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
                   <span>Aguardando participantes...</span>
                 </>
-              ) : isConnecting ? (
+              ) : isConnecting && remoteParticipants.size === 0 ? (
                 <>
                   <Loader2 className="h-3 w-3 animate-spin" />
                   <span>Conectando...</span>
@@ -1529,6 +1477,12 @@ const PublicMeeting = () => {
                 <>
                   <span className="h-2 w-2 rounded-full bg-green-500" />
                   <span>{formatTime(callDuration)}</span>
+                  {participantCount > 1 && (
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      <Users className="h-3 w-3 mr-1" />
+                      {participantCount}
+                    </Badge>
+                  )}
                 </>
               )}
             </div>
@@ -1536,7 +1490,6 @@ const PublicMeeting = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Pending join requests button for host */}
           {isHost && pendingJoinRequests.length > 0 && (
             <Button
               variant="outline"
@@ -1552,7 +1505,7 @@ const PublicMeeting = () => {
             </Button>
           )}
 
-          {isHost && waitingForGuests && (
+          {isHost && (
             <Button variant="outline" size="sm" onClick={copyLink}>
               {copied ? (
                 <Check className="h-4 w-4 mr-2 text-green-500" />
@@ -1627,24 +1580,31 @@ const PublicMeeting = () => {
         </div>
       )}
 
-      {/* Video area */}
+      {/* Video area - Grid layout for multiple participants */}
       <div className="flex-1 relative bg-muted/50 overflow-hidden">
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          playsInline
-          className={`absolute inset-0 w-full h-full ${remoteIsScreenSharing ? 'object-contain bg-black' : 'object-cover'}`}
-        />
-        
-        {/* Screen share indicator for receiver */}
-        {remoteIsScreenSharing && (
-          <div className="absolute top-4 left-4 bg-primary/90 text-primary-foreground text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 z-10">
-            <Monitor className="h-4 w-4" />
-            <span>{isHost ? guestName : hostName} está compartilhando a tela</span>
+        {remoteParticipantsList.length > 0 ? (
+          <div className={`grid ${getVideoGridClass()} w-full h-full gap-1`}>
+            {remoteParticipantsList.map(([peerId, participant]) => (
+              <div key={peerId} className="relative bg-muted/80 overflow-hidden">
+                <video
+                  autoPlay
+                  playsInline
+                  className={`w-full h-full ${remoteIsScreenSharing ? 'object-contain bg-black' : 'object-cover'}`}
+                  ref={(el) => {
+                    if (el && el.srcObject !== participant.stream) {
+                      el.srcObject = participant.stream;
+                      el.play().catch(console.warn);
+                    }
+                  }}
+                />
+                {/* Participant name label */}
+                <div className="absolute bottom-2 left-2 bg-background/80 text-foreground text-xs px-2 py-1 rounded">
+                  {participant.name}
+                </div>
+              </div>
+            ))}
           </div>
-        )}
-
-        {!remoteStream && (
+        ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
               {waitingForGuests ? (
@@ -1679,8 +1639,16 @@ const PublicMeeting = () => {
           </div>
         )}
 
-        <div className="absolute bottom-4 right-4 w-48 h-36 rounded-lg overflow-hidden shadow-lg border border-border bg-background">
-          {/* Hidden video for blur processing */}
+        {/* Screen share indicator */}
+        {remoteIsScreenSharing && (
+          <div className="absolute top-4 left-4 bg-primary/90 text-primary-foreground text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 z-10">
+            <Monitor className="h-4 w-4" />
+            <span>Participante está compartilhando a tela</span>
+          </div>
+        )}
+
+        {/* Local video (small, bottom-right) */}
+        <div className="absolute bottom-4 right-4 w-48 h-36 rounded-lg overflow-hidden shadow-lg border border-border bg-background z-10">
           <video
             ref={localVideoRef}
             autoPlay
@@ -1690,7 +1658,6 @@ const PublicMeeting = () => {
             style={!isBlurEnabled ? getFilterStyle() : undefined}
           />
           
-          {/* Canvas for blur effect */}
           {isBlurEnabled && (
             <canvas
               ref={blurCanvasRef}
@@ -1699,7 +1666,6 @@ const PublicMeeting = () => {
             />
           )}
           
-          {/* Blur loading indicator */}
           {isBlurLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
               <div className="text-center">
@@ -1714,6 +1680,10 @@ const PublicMeeting = () => {
               <VideoOff className="h-8 w-8 text-muted-foreground" />
             </div>
           )}
+          
+          <div className="absolute bottom-1 left-1 bg-background/80 text-foreground text-[10px] px-1.5 py-0.5 rounded">
+            Você
+          </div>
         </div>
       </div>
 
@@ -1737,7 +1707,6 @@ const PublicMeeting = () => {
           {isVideoEnabled ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
         </Button>
 
-        {/* Camera Filters */}
         <CameraFiltersPanel
           filters={cameraFilters}
           activePreset={cameraPreset}
