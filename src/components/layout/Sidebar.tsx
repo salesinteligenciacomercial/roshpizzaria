@@ -15,7 +15,7 @@ import { useAgendaNotifications } from "@/hooks/useAgendaNotifications";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const navigation = [{
-  name: "Analytics",
+  name: "Relatórios",
   href: "/analytics",
   icon: LayoutDashboard,
   menuKey: "analytics"
