@@ -1744,7 +1744,13 @@ const PublicMeeting = () => {
             {/* Local video in grid */}
             <div className="relative bg-muted/80 overflow-hidden rounded-sm min-h-0 min-w-0">
               <video
-                ref={localVideoRef}
+                ref={(el) => {
+                  localVideoRef.current = el;
+                  if (el && localStream && el.srcObject !== localStream) {
+                    el.srcObject = localStream;
+                    el.play().catch(console.warn);
+                  }
+                }}
                 autoPlay
                 playsInline
                 muted
@@ -1782,7 +1788,13 @@ const PublicMeeting = () => {
             {/* Local video full screen when alone */}
             <div className="flex-1 relative">
               <video
-                ref={localVideoRef}
+                ref={(el) => {
+                  localVideoRef.current = el;
+                  if (el && localStream && el.srcObject !== localStream) {
+                    el.srcObject = localStream;
+                    el.play().catch(console.warn);
+                  }
+                }}
                 autoPlay
                 playsInline
                 muted
