@@ -16,7 +16,7 @@ import { NewConversationDialog } from '@/components/internal-chat/NewConversatio
 import { ShareItemDialog } from '@/components/internal-chat/ShareItemDialog';
 import { EditGroupDialog } from '@/components/internal-chat/EditGroupDialog';
 import { MessageItem } from '@/components/internal-chat/MessageItem';
-import { VideoCallModal } from '@/components/meetings/VideoCallModal';
+import { VideoCallModalV2 } from '@/components/meetings/VideoCallModalV2';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -692,7 +692,7 @@ export default function ChatInterno() {
     }} />}
 
       {/* Video/Audio Call Modal */}
-      {activeCall && currentUserId && <VideoCallModal open={true} onClose={() => setActiveCall(null)} meetingId={activeCall.meetingId} localUserId={currentUserId} remoteUserId={activeCall.remoteUserId} remoteUserName={activeCall.remoteUserName} callType={activeCall.callType} isCaller={activeCall.isCaller} onCallEnded={handleCallEnded} />}
+      {activeCall && currentUserId && <VideoCallModalV2 open={true} onClose={() => setActiveCall(null)} meetingId={activeCall.meetingId} localUserId={currentUserId} remoteUserId={activeCall.remoteUserId} remoteUserName={activeCall.remoteUserName} callType={activeCall.callType} isCaller={activeCall.isCaller} onCallEnded={handleCallEnded} />}
 
       {/* Note: Incoming Call Modal removed - handled globally by GlobalCallListenerV2 in MainLayout */}
     </div>;
