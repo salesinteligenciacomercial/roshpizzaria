@@ -8,7 +8,7 @@ import {
   Mic, MicOff, Video, VideoOff, PhoneOff, 
   Monitor, MonitorOff, Circle, Square, Loader2, Users, Copy, Check,
   FileText, Download, X, MessageSquare, BookOpen, MessageCircle,
-  UserCheck, UserX, Bell
+  UserCheck, UserX, Bell, ChevronRight
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MeetingScriptPanel, MeetingScript } from '@/components/meetings/MeetingScriptPanel';
@@ -122,7 +122,6 @@ const PublicMeeting = () => {
   
   // Call state
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  // Multi-participant: map of guestId -> { stream, name }
   const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map());
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -133,6 +132,7 @@ const PublicMeeting = () => {
   const [callDuration, setCallDuration] = useState(0);
   const [isConnecting, setIsConnecting] = useState(true);
   const [waitingForGuests, setWaitingForGuests] = useState(false);
+  const [showParticipantList, setShowParticipantList] = useState(false);
   
   // Participant admission state
   const [pendingJoinRequests, setPendingJoinRequests] = useState<PendingJoinRequest[]>([]);
@@ -171,16 +171,15 @@ const PublicMeeting = () => {
     stopProcessing: stopBlurProcessing,
   } = useBackgroundBlur();
 
-  // Canvas ref for background blur
   const blurCanvasRef = useRef<HTMLCanvasElement>(null);
-  
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  // Multi-participant: Map of guestId -> RTCPeerConnection
+  
+  // Unified peer connection management (both host and guest use maps)
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const hasRemoteDescriptionsRef = useRef<Map<string, boolean>>(new Map());
   const iceCandidateQueuesRef = useRef<Map<string, RTCIceCandidate[]>>(new Map());
-  // Keep track of accepted guest names for linking offers to names
-  const acceptedGuestNamesRef = useRef<Map<string, string>>(new Map());
+  const peerNamesRef = useRef<Map<string, string>>(new Map());
+  const processedOffersRef = useRef<Set<string>>(new Set());
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
@@ -188,6 +187,7 @@ const PublicMeeting = () => {
   const callIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const originalVideoTrackRef = useRef<MediaStreamTrack | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
   
   // Transcription refs
   const transcriptionRecorderRef = useRef<MediaRecorder | null>(null);
@@ -197,13 +197,6 @@ const PublicMeeting = () => {
   const guestIdRef = useRef<string>(`guest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
   const processedGuestJoinsRef = useRef<Set<string>>(new Set());
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  // Track processed offers to avoid duplicates
-  const processedOffersRef = useRef<Set<string>>(new Set());
-  
-  // For guest: single peer connection ref (guest only connects to host)
-  const guestPeerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const guestHasRemoteDescRef = useRef(false);
-  const guestIceCandidateQueueRef = useRef<RTCIceCandidate[]>([]);
   
   // Chat state
   const [showChat, setShowChat] = useState(false);
@@ -221,7 +214,10 @@ const PublicMeeting = () => {
     currentChatUserName
   );
 
-  // Helper: get first remote stream (for backward compat in recording/transcription)
+  // My peer ID
+  const myPeerId = isHost ? 'host' : guestIdRef.current;
+
+  // Helper: get first remote stream (for recording/transcription)
   const getFirstRemoteStream = useCallback((): MediaStream | null => {
     const entries = Array.from(remoteParticipants.values());
     return entries.length > 0 ? entries[0].stream : null;
@@ -321,32 +317,33 @@ const PublicMeeting = () => {
     };
   }, [isHost, hasJoined, meetingId]);
 
-  // ========== HOST: Create a new peer connection for a specific guest ==========
-  const createPeerConnectionForGuest = useCallback((guestPeerId: string, guestPeerName: string, existingLocalStream: MediaStream) => {
-    console.log(`[Host] Creating peer connection for guest: ${guestPeerName} (${guestPeerId})`);
+  // ========== UNIVERSAL: Create peer connection to any peer ==========
+  const createPeerConnection = useCallback((peerId: string, peerName: string, stream: MediaStream): RTCPeerConnection => {
+    console.log(`[${myPeerId}] Creating peer connection to: ${peerName} (${peerId})`);
     
-    // Clean up existing connection for this guest if any
-    const existingPc = peerConnectionsRef.current.get(guestPeerId);
+    // Clean up existing
+    const existingPc = peerConnectionsRef.current.get(peerId);
     if (existingPc) {
       existingPc.close();
     }
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
-    peerConnectionsRef.current.set(guestPeerId, pc);
-    hasRemoteDescriptionsRef.current.set(guestPeerId, false);
-    iceCandidateQueuesRef.current.set(guestPeerId, []);
+    peerConnectionsRef.current.set(peerId, pc);
+    hasRemoteDescriptionsRef.current.set(peerId, false);
+    iceCandidateQueuesRef.current.set(peerId, []);
+    peerNamesRef.current.set(peerId, peerName);
 
-    // Add local tracks to the new connection
-    existingLocalStream.getTracks().forEach(track => {
-      pc.addTrack(track, existingLocalStream);
+    // Add local tracks
+    stream.getTracks().forEach(track => {
+      pc.addTrack(track, stream);
     });
 
     pc.ontrack = (event) => {
-      console.log(`[Host] Received remote track from guest ${guestPeerName}`);
+      console.log(`[${myPeerId}] Received remote track from ${peerName} (${peerId})`);
       const remoteMediaStream = event.streams[0];
       setRemoteParticipants(prev => {
         const newMap = new Map(prev);
-        newMap.set(guestPeerId, { stream: remoteMediaStream, name: guestPeerName });
+        newMap.set(peerId, { stream: remoteMediaStream, name: peerName });
         return newMap;
       });
       setIsConnecting(false);
@@ -363,8 +360,8 @@ const PublicMeeting = () => {
       if (event.candidate) {
         await supabase.from('meeting_signals').insert([{
           meeting_id: meetingId!,
-          from_user: 'host',
-          to_user: guestPeerId,
+          from_user: myPeerId,
+          to_user: peerId,
           signal_type: 'ice-candidate',
           signal_data: JSON.parse(JSON.stringify({ candidate: event.candidate.toJSON() })),
         }]);
@@ -372,7 +369,7 @@ const PublicMeeting = () => {
     };
 
     pc.onconnectionstatechange = () => {
-      console.log(`[Host] Connection state for ${guestPeerName}:`, pc.connectionState);
+      console.log(`[${myPeerId}] Connection state for ${peerName}:`, pc.connectionState);
       if (pc.connectionState === 'connected') {
         setIsConnecting(false);
         setWaitingForGuests(false);
@@ -384,56 +381,55 @@ const PublicMeeting = () => {
       } else if (pc.connectionState === 'failed') {
         pc.restartIce();
       } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
-        // Remove participant when disconnected
-        console.log(`[Host] Guest ${guestPeerName} disconnected`);
+        console.log(`[${myPeerId}] Peer ${peerName} disconnected`);
         setRemoteParticipants(prev => {
           const newMap = new Map(prev);
-          newMap.delete(guestPeerId);
+          newMap.delete(peerId);
           return newMap;
         });
-        peerConnectionsRef.current.delete(guestPeerId);
-        hasRemoteDescriptionsRef.current.delete(guestPeerId);
-        iceCandidateQueuesRef.current.delete(guestPeerId);
+        peerConnectionsRef.current.delete(peerId);
+        hasRemoteDescriptionsRef.current.delete(peerId);
+        iceCandidateQueuesRef.current.delete(peerId);
       }
     };
 
     return pc;
-  }, [meetingId]);
+  }, [meetingId, myPeerId]);
 
-  // ========== HOST: Process offer from a specific guest ==========
-  const processGuestOffer = useCallback(async (guestPeerId: string, sdpData: any, existingLocalStream: MediaStream) => {
-    const offerKey = `${guestPeerId}-offer`;
+  // ========== UNIVERSAL: Process an offer from a peer ==========
+  const processOffer = useCallback(async (fromPeerId: string, sdpData: any, stream: MediaStream) => {
+    const offerKey = `${fromPeerId}-offer`;
     if (processedOffersRef.current.has(offerKey)) {
-      console.log(`[Host] Already processed offer from ${guestPeerId}, skipping`);
+      console.log(`[${myPeerId}] Already processed offer from ${fromPeerId}, skipping`);
       return;
     }
     processedOffersRef.current.add(offerKey);
 
-    const guestPeerName = acceptedGuestNamesRef.current.get(guestPeerId) || 'Participante';
+    const peerName = peerNamesRef.current.get(fromPeerId) || 'Participante';
     
-    let pc = peerConnectionsRef.current.get(guestPeerId);
+    let pc = peerConnectionsRef.current.get(fromPeerId);
     if (!pc || pc.connectionState === 'closed' || pc.connectionState === 'failed') {
-      pc = createPeerConnectionForGuest(guestPeerId, guestPeerName, existingLocalStream);
+      pc = createPeerConnection(fromPeerId, peerName, stream);
     }
 
-    const hasRemoteDesc = hasRemoteDescriptionsRef.current.get(guestPeerId);
+    const hasRemoteDesc = hasRemoteDescriptionsRef.current.get(fromPeerId);
     if (hasRemoteDesc) {
-      console.log(`[Host] Already has remote desc for ${guestPeerId}, skipping`);
+      console.log(`[${myPeerId}] Already has remote desc for ${fromPeerId}, skipping`);
       return;
     }
 
     if (pc.signalingState !== 'stable') {
-      console.log(`[Host] PC not stable for ${guestPeerId}, state: ${pc.signalingState}`);
+      console.log(`[${myPeerId}] PC not stable for ${fromPeerId}, state: ${pc.signalingState}`);
       return;
     }
 
     try {
-      console.log(`[Host] Setting remote description for ${guestPeerName}...`);
+      console.log(`[${myPeerId}] Setting remote description from ${peerName}...`);
       await pc.setRemoteDescription(new RTCSessionDescription(sdpData));
-      hasRemoteDescriptionsRef.current.set(guestPeerId, true);
+      hasRemoteDescriptionsRef.current.set(fromPeerId, true);
 
       // Process queued ICE candidates
-      const queue = iceCandidateQueuesRef.current.get(guestPeerId) || [];
+      const queue = iceCandidateQueuesRef.current.get(fromPeerId) || [];
       while (queue.length > 0) {
         const candidate = queue.shift();
         if (candidate) {
@@ -446,20 +442,114 @@ const PublicMeeting = () => {
 
       await supabase.from('meeting_signals').insert([{
         meeting_id: meetingId!,
-        from_user: 'host',
-        to_user: guestPeerId,
+        from_user: myPeerId,
+        to_user: fromPeerId,
         signal_type: 'answer',
         signal_data: JSON.parse(JSON.stringify({ sdp: answer })),
       }]);
-      console.log(`[Host] Answer sent to ${guestPeerName}`);
+      console.log(`[${myPeerId}] Answer sent to ${peerName}`);
       setWaitingForGuests(false);
       setIsConnecting(false);
     } catch (error) {
-      console.error(`[Host] Error processing offer from ${guestPeerName}:`, error);
-      // Allow retry
+      console.error(`[${myPeerId}] Error processing offer from ${peerName}:`, error);
       processedOffersRef.current.delete(offerKey);
     }
-  }, [meetingId, createPeerConnectionForGuest]);
+  }, [meetingId, myPeerId, createPeerConnection]);
+
+  // ========== UNIVERSAL: Send offer to a peer ==========
+  const sendOfferToPeer = useCallback(async (peerId: string, peerName: string, stream: MediaStream) => {
+    console.log(`[${myPeerId}] Sending offer to ${peerName} (${peerId})`);
+    peerNamesRef.current.set(peerId, peerName);
+    
+    const pc = createPeerConnection(peerId, peerName, stream);
+    
+    const offer = await pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true,
+    });
+    await pc.setLocalDescription(offer);
+    
+    await supabase.from('meeting_signals').insert([{
+      meeting_id: meetingId!,
+      from_user: myPeerId,
+      to_user: peerId,
+      signal_type: 'offer',
+      signal_data: JSON.parse(JSON.stringify({ sdp: offer })),
+    }]);
+
+    // Poll for answer
+    const pollForAnswer = async () => {
+      if (hasRemoteDescriptionsRef.current.get(peerId)) return;
+      const { data: answers } = await supabase
+        .from('meeting_signals')
+        .select('*')
+        .eq('meeting_id', meetingId!)
+        .eq('to_user', myPeerId)
+        .eq('from_user', peerId)
+        .eq('signal_type', 'answer')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      
+      if (answers && answers.length > 0) {
+        const currentPc = peerConnectionsRef.current.get(peerId);
+        if (currentPc && currentPc.signalingState === 'have-local-offer') {
+          const answerData = answers[0].signal_data as any;
+          await currentPc.setRemoteDescription(new RTCSessionDescription(answerData.sdp));
+          hasRemoteDescriptionsRef.current.set(peerId, true);
+          const queue = iceCandidateQueuesRef.current.get(peerId) || [];
+          while (queue.length > 0) {
+            const candidate = queue.shift();
+            if (candidate) {
+              try { await currentPc.addIceCandidate(candidate); } catch (e) {}
+            }
+          }
+        }
+      }
+    };
+    
+    setTimeout(pollForAnswer, 1000);
+    setTimeout(pollForAnswer, 3000);
+    setTimeout(pollForAnswer, 5000);
+    setTimeout(pollForAnswer, 8000);
+    setTimeout(pollForAnswer, 12000);
+  }, [meetingId, myPeerId, createPeerConnection]);
+
+  // ========== UNIVERSAL: Handle incoming ICE candidate ==========
+  const handleIceCandidate = useCallback(async (fromPeerId: string, candidateData: any) => {
+    const candidate = new RTCIceCandidate(candidateData);
+    const pc = peerConnectionsRef.current.get(fromPeerId);
+    const hasRemoteDesc = hasRemoteDescriptionsRef.current.get(fromPeerId);
+
+    if (pc && hasRemoteDesc) {
+      try { await pc.addIceCandidate(candidate); } catch (e) { console.error('ICE err:', e); }
+    } else {
+      const queue = iceCandidateQueuesRef.current.get(fromPeerId) || [];
+      queue.push(candidate);
+      iceCandidateQueuesRef.current.set(fromPeerId, queue);
+    }
+  }, []);
+
+  // ========== UNIVERSAL: Handle incoming answer ==========
+  const handleAnswer = useCallback(async (fromPeerId: string, sdpData: any) => {
+    const pc = peerConnectionsRef.current.get(fromPeerId);
+    if (!pc) return;
+    if (pc.signalingState !== 'have-local-offer') return;
+    if (hasRemoteDescriptionsRef.current.get(fromPeerId)) return;
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(sdpData));
+      hasRemoteDescriptionsRef.current.set(fromPeerId, true);
+      const queue = iceCandidateQueuesRef.current.get(fromPeerId) || [];
+      while (queue.length > 0) {
+        const candidate = queue.shift();
+        if (candidate) {
+          try { await pc.addIceCandidate(candidate); } catch (e) {}
+        }
+      }
+    } catch (e) {
+      console.error(`[${myPeerId}] Error setting answer from ${fromPeerId}:`, e);
+    }
+  }, [myPeerId]);
 
   // Initialize WebRTC as Host
   const initializeWebRTCAsHost = async () => {
@@ -469,13 +559,14 @@ const PublicMeeting = () => {
         audio: { echoCancellation: true, noiseSuppression: true },
       });
       setLocalStream(stream);
+      localStreamRef.current = stream;
       
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
         localVideoRef.current.play().catch(console.warn);
       }
 
-      // Subscribe to signals from guests
+      // Subscribe to signals
       const channel = supabase
         .channel(`public-meeting-host-${meetingId}-${Date.now()}`)
         .on(
@@ -489,25 +580,19 @@ const PublicMeeting = () => {
           async (payload) => {
             const signal = payload.new as any;
             if (signal.from_user === 'host') return;
+            // Only process signals directed to host or broadcast
+            if (signal.to_user !== 'host' && signal.to_user !== 'all') return;
             
-            const guestPeerId = signal.from_user;
+            const fromPeerId = signal.from_user;
 
             if (signal.signal_type === 'offer') {
-              console.log(`[Host Realtime] Offer from ${guestPeerId}`);
-              await processGuestOffer(guestPeerId, signal.signal_data.sdp, stream);
-            } else if (signal.signal_type === 'ice-candidate' && signal.from_user !== 'host') {
-              const candidate = new RTCIceCandidate(signal.signal_data.candidate);
-              const pc = peerConnectionsRef.current.get(guestPeerId);
-              const hasRemoteDesc = hasRemoteDescriptionsRef.current.get(guestPeerId);
-
-              if (pc && hasRemoteDesc) {
-                try { await pc.addIceCandidate(candidate); } catch (e) { console.error('ICE err:', e); }
-              } else {
-                // Queue it
-                const queue = iceCandidateQueuesRef.current.get(guestPeerId) || [];
-                queue.push(candidate);
-                iceCandidateQueuesRef.current.set(guestPeerId, queue);
+              console.log(`[Host Realtime] Offer from ${fromPeerId}`);
+              const currentStream = localStreamRef.current;
+              if (currentStream) {
+                await processOffer(fromPeerId, signal.signal_data.sdp, currentStream);
               }
+            } else if (signal.signal_type === 'ice-candidate') {
+              await handleIceCandidate(fromPeerId, signal.signal_data.candidate);
             } else if (signal.signal_type === 'guest-joined') {
               console.log('[Host Realtime] Guest joined:', signal.signal_data);
               playJoinNotification();
@@ -534,20 +619,15 @@ const PublicMeeting = () => {
                 });
               }
             } else if (signal.signal_type === 'call-end') {
-              // A specific guest ended - remove their connection
-              const pc = peerConnectionsRef.current.get(guestPeerId);
+              const pc = peerConnectionsRef.current.get(fromPeerId);
               if (pc) {
                 pc.close();
-                peerConnectionsRef.current.delete(guestPeerId);
+                peerConnectionsRef.current.delete(fromPeerId);
                 setRemoteParticipants(prev => {
                   const newMap = new Map(prev);
-                  newMap.delete(guestPeerId);
+                  newMap.delete(fromPeerId);
                   return newMap;
                 });
-              }
-              // If signal is broadcast to all, end meeting
-              if (signal.to_user === 'host' || signal.to_user === 'all') {
-                // Just remove that guest
               }
             } else if (signal.signal_type === 'screen-share-status') {
               const shareData = signal.signal_data as { isSharing: boolean };
@@ -563,12 +643,16 @@ const PublicMeeting = () => {
       
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Poll for pending offers from already-accepted guests
+      // Poll for pending offers
       const checkAndProcessOffers = async () => {
+        const currentStream = localStreamRef.current;
+        if (!currentStream) return;
+        
         const { data: pendingOffers, error } = await supabase
           .from('meeting_signals')
           .select('*')
           .eq('meeting_id', meetingId!)
+          .eq('to_user', 'host')
           .eq('signal_type', 'offer')
           .order('created_at', { ascending: false })
           .limit(20);
@@ -576,23 +660,20 @@ const PublicMeeting = () => {
         if (error || !pendingOffers) return;
         
         for (const offer of pendingOffers) {
-          const guestPeerId = offer.from_user;
-          if (processedOffersRef.current.has(`${guestPeerId}-offer`)) continue;
-          // Only process if this guest was accepted
-          if (acceptedGuestNamesRef.current.has(guestPeerId)) {
-            await processGuestOffer(guestPeerId, (offer.signal_data as any).sdp, stream);
+          const fromPeerId = offer.from_user;
+          if (processedOffersRef.current.has(`${fromPeerId}-offer`)) continue;
+          if (peerNamesRef.current.has(fromPeerId)) {
+            await processOffer(fromPeerId, (offer.signal_data as any).sdp, currentStream);
           }
         }
       };
       
       await checkAndProcessOffers();
       
-      // Continuous polling for new offers
       const offerPollInterval = setInterval(async () => {
         await checkAndProcessOffers();
       }, 2000);
       
-      // Store cleanup
       const originalCleanup = channelRef.current;
       channelRef.current = {
         ...originalCleanup,
@@ -611,7 +692,7 @@ const PublicMeeting = () => {
     }
   };
 
-  // Initialize WebRTC as Guest (creates offer)
+  // Initialize WebRTC as Guest (full mesh - connects to host and other guests)
   const initializeWebRTCAsGuest = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -619,65 +700,14 @@ const PublicMeeting = () => {
         audio: { echoCancellation: true, noiseSuppression: true },
       });
       setLocalStream(stream);
+      localStreamRef.current = stream;
       
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
         localVideoRef.current.play().catch(console.warn);
       }
 
-      const pc = new RTCPeerConnection(ICE_SERVERS);
-      guestPeerConnectionRef.current = pc;
-      guestHasRemoteDescRef.current = false;
-      guestIceCandidateQueueRef.current = [];
-
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-      });
-
-      pc.ontrack = (event) => {
-        console.log('[Guest] Received remote track');
-        const remoteMediaStream = event.streams[0];
-        setRemoteParticipants(prev => {
-          const newMap = new Map(prev);
-          newMap.set('host', { stream: remoteMediaStream, name: hostName });
-          return newMap;
-        });
-        setIsConnecting(false);
-        
-        if (!callIntervalRef.current) {
-          callIntervalRef.current = setInterval(() => {
-            setCallDuration(prev => prev + 1);
-          }, 1000);
-        }
-      };
-
-      pc.onicecandidate = async (event) => {
-        if (event.candidate) {
-          await supabase.from('meeting_signals').insert([{
-            meeting_id: meetingId!,
-            from_user: guestIdRef.current,
-            to_user: 'host',
-            signal_type: 'ice-candidate',
-            signal_data: JSON.parse(JSON.stringify({ candidate: event.candidate.toJSON() })),
-          }]);
-        }
-      };
-
-      pc.onconnectionstatechange = () => {
-        console.log('[Guest] Connection state:', pc.connectionState);
-        if (pc.connectionState === 'connected') {
-          setIsConnecting(false);
-          if (!callIntervalRef.current) {
-            callIntervalRef.current = setInterval(() => {
-              setCallDuration(prev => prev + 1);
-            }, 1000);
-          }
-        } else if (pc.connectionState === 'failed') {
-          pc.restartIce();
-        }
-      };
-
-      // Subscribe to signals
+      // Subscribe to ALL signals for this meeting directed to this guest
       const channel = supabase
         .channel(`public-meeting-${meetingId}-${guestIdRef.current}-${Date.now()}`)
         .on(
@@ -690,33 +720,65 @@ const PublicMeeting = () => {
           },
           async (payload) => {
             const signal = payload.new as any;
-            // Only process signals directed to this guest
-            if (signal.to_user !== guestIdRef.current && signal.to_user !== 'guest') return;
+            const fromPeerId = signal.from_user;
+            
+            // Skip own signals
+            if (fromPeerId === guestIdRef.current) return;
+            
+            // Only process signals directed to this guest, or broadcast
+            if (signal.to_user !== guestIdRef.current && signal.to_user !== 'all' && signal.to_user !== 'guest') return;
 
             if (signal.signal_type === 'answer') {
-              if (pc.signalingState === 'have-local-offer') {
-                await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
-                guestHasRemoteDescRef.current = true;
-                // Process queued candidates
-                while (guestIceCandidateQueueRef.current.length > 0) {
-                  const candidate = guestIceCandidateQueueRef.current.shift();
-                  if (candidate) {
-                    try { await pc.addIceCandidate(candidate); } catch (e) { console.error('ICE err:', e); }
-                  }
+              console.log(`[Guest] Answer from ${fromPeerId}`);
+              await handleAnswer(fromPeerId, signal.signal_data.sdp);
+            } else if (signal.signal_type === 'offer') {
+              // Another peer (guest) is sending us an offer
+              console.log(`[Guest] Offer from ${fromPeerId}`);
+              const currentStream = localStreamRef.current;
+              if (currentStream) {
+                await processOffer(fromPeerId, signal.signal_data.sdp, currentStream);
+              }
+            } else if (signal.signal_type === 'ice-candidate') {
+              await handleIceCandidate(fromPeerId, signal.signal_data.candidate);
+            } else if (signal.signal_type === 'call-end') {
+              if (fromPeerId === 'host') {
+                // Host ended the meeting
+                handleEndCall();
+              } else {
+                // Another guest left
+                const pc = peerConnectionsRef.current.get(fromPeerId);
+                if (pc) {
+                  pc.close();
+                  peerConnectionsRef.current.delete(fromPeerId);
+                  setRemoteParticipants(prev => {
+                    const newMap = new Map(prev);
+                    newMap.delete(fromPeerId);
+                    return newMap;
+                  });
                 }
               }
-            } else if (signal.signal_type === 'ice-candidate' && signal.from_user !== guestIdRef.current) {
-              const candidate = new RTCIceCandidate(signal.signal_data.candidate);
-              if (guestHasRemoteDescRef.current) {
-                try { await pc.addIceCandidate(candidate); } catch (e) { console.error('ICE err:', e); }
-              } else {
-                guestIceCandidateQueueRef.current.push(candidate);
-              }
-            } else if (signal.signal_type === 'call-end') {
-              handleEndCall();
             } else if (signal.signal_type === 'screen-share-status') {
               const shareData = signal.signal_data as { isSharing: boolean };
               setRemoteIsScreenSharing(shareData.isSharing);
+            } else if (signal.signal_type === 'new-peer-joined') {
+              // Host is telling us about a new peer - we should create an offer to them
+              const newPeerData = signal.signal_data as any;
+              const newPeerId = newPeerData.peerId;
+              const newPeerName = newPeerData.peerName;
+              console.log(`[Guest] New peer notification: ${newPeerName} (${newPeerId})`);
+              
+              const currentStream = localStreamRef.current;
+              if (currentStream && !peerConnectionsRef.current.has(newPeerId)) {
+                peerNamesRef.current.set(newPeerId, newPeerName);
+                await sendOfferToPeer(newPeerId, newPeerName, currentStream);
+              }
+            } else if (signal.signal_type === 'join-accepted') {
+              console.log('[Guest] Admission accepted!');
+              setWaitingForAdmission(false);
+            } else if (signal.signal_type === 'join-rejected') {
+              setWaitingForAdmission(false);
+              setAdmissionRejected(true);
+              toast.error('O anfitrião recusou sua entrada na reunião');
             }
           }
         )
@@ -726,7 +788,7 @@ const PublicMeeting = () => {
       
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Send join-request and wait for host approval
+      // Send join-request to host
       if (hostId) {
         await supabase.from('meeting_signals').insert([{
           meeting_id: meetingId!,
@@ -745,96 +807,7 @@ const PublicMeeting = () => {
         setWaitingForAdmission(true);
       }
 
-      // Helper to send offer after admission
-      const sendOfferToHost = async () => {
-        const offer = await pc.createOffer({
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: true,
-        });
-        await pc.setLocalDescription(offer);
-        
-        await supabase.from('meeting_signals').insert([{
-          meeting_id: meetingId!,
-          from_user: guestIdRef.current,
-          to_user: 'host',
-          signal_type: 'offer',
-          signal_data: JSON.parse(JSON.stringify({ sdp: offer })),
-        }]);
-
-        if (hostId) {
-          await supabase.from('meeting_signals').insert([{
-            meeting_id: meetingId!,
-            from_user: guestIdRef.current,
-            to_user: hostId,
-            signal_type: 'guest-joined',
-            signal_data: { guestName, guestId: guestIdRef.current },
-          }]);
-        }
-
-        console.log('[Guest] Offer sent after admission');
-        
-        // Poll for answer
-        const pollForAnswer = async () => {
-          if (guestHasRemoteDescRef.current) return;
-          const { data: answers } = await supabase
-            .from('meeting_signals')
-            .select('*')
-            .eq('meeting_id', meetingId!)
-            .eq('to_user', guestIdRef.current)
-            .eq('signal_type', 'answer')
-            .order('created_at', { ascending: false })
-            .limit(1);
-          
-          if (answers && answers.length > 0 && pc.signalingState === 'have-local-offer') {
-            const answerData = answers[0].signal_data as any;
-            await pc.setRemoteDescription(new RTCSessionDescription(answerData.sdp));
-            guestHasRemoteDescRef.current = true;
-            while (guestIceCandidateQueueRef.current.length > 0) {
-              const candidate = guestIceCandidateQueueRef.current.shift();
-              if (candidate) {
-                try { await pc.addIceCandidate(candidate); } catch (e) {}
-              }
-            }
-          }
-        };
-        
-        setTimeout(pollForAnswer, 1000);
-        setTimeout(pollForAnswer, 3000);
-        setTimeout(pollForAnswer, 5000);
-        setTimeout(pollForAnswer, 8000);
-      };
-
-      // Listen for admission response via realtime
-      const admissionChannel = supabase
-        .channel(`admission-${meetingId}-${guestIdRef.current}-${Date.now()}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'meeting_signals',
-            filter: `meeting_id=eq.${meetingId}`,
-          },
-          async (payload) => {
-            const signal = payload.new as any;
-            if (signal.to_user !== guestIdRef.current) return;
-
-            if (signal.signal_type === 'join-accepted') {
-              console.log('[Guest] Admission accepted!');
-              setWaitingForAdmission(false);
-              supabase.removeChannel(admissionChannel);
-              await sendOfferToHost();
-            } else if (signal.signal_type === 'join-rejected') {
-              setWaitingForAdmission(false);
-              setAdmissionRejected(true);
-              supabase.removeChannel(admissionChannel);
-              toast.error('O anfitrião recusou sua entrada na reunião');
-            }
-          }
-        )
-        .subscribe();
-
-      // Also poll for admission response
+      // Poll for admission response
       const pollAdmission = setInterval(async () => {
         const { data: responses } = await supabase
           .from('meeting_signals')
@@ -850,17 +823,82 @@ const PublicMeeting = () => {
           if (resp.signal_type === 'join-accepted') {
             clearInterval(pollAdmission);
             setWaitingForAdmission(false);
-            supabase.removeChannel(admissionChannel);
-            await sendOfferToHost();
+            
+            const acceptData = resp.signal_data as any;
+            const existingPeers: Array<{ peerId: string; peerName: string }> = acceptData?.existingPeers || [];
+            
+            const currentStream = localStreamRef.current;
+            if (!currentStream) return;
+
+            // Connect to host
+            peerNamesRef.current.set('host', hostName || 'Anfitrião');
+            await sendOfferToPeer('host', hostName || 'Anfitrião', currentStream);
+
+            // Connect to all existing guests
+            for (const peer of existingPeers) {
+              if (peer.peerId !== guestIdRef.current) {
+                peerNamesRef.current.set(peer.peerId, peer.peerName);
+                await sendOfferToPeer(peer.peerId, peer.peerName, currentStream);
+              }
+            }
+
+            // Notify host that we joined
+            if (hostId) {
+              await supabase.from('meeting_signals').insert([{
+                meeting_id: meetingId!,
+                from_user: guestIdRef.current,
+                to_user: 'host',
+                signal_type: 'guest-joined',
+                signal_data: { guestName, guestId: guestIdRef.current },
+              }]);
+            }
+
+            console.log('[Guest] Connected to host and', existingPeers.length, 'existing peers');
           } else if (resp.signal_type === 'join-rejected') {
             clearInterval(pollAdmission);
             setWaitingForAdmission(false);
             setAdmissionRejected(true);
-            supabase.removeChannel(admissionChannel);
             toast.error('O anfitrião recusou sua entrada na reunião');
           }
         }
       }, 2000);
+
+      // Also poll for offers from other peers (in case realtime misses them)
+      const peerOfferPoll = setInterval(async () => {
+        const currentStream = localStreamRef.current;
+        if (!currentStream) return;
+        
+        const { data: offers } = await supabase
+          .from('meeting_signals')
+          .select('*')
+          .eq('meeting_id', meetingId!)
+          .eq('to_user', guestIdRef.current)
+          .eq('signal_type', 'offer')
+          .order('created_at', { ascending: false })
+          .limit(20);
+        
+        if (offers) {
+          for (const offer of offers) {
+            const fromPeerId = offer.from_user;
+            if (!processedOffersRef.current.has(`${fromPeerId}-offer`)) {
+              const pName = peerNamesRef.current.get(fromPeerId) || 'Participante';
+              peerNamesRef.current.set(fromPeerId, pName);
+              await processOffer(fromPeerId, (offer.signal_data as any).sdp, currentStream);
+            }
+          }
+        }
+      }, 3000);
+
+      // Cleanup on unmount
+      const origChannel = channelRef.current;
+      channelRef.current = {
+        ...origChannel,
+        unsubscribe: () => {
+          clearInterval(pollAdmission);
+          clearInterval(peerOfferPoll);
+          return origChannel?.unsubscribe();
+        },
+      } as any;
 
     } catch (error) {
       console.error('Error initializing WebRTC as guest:', error);
@@ -895,16 +933,35 @@ const PublicMeeting = () => {
   const handleAcceptGuest = async (guest: PendingJoinRequest) => {
     console.log('[Host] Accepting guest:', guest.guestName, guest.guestId);
     
-    // Store accepted guest name for later when offer arrives
-    acceptedGuestNamesRef.current.set(guest.guestId, guest.guestName);
+    peerNamesRef.current.set(guest.guestId, guest.guestName);
     
+    // Build list of existing connected peers for the new guest
+    const existingPeers: Array<{ peerId: string; peerName: string }> = [];
+    peerConnectionsRef.current.forEach((_, peerId) => {
+      const name = peerNamesRef.current.get(peerId) || 'Participante';
+      existingPeers.push({ peerId, peerName: name });
+    });
+
+    // Send acceptance with existing peer list
     await supabase.from('meeting_signals').insert([{
       meeting_id: meetingId!,
       from_user: 'host',
       to_user: guest.guestId,
       signal_type: 'join-accepted',
-      signal_data: { guestName: guest.guestName },
+      signal_data: { guestName: guest.guestName, existingPeers },
     }]);
+
+    // Notify ALL existing connected guests about the new peer
+    const notifyPromises = Array.from(peerConnectionsRef.current.keys()).map(existingPeerId => 
+      supabase.from('meeting_signals').insert([{
+        meeting_id: meetingId!,
+        from_user: 'host',
+        to_user: existingPeerId,
+        signal_type: 'new-peer-joined',
+        signal_data: { peerId: guest.guestId, peerName: guest.guestName },
+      }])
+    );
+    await Promise.all(notifyPromises);
 
     setPendingJoinRequests(prev => prev.filter(r => r.guestId !== guest.guestId));
     toast.success(`${guest.guestName} foi aceito na reunião`);
@@ -955,11 +1012,7 @@ const PublicMeeting = () => {
   };
 
   const toggleScreenShare = async () => {
-    // Get all peer connections
-    const allPcs = isHost 
-      ? Array.from(peerConnectionsRef.current.values()) 
-      : (guestPeerConnectionRef.current ? [guestPeerConnectionRef.current] : []);
-    
+    const allPcs = Array.from(peerConnectionsRef.current.values());
     if (allPcs.length === 0) return;
 
     try {
@@ -979,17 +1032,18 @@ const PublicMeeting = () => {
         }
         
         const audioTracks = localStream?.getAudioTracks() || [];
-        setLocalStream(new MediaStream([...audioTracks, videoTrack]));
+        const newStream = new MediaStream([...audioTracks, videoTrack]);
+        setLocalStream(newStream);
+        localStreamRef.current = newStream;
         
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = new MediaStream([...audioTracks, videoTrack]);
+          localVideoRef.current.srcObject = newStream;
         }
         
-        // Notify all participants
         await supabase.from('meeting_signals').insert([{
           meeting_id: meetingId!,
-          from_user: isHost ? 'host' : guestIdRef.current,
-          to_user: isHost ? 'guest' : 'host',
+          from_user: myPeerId,
+          to_user: 'all',
           signal_type: 'screen-share-status',
           signal_data: { isSharing: false },
         }]);
@@ -1014,8 +1068,8 @@ const PublicMeeting = () => {
         
         await supabase.from('meeting_signals').insert([{
           meeting_id: meetingId!,
-          from_user: isHost ? 'host' : guestIdRef.current,
-          to_user: isHost ? 'guest' : 'host',
+          from_user: myPeerId,
+          to_user: 'all',
           signal_type: 'screen-share-status',
           signal_data: { isSharing: true },
         }]);
@@ -1042,9 +1096,14 @@ const PublicMeeting = () => {
       const audioContext = new AudioContext();
       const destination = audioContext.createMediaStreamDestination();
 
-      streams.forEach(stream => {
-        if (stream.getAudioTracks().length > 0) {
-          const source = audioContext.createMediaStreamSource(stream);
+      // Add audio from all remote participants
+      if (localStream && localStream.getAudioTracks().length > 0) {
+        const source = audioContext.createMediaStreamSource(localStream);
+        source.connect(destination);
+      }
+      remoteParticipants.forEach((participant) => {
+        if (participant.stream.getAudioTracks().length > 0) {
+          const source = audioContext.createMediaStreamSource(participant.stream);
           source.connect(destination);
         }
       });
@@ -1241,43 +1300,42 @@ const PublicMeeting = () => {
     localStream?.getTracks().forEach(track => track.stop());
     
     // Close all peer connections
-    if (isHost) {
-      peerConnectionsRef.current.forEach(pc => pc.close());
-      peerConnectionsRef.current.clear();
-    } else {
-      guestPeerConnectionRef.current?.close();
-    }
+    peerConnectionsRef.current.forEach(pc => pc.close());
+    peerConnectionsRef.current.clear();
     
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
     }
 
-    // Signal call end
-    if (isHost) {
+    // Signal call end to all
+    await supabase.from('meeting_signals').insert([{
+      meeting_id: meetingId!,
+      from_user: myPeerId,
+      to_user: isHost ? 'guest' : 'host',
+      signal_type: 'call-end',
+      signal_data: {},
+    }]);
+
+    // Also send to 'all' so other guests know
+    if (!isHost) {
       await supabase.from('meeting_signals').insert([{
         meeting_id: meetingId!,
-        from_user: 'host',
-        to_user: 'guest',
-        signal_type: 'call-end',
-        signal_data: {},
-      }]);
-    } else {
-      await supabase.from('meeting_signals').insert([{
-        meeting_id: meetingId!,
-        from_user: guestIdRef.current,
-        to_user: 'host',
+        from_user: myPeerId,
+        to_user: 'all',
         signal_type: 'call-end',
         signal_data: {},
       }]);
     }
 
-    await supabase
-      .from('meetings')
-      .update({
-        status: 'ended',
-        ended_at: new Date().toISOString(),
-      })
-      .eq('id', meetingId);
+    if (isHost) {
+      await supabase
+        .from('meetings')
+        .update({
+          status: 'ended',
+          ended_at: new Date().toISOString(),
+        })
+        .eq('id', meetingId);
+    }
 
     setMeetingEnded(true);
   };
@@ -1288,8 +1346,8 @@ const PublicMeeting = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Get participants count
-  const participantCount = remoteParticipants.size + 1; // +1 for self
+  // Participants
+  const participantCount = remoteParticipants.size + 1;
   const remoteParticipantsList = Array.from(remoteParticipants.entries());
 
   // Meeting not found
@@ -1439,30 +1497,30 @@ const PublicMeeting = () => {
   }
 
   // ========== CALL SCREEN ==========
-  // Determine grid layout based on participant count
+  // Dynamic grid for ALL participants (including self)
+  const totalVideos = remoteParticipantsList.length + 1; // +1 for local
   const getVideoGridClass = () => {
-    const count = remoteParticipantsList.length;
-    if (count === 0) return '';
-    if (count === 1) return 'grid-cols-1';
-    if (count <= 2) return 'grid-cols-2';
-    if (count <= 4) return 'grid-cols-2 grid-rows-2';
-    if (count <= 6) return 'grid-cols-3 grid-rows-2';
-    return 'grid-cols-3 grid-rows-3';
+    if (totalVideos <= 1) return 'grid-cols-1';
+    if (totalVideos === 2) return 'grid-cols-2';
+    if (totalVideos <= 4) return 'grid-cols-2';
+    if (totalVideos <= 6) return 'grid-cols-3';
+    if (totalVideos <= 9) return 'grid-cols-3';
+    return 'grid-cols-4';
   };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between p-3 border-b">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
-            <span className="text-lg font-semibold text-primary">
+          <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
+            <span className="text-sm font-semibold text-primary">
               {(isHost ? guestName : hostName).charAt(0).toUpperCase()}
             </span>
           </div>
           <div>
-            <h3 className="font-semibold">{isHost ? 'Você (Anfitrião)' : hostName}</h3>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <h3 className="font-semibold text-sm">{isHost ? 'Você (Anfitrião)' : hostName}</h3>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {waitingForGuests ? (
                 <>
                   <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
@@ -1477,14 +1535,16 @@ const PublicMeeting = () => {
                 <>
                   <span className="h-2 w-2 rounded-full bg-green-500" />
                   <span>{formatTime(callDuration)}</span>
-                  {participantCount > 1 && (
-                    <Badge variant="secondary" className="ml-2 text-xs">
-                      <Users className="h-3 w-3 mr-1" />
-                      {participantCount}
-                    </Badge>
-                  )}
                 </>
               )}
+              <Badge 
+                variant="secondary" 
+                className="ml-1 text-xs cursor-pointer hover:bg-secondary/80"
+                onClick={() => setShowParticipantList(!showParticipantList)}
+              >
+                <Users className="h-3 w-3 mr-1" />
+                {participantCount}
+              </Badge>
             </div>
           </div>
         </div>
@@ -1497,9 +1557,8 @@ const PublicMeeting = () => {
               onClick={() => setShowPendingRequests(!showPendingRequests)}
               className="relative"
             >
-              <Bell className="h-4 w-4 mr-2" />
-              Solicitações
-              <Badge variant="destructive" className="ml-2 h-5 w-5 p-0 flex items-center justify-center text-xs">
+              <Bell className="h-4 w-4 mr-1" />
+              <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
                 {pendingJoinRequests.length}
               </Badge>
             </Button>
@@ -1508,9 +1567,9 @@ const PublicMeeting = () => {
           {isHost && (
             <Button variant="outline" size="sm" onClick={copyLink}>
               {copied ? (
-                <Check className="h-4 w-4 mr-2 text-green-500" />
+                <Check className="h-4 w-4 mr-1 text-green-500" />
               ) : (
-                <Copy className="h-4 w-4 mr-2" />
+                <Copy className="h-4 w-4 mr-1" />
               )}
               Copiar Link
             </Button>
@@ -1527,7 +1586,7 @@ const PublicMeeting = () => {
 
       {/* Pending Join Requests Panel */}
       {isHost && showPendingRequests && pendingJoinRequests.length > 0 && (
-        <div className="absolute top-16 right-4 z-50 w-80 bg-background border rounded-lg shadow-xl">
+        <div className="absolute top-14 right-4 z-50 w-80 bg-background border rounded-lg shadow-xl">
           <div className="flex items-center justify-between p-3 border-b">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-primary" />
@@ -1580,12 +1639,60 @@ const PublicMeeting = () => {
         </div>
       )}
 
-      {/* Video area - Grid layout for multiple participants */}
+      {/* Participant List Panel */}
+      {showParticipantList && (
+        <div className="absolute top-14 left-4 z-50 w-64 bg-background border rounded-lg shadow-xl">
+          <div className="flex items-center justify-between p-3 border-b">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary" />
+              <span className="font-medium text-sm">Participantes ({participantCount})</span>
+            </div>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowParticipantList(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            {/* Self */}
+            <div className="flex items-center gap-2 p-3 border-b">
+              <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
+                <span className="text-sm font-semibold text-primary">
+                  {(isHost ? guestName : guestName).charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="flex-1">
+                <span className="text-sm font-medium">Você{isHost ? ' (Anfitrião)' : ''}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                {isAudioEnabled ? <Mic className="h-3 w-3 text-green-500" /> : <MicOff className="h-3 w-3 text-destructive" />}
+                {isVideoEnabled ? <Video className="h-3 w-3 text-green-500" /> : <VideoOff className="h-3 w-3 text-destructive" />}
+              </div>
+            </div>
+            {/* Remote participants */}
+            {remoteParticipantsList.map(([peerId, participant]) => (
+              <div key={peerId} className="flex items-center gap-2 p-3 border-b last:border-b-0">
+                <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
+                  <span className="text-sm font-semibold text-primary">
+                    {participant.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1">
+                  <span className="text-sm font-medium">{participant.name}</span>
+                  {peerId === 'host' && <span className="text-xs text-muted-foreground ml-1">(Anfitrião)</span>}
+                </div>
+                <span className="h-2 w-2 rounded-full bg-green-500" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Video area - All participants in grid including self */}
       <div className="flex-1 relative bg-muted/50 overflow-hidden">
         {remoteParticipantsList.length > 0 ? (
-          <div className={`grid ${getVideoGridClass()} w-full h-full gap-1`}>
+          <div className={`grid ${getVideoGridClass()} w-full h-full gap-0.5 p-0.5`}>
+            {/* All remote participants */}
             {remoteParticipantsList.map(([peerId, participant]) => (
-              <div key={peerId} className="relative bg-muted/80 overflow-hidden">
+              <div key={peerId} className="relative bg-muted/80 overflow-hidden rounded-sm min-h-0">
                 <video
                   autoPlay
                   playsInline
@@ -1597,45 +1704,89 @@ const PublicMeeting = () => {
                     }
                   }}
                 />
-                {/* Participant name label */}
-                <div className="absolute bottom-2 left-2 bg-background/80 text-foreground text-xs px-2 py-1 rounded">
+                <div className="absolute bottom-1 left-1 bg-background/80 text-foreground text-xs px-2 py-0.5 rounded">
                   {participant.name}
                 </div>
               </div>
             ))}
+            {/* Local video in grid */}
+            <div className="relative bg-muted/80 overflow-hidden rounded-sm min-h-0">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className={isBlurEnabled ? 'hidden' : 'w-full h-full object-cover'}
+                style={!isBlurEnabled ? getFilterStyle() : undefined}
+              />
+              {isBlurEnabled && (
+                <canvas
+                  ref={blurCanvasRef}
+                  className="w-full h-full object-cover"
+                  style={getFilterStyle()}
+                />
+              )}
+              {isBlurLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
+                  <div className="text-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-1" />
+                    <span className="text-[10px] text-muted-foreground">Carregando IA...</span>
+                  </div>
+                </div>
+              )}
+              {!isVideoEnabled && (
+                <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                  <VideoOff className="h-8 w-8 text-muted-foreground" />
+                </div>
+              )}
+              <div className="absolute bottom-1 left-1 bg-background/80 text-foreground text-xs px-2 py-0.5 rounded">
+                Você
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              {waitingForGuests ? (
-                <>
-                  <div className="h-24 w-24 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-                    <Users className="h-12 w-12 text-primary" />
-                  </div>
-                  <h3 className="text-xl font-semibold mb-2">Sala ao Vivo</h3>
-                  <p className="text-muted-foreground mb-4">Aguardando participantes entrarem...</p>
-                  <div className="flex items-center justify-center gap-2 text-muted-foreground">
+          /* Waiting screen when no remote participants */
+          <div className="absolute inset-0 flex flex-col">
+            {/* Local video full screen when alone */}
+            <div className="flex-1 relative">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className={isBlurEnabled ? 'hidden' : 'w-full h-full object-cover'}
+                style={!isBlurEnabled ? getFilterStyle() : undefined}
+              />
+              {isBlurEnabled && (
+                <canvas
+                  ref={blurCanvasRef}
+                  className="w-full h-full object-cover"
+                  style={getFilterStyle()}
+                />
+              )}
+              {!isVideoEnabled && (
+                <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                  <VideoOff className="h-12 w-12 text-muted-foreground" />
+                </div>
+              )}
+              <div className="absolute bottom-2 left-2 bg-background/80 text-foreground text-xs px-2 py-1 rounded">
+                Você
+              </div>
+            </div>
+            {waitingForGuests && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+                <div className="text-center bg-background/90 rounded-lg p-6 shadow-lg">
+                  <Users className="h-10 w-10 text-primary mx-auto mb-3" />
+                  <h3 className="text-lg font-semibold mb-1">Sala ao Vivo</h3>
+                  <p className="text-sm text-muted-foreground mb-3">Aguardando participantes entrarem...</p>
+                  <div className="flex items-center justify-center gap-2">
                     <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                     <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                     <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
-                </>
-              ) : (
-                <>
-                  <div className="h-24 w-24 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-                    <span className="text-4xl font-semibold text-primary">
-                      {(isHost ? 'G' : hostName.charAt(0)).toUpperCase()}
-                    </span>
-                  </div>
-                  {isConnecting && (
-                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      <span>Aguardando conexão...</span>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1646,65 +1797,26 @@ const PublicMeeting = () => {
             <span>Participante está compartilhando a tela</span>
           </div>
         )}
-
-        {/* Local video (small, bottom-right) */}
-        <div className="absolute bottom-4 right-4 w-48 h-36 rounded-lg overflow-hidden shadow-lg border border-border bg-background z-10">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className={isBlurEnabled ? 'hidden' : 'w-full h-full object-cover'}
-            style={!isBlurEnabled ? getFilterStyle() : undefined}
-          />
-          
-          {isBlurEnabled && (
-            <canvas
-              ref={blurCanvasRef}
-              className="w-full h-full object-cover"
-              style={getFilterStyle()}
-            />
-          )}
-          
-          {isBlurLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
-              <div className="text-center">
-                <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-1" />
-                <span className="text-[10px] text-muted-foreground">Carregando IA...</span>
-              </div>
-            </div>
-          )}
-          
-          {!isVideoEnabled && (
-            <div className="absolute inset-0 flex items-center justify-center bg-muted">
-              <VideoOff className="h-8 w-8 text-muted-foreground" />
-            </div>
-          )}
-          
-          <div className="absolute bottom-1 left-1 bg-background/80 text-foreground text-[10px] px-1.5 py-0.5 rounded">
-            Você
-          </div>
-        </div>
       </div>
 
       {/* Controls */}
-      <div className="flex items-center justify-center gap-4 p-6 border-t bg-background">
+      <div className="flex items-center justify-center gap-3 p-4 border-t bg-background">
         <Button
           variant={isAudioEnabled ? 'secondary' : 'destructive'}
           size="lg"
-          className="rounded-full h-14 w-14"
+          className="rounded-full h-12 w-12"
           onClick={toggleAudio}
         >
-          {isAudioEnabled ? <Mic className="h-6 w-6" /> : <MicOff className="h-6 w-6" />}
+          {isAudioEnabled ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
         </Button>
 
         <Button
           variant={isVideoEnabled ? 'secondary' : 'destructive'}
           size="lg"
-          className="rounded-full h-14 w-14"
+          className="rounded-full h-12 w-12"
           onClick={toggleVideo}
         >
-          {isVideoEnabled ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
+          {isVideoEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
         </Button>
 
         <CameraFiltersPanel
@@ -1723,53 +1835,53 @@ const PublicMeeting = () => {
         <Button
           variant={isScreenSharing ? 'default' : 'secondary'}
           size="lg"
-          className="rounded-full h-14 w-14"
+          className="rounded-full h-12 w-12"
           onClick={toggleScreenShare}
         >
-          {isScreenSharing ? <MonitorOff className="h-6 w-6" /> : <Monitor className="h-6 w-6" />}
+          {isScreenSharing ? <MonitorOff className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
         </Button>
 
         <Button
           variant={isRecording ? 'destructive' : 'secondary'}
           size="lg"
-          className="rounded-full h-14 w-14"
+          className="rounded-full h-12 w-12"
           onClick={isRecording ? stopRecording : startRecording}
           title={isRecording ? 'Parar gravação' : 'Gravar reunião'}
         >
-          {isRecording ? <Square className="h-6 w-6" /> : <Circle className="h-6 w-6" />}
+          {isRecording ? <Square className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
         </Button>
 
         <Button
           variant={isTranscribing ? 'default' : 'secondary'}
           size="lg"
-          className="rounded-full h-14 w-14"
+          className="rounded-full h-12 w-12"
           onClick={isTranscribing ? stopTranscription : startTranscription}
           title={isTranscribing ? 'Parar transcrição' : 'Transcrever áudio'}
         >
-          <FileText className="h-6 w-6" />
+          <FileText className="h-5 w-5" />
         </Button>
 
         <Button
           variant={activeScript ? 'default' : 'secondary'}
           size="lg"
-          className="rounded-full h-14 w-14"
+          className="rounded-full h-12 w-12"
           onClick={() => activeScript ? setActiveScript(null) : setShowScriptDialog(true)}
           title={activeScript ? 'Fechar roteiro' : 'Abrir roteiro de reunião'}
         >
-          <BookOpen className="h-6 w-6" />
+          <BookOpen className="h-5 w-5" />
         </Button>
 
         <Button
           variant={showChat ? 'default' : 'secondary'}
           size="lg"
-          className="rounded-full h-14 w-14 relative"
+          className="rounded-full h-12 w-12 relative"
           onClick={() => {
             setShowChat(!showChat);
             if (!showChat) markChatAsRead();
           }}
           title={showChat ? 'Fechar chat' : 'Abrir chat'}
         >
-          <MessageCircle className="h-6 w-6" />
+          <MessageCircle className="h-5 w-5" />
           {chatUnreadCount > 0 && !showChat && (
             <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center font-medium">
               {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
@@ -1780,16 +1892,16 @@ const PublicMeeting = () => {
         <Button
           variant="destructive"
           size="lg"
-          className="rounded-full h-14 w-14"
+          className="rounded-full h-12 w-12"
           onClick={handleEndCall}
         >
-          <PhoneOff className="h-6 w-6" />
+          <PhoneOff className="h-5 w-5" />
         </Button>
       </div>
 
       {/* Transcription Panel */}
       {showTranscriptions && (
-        <div className="absolute right-4 top-4 bottom-24 w-80 bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg flex flex-col">
+        <div className="absolute right-4 top-14 bottom-20 w-80 bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg flex flex-col z-20">
           <div className="flex items-center justify-between p-3 border-b">
             <div className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4 text-primary" />
