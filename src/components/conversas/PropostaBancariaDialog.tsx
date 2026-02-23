@@ -43,6 +43,7 @@ const TIPOS_OPERACAO = [
   { value: "refinanciamento", label: "Refinanciamento" },
   { value: "portabilidade_pura", label: "Portabilidade Pura" },
   { value: "portabilidade_refin", label: "Portabilidade + Refin" },
+  { value: "sac", label: "SAC" },
 ];
 
 const STATUS_PROPOSTA = [
