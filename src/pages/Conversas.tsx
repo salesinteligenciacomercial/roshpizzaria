@@ -1520,7 +1520,8 @@ function Conversas() {
           : (novaMensagem.telefone_formatado || novaMensagem.numero || '').replace(/[^0-9]/g, '');
         
         // Validar telefone apenas para contatos individuais (grupos têm formato diferente)
-        if (!isGroupMessage && (telefone.length < 11 || telefone.length > 13)) {
+        // ⚡ CORREÇÃO: Aceitar até 15 dígitos (consistente com loadAllUniqueConversations)
+        if (!isGroupMessage && (telefone.length < 10 || telefone.length > 15)) {
           console.warn('⚠️ [REALTIME-MULTIUSER] Telefone inválido ignorado:', telefone);
           return;
         }
