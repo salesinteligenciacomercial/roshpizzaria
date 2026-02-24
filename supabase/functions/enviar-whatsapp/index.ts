@@ -248,7 +248,8 @@ async function checkEvolutionConnectionState(
   apiKey: string
 ): Promise<boolean> {
   try {
-    const url = `${baseUrl}/instance/connectionState/${instanceName}`;
+    const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
+    const url = `${cleanBaseUrl}/instance/connectionState/${instanceName}`;
     console.log("🔍 Verificando estado real da conexão Evolution:", url);
     
     const response = await fetch(url, {
@@ -258,17 +259,33 @@ async function checkEvolutionConnectionState(
     
     if (!response.ok) {
       console.warn("⚠️ Falha ao verificar estado Evolution:", response.status);
-      return false;
+      // Se não conseguir verificar, assumir conectado para não bloquear envio
+      // O envio em si falhará se realmente desconectado
+      return true;
     }
     
     const data = await response.json();
-    const state = data?.instance?.state || data?.state || '';
+    console.log("📡 Resposta completa connectionState:", JSON.stringify(data));
+    
+    // Verificar múltiplos formatos de resposta da Evolution API
+    const state = (
+      data?.instance?.state || 
+      data?.state || 
+      data?.instance?.connectionStatus || 
+      data?.connectionStatus ||
+      data?.instance?.status ||
+      ''
+    ).toLowerCase();
+    
     console.log("📡 Estado real Evolution:", state);
     
-    return state === 'open' || state === 'connected';
+    // Aceitar variações de estado conectado
+    const connectedStates = ['open', 'connected', 'online', 'syncing'];
+    return connectedStates.includes(state);
   } catch (error) {
     console.error("❌ Erro ao verificar estado Evolution:", error);
-    return false;
+    // Em caso de erro de rede na verificação, tentar enviar mesmo assim
+    return true;
   }
 }
 
@@ -988,14 +1005,7 @@ serve(async (req) => {
             );
           }
         } else {
-          // 🔍 Verificar estado real da conexão Evolution antes de enviar
-          const isReallyConnected = await checkEvolutionConnectionState(baseUrl, connection.instance_name, apiKey);
-          
-          if (!isReallyConnected && hasMetaCredentials) {
-            console.log("⚠️ Evolution sessão fechada (verificação real-time) - usando Meta como fallback...");
-            result = await sendMetaFallback(connection, formattedNumber, validatedData);
-          } else {
-            // Tentar enviar via Evolution
+            // Enviar diretamente via Evolution sem verificação prévia de connectionState
             result = await sendEvolutionMessage(
               baseUrl,
               connection.instance_name,
@@ -1005,12 +1015,11 @@ serve(async (req) => {
               validatedData
             );
             
-            // Se Evolution falhou, tentar Meta como fallback (suporta texto, mídia e templates)
+            // Se Evolution falhou, tentar Meta como fallback
             if (!result.success && hasMetaCredentials) {
               console.log("🔄 Evolution falhou (" + result.error + "), tentando Meta como fallback...");
               result = await sendMetaFallback(connection, formattedNumber, validatedData);
             }
-          }
         }
       }
     }
@@ -1028,36 +1037,22 @@ serve(async (req) => {
         );
       }
 
-      // 🔍 Verificar estado real da conexão antes de enviar
-      const isReallyConnected = await checkEvolutionConnectionState(baseUrl, connection.instance_name, apiKey);
+      // Enviar diretamente pela Evolution - sem verificação prévia de connectionState
+      // pois o endpoint /connectionState pode retornar estado incorreto
+      result = await sendEvolutionMessage(
+        baseUrl,
+        connection.instance_name,
+        apiKey,
+        validatedData.numero,
+        false,
+        validatedData
+      );
       
-      if (!isReallyConnected) {
-        console.warn("⚠️ Evolution sessão fechada (verificação real-time). Tentando Meta como fallback...");
-        
+      // Se Evolution falhou, tentar Meta como fallback se disponível
+      if (!result.success) {
+        console.warn("⚠️ Evolution falhou:", result.error);
         if (hasMetaCredentials) {
-          result = await sendMetaFallback(connection, formattedNumber, validatedData);
-        } else {
-          return new Response(
-            JSON.stringify({ 
-              error: "Sessão WhatsApp desconectada. Reconecte o QR Code na página de Configurações ou configure a API Meta como fallback.",
-              code: "EVOLUTION_DISCONNECTED"
-            }),
-            { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-      } else {
-        result = await sendEvolutionMessage(
-          baseUrl,
-          connection.instance_name,
-          apiKey,
-          validatedData.numero,
-          false,
-          validatedData
-        );
-        
-        // Se Evolution falhou com "Connection Closed", tentar Meta como fallback
-        if (!result.success && result.error?.includes('Connection Closed') && hasMetaCredentials) {
-          console.log("⚠️ Evolution retornou 'Connection Closed' - tentando Meta como fallback...");
+          console.log("🔄 Tentando Meta como fallback...");
           result = await sendMetaFallback(connection, formattedNumber, validatedData);
         }
       }
