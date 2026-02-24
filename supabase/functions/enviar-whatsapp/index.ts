@@ -241,6 +241,113 @@ async function sendMetaMediaMessage(
   }
 }
 
+// ============= EVOLUTION CONNECTION STATE CHECK =============
+async function checkEvolutionConnectionState(
+  baseUrl: string,
+  instanceName: string,
+  apiKey: string
+): Promise<boolean> {
+  try {
+    const url = `${baseUrl}/instance/connectionState/${instanceName}`;
+    console.log("🔍 Verificando estado real da conexão Evolution:", url);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'apikey': apiKey },
+    });
+    
+    if (!response.ok) {
+      console.warn("⚠️ Falha ao verificar estado Evolution:", response.status);
+      return false;
+    }
+    
+    const data = await response.json();
+    const state = data?.instance?.state || data?.state || '';
+    console.log("📡 Estado real Evolution:", state);
+    
+    return state === 'open' || state === 'connected';
+  } catch (error) {
+    console.error("❌ Erro ao verificar estado Evolution:", error);
+    return false;
+  }
+}
+
+// ============= META FALLBACK HELPER =============
+async function sendMetaFallback(
+  connection: any,
+  formattedNumber: string,
+  validatedData: any
+): Promise<{ success: boolean; provider: string; data?: any; error?: string }> {
+  console.log("🔄 Meta API fallback ativado...");
+  
+  if (validatedData.template_name) {
+    return await sendMetaTemplateMessage(
+      connection.meta_phone_number_id,
+      connection.meta_access_token,
+      formattedNumber,
+      validatedData.template_name,
+      validatedData.template_language || 'pt_BR',
+      validatedData.template_components
+    );
+  }
+  
+  if (validatedData.mediaBase64) {
+    const mimeType = validatedData.mimeType || 'application/octet-stream';
+    const fileName = validatedData.fileName || 'arquivo';
+    const uploadResult = await uploadMetaMedia(
+      connection.meta_phone_number_id,
+      connection.meta_access_token,
+      validatedData.mediaBase64,
+      mimeType,
+      fileName
+    );
+    if (uploadResult.success && uploadResult.media_id) {
+      let mediaType = validatedData.tipo_mensagem || 'document';
+      if (mediaType === 'texto') mediaType = 'text';
+      if (mediaType === 'pdf') mediaType = 'document';
+      return await sendMetaMediaMessage(
+        connection.meta_phone_number_id,
+        connection.meta_access_token,
+        formattedNumber,
+        uploadResult.media_id,
+        mediaType as 'image' | 'video' | 'audio' | 'document',
+        validatedData.mensagem || validatedData.caption,
+        true
+      );
+    }
+  }
+  
+  if (validatedData.mediaUrl) {
+    let mediaType = validatedData.tipo_mensagem || 'image';
+    if (mediaType === 'texto') mediaType = 'text';
+    if (mediaType === 'pdf') mediaType = 'document';
+    return await sendMetaMediaMessage(
+      connection.meta_phone_number_id,
+      connection.meta_access_token,
+      formattedNumber,
+      validatedData.mediaUrl,
+      mediaType as 'image' | 'video' | 'audio' | 'document',
+      validatedData.mensagem || validatedData.caption,
+      false
+    );
+  }
+  
+  if (validatedData.mensagem) {
+    const result = await sendMetaTextMessage(
+      connection.meta_phone_number_id,
+      connection.meta_access_token,
+      formattedNumber,
+      validatedData.mensagem
+    );
+    if (!result.success && (result.error?.includes('Re-engagement message') || result.error?.includes('outside the allowed window'))) {
+      result.error = 'JANELA_24H_EXPIRADA: Este contato não enviou mensagem nas últimas 24h. Para enviar a primeira mensagem, use um template aprovado.';
+    }
+    return result;
+  }
+  
+  return { success: false, provider: 'meta', error: 'Nenhum conteúdo válido para enviar via Meta API' };
+}
+
 // ============= EVOLUTION API FUNCTIONS =============
 async function sendEvolutionMessage(
   baseUrl: string,
@@ -868,20 +975,12 @@ serve(async (req) => {
           result = { success: false, provider: 'meta', error: 'Mensagem, mídia ou template é obrigatório' };
         }
       }
-      // Evolution está conectada - usar como principal
+      // Evolution está conectada (DB) - verificar estado real antes de enviar
       else {
-        console.log("📗 Evolution conectada - Usando como principal, Meta como fallback...");
-        
         if (!baseUrl || !apiKey) {
-          // Sem Evolution configurada, tentar Meta
-          if (hasMetaCredentials && validatedData.mensagem) {
+          if (hasMetaCredentials) {
             console.log("⚠️ Evolution não configurada, tentando Meta...");
-            result = await sendMetaTextMessage(
-              connection.meta_phone_number_id,
-              connection.meta_access_token,
-              formattedNumber,
-              validatedData.mensagem
-            );
+            result = await sendMetaFallback(connection, formattedNumber, validatedData);
           } else {
             return new Response(
               JSON.stringify({ error: "Nenhuma API configurada corretamente", code: "NO_API_CONFIG" }),
@@ -889,40 +988,28 @@ serve(async (req) => {
             );
           }
         } else {
-          // Tentar enviar via Evolution
-          result = await sendEvolutionMessage(
-            baseUrl,
-            connection.instance_name,
-            apiKey,
-            validatedData.numero,
-            false,
-            validatedData
-          );
+          // 🔍 Verificar estado real da conexão Evolution antes de enviar
+          const isReallyConnected = await checkEvolutionConnectionState(baseUrl, connection.instance_name, apiKey);
           
-          // 🔒 CORREÇÃO: Se Evolution falhou com "Connection Closed", NÃO atualizar status automaticamente
-          // A desconexão deve ser MANUAL - apenas logar e tentar fallback
-          if (!result.success && result.error?.includes('Connection Closed')) {
-            console.log("⚠️ Evolution retornou 'Connection Closed' - NÃO desconectando automaticamente (desconexão manual apenas)");
-            
-            // Tentar Meta como fallback SEM atualizar status de desconexão
-            if (hasMetaCredentials && validatedData.mensagem) {
-              console.log("🔄 Tentando Meta como fallback...");
-              result = await sendMetaTextMessage(
-                connection.meta_phone_number_id,
-                connection.meta_access_token,
-                formattedNumber,
-                validatedData.mensagem
-              );
-            }
-          } else if (!result.success && hasMetaCredentials && validatedData.mensagem) {
-            // Outro erro do Evolution - tentar Meta
-            console.log("🔄 Evolution falhou, tentando Meta como fallback...");
-            result = await sendMetaTextMessage(
-              connection.meta_phone_number_id,
-              connection.meta_access_token,
-              formattedNumber,
-              validatedData.mensagem
+          if (!isReallyConnected && hasMetaCredentials) {
+            console.log("⚠️ Evolution sessão fechada (verificação real-time) - usando Meta como fallback...");
+            result = await sendMetaFallback(connection, formattedNumber, validatedData);
+          } else {
+            // Tentar enviar via Evolution
+            result = await sendEvolutionMessage(
+              baseUrl,
+              connection.instance_name,
+              apiKey,
+              validatedData.numero,
+              false,
+              validatedData
             );
+            
+            // Se Evolution falhou, tentar Meta como fallback (suporta texto, mídia e templates)
+            if (!result.success && hasMetaCredentials) {
+              console.log("🔄 Evolution falhou (" + result.error + "), tentando Meta como fallback...");
+              result = await sendMetaFallback(connection, formattedNumber, validatedData);
+            }
           }
         }
       }
@@ -940,20 +1027,33 @@ serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      // 🔍 Verificar estado real da conexão antes de enviar
+      const isReallyConnected = await checkEvolutionConnectionState(baseUrl, connection.instance_name, apiKey);
       
-      result = await sendEvolutionMessage(
-        baseUrl,
-        connection.instance_name,
-        apiKey,
-        validatedData.numero,
-        false,
-        validatedData
-      );
-      
-      // 🔒 CORREÇÃO: Se Evolution falhou com "Connection Closed", NÃO atualizar status automaticamente
-      // A desconexão deve ser MANUAL - apenas logar o erro
-      if (!result.success && result.error?.includes('Connection Closed')) {
-        console.log("⚠️ Evolution retornou 'Connection Closed' - NÃO desconectando automaticamente (desconexão manual apenas)");
+      if (!isReallyConnected) {
+        console.warn("⚠️ Evolution sessão fechada (verificação real-time). Tentando Meta como fallback...");
+        
+        if (hasMetaCredentials) {
+          result = await sendMetaFallback(connection, formattedNumber, validatedData);
+        } else {
+          result = { success: false, provider: 'evolution', error: 'WhatsApp Evolution desconectado. Reconecte sua instância ou configure a API Meta.' };
+        }
+      } else {
+        result = await sendEvolutionMessage(
+          baseUrl,
+          connection.instance_name,
+          apiKey,
+          validatedData.numero,
+          false,
+          validatedData
+        );
+        
+        // Se Evolution falhou com "Connection Closed", tentar Meta como fallback
+        if (!result.success && result.error?.includes('Connection Closed') && hasMetaCredentials) {
+          console.log("⚠️ Evolution retornou 'Connection Closed' - tentando Meta como fallback...");
+          result = await sendMetaFallback(connection, formattedNumber, validatedData);
+        }
       }
     }
 
