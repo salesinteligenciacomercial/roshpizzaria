@@ -1,48 +1,77 @@
 
 
-## Diagnostic Summary
+## Diagnostico Completo - Problemas Identificados
 
-The system **IS receiving messages** (webhook-conversas is working and saving to the database). The problem is twofold:
-
-### Problem 1: Sending fails - Evolution API session disconnected
-The logs show clearly:
-- Evolution API session state: `close` / `connecting` (physically disconnected)
-- Database still shows `status: connected` (stale)
-- No Meta API fallback configured (`meta_phone_number_id: null`, `has_meta_token: false`)
-- Result: all send attempts return 500 "Connection Closed"
-
-**This is NOT a code bug.** Your WhatsApp session in the Evolution API panel expired and needs to be reconnected manually by scanning the QR code again.
-
-### Problem 2: Received messages may not appear in UI
-Although webhook saves messages to the database, the real-time subscription in the Conversas page may not be refreshing the contact list properly (this was the bug fixed earlier).
+Analisei os logs em tempo real e fiz testes diretos. Encontrei **3 problemas concretos** que explicam por que o envio e recebimento pararam:
 
 ---
 
-## Required Actions
+### Problema 1: Evolution API retornando ERRO ao enviar
 
-### Action 1 (Manual - You must do this):
-Reconnect your WhatsApp session in the Evolution API panel (`https://evolution-evolution-api.0ntuaf.easypanel.host`):
-1. Access the Evolution API panel
-2. Find the instance **CRM**
-3. Scan the QR code with your WhatsApp to re-establish the session
-4. Once connected, sending and receiving will work normally
+Os logs mostram dois tipos de erro alternando:
 
-### Action 2 (Optional - Code improvement):
-Configure Meta API as a fallback so that when Evolution goes offline, messages still get delivered via the official API. This requires:
-- A Meta Business phone number ID
-- A Meta access token
-- Updating the `whatsapp_connections` record to set `api_provider: 'both'` with Meta credentials
+```text
+Erro A: "Cannot read properties of undefined (reading 'onWhatsApp')"
+  → A instancia "EU" no servidor evo-evolution-api NAO tem sessao WhatsApp ativa internamente
 
-### Action 3 (Code fix):
-Update the `enviar-whatsapp` edge function to return a clearer error message when Evolution is disconnected and no Meta fallback is available, instead of a generic 500 error. The response should tell the user to reconnect the WhatsApp session.
+Erro B: "Unexpected token '<', '<!DOCTYPE'... is not valid JSON"
+  → O servidor Evolution esta retornando uma pagina HTML em vez de JSON (API instavel)
+```
+
+Mesmo que o painel mostre "Connected", a sessao interna do WhatsApp NAO esta funcional. O erro `onWhatsApp is undefined` significa que o modulo WhatsApp dentro da instancia nao foi inicializado.
+
+### Problema 2: Webhook NAO configurado na instancia "EU"
+
+Os logs de `webhook-conversas` estao **completamente vazios** - nenhuma chamada recebida. Isso significa que a instancia "EU" no servidor `evo-evolution-api.0ntuaf.easypanel.host` **NAO tem o webhook configurado** para enviar eventos ao CRM.
+
+### Problema 3: Meta API fallback falhando
+
+Quando a Evolution falha, o sistema tenta a Meta API como fallback, mas recebe:
+```text
+"(#133010) Account not registered"
+```
+O `meta_phone_number_id` (1043086395547826) ou o `meta_access_token` configurados estao invalidos ou expirados.
 
 ---
 
-## Technical Details
+## Plano de Correcao
 
-The edge function `enviar-whatsapp` correctly detects the disconnected state via real-time check (`/instance/connectionState`), but when `hasMeta: null`, the fallback path has no alternative and the function crashes with the 500 error. The fix would add a graceful error response:
+### Parte 1: Acoes manuais no painel Evolution API (VOCE precisa fazer)
 
-```
-"Sessão WhatsApp desconectada. Reconecte o QR Code na página de Configurações ou configure a API Meta como fallback."
-```
+1. Acessar `https://evo-evolution-api.0ntuaf.easypanel.host`
+2. Na instancia **EU**:
+   - Clicar em **Restart** (reiniciar a instancia)
+   - Se nao resolver, **desconectar** e **reconectar** escaneando o QR Code novamente
+3. Configurar o **Webhook** da instancia EU:
+   - **URL**: `https://dteppsfseusqixuppglh.supabase.co/functions/v1/webhook-conversas?instance=EU`
+   - **Eventos**: `MESSAGES_UPSERT`, `CONNECTION_UPDATE`, `MESSAGES_UPDATE`
+   - **Webhook by Events**: Ativado
+
+### Parte 2: Melhorias no codigo (eu implemento)
+
+1. **Atualizar CORS headers** do `enviar-whatsapp` - os headers atuais estao incompletos, o que pode causar falhas silenciosas em algumas chamadas do frontend
+
+2. **Melhorar tratamento de erro da Evolution** - quando a API retorna HTML em vez de JSON (servidor instavel), o codigo crasha com `SyntaxError`. Vou adicionar tratamento seguro para esse caso
+
+3. **Mensagem de erro mais clara** - quando a Evolution retorna `onWhatsApp undefined`, informar o usuario que a sessao precisa ser reiniciada no painel, em vez de mostrar erro generico
+
+4. **Verificacao de saude do webhook** - adicionar um endpoint de teste para validar se o webhook esta configurado e funcionando
+
+### Detalhes tecnicos das mudancas no codigo
+
+**`supabase/functions/enviar-whatsapp/index.ts`:**
+- Linha 7: Atualizar `corsHeaders` para incluir headers completos do cliente
+- Funcao `sendEvolutionMessage`: Adicionar `try/catch` ao parsear JSON da resposta, tratando respostas HTML como erro de servidor instavel
+- Adicionar deteccao especifica do erro `onWhatsApp` para retornar mensagem clara: "Sessao WhatsApp expirada. Reinicie a instancia no painel Evolution API"
+
+**Nenhuma mudanca de banco de dados necessaria.**
+
+---
+
+## Resumo
+
+O problema principal **NAO e de codigo** - e que:
+1. A instancia "EU" precisa ser **reiniciada** no painel Evolution
+2. O **webhook** precisa ser configurado na instancia EU para o CRM receber mensagens
+3. As melhorias de codigo vao tornar os erros mais claros e o sistema mais resiliente
 
