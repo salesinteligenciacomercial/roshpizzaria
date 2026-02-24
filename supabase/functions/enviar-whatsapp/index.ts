@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 // Meta API Configuration
@@ -450,18 +450,53 @@ async function sendEvolutionMessage(
       body: JSON.stringify(bodyPayload),
     });
 
-    const data = await response.json();
+    // Safe JSON parsing - Evolution API sometimes returns HTML instead of JSON
+    let data: any;
+    const responseText = await response.text();
+    try {
+      data = JSON.parse(responseText);
+    } catch (_parseError) {
+      console.error("❌ Evolution API retornou resposta não-JSON (servidor instável):", responseText.substring(0, 200));
+      return { 
+        success: false, 
+        provider: 'evolution', 
+        error: 'Servidor Evolution API instável (retornou HTML em vez de JSON). Tente novamente em alguns segundos.' 
+      };
+    }
     
     if (!response.ok) {
       console.error("Evolution API Error:", data);
-      return { success: false, provider: 'evolution', error: data.response?.message?.[0] || 'Erro Evolution API' };
+      const errorMsg = data.response?.message?.[0] || JSON.stringify(data);
+      
+      // Detect specific "onWhatsApp" error = session not truly active
+      if (errorMsg.includes('onWhatsApp') || errorMsg.includes('Cannot read properties of undefined')) {
+        console.error("🔴 Sessão WhatsApp interna não inicializada na instância");
+        return { 
+          success: false, 
+          provider: 'evolution', 
+          error: 'Sessão WhatsApp expirada ou não inicializada. Reinicie a instância no painel Evolution API e escaneie o QR Code novamente.' 
+        };
+      }
+      
+      return { success: false, provider: 'evolution', error: errorMsg };
     }
 
     console.log("✅ Evolution API - Mensagem enviada");
     return { success: true, provider: 'evolution', data };
   } catch (error) {
-    console.error('Evolution API Exception:', error);
-    return { success: false, provider: 'evolution', error: String(error) };
+    const errorStr = String(error);
+    console.error('Evolution API Exception:', errorStr);
+    
+    // Detect connection errors
+    if (errorStr.includes('Connection closed') || errorStr.includes('connection reset') || errorStr.includes('ECONNREFUSED')) {
+      return { 
+        success: false, 
+        provider: 'evolution', 
+        error: 'Servidor Evolution API não está respondendo. Verifique se o servidor está online.' 
+      };
+    }
+    
+    return { success: false, provider: 'evolution', error: errorStr };
   }
 }
 
