@@ -1037,7 +1037,13 @@ serve(async (req) => {
         if (hasMetaCredentials) {
           result = await sendMetaFallback(connection, formattedNumber, validatedData);
         } else {
-          result = { success: false, provider: 'evolution', error: 'WhatsApp Evolution desconectado. Reconecte sua instância ou configure a API Meta.' };
+          return new Response(
+            JSON.stringify({ 
+              error: "Sessão WhatsApp desconectada. Reconecte o QR Code na página de Configurações ou configure a API Meta como fallback.",
+              code: "EVOLUTION_DISCONNECTED"
+            }),
+            { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
       } else {
         result = await sendEvolutionMessage(
