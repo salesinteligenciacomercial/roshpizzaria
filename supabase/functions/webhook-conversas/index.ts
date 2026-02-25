@@ -536,12 +536,45 @@ serve(async (req) => {
             console.log(`✅ [WEBHOOK] Status da instância ${instanceName} atualizado para: connected`);
           }
         } else if (connectionState === 'close' || connectionState === 'closed' || connectionState === 'disconnected') {
-          // 🔒 CORREÇÃO DEFINITIVA: NÃO desconectar automaticamente!
-          // A Evolution API envia eventos 'close' frequentemente por instabilidade 
-          // temporária de rede, reconexão de WebSocket, etc. 
-          // A instância só deve ser marcada como desconectada MANUALMENTE pelo usuário.
-          // Apenas logar o evento para diagnóstico.
-          console.log(`⚠️ [WEBHOOK] Instância ${instanceName} recebeu estado ${connectionState} - IGNORADO (apenas desconexão manual é aceita)`);
+          // 🔄 AUTO-RECONEXÃO: Tentar reconectar automaticamente em vez de apenas ignorar
+          console.log(`⚠️ [WEBHOOK] Instância ${instanceName} recebeu estado ${connectionState} - Tentando auto-reconexão...`);
+          
+          // Buscar dados da conexão para reconectar
+          const { data: connData } = await supabase
+            .from('whatsapp_connections')
+            .select('evolution_api_url, evolution_api_key')
+            .eq('instance_name', instanceName)
+            .single();
+          
+          if (connData?.evolution_api_url && connData?.evolution_api_key) {
+            const evoBaseUrl = connData.evolution_api_url.replace(/\/(manager|api|v1|v2)?\/?$/i, '').replace(/\/$/, '');
+            const evoApiKey = connData.evolution_api_key;
+            
+            try {
+              // Aguardar um momento antes de reconectar (pode ser apenas transitório)
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // Tentar restart
+              const restartRes = await fetch(`${evoBaseUrl}/instance/restart/${instanceName}`, {
+                method: "PUT",
+                headers: { "apikey": evoApiKey, "Content-Type": "application/json" },
+              });
+              
+              if (restartRes.ok) {
+                console.log(`✅ [WEBHOOK] Auto-restart solicitado para ${instanceName}`);
+              } else {
+                // Tentar connect como fallback
+                const connectRes = await fetch(`${evoBaseUrl}/instance/connect/${instanceName}`, {
+                  method: "GET",
+                  headers: { "apikey": evoApiKey },
+                });
+                console.log(`🔄 [WEBHOOK] Auto-connect para ${instanceName}: ${connectRes.status}`);
+              }
+            } catch (reconnectErr) {
+              console.warn(`⚠️ [WEBHOOK] Falha na auto-reconexão de ${instanceName}:`, reconnectErr);
+            }
+          }
+          // NÃO atualizar status para 'disconnected' no banco
         
         } else {
           // Para estados transitórios (connecting), apenas LOGAR

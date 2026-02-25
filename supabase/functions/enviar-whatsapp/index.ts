@@ -387,13 +387,85 @@ async function sendMetaFallback(
 }
 
 // ============= EVOLUTION API FUNCTIONS =============
+
+// Tentar reconectar instância Evolution API
+async function tryReconnectInstance(baseUrl: string, instanceName: string, apiKey: string): Promise<boolean> {
+  try {
+    console.log(`🔄 Tentando reconectar instância ${instanceName}...`);
+    
+    // 1. Verificar estado real da instância
+    const stateRes = await fetch(`${baseUrl}/instance/connectionState/${instanceName}`, {
+      method: "GET",
+      headers: { "apikey": apiKey },
+    });
+    
+    if (stateRes.ok) {
+      const stateData = await stateRes.json();
+      const state = stateData?.instance?.state || stateData?.state || '';
+      console.log(`📡 Estado atual da instância ${instanceName}: ${state}`);
+      
+      if (state === 'open' || state === 'connected') {
+        console.log(`✅ Instância ${instanceName} já está conectada!`);
+        return true;
+      }
+    }
+    
+    // 2. Tentar restart da instância
+    console.log(`🔄 Fazendo restart da instância ${instanceName}...`);
+    const restartRes = await fetch(`${baseUrl}/instance/restart/${instanceName}`, {
+      method: "PUT",
+      headers: { "apikey": apiKey, "Content-Type": "application/json" },
+    });
+    
+    if (restartRes.ok) {
+      console.log(`✅ Restart solicitado para ${instanceName}`);
+      // Aguardar 3 segundos para a reconexão
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Verificar estado novamente
+      const checkRes = await fetch(`${baseUrl}/instance/connectionState/${instanceName}`, {
+        method: "GET",
+        headers: { "apikey": apiKey },
+      });
+      
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        const newState = checkData?.instance?.state || checkData?.state || '';
+        console.log(`📡 Estado após restart: ${newState}`);
+        return newState === 'open' || newState === 'connected';
+      }
+    } else {
+      console.warn(`⚠️ Restart falhou para ${instanceName}: ${restartRes.status}`);
+    }
+    
+    // 3. Tentar connect como fallback
+    console.log(`🔄 Tentando connect da instância ${instanceName}...`);
+    const connectRes = await fetch(`${baseUrl}/instance/connect/${instanceName}`, {
+      method: "GET",
+      headers: { "apikey": apiKey },
+    });
+    
+    if (connectRes.ok) {
+      console.log(`✅ Connect solicitado para ${instanceName}`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error(`❌ Erro ao tentar reconectar ${instanceName}:`, error);
+    return false;
+  }
+}
+
 async function sendEvolutionMessage(
   baseUrl: string,
   instanceName: string,
   apiKey: string,
   target: string,
   isGroup: boolean,
-  validatedData: any
+  validatedData: any,
+  _retryAttempt: number = 0
 ): Promise<{ success: boolean; provider: string; data?: any; error?: string }> {
   try {
     let evolutionUrl: string;
@@ -477,34 +549,55 @@ async function sendEvolutionMessage(
     try {
       data = JSON.parse(responseText);
     } catch (_parseError) {
-      console.error("❌ Evolution API retornou resposta não-JSON (servidor instável):", responseText.substring(0, 200));
+      console.error("❌ Evolution API retornou resposta não-JSON:", responseText.substring(0, 200));
+      
+      // Tentar reconectar se for primeiro attempt
+      if (_retryAttempt === 0) {
+        console.log("🔄 Servidor instável - tentando reconectar...");
+        const reconnected = await tryReconnectInstance(baseUrl, instanceName, apiKey);
+        if (reconnected) {
+          return sendEvolutionMessage(baseUrl, instanceName, apiKey, target, isGroup, validatedData, 1);
+        }
+      }
+      
       return { 
         success: false, 
         provider: 'evolution', 
-        error: 'Servidor Evolution API instável (retornou HTML em vez de JSON). Tente novamente em alguns segundos.' 
+        error: 'Servidor Evolution API instável. Tentamos reconectar automaticamente.' 
       };
     }
     
     if (!response.ok) {
       console.error("Evolution API Error:", data);
-      const errorMsg = data.response?.message?.[0] || JSON.stringify(data);
+      const errorMsg = data.response?.message?.[0] || data?.message || JSON.stringify(data);
       
       // Detect "Connection Closed" or session errors = instance disconnected
       const isDisconnected = errorMsg.includes('Connection Closed') || 
+                             errorMsg.includes('Internal Server Error') ||
                              errorMsg.includes('onWhatsApp') || 
                              errorMsg.includes('Cannot read properties of undefined') ||
                              errorMsg.includes('not connected');
       
       if (isDisconnected) {
-        // 🔒 CORREÇÃO: NÃO atualizar status para 'disconnected' automaticamente.
-        // Erros de "Connection Closed" podem ser temporários (instabilidade de rede).
-        // A desconexão no banco só deve ocorrer manualmente pelo usuário.
-        console.warn("⚠️ Instância WhatsApp com erro de conexão (pode ser temporário):", errorMsg);
+        console.warn("⚠️ Instância WhatsApp com erro de conexão:", errorMsg);
+        
+        // 🔄 AUTO-RECONEXÃO: Tentar reconectar e reenviar (máximo 1 retry)
+        if (_retryAttempt === 0) {
+          console.log("🔄 Tentando auto-reconexão antes de desistir...");
+          const reconnected = await tryReconnectInstance(baseUrl, instanceName, apiKey);
+          
+          if (reconnected) {
+            console.log("✅ Reconexão bem-sucedida! Reenviando mensagem...");
+            return sendEvolutionMessage(baseUrl, instanceName, apiKey, target, isGroup, validatedData, 1);
+          } else {
+            console.warn("❌ Auto-reconexão falhou. A instância pode precisar de QR Code.");
+          }
+        }
         
         return { 
           success: false, 
           provider: 'evolution', 
-          error: 'Erro de conexão temporário. Tente novamente em alguns segundos. Se persistir, reconecte via QR Code.' 
+          error: 'Instância desconectada. Tentamos reconectar automaticamente mas falhou. Reconecte via QR Code nas Configurações.' 
         };
       }
       
