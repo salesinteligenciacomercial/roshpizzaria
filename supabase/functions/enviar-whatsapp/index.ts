@@ -619,13 +619,12 @@ serve(async (req) => {
       );
     }
     
-    // Se apenas Evolution está configurado e está desconectado
+    // ⚡ CORREÇÃO: NÃO bloquear envio baseado no status do banco de dados.
+    // O status pode estar desatualizado. Tentar enviar diretamente e deixar
+    // a Evolution API retornar erro se realmente desconectada.
+    // Se falhar, o handler de erro já atualiza o status no banco.
     if (!hasMetaCredentials && hasEvolutionConfig && !evolutionConnected) {
-      console.error("❌ Evolution API desconectada e Meta não configurada");
-      return new Response(
-        JSON.stringify({ error: "WhatsApp Evolution desconectado. Reconecte sua instância ou configure a API Meta.", code: "EVOLUTION_DISCONNECTED" }),
-        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      console.warn("⚠️ Evolution API com status 'desconectado' no banco, mas tentando enviar mesmo assim (status pode estar desatualizado)");
     }
 
     console.log("🔗 Conexão encontrada:", {
