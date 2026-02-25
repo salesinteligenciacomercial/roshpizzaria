@@ -176,10 +176,20 @@ serve(async (req) => {
         });
       }
 
-      console.log('🔄 [EVOLUTION] Refresh QR para:', instanceName);
-      const connectRes = await fetch(`${baseUrl}/instance/connect/${instanceName}`, {
+      // ⚡ CORREÇÃO: Buscar URL e API key específicas da instância no banco
+      const { data: connData } = await supabase
+        .from('whatsapp_connections')
+        .select('evolution_api_url, evolution_api_key')
+        .eq('instance_name', instanceName)
+        .single();
+
+      const instanceBaseUrl = connData?.evolution_api_url?.replace(/\/+$/, '') || baseUrl;
+      const instanceApiKey = connData?.evolution_api_key || EVOLUTION_API_KEY;
+
+      console.log('🔄 [EVOLUTION] Refresh QR para:', instanceName, '| URL:', instanceBaseUrl);
+      const connectRes = await fetch(`${instanceBaseUrl}/instance/connect/${instanceName}`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
+        headers: { 'Content-Type': 'application/json', 'apikey': instanceApiKey },
       });
       const connectData = await connectRes.json();
       console.log('📡 [EVOLUTION] Resposta refresh:', JSON.stringify(connectData));
@@ -204,10 +214,20 @@ serve(async (req) => {
         });
       }
 
-      console.log('🔍 [EVOLUTION] Verificando status:', instanceName);
-      const stateRes = await fetch(`${baseUrl}/instance/connectionState/${instanceName}`, {
+      // ⚡ CORREÇÃO: Buscar URL e API key específicas da instância no banco
+      const { data: connData } = await supabase
+        .from('whatsapp_connections')
+        .select('evolution_api_url, evolution_api_key')
+        .eq('instance_name', instanceName)
+        .single();
+
+      const instanceBaseUrl = connData?.evolution_api_url?.replace(/\/+$/, '') || baseUrl;
+      const instanceApiKey = connData?.evolution_api_key || EVOLUTION_API_KEY;
+
+      console.log('🔍 [EVOLUTION] Verificando status:', instanceName, '| URL:', instanceBaseUrl);
+      const stateRes = await fetch(`${instanceBaseUrl}/instance/connectionState/${instanceName}`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
+        headers: { 'Content-Type': 'application/json', 'apikey': instanceApiKey },
       });
       const stateData = await stateRes.json();
       console.log('📡 [EVOLUTION] Estado:', JSON.stringify(stateData));
@@ -216,15 +236,14 @@ serve(async (req) => {
       const isConnected = state === 'open' || state === 'connected';
 
       // If connected, update DB
-      if (isConnected && companyId) {
+      if (isConnected) {
         await supabase
           .from('whatsapp_connections')
           .update({
             status: 'connected',
             last_connected_at: new Date().toISOString(),
           })
-          .eq('instance_name', instanceName)
-          .eq('company_id', companyId);
+          .eq('instance_name', instanceName);
       }
 
       return new Response(JSON.stringify({
