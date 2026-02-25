@@ -11,6 +11,27 @@ const corsHeaders = {
 const META_API_VERSION = 'v18.0';
 const META_API_BASE_URL = 'https://graph.facebook.com';
 
+// ⚡ Sanitize Evolution API URL - prevent corrupted/malformed URLs
+function sanitizeEvolutionUrl(url: string): string {
+  if (!url) return '';
+  let clean = url.trim();
+  // Remove trailing slashes and path suffixes like /manager, /api, etc.
+  clean = clean.replace(/\/(manager|api|v1|v2)?\/?$/i, '').replace(/\/+$/, '');
+  // Validate it looks like a proper URL
+  try {
+    const parsed = new URL(clean);
+    // Ensure it uses https or http
+    if (!parsed.protocol.startsWith('http')) {
+      console.error('⚠️ URL Evolution inválida (protocolo):', clean);
+      return '';
+    }
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    console.error('⚠️ URL Evolution malformada, ignorando:', clean);
+    return '';
+  }
+}
+
 // Input validation schema
 const enviarWhatsAppSchema = z.object({
   numero: z.string().refine((val) => {
@@ -578,11 +599,15 @@ serve(async (req) => {
       );
     }
 
+    // ⚡ Centralizar resolução de URL Evolution - sanitizar UMA vez
+    const resolvedEvolutionUrl = sanitizeEvolutionUrl(connection.evolution_api_url || EVOLUTION_API_URL);
+    const resolvedEvolutionKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+    
+    console.log("🔗 Evolution URL resolvida:", resolvedEvolutionUrl || "(vazio)");
+
     // Verificar se há pelo menos uma API disponível
     const hasMetaCredentials = connection.meta_phone_number_id && connection.meta_access_token;
-    const hasEvolutionConfig = (connection.evolution_api_url || EVOLUTION_API_URL) && 
-                                (connection.evolution_api_key || EVOLUTION_API_KEY) &&
-                                connection.instance_name;
+    const hasEvolutionConfig = resolvedEvolutionUrl && resolvedEvolutionKey && connection.instance_name;
     const evolutionConnected = connection.status === 'connected';
 
     // Se não tem nenhuma API configurada OU (Evolution desconectado E não tem Meta)
@@ -691,9 +716,8 @@ serve(async (req) => {
       // Using formatted text with numbered options as reliable fallback
       if ((apiProvider === 'evolution' || apiProvider === 'both') && hasEvolutionConfig) {
         try {
-          const rawBaseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
-          const baseUrl = rawBaseUrl.replace(/\/(manager|api|v1|v2)?\/?$/i, '').replace(/\/$/, '');
-          const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+          const baseUrl = resolvedEvolutionUrl;
+          const apiKey = resolvedEvolutionKey;
           const targetNumber = formattedNumber;
           
           const bodyText = interactive?.body?.text || validatedData.mensagem || '';
@@ -788,9 +812,8 @@ serve(async (req) => {
     if (isGroup) {
       console.log("📱 Grupo detectado - Usando Evolution API (Meta não suporta grupos)");
       // Sanitizar URL removendo paths extras como /manager/, /api/, etc.
-      const rawBaseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
-      const baseUrl = rawBaseUrl.replace(/\/(manager|api|v1|v2)?\/?$/i, '');
-      const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+      const baseUrl = resolvedEvolutionUrl;
+      const apiKey = resolvedEvolutionKey;
       
       if (!baseUrl || !apiKey) {
         return new Response(
@@ -800,7 +823,7 @@ serve(async (req) => {
       }
       
       result = await sendEvolutionMessage(
-        baseUrl.replace(/\/$/, ''),
+        baseUrl,
         connection.instance_name,
         apiKey,
         validatedData.numero,
@@ -851,9 +874,8 @@ serve(async (req) => {
           // Fallback para Evolution se disponível
           if (hasEvolutionConfig) {
             console.log("🔄 Tentando Evolution como fallback...");
-            const rawBaseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
-            const baseUrl = rawBaseUrl.replace(/\/(manager|api|v1|v2)?\/?$/i, '');
-            const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+            const baseUrl = resolvedEvolutionUrl;
+            const apiKey = resolvedEvolutionKey;
             
             result = await sendEvolutionMessage(
               baseUrl,
@@ -871,9 +893,8 @@ serve(async (req) => {
       // Base64 sem credenciais Meta - usar Evolution direto
       else if (validatedData.mediaBase64 && hasEvolutionConfig) {
         console.log("📤 Base64 sem Meta - usando Evolution API...");
-        const rawBaseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
-        const baseUrl = rawBaseUrl.replace(/\/(manager|api|v1|v2)?\/?$/i, '');
-        const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+        const baseUrl = resolvedEvolutionUrl;
+        const apiKey = resolvedEvolutionKey;
         
         result = await sendEvolutionMessage(
           baseUrl,
@@ -899,9 +920,8 @@ serve(async (req) => {
         // Fallback para Evolution se Meta falhar e provider for "both"
         if (!result.success && apiProvider === 'both' && hasEvolutionConfig) {
           console.log("🔄 Template Meta falhou, tentando Evolution como fallback...");
-          const rawBaseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
-          const baseUrl = rawBaseUrl.replace(/\/(manager|api|v1|v2)?\/?$/i, '');
-          const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+          const baseUrl = resolvedEvolutionUrl;
+          const apiKey = resolvedEvolutionKey;
           
           result = await sendEvolutionMessage(
             baseUrl,
@@ -953,9 +973,8 @@ serve(async (req) => {
         // Fallback para Evolution se Meta falhar e provider for "both"
         if (!result.success && apiProvider === 'both' && hasEvolutionConfig) {
           console.log("🔄 Meta falhou, tentando Evolution como fallback...");
-          const rawBaseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
-          const baseUrl = rawBaseUrl.replace(/\/(manager|api|v1|v2)?\/?$/i, '');
-          const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+          const baseUrl = resolvedEvolutionUrl;
+          const apiKey = resolvedEvolutionKey;
           
           result = await sendEvolutionMessage(
             baseUrl,
@@ -969,9 +988,8 @@ serve(async (req) => {
       } else if (hasEvolutionConfig) {
         // Sem credenciais Meta mas Evolution disponível - usar Evolution
         console.log("⚠️ Sem credenciais Meta - usando Evolution");
-        const rawBaseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
-        const baseUrl = rawBaseUrl.replace(/\/(manager|api|v1|v2)?\/?$/i, '');
-        const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+        const baseUrl = resolvedEvolutionUrl;
+        const apiKey = resolvedEvolutionKey;
         
         result = await sendEvolutionMessage(
           baseUrl,
@@ -992,9 +1010,8 @@ serve(async (req) => {
     // Se chegou aqui com 'both', usar Evolution como principal (se conectado), Meta como fallback
     else if (apiProvider === 'both') {
       console.log("📗📘 Provider 'both' - Usando lógica de fallback (sem force_provider)");
-      const rawBaseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
-      const baseUrl = rawBaseUrl.replace(/\/(manager|api|v1|v2)?\/?$/i, '');
-      const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+      const baseUrl = resolvedEvolutionUrl;
+      const apiKey = resolvedEvolutionKey;
       
       // Se Evolution está desconectada, ir direto para Meta
       if (!evolutionConnected) {
@@ -1082,9 +1099,8 @@ serve(async (req) => {
     // Evolution API only
     else {
       console.log("📗 Usando Evolution API...");
-      const rawBaseUrl = connection.evolution_api_url || EVOLUTION_API_URL;
-      const baseUrl = rawBaseUrl.replace(/\/(manager|api|v1|v2)?\/?$/i, '');
-      const apiKey = connection.evolution_api_key || EVOLUTION_API_KEY;
+      const baseUrl = resolvedEvolutionUrl;
+      const apiKey = resolvedEvolutionKey;
       
       if (!baseUrl || !apiKey) {
         return new Response(
