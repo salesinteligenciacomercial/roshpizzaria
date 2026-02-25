@@ -235,7 +235,7 @@ serve(async (req) => {
       const state = stateData?.instance?.state || stateData?.state || 'unknown';
       const isConnected = state === 'open' || state === 'connected';
 
-      // If connected, update DB
+      // If connected, update DB AND re-verify webhook configuration
       if (isConnected) {
         await supabase
           .from('whatsapp_connections')
@@ -244,6 +244,33 @@ serve(async (req) => {
             last_connected_at: new Date().toISOString(),
           })
           .eq('instance_name', instanceName);
+        
+        // ⚡ CRITICAL: Re-configure webhook every time connection is confirmed
+        // This ensures webhook is always properly set even if it was lost
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+        const webhookUrl = `${supabaseUrl}/functions/v1/webhook-conversas?instance=${instanceName}`;
+        
+        console.log('🔗 [EVOLUTION] Re-verificando webhook após conexão:', webhookUrl);
+        
+        try {
+          const webhookRes = await fetch(`${instanceBaseUrl}/webhook/set/${instanceName}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': instanceApiKey },
+            body: JSON.stringify({
+              webhook: {
+                url: webhookUrl,
+                webhookByEvents: false,
+                webhookBase64: true,
+                events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE', 'CONTACTS_UPSERT'],
+                enabled: true,
+              }
+            }),
+          });
+          const webhookData = await webhookRes.json();
+          console.log('✅ [EVOLUTION] Webhook re-configurado:', JSON.stringify(webhookData));
+        } catch (whErr) {
+          console.error('⚠️ [EVOLUTION] Erro ao re-configurar webhook:', whErr);
+        }
       }
 
       return new Response(JSON.stringify({

@@ -1170,15 +1170,25 @@ serve(async (req) => {
             );
           }
         } else {
-            // Enviar diretamente via Evolution sem verificação prévia de connectionState
-            result = await sendEvolutionMessage(
-              baseUrl,
-              connection.instance_name,
-              apiKey,
-              validatedData.numero,
-              false,
-              validatedData
-            );
+            // ⚡ PRE-CHECK: Verificar estado REAL da conexão antes de enviar
+            const isReallyConnected = await checkEvolutionConnectionState(baseUrl, connection.instance_name, apiKey);
+            
+            if (!isReallyConnected) {
+              console.warn("⚠️ Evolution desconectada (estado real) no modo 'both' - tentando reconectar...");
+              const reconnected = await tryReconnectInstance(baseUrl, connection.instance_name, apiKey);
+              
+              if (reconnected) {
+                console.log("✅ Reconexão bem-sucedida! Enviando via Evolution...");
+                result = await sendEvolutionMessage(baseUrl, connection.instance_name, apiKey, validatedData.numero, false, validatedData);
+              } else if (hasMetaCredentials) {
+                console.log("🔄 Reconexão falhou, usando Meta como fallback...");
+                result = await sendMetaFallback(connection, formattedNumber, validatedData);
+              } else {
+                result = { success: false, provider: 'evolution', error: 'WhatsApp desconectado. Reconecte via QR Code.' };
+              }
+            } else {
+              result = await sendEvolutionMessage(baseUrl, connection.instance_name, apiKey, validatedData.numero, false, validatedData);
+            }
             
             // Se Evolution falhou, tentar Meta como fallback
             if (!result.success && hasMetaCredentials) {
@@ -1201,19 +1211,46 @@ serve(async (req) => {
         );
       }
 
-      // Enviar diretamente pela Evolution - sem verificação prévia de connectionState
-      // pois o endpoint /connectionState pode retornar estado incorreto
-      result = await sendEvolutionMessage(
-        baseUrl,
-        connection.instance_name,
-        apiKey,
-        validatedData.numero,
-        false,
-        validatedData
-      );
+      // ⚡ PRE-CHECK: Verificar estado REAL da conexão antes de enviar
+      const isReallyConnected = await checkEvolutionConnectionState(baseUrl, connection.instance_name, apiKey);
       
-      // Se Evolution falhou, tentar Meta como fallback se disponível
-      if (!result.success) {
+      if (!isReallyConnected) {
+        console.warn("⚠️ Evolution API desconectada (estado real) - tentando reconectar ANTES de enviar...");
+        const reconnected = await tryReconnectInstance(baseUrl, connection.instance_name, apiKey);
+        
+        if (!reconnected) {
+          console.error("❌ Reconexão falhou - instância realmente desconectada");
+          
+          // Atualizar status no banco para refletir realidade
+          await supabase
+            .from('whatsapp_connections')
+            .update({ status: 'disconnected', updated_at: new Date().toISOString() })
+            .eq('company_id', validatedData.company_id);
+          
+          // Tentar Meta como fallback
+          if (hasMetaCredentials) {
+            console.log("🔄 Tentando Meta como fallback...");
+            result = await sendMetaFallback(connection, formattedNumber, validatedData);
+          } else {
+            return new Response(
+              JSON.stringify({ 
+                error: "WhatsApp desconectado. Reconecte via QR Code em Configurações > WhatsApp.", 
+                code: "WHATSAPP_DISCONNECTED" 
+              }),
+              { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } else {
+          console.log("✅ Reconexão bem-sucedida! Enviando mensagem...");
+          result = await sendEvolutionMessage(baseUrl, connection.instance_name, apiKey, validatedData.numero, false, validatedData);
+        }
+      } else {
+        // Conectado - enviar normalmente
+        result = await sendEvolutionMessage(baseUrl, connection.instance_name, apiKey, validatedData.numero, false, validatedData);
+      }
+      
+      // Se Evolution falhou mesmo após verificação, tentar Meta como fallback
+      if (result && !result.success) {
         console.warn("⚠️ Evolution falhou:", result.error);
         if (hasMetaCredentials) {
           console.log("🔄 Tentando Meta como fallback...");
