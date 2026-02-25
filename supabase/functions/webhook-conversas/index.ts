@@ -535,9 +535,26 @@ serve(async (req) => {
           } else {
             console.log(`✅ [WEBHOOK] Status da instância ${instanceName} atualizado para: connected`);
           }
+        } else if (connectionState === 'close' || connectionState === 'closed' || connectionState === 'disconnected') {
+          // ⚡ CORREÇÃO: Estado explícito de desconexão - atualizar banco
+          console.log(`🔴 [WEBHOOK] Instância ${instanceName} DESCONECTADA (${connectionState}) - atualizando banco`);
+          
+          const { error: disconnectError } = await supabase
+            .from('whatsapp_connections')
+            .update({ 
+              status: 'disconnected',
+              updated_at: new Date().toISOString()
+            })
+            .eq('instance_name', instanceName);
+          
+          if (disconnectError) {
+            console.error('❌ [WEBHOOK] Erro ao atualizar status para disconnected:', disconnectError);
+          } else {
+            console.log(`✅ [WEBHOOK] Status da instância ${instanceName} atualizado para: disconnected`);
+          }
         } else {
-          // Para estados de desconexão, apenas LOGAR - não atualizar banco
-          console.log(`⚠️ [WEBHOOK] Estado de conexão ${connectionState} para ${instanceName} - IGNORADO (desconexão apenas manual)`);
+          // Para estados transitórios (connecting), apenas LOGAR
+          console.log(`⚠️ [WEBHOOK] Estado de conexão ${connectionState} para ${instanceName} - IGNORADO (estado transitório)`);
         }
         
         return new Response(

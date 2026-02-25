@@ -468,13 +468,34 @@ async function sendEvolutionMessage(
       console.error("Evolution API Error:", data);
       const errorMsg = data.response?.message?.[0] || JSON.stringify(data);
       
-      // Detect specific "onWhatsApp" error = session not truly active
-      if (errorMsg.includes('onWhatsApp') || errorMsg.includes('Cannot read properties of undefined')) {
-        console.error("🔴 Sessão WhatsApp interna não inicializada na instância");
+      // Detect "Connection Closed" or session errors = instance disconnected
+      const isDisconnected = errorMsg.includes('Connection Closed') || 
+                             errorMsg.includes('onWhatsApp') || 
+                             errorMsg.includes('Cannot read properties of undefined') ||
+                             errorMsg.includes('not connected');
+      
+      if (isDisconnected) {
+        console.error("🔴 Instância WhatsApp DESCONECTADA - atualizando status no banco");
+        // ⚡ CORREÇÃO: Atualizar status no banco para refletir realidade
+        try {
+          const SUPABASE_URL_ENV = Deno.env.get("SUPABASE_URL") || "";
+          const SUPABASE_KEY_ENV = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+          if (SUPABASE_URL_ENV && SUPABASE_KEY_ENV) {
+            const adminClient = createClient(SUPABASE_URL_ENV, SUPABASE_KEY_ENV);
+            await adminClient
+              .from('whatsapp_connections')
+              .update({ status: 'disconnected', updated_at: new Date().toISOString() })
+              .eq('instance_name', instanceName);
+            console.log("✅ Status atualizado para 'disconnected' no banco:", instanceName);
+          }
+        } catch (updateErr) {
+          console.error("❌ Erro ao atualizar status:", updateErr);
+        }
+        
         return { 
           success: false, 
           provider: 'evolution', 
-          error: 'Sessão WhatsApp expirada ou não inicializada. Reinicie a instância no painel Evolution API e escaneie o QR Code novamente.' 
+          error: 'WhatsApp desconectado. Reconecte a instância escaneando o QR Code novamente.' 
         };
       }
       
