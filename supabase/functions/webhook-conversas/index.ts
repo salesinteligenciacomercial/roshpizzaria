@@ -536,22 +536,13 @@ serve(async (req) => {
             console.log(`✅ [WEBHOOK] Status da instância ${instanceName} atualizado para: connected`);
           }
         } else if (connectionState === 'close' || connectionState === 'closed' || connectionState === 'disconnected') {
-          // ⚡ CORREÇÃO: Estado explícito de desconexão - atualizar banco
-          console.log(`🔴 [WEBHOOK] Instância ${instanceName} DESCONECTADA (${connectionState}) - atualizando banco`);
-          
-          const { error: disconnectError } = await supabase
-            .from('whatsapp_connections')
-            .update({ 
-              status: 'disconnected',
-              updated_at: new Date().toISOString()
-            })
-            .eq('instance_name', instanceName);
-          
-          if (disconnectError) {
-            console.error('❌ [WEBHOOK] Erro ao atualizar status para disconnected:', disconnectError);
-          } else {
-            console.log(`✅ [WEBHOOK] Status da instância ${instanceName} atualizado para: disconnected`);
-          }
+          // 🔒 CORREÇÃO DEFINITIVA: NÃO desconectar automaticamente!
+          // A Evolution API envia eventos 'close' frequentemente por instabilidade 
+          // temporária de rede, reconexão de WebSocket, etc. 
+          // A instância só deve ser marcada como desconectada MANUALMENTE pelo usuário.
+          // Apenas logar o evento para diagnóstico.
+          console.log(`⚠️ [WEBHOOK] Instância ${instanceName} recebeu estado ${connectionState} - IGNORADO (apenas desconexão manual é aceita)`);
+        
         } else {
           // Para estados transitórios (connecting), apenas LOGAR
           console.log(`⚠️ [WEBHOOK] Estado de conexão ${connectionState} para ${instanceName} - IGNORADO (estado transitório)`);

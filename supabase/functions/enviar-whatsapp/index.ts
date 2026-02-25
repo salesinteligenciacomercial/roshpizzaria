@@ -496,27 +496,15 @@ async function sendEvolutionMessage(
                              errorMsg.includes('not connected');
       
       if (isDisconnected) {
-        console.error("🔴 Instância WhatsApp DESCONECTADA - atualizando status no banco");
-        // ⚡ CORREÇÃO: Atualizar status no banco para refletir realidade
-        try {
-          const SUPABASE_URL_ENV = Deno.env.get("SUPABASE_URL") || "";
-          const SUPABASE_KEY_ENV = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-          if (SUPABASE_URL_ENV && SUPABASE_KEY_ENV) {
-            const adminClient = createClient(SUPABASE_URL_ENV, SUPABASE_KEY_ENV);
-            await adminClient
-              .from('whatsapp_connections')
-              .update({ status: 'disconnected', updated_at: new Date().toISOString() })
-              .eq('instance_name', instanceName);
-            console.log("✅ Status atualizado para 'disconnected' no banco:", instanceName);
-          }
-        } catch (updateErr) {
-          console.error("❌ Erro ao atualizar status:", updateErr);
-        }
+        // 🔒 CORREÇÃO: NÃO atualizar status para 'disconnected' automaticamente.
+        // Erros de "Connection Closed" podem ser temporários (instabilidade de rede).
+        // A desconexão no banco só deve ocorrer manualmente pelo usuário.
+        console.warn("⚠️ Instância WhatsApp com erro de conexão (pode ser temporário):", errorMsg);
         
         return { 
           success: false, 
           provider: 'evolution', 
-          error: 'WhatsApp desconectado. Reconecte a instância escaneando o QR Code novamente.' 
+          error: 'Erro de conexão temporário. Tente novamente em alguns segundos. Se persistir, reconecte via QR Code.' 
         };
       }
       
