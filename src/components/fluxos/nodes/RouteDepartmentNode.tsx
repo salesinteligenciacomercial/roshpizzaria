@@ -24,9 +24,16 @@ export function RouteDepartmentNode({ data }: any) {
         </div>
       </div>
       
-      {data.department && (
-        <div className="mt-2 text-xs text-white/80">
-          📍 {data.department}
+      {(data.department || data.assignedUserName || data.assignedUserId) && (
+        <div className="mt-2 space-y-0.5">
+          {data.department && (
+            <div className="text-xs text-white/80">🏢 {data.department}</div>
+          )}
+          {(data.assignedUserName || data.assignedUserId) && (
+            <div className="text-xs text-white/80">
+              👤 {data.assignedUserName || 'Usuário atribuído'}
+            </div>
+          )}
         </div>
       )}
 

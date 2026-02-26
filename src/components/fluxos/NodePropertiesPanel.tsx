@@ -756,6 +756,7 @@ function RouteDepartmentProperties({ selectedNode, updateNodeData, inputProps }:
   }, []);
 
   const departments = ['Vendas', 'Suporte', 'Financeiro', 'Comercial', 'Técnico', 'Administrativo', 'SAC'];
+  const routeMode = selectedNode.data.routeMode || 'department';
 
   return (
     <>
@@ -770,46 +771,80 @@ function RouteDepartmentProperties({ selectedNode, updateNodeData, inputProps }:
         />
       </div>
       <div className="space-y-2">
-        <Label className="text-slate-300 text-xs font-medium">Departamento</Label>
+        <Label className="text-slate-300 text-xs font-medium">Direcionar para</Label>
         <Select
-          value={selectedNode.data.department || ''}
-          onValueChange={(v) => updateNodeData('department', v)}
+          value={routeMode}
+          onValueChange={(v) => {
+            updateNodeData('routeMode', v);
+            if (v === 'user') updateNodeData('department', '');
+            if (v === 'department') updateNodeData('assignedUserId', '');
+          }}
         >
           <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
-            <SelectValue placeholder="Selecione o departamento" />
+            <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-slate-800 border-slate-700 z-50">
-            {departments.map(dep => (
-              <SelectItem key={dep} value={dep}>{dep}</SelectItem>
-            ))}
+            <SelectItem value="department">🏢 Departamento</SelectItem>
+            <SelectItem value="user">👤 Usuário/Atendente</SelectItem>
+            <SelectItem value="both">🏢👤 Departamento + Usuário</SelectItem>
           </SelectContent>
         </Select>
       </div>
-      <div className="space-y-2">
-        <Label className="text-slate-300 text-xs font-medium">Responsável</Label>
-        {loading ? (
-          <div className="flex items-center gap-2 text-slate-400 text-xs py-2">
-            <Loader2 className="h-3 w-3 animate-spin" /> Carregando usuários...
-          </div>
-        ) : (
+
+      {(routeMode === 'department' || routeMode === 'both') && (
+        <div className="space-y-2">
+          <Label className="text-slate-300 text-xs font-medium">Departamento</Label>
           <Select
-            value={selectedNode.data.assignedUserId || ''}
-            onValueChange={(v) => updateNodeData('assignedUserId', v)}
+            value={selectedNode.data.department || ''}
+            onValueChange={(v) => updateNodeData('department', v)}
           >
             <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
-              <SelectValue placeholder="Selecione o responsável" />
+              <SelectValue placeholder="Selecione o departamento" />
             </SelectTrigger>
             <SelectContent className="bg-slate-800 border-slate-700 z-50">
-              <SelectItem value="auto">🔄 Automático (fila)</SelectItem>
-              {users.map(u => (
-                <SelectItem key={u.id} value={u.id}>
-                  👤 {u.name} {u.email ? `(${u.email})` : ''}
-                </SelectItem>
+              {departments.map(dep => (
+                <SelectItem key={dep} value={dep}>{dep}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-        )}
-      </div>
+        </div>
+      )}
+
+      {(routeMode === 'user' || routeMode === 'both') && (
+        <div className="space-y-2">
+          <Label className="text-slate-300 text-xs font-medium">
+            {routeMode === 'user' ? 'Atendente/Usuário' : 'Responsável'}
+          </Label>
+          {loading ? (
+            <div className="flex items-center gap-2 text-slate-400 text-xs py-2">
+              <Loader2 className="h-3 w-3 animate-spin" /> Carregando usuários...
+            </div>
+          ) : users.length === 0 ? (
+            <p className="text-xs text-amber-400">Nenhum usuário encontrado na empresa</p>
+          ) : (
+            <Select
+              value={selectedNode.data.assignedUserId || ''}
+              onValueChange={(v) => {
+                updateNodeData('assignedUserId', v);
+                const selectedUser = users.find(u => u.id === v);
+                if (selectedUser) updateNodeData('assignedUserName', selectedUser.name);
+              }}
+            >
+              <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                <SelectValue placeholder="Selecione o atendente" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-700 z-50">
+                <SelectItem value="auto">🔄 Automático (fila)</SelectItem>
+                {users.map(u => (
+                  <SelectItem key={u.id} value={u.id}>
+                    👤 {u.name} {u.email ? `(${u.email})` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
       <div className="space-y-2">
         <Label className="text-slate-300 text-xs font-medium">Mensagem ao Transferir</Label>
         <Textarea
