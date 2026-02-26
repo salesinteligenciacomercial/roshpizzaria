@@ -7,9 +7,19 @@ const corsHeaders = {
 };
 
 // ========================
-// IA DE ATENDIMENTO - VERSÃO MELHORADA
-// Com processamento de mídias, integração com agendamento e base de conhecimento
+// IA DE ATENDIMENTO - VERSÃO HUMANIZADA
+// Respostas naturais, conversacionais e semelhantes a um humano real
 // ========================
+
+// Função para obter saudação baseada no horário
+function getSaudacao(): string {
+  const now = new Date();
+  // Ajustar para fuso horário do Brasil (UTC-3)
+  const brHour = (now.getUTCHours() - 3 + 24) % 24;
+  if (brHour >= 5 && brHour < 12) return 'Bom dia';
+  if (brHour >= 12 && brHour < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -53,11 +63,9 @@ serve(async (req) => {
         const prompt = customPrompts.atendimento?.custom_prompt || customPrompts.atendimento?.prompt || customPrompts.default || null;
         promptPersonalizado = typeof prompt === 'string' ? prompt : null;
         
-        // Extrair base de conhecimento
         knowledgeBase = customPrompts.atendimento?.knowledge_base || null;
       }
       
-      // Carregar configurações de bloqueio
       blockedTags = config?.blocked_tags || [];
       blockedFunnels = config?.blocked_funnels || [];
       blockedStages = config?.blocked_stages || [];
@@ -67,31 +75,21 @@ serve(async (req) => {
     // VERIFICAR BLOQUEIOS
     // ========================================
     if (leadData) {
-      // Verificar bloqueio por tags
       if (blockedTags.length > 0 && leadData.tags) {
         const hasBlockedTag = leadData.tags.some((tag: string) => blockedTags.includes(tag));
         if (hasBlockedTag) {
           console.log('⛔ Lead bloqueado por tag');
           return new Response(
-            JSON.stringify({ 
-              blocked: true, 
-              reason: 'Tag bloqueada',
-              response: null 
-            }),
+            JSON.stringify({ blocked: true, reason: 'Tag bloqueada', response: null }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
       }
       
-      // Verificar bloqueio por funil/etapa
       if (blockedFunnels.length > 0 && leadData.funil_id && blockedFunnels.includes(leadData.funil_id)) {
         console.log('⛔ Lead bloqueado por funil');
         return new Response(
-          JSON.stringify({ 
-            blocked: true, 
-            reason: 'Funil bloqueado',
-            response: null 
-          }),
+          JSON.stringify({ blocked: true, reason: 'Funil bloqueado', response: null }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -99,18 +97,14 @@ serve(async (req) => {
       if (blockedStages.length > 0 && leadData.etapa_id && blockedStages.includes(leadData.etapa_id)) {
         console.log('⛔ Lead bloqueado por etapa');
         return new Response(
-          JSON.stringify({ 
-            blocked: true, 
-            reason: 'Etapa bloqueada',
-            response: null 
-          }),
+          JSON.stringify({ blocked: true, reason: 'Etapa bloqueada', response: null }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     }
 
     // ========================================
-    // PROCESSAR ARQUIVOS (IMAGENS, PDFs, ÁUDIOS, VÍDEOS)
+    // PROCESSAR ARQUIVOS
     // ========================================
     let filesContent: any[] = [];
     let filesDescription = '';
@@ -120,66 +114,54 @@ serve(async (req) => {
       
       for (const fileData of files) {
         if (fileData.type === 'image') {
-          // Imagens: enviar diretamente para o modelo multimodal
           filesContent.push({
             type: 'image_url',
-            image_url: {
-              url: `data:${fileData.mimeType};base64,${fileData.base64}`
-            }
+            image_url: { url: `data:${fileData.mimeType};base64,${fileData.base64}` }
           });
-          filesDescription += `\n[Imagem anexada: ${fileData.name}] - Analise esta imagem e descreva o que você vê.`;
+          filesDescription += `\n[O cliente enviou uma imagem: ${fileData.name}]`;
         } else if (fileData.type === 'pdf') {
-          // PDFs: tentar extrair texto se possível
-          filesDescription += `\n[PDF anexado: ${fileData.name}] - O cliente enviou um documento PDF. Pergunte sobre o conteúdo ou solicite informações específicas.`;
+          filesDescription += `\n[O cliente enviou um PDF: ${fileData.name}]`;
         } else if (fileData.type === 'audio') {
-          // Áudios: chamar transcrição se disponível
-          filesDescription += `\n[Áudio anexado: ${fileData.name}] - O cliente enviou um áudio. Se necessário, solicite que transcreva ou repita por texto.`;
-          
-          // Tentar transcrever o áudio
+          filesDescription += `\n[O cliente enviou um áudio: ${fileData.name}]`;
           try {
             const { data: transcricao } = await supabase.functions.invoke('transcrever-audio', {
-              body: { 
-                audioBase64: fileData.base64,
-                mimeType: fileData.mimeType
-              }
+              body: { audioBase64: fileData.base64, mimeType: fileData.mimeType }
             });
-            
             if (transcricao?.text) {
               filesDescription = filesDescription.replace(
-                `[Áudio anexado: ${fileData.name}]`,
-                `[Áudio transcrito: "${transcricao.text}"]`
+                `[O cliente enviou um áudio: ${fileData.name}]`,
+                `[Áudio transcrito do cliente: "${transcricao.text}"]`
               );
             }
           } catch (e) {
             console.warn('⚠️ Erro na transcrição:', e);
           }
         } else if (fileData.type === 'video') {
-          filesDescription += `\n[Vídeo anexado: ${fileData.name}] - O cliente enviou um vídeo. Pergunte sobre o conteúdo.`;
+          filesDescription += `\n[O cliente enviou um vídeo: ${fileData.name}]`;
         }
       }
     }
 
     // ========================================
-    // MONTAR CONTEXTO DINÂMICO (DADOS DO LEAD + BASE DE CONHECIMENTO)
+    // MONTAR CONTEXTO DINÂMICO
     // ========================================
     let contextoDinamico = '';
+    const saudacao = getSaudacao();
     
-    // Contexto do lead
     if (leadData) {
       contextoDinamico += `
-DADOS DO CLIENTE:
+DADOS DO CLIENTE (use naturalmente, NÃO repita todos de uma vez):
 - Nome: ${leadData.name || 'Não informado'}
 - Telefone: ${leadData.phone || leadData.telefone || 'Não informado'}
 - Email: ${leadData.email || 'Não informado'}
 - Empresa: ${leadData.company || 'Não informado'}
 - CPF: ${leadData.cpf || 'Não informado'}
-- Valor em negociação: ${leadData.value ? `R$ ${leadData.value}` : 'Não definido'}
+- Valor: ${leadData.value ? `R$ ${leadData.value}` : 'Não definido'}
 - Status: ${leadData.status || 'novo'}
 - Tags: ${leadData.tags?.join(', ') || 'Nenhuma'}
 - Observações: ${leadData.notes || 'Nenhuma'}
 `;
 
-      // Buscar etapa/funil do lead
       if (leadData.etapa_id) {
         const { data: etapa } = await supabase
           .from('etapas')
@@ -188,15 +170,10 @@ DADOS DO CLIENTE:
           .single();
         
         if (etapa) {
-          contextoDinamico += `
-POSIÇÃO NO FUNIL:
-- Funil: ${(etapa as any).funil?.nome || 'Não definido'}
-- Etapa: ${etapa.nome}
-`;
+          contextoDinamico += `- Funil: ${(etapa as any).funil?.nome || '?'} → Etapa: ${etapa.nome}\n`;
         }
       }
       
-      // Buscar tarefas do lead
       if (leadData.id) {
         const { data: tarefas } = await supabase
           .from('tasks')
@@ -206,13 +183,9 @@ POSIÇÃO NO FUNIL:
           .limit(5);
         
         if (tarefas && tarefas.length > 0) {
-          contextoDinamico += `
-TAREFAS PENDENTES:
-${tarefas.map((t: any) => `- ${t.title} (${t.priority}) - ${t.status}`).join('\n')}
-`;
+          contextoDinamico += `\nTAREFAS PENDENTES:\n${tarefas.map((t: any) => `- ${t.title} (${t.priority})`).join('\n')}\n`;
         }
         
-        // Buscar compromissos do lead
         const { data: compromissos } = await supabase
           .from('compromissos')
           .select('data_hora_inicio, tipo_servico, status')
@@ -222,124 +195,125 @@ ${tarefas.map((t: any) => `- ${t.title} (${t.priority}) - ${t.status}`).join('\n
           .limit(3);
         
         if (compromissos && compromissos.length > 0) {
-          contextoDinamico += `
-COMPROMISSOS AGENDADOS:
-${compromissos.map((c: any) => `- ${new Date(c.data_hora_inicio).toLocaleDateString('pt-BR')} às ${new Date(c.data_hora_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - ${c.tipo_servico}`).join('\n')}
-`;
+          contextoDinamico += `\nCOMPROMISSOS AGENDADOS:\n${compromissos.map((c: any) => 
+            `- ${new Date(c.data_hora_inicio).toLocaleDateString('pt-BR')} às ${new Date(c.data_hora_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - ${c.tipo_servico}`
+          ).join('\n')}\n`;
         }
       }
     }
 
-    // Adicionar base de conhecimento ao contexto
+    // Base de conhecimento
     if (knowledgeBase) {
       if (knowledgeBase.empresa) {
-        contextoDinamico += `
-INFORMAÇÕES DA EMPRESA:
-- Nome: ${knowledgeBase.empresa.nome || 'Não informado'}
-- Descrição: ${knowledgeBase.empresa.descricao || 'Não informada'}
-- Segmento: ${knowledgeBase.empresa.segmento || 'Não informado'}
-- Horário: ${knowledgeBase.empresa.horario || 'Não informado'}
-- Endereço: ${knowledgeBase.empresa.endereco || 'Não informado'}
-- Contato: ${knowledgeBase.empresa.contato || 'Não informado'}
-`;
+        contextoDinamico += `\nSUA EMPRESA:\n- Nome: ${knowledgeBase.empresa.nome || '?'}\n- Segmento: ${knowledgeBase.empresa.segmento || '?'}\n- Horário: ${knowledgeBase.empresa.horario || '?'}\n- Endereço: ${knowledgeBase.empresa.endereco || '?'}\n- Contato: ${knowledgeBase.empresa.contato || '?'}\n`;
       }
-      
       if (knowledgeBase.produtos && knowledgeBase.produtos.length > 0) {
-        contextoDinamico += `
-PRODUTOS/SERVIÇOS DISPONÍVEIS:
-${knowledgeBase.produtos.map((p: any) => `- ${p.nome}: ${p.descricao} ${p.preco ? `(${p.preco})` : ''}`).join('\n')}
-`;
+        contextoDinamico += `\nPRODUTOS/SERVIÇOS:\n${knowledgeBase.produtos.map((p: any) => `- ${p.nome}: ${p.descricao} ${p.preco ? `(${p.preco})` : ''}`).join('\n')}\n`;
       }
-      
       if (knowledgeBase.faqs && knowledgeBase.faqs.length > 0) {
-        contextoDinamico += `
-PERGUNTAS FREQUENTES:
-${knowledgeBase.faqs.map((f: any) => `P: ${f.pergunta}\nR: ${f.resposta}`).join('\n\n')}
-`;
+        contextoDinamico += `\nPERGUNTAS FREQUENTES:\n${knowledgeBase.faqs.map((f: any) => `P: ${f.pergunta}\nR: ${f.resposta}`).join('\n\n')}\n`;
       }
-      
       if (knowledgeBase.informacoes_extras) {
-        contextoDinamico += `
-INFORMAÇÕES ADICIONAIS:
-${knowledgeBase.informacoes_extras}
-`;
-      }
-    }
-
-    // Buscar histórico recente da conversa
-    const historyCount = iaConfig?.history_messages_count || 10;
-    if (conversationId && companyId && leadData && iaConfig?.read_conversation_history !== false) {
-      const { data: historico } = await supabase
-        .from('conversas')
-        .select('mensagem, fromme, created_at')
-        .eq('telefone_formatado', leadData?.telefone || leadData?.phone)
-        .eq('company_id', companyId)
-        .order('created_at', { ascending: false })
-        .limit(historyCount);
-      
-      if (historico && historico.length > 1) {
-        contextoDinamico += `
-HISTÓRICO RECENTE DA CONVERSA (últimas ${historico.length - 1} mensagens):
-${historico.slice(1).reverse().map((h: any) => 
-  `${h.fromme ? '[Você]' : '[Cliente]'}: ${h.mensagem?.substring(0, 200)}`
-).join('\n')}
-`;
+        contextoDinamico += `\nINFO EXTRA:\n${knowledgeBase.informacoes_extras}\n`;
       }
     }
 
     // ========================================
-    // DETECTAR INTENÇÃO DE AGENDAMENTO
+    // BUSCAR HISTÓRICO COMO ARRAY DE MENSAGENS
     // ========================================
-    const msgLower = message?.toLowerCase() || '';
-    const agendamentoKeywords = ['agendar', 'marcar', 'horário', 'horario', 'consulta', 'disponível', 'disponivel', 'vaga', 'quando posso', 'quero marcar'];
-    const isAgendamentoIntent = agendamentoKeywords.some(k => msgLower.includes(k));
+    const historyCount = iaConfig?.history_messages_count || 15;
+    const conversationMessages: { role: string; content: string }[] = [];
+    
+    if (companyId && leadData && iaConfig?.read_conversation_history !== false) {
+      const telefoneParaHistorico = leadData?.telefone || leadData?.phone;
+      if (telefoneParaHistorico) {
+        const telefoneLimpo = telefoneParaHistorico.replace(/[^0-9]/g, '');
+        const { data: historico } = await supabase
+          .from('conversas')
+          .select('mensagem, fromme, created_at')
+          .eq('telefone_formatado', telefoneLimpo)
+          .eq('company_id', companyId)
+          .order('created_at', { ascending: false })
+          .limit(historyCount);
+        
+        if (historico && historico.length > 1) {
+          // Reverter para ordem cronológica, excluir a mensagem atual (primeira)
+          const mensagensAnteriores = historico.slice(1).reverse();
+          for (const msg of mensagensAnteriores) {
+            if (msg.mensagem && msg.mensagem.trim()) {
+              conversationMessages.push({
+                role: msg.fromme ? 'assistant' : 'user',
+                content: msg.mensagem.substring(0, 500)
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Detectar se é primeira mensagem
+    const isPrimeiraMensagem = conversationMessages.length === 0;
 
     // ========================================
-    // CONSTRUIR PROMPT FINAL
+    // CONSTRUIR PROMPT HUMANIZADO
     // ========================================
+    const nomeEmpresa = knowledgeBase?.empresa?.nome || 'nossa empresa';
+    const nomeCliente = leadData?.name?.split(' ')[0] || ''; // Primeiro nome apenas
+    
     let systemPrompt = '';
     
     if (promptPersonalizado && promptPersonalizado.trim()) {
-      // Substituir variáveis no prompt personalizado
+      // Substituir variáveis
       let promptComVariaveis = promptPersonalizado
         .replace(/{lead\.name}/g, leadData?.name || 'Cliente')
         .replace(/{lead\.phone}/g, leadData?.phone || leadData?.telefone || '')
         .replace(/{lead\.email}/g, leadData?.email || '')
         .replace(/{lead\.company}/g, leadData?.company || '')
-        .replace(/{company\.name}/g, knowledgeBase?.empresa?.nome || 'Empresa');
+        .replace(/{company\.name}/g, nomeEmpresa)
+        .replace(/{saudacao}/g, saudacao);
       
       systemPrompt = `${promptComVariaveis}
 
 ${contextoDinamico}
 
-AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se aplicável):
-- [COLETAR_DADOS:campo=valor] - para coletar CPF, email, telefone, empresa
-- [ADICIONAR_TAG:nome] - para adicionar tag ao lead
-- [MOVER_FUNIL:etapa] - para mover lead no funil
-- [CRIAR_TAREFA:titulo] - para criar tarefa de follow-up
-- [AGENDAR] - quando cliente quiser marcar horário (inicia fluxo de agendamento)
-- [TRANSFERIR_HUMANO] - para transferir para atendente humano
-- [QUALIFICAR] - para marcar lead como qualificado`;
+REGRAS DE HUMANIZAÇÃO (OBRIGATÓRIO):
+- NUNCA diga que é uma IA, assistente virtual, robô ou bot
+- Responda como se fosse um atendente humano real da equipe
+- Máximo 2-3 frases curtas por mensagem (como WhatsApp real)
+- Use linguagem natural e informal quando apropriado
+- Evite listas e formatação elaborada — escreva como uma pessoa normal digitaria
+- Não repita o nome do cliente a cada mensagem
+- ${saudacao} — use essa saudação se for a primeira interação
+- Se não souber algo, diga "vou verificar com a equipe" em vez de "não tenho essa informação"
+- Use emojis com muita moderação (máximo 1 por mensagem, e nem sempre)
+- Não faça perguntas demais de uma vez — no máximo 1 pergunta por mensagem
+
+AÇÕES INTERNAS (inclua UMA no final, entre colchetes, NUNCA mostre ao cliente):
+[COLETAR_DADOS:campo=valor] | [ADICIONAR_TAG:nome] | [MOVER_FUNIL:etapa] | [CRIAR_TAREFA:titulo] | [AGENDAR] | [TRANSFERIR_HUMANO] | [QUALIFICAR]`;
     } else {
-      systemPrompt = `Você é uma assistente de atendimento virtual. Responda de forma cordial, profissional e objetiva.
+      systemPrompt = `Você é ${nomeCliente ? `o atendente que está conversando com ${nomeCliente}` : 'um atendente'} da equipe de ${nomeEmpresa}.
+
+CONTEXTO:
+- Horário atual: ${saudacao}
+- ${isPrimeiraMensagem ? 'Esta é a PRIMEIRA mensagem do cliente — cumprimente naturalmente.' : 'Conversa já em andamento — NÃO cumprimente novamente.'}
 
 ${contextoDinamico}
 
-DIRETRIZES:
-- Seja prestativo e empático
-- Responda de forma concisa (máximo 3 parágrafos)
-- Use emojis com moderação para criar conexão
-- Se não souber responder algo, admita e ofereça encaminhar para um humano
-- Se o cliente quiser agendar algo, use a ação [AGENDAR]
+COMO VOCÊ DEVE SE COMPORTAR:
+1. Você é um HUMANO da equipe, NÃO uma IA. Jamais revele que é artificial.
+2. Escreva como uma pessoa real no WhatsApp: frases curtas, diretas, naturais.
+3. Máximo 2-3 frases por mensagem. Nada de parágrafos longos.
+4. Use linguagem amigável e profissional ao mesmo tempo.
+5. Não repita o nome do cliente em toda mensagem.
+6. Se não souber algo: "Deixa eu verificar aqui com a equipe e já te retorno, tá?"
+7. Emojis: no máximo 1 por mensagem, e nem sempre. Nada de 😊🎉✨ em tudo.
+8. Faça no máximo 1 pergunta por mensagem.
+9. Não faça listas formatadas. Escreva como texto corrido.
+10. Se o cliente pedir para agendar, use [AGENDAR].
+11. Se sentir que precisa de um humano de verdade, use [TRANSFERIR_HUMANO].
 
-AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se aplicável):
-- [COLETAR_DADOS:campo=valor] - para coletar CPF, email, telefone, empresa
-- [ADICIONAR_TAG:nome] - para adicionar tag ao lead
-- [MOVER_FUNIL:etapa] - para mover lead no funil
-- [CRIAR_TAREFA:titulo] - para criar tarefa de follow-up
-- [AGENDAR] - quando cliente quiser marcar horário
-- [TRANSFERIR_HUMANO] - para transferir para atendente humano
-- [QUALIFICAR] - para marcar lead como qualificado`;
+AÇÕES INTERNAS (coloque UMA no final da resposta se necessário, entre colchetes — o cliente NUNCA verá):
+[COLETAR_DADOS:campo=valor] | [ADICIONAR_TAG:nome] | [MOVER_FUNIL:etapa] | [CRIAR_TAREFA:titulo] | [AGENDAR] | [TRANSFERIR_HUMANO] | [QUALIFICAR]`;
     }
 
     console.log('🤖 IA Atendimento - Processando:', { 
@@ -348,13 +322,24 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
       hasLead: !!leadData,
       hasCustomPrompt: !!promptPersonalizado,
       hasFiles: filesContent.length > 0,
-      hasKnowledgeBase: !!knowledgeBase,
-      isAgendamentoIntent
+      isPrimeiraMensagem,
+      historicMessages: conversationMessages.length
     });
 
-    // Construir conteúdo da mensagem (texto + arquivos multimodais)
+    // ========================================
+    // CONSTRUIR MESSAGES ARRAY (histórico real)
+    // ========================================
+    const messagesArray: any[] = [
+      { role: 'system', content: systemPrompt }
+    ];
+
+    // Adicionar histórico como mensagens separadas
+    for (const msg of conversationMessages) {
+      messagesArray.push(msg);
+    }
+
+    // Adicionar mensagem atual
     let userContent: any;
-    
     if (filesContent.length > 0) {
       userContent = [
         { type: 'text', text: (message || 'Analise este arquivo.') + filesDescription },
@@ -363,7 +348,11 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
     } else {
       userContent = message + filesDescription;
     }
+    messagesArray.push({ role: 'user', content: userContent });
 
+    // ========================================
+    // CHAMAR IA
+    // ========================================
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -372,24 +361,21 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent }
-        ],
-        max_tokens: 1000,
+        messages: messagesArray,
+        max_tokens: 300, // Respostas curtas como WhatsApp real
       }),
     });
 
     if (!response.ok) {
       if (response.status === 429) {
         return new Response(
-          JSON.stringify({ error: 'Limite de requisições atingido. Tente novamente em alguns segundos.' }),
+          JSON.stringify({ error: 'Limite de requisições. Tente em alguns segundos.' }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: 'Créditos insuficientes. Adicione fundos à sua conta Lovable.' }),
+          JSON.stringify({ error: 'Créditos insuficientes.' }),
           { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -401,15 +387,32 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
     const data = await response.json();
     const aiResponse = data.choices[0].message.content;
 
-    // Extrair ação e parâmetros da resposta
-    const actionPattern = /\[(QUALIFICAR|COLETAR_DADOS|ADICIONAR_TAG|MOVER_FUNIL|CRIAR_TAREFA|AGENDAR|TRANSFERIR_HUMANO)(:([^\]]+))?\]/;
-    const actionMatch = aiResponse.match(actionPattern);
+    // ========================================
+    // EXTRAIR E LIMPAR AÇÕES (regex robusto)
+    // ========================================
+    // Capturar todas as variações de ações, inclusive com espaços
+    const actionPatterns = [
+      /\[\s*(QUALIFICAR|COLETAR_DADOS|ADICIONAR_TAG|MOVER_FUNIL|CRIAR_TAREFA|AGENDAR|TRANSFERIR_HUMANO)\s*(?::\s*([^\]]*))?\s*\]/gi,
+    ];
     
-    const action = actionMatch ? actionMatch[1] : null;
-    const actionParams = actionMatch ? actionMatch[3] : null;
+    let action: string | null = null;
+    let actionParams: string | null = null;
+    let cleanResponse = aiResponse;
     
-    // Remover ação da resposta
-    const cleanResponse = aiResponse.replace(actionPattern, '').trim();
+    for (const pattern of actionPatterns) {
+      const match = pattern.exec(aiResponse);
+      if (match) {
+        action = match[1].toUpperCase();
+        actionParams = match[2]?.trim() || null;
+        break;
+      }
+    }
+    
+    // Remover TODAS as ações da resposta (inclusive múltiplas)
+    cleanResponse = cleanResponse
+      .replace(/\[\s*(QUALIFICAR|COLETAR_DADOS|ADICIONAR_TAG|MOVER_FUNIL|CRIAR_TAREFA|AGENDAR|TRANSFERIR_HUMANO)\s*(?::\s*[^\]]*)?\s*\]/gi, '')
+      .replace(/\n{3,}/g, '\n\n') // Remover linhas vazias extras
+      .trim();
 
     // Executar ações automaticamente
     let actionResult = null;
@@ -422,13 +425,9 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
             if (campo && valor) {
               const { error } = await supabase
                 .from('leads')
-                .update({ 
-                  [campo]: valor.trim(),
-                  updated_at: new Date().toISOString()
-                })
+                .update({ [campo.trim()]: valor.trim(), updated_at: new Date().toISOString() })
                 .eq('id', leadData.id);
-              
-              actionResult = { success: !error, campo, valor: valor.trim() };
+              actionResult = { success: !error, campo: campo.trim(), valor: valor.trim() };
               console.log(`📝 Dados coletados: ${campo}=${valor}`);
             }
           }
@@ -438,15 +437,10 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
           if (actionParams) {
             const tagsAtuais = leadData.tags || [];
             const novasTags = [...new Set([...tagsAtuais, actionParams.trim()])];
-            
             const { error } = await supabase
               .from('leads')
-              .update({ 
-                tags: novasTags,
-                updated_at: new Date().toISOString()
-              })
+              .update({ tags: novasTags, updated_at: new Date().toISOString() })
               .eq('id', leadData.id);
-            
             actionResult = { success: !error, tag: actionParams.trim() };
             console.log(`🏷️ Tag adicionada: ${actionParams}`);
           }
@@ -464,13 +458,8 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
             if (etapa) {
               const { error } = await supabase
                 .from('leads')
-                .update({ 
-                  etapa_id: etapa.id,
-                  funil_id: etapa.funil_id,
-                  updated_at: new Date().toISOString()
-                })
+                .update({ etapa_id: etapa.id, funil_id: etapa.funil_id, updated_at: new Date().toISOString() })
                 .eq('id', leadData.id);
-              
               actionResult = { success: !error, etapa: actionParams.trim() };
               console.log(`📊 Lead movido para: ${actionParams}`);
             }
@@ -497,7 +486,6 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
                   status: 'pendente',
                   priority: 'media'
                 });
-              
               actionResult = { success: !error, titulo: actionParams.trim() };
               console.log(`✅ Tarefa criada: ${actionParams}`);
             }
@@ -507,29 +495,20 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
         case 'QUALIFICAR':
           const { error: qualError } = await supabase
             .from('leads')
-            .update({ 
-              status: 'qualificado',
-              updated_at: new Date().toISOString()
-            })
+            .update({ status: 'qualificado', updated_at: new Date().toISOString() })
             .eq('id', leadData.id);
-          
           actionResult = { success: !qualError };
           console.log('✨ Lead qualificado');
           break;
           
         case 'AGENDAR':
-          // Sinalizar que deve transferir para IA de agendamento
-          actionResult = { 
-            success: true, 
-            nextAgent: 'agendamento',
-            message: 'Transferindo para agendamento...' 
-          };
+          actionResult = { success: true, nextAgent: 'agendamento', message: 'Transferindo para agendamento...' };
           console.log('📅 Iniciando fluxo de agendamento');
           break;
       }
     }
 
-    // Registrar interação para aprendizado
+    // Registrar aprendizado
     try {
       await supabase
         .from('ia_training_data')
@@ -544,7 +523,9 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
             hasFiles: files?.length > 0,
             action,
             actionParams,
-            hasKnowledgeBase: !!knowledgeBase
+            hasKnowledgeBase: !!knowledgeBase,
+            isPrimeiraMensagem,
+            historicoCount: conversationMessages.length
           }
         });
     } catch (e) {
@@ -552,7 +533,13 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
     }
 
     const executionTime = Date.now() - startTime;
-    console.log(`✅ IA Atendimento - Concluído em ${executionTime}ms`);
+    
+    // Calcular delay simulado para parecer humano (baseado no tamanho da resposta)
+    // Simula ~40-80 palavras por minuto de digitação
+    const palavras = cleanResponse.split(/\s+/).length;
+    const delayMs = Math.min(Math.max(palavras * 150, 1500), 6000); // Min 1.5s, Max 6s
+    
+    console.log(`✅ IA Atendimento - Concluído em ${executionTime}ms (delay sugerido: ${delayMs}ms)`);
 
     return new Response(
       JSON.stringify({ 
@@ -561,6 +548,7 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
         actionParams,
         actionResult,
         executionTime,
+        suggestedDelay: delayMs, // Delay para o webhook usar
         nextAgent: action === 'AGENDAR' ? 'agendamento' : undefined
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -571,7 +559,7 @@ AÇÕES DISPONÍVEIS (inclua UMA ação no final da resposta entre colchetes, se
     return new Response(
       JSON.stringify({ 
         error: error instanceof Error ? error.message : 'Erro desconhecido',
-        response: 'Desculpe, estou com dificuldades técnicas. Um atendente humano irá te ajudar em breve.'
+        response: 'Desculpe, tive um probleminha aqui. Já vou te retornar!'
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

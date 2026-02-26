@@ -1948,6 +1948,10 @@ serve(async (req) => {
               }).then(async (r) => {
                 const result = await r.json();
                 if (result.response) {
+                  // Delay humanizado antes de responder
+                  const delay = result.suggestedDelay || 2000;
+                  await new Promise(resolve => setTimeout(resolve, delay));
+                  console.log(`⏱️ [WEBHOOK-IA] Delay de ${delay}ms aplicado para humanização`);
                   await fetch(`${supabaseUrlEnv}/functions/v1/enviar-whatsapp`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${supabaseKeyEnv}`, 'Content-Type': 'application/json' },
@@ -1972,6 +1976,10 @@ serve(async (req) => {
               }).then(async (r) => {
                 const result = await r.json();
                 if (result.response) {
+                  // Delay humanizado antes de responder
+                  const delay = result.suggestedDelay || 2000;
+                  await new Promise(resolve => setTimeout(resolve, delay));
+                  console.log(`⏱️ [WEBHOOK-IA] Delay de ${delay}ms aplicado para humanização`);
                   await fetch(`${supabaseUrlEnv}/functions/v1/enviar-whatsapp`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${supabaseKeyEnv}`, 'Content-Type': 'application/json' },
@@ -2010,6 +2018,10 @@ serve(async (req) => {
                   const iaResult = await iaResponse.json();
                   if (!iaResult.active || iaResult.shouldTransfer) return;
                   if (iaResult.response) {
+                    // Delay humanizado antes de responder
+                    const delay = iaResult.suggestedDelay || 2000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    console.log(`⏱️ [WEBHOOK-IA] Delay de ${delay}ms aplicado para humanização`);
                     console.log('🤖 [WEBHOOK-IA] Enviando resposta da IA...');
                     await fetch(`${supabaseUrlEnv}/functions/v1/enviar-whatsapp`, {
                       method: 'POST',
