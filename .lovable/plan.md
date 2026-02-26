@@ -1,37 +1,55 @@
 
 
-## Diagnóstico: Bug de digitação no Processos Comerciais
+## Análise: Funcionalidade de URA no CRM
 
-### Causa raiz
+### O que já existe
 
-O problema está no componente `BlockEditor.tsx`. A cada tecla digitada, a função `updateBlock` é chamada, que faz **duas coisas simultaneamente**:
+O sistema **já possui todos os componentes necessários** para implementar uma URA funcional dentro do módulo de **Fluxos de Automação**. Não é necessário criar uma nova aba.
 
-1. Envia uma requisição ao banco de dados para salvar o texto
-2. Chama `onBlocksChange(updatedBlocks)` que atualiza o estado do componente pai (`NotionPage`)
+**Componentes existentes que formam a URA:**
 
-Isso causa um ciclo de re-renderização: o componente pai recebe novos `blocks`, re-renderiza o `BlockEditor`, e o textarea recebe um `value` possivelmente desatualizado (a resposta do banco ainda não voltou, ou o estado do pai conflita com o que o usuário está digitando). O resultado é texto "pulando", caracteres perdidos e impossibilidade de digitar normalmente.
+1. **Menu Interativo** (`interactive_menu`) - Envia opções com botões/lista ao cliente e aguarda resposta
+2. **Rotear Departamento** (`route_department`) - Direciona a conversa para um departamento ou atendente específico
+3. **Atribuir Responsável** (`atribuir_responsavel`) - Atribui a conversa a um usuário
+4. **Condições** (`condition`) - Permite criar regras (horário, palavra-chave, tag, etc.)
+5. **Gatilho "Nova Mensagem"** - Inicia o fluxo quando uma mensagem chega
+6. **IA Conversacional** - Entende texto livre e roteia para a opção correta
 
-### Solução
+**Backend funcional:**
+- `executar-fluxo/index.ts` já processa todos esses nós incluindo `executeInteractiveMenu()` com IA para entender texto livre e `executeRouteDepartment()` que atribui conversas e limpa o estado do fluxo
+- `webhook-conversas/index.ts` já detecta fluxos ativos e dispara a execução
 
-Implementar **estado local** para o texto de cada bloco e usar **debounce** para salvar no banco. Assim, a digitação fica instantânea e fluida, e o salvamento acontece apenas após o usuário parar de digitar por ~500ms.
+### Problema identificado
 
-### Alterações planejadas
+A funcionalidade existe mas tem duas limitações que impedem uso como URA real:
 
-**Arquivo: `src/components/processos/notion/BlockEditor.tsx`**
+1. **O campo "Departamento" é texto livre** - deveria listar departamentos/usuários reais do banco
+2. **Falta vinculação Menu → Departamento por botão** - quando o menu interativo tem 3 botões, cada botão deveria poder conectar a um departamento diferente via edges do grafo, mas o sistema atualmente segue **todas** as edges de saída do menu após match
 
-1. Criar um sub-componente `EditableBlock` que mantém o texto em estado local (`useState`) independente das props
-2. Sincronizar o estado local com as props apenas quando o `block.id` muda (novo bloco), não a cada re-render
-3. Usar `useCallback` com `setTimeout`/debounce de ~500ms para chamar `updateBlock` (salvamento no banco) somente após pausa na digitação
-4. Remover a chamada síncrona a `onBlocksChange` dentro de `updateBlock` durante digitação ativa — o estado local do textarea é a fonte de verdade enquanto o usuário digita
+### Plano de Melhorias
 
-```text
-Fluxo atual (bugado):
-Tecla → updateBlock() → DB request + onBlocksChange() → re-render pai → re-render textarea → valor conflita
+#### 1. Melhorar o NodePropertiesPanel para `route_department`
+- Substituir o campo texto "Departamento" por um dropdown que busca departamentos/usuários reais via `user_roles` e `profiles`
+- Carregar lista de usuários da empresa para o campo "Responsável" em vez de pedir UUID manual
 
-Fluxo corrigido:
-Tecla → setLocalText() → render local instantâneo
-       └→ debounce 500ms → updateBlock() → DB request + onBlocksChange()
-```
+#### 2. Melhorar o InteractiveMenuNode com saídas por botão
+- Adicionar handles de saída individuais por botão (um handle por opção do menu)
+- Assim cada botão pode conectar a um nó `route_department` diferente
 
-Essa é uma correção cirúrgica que resolve o bug sem alterar a estrutura geral do editor.
+#### 3. Corrigir `executar-fluxo` para seguir edge do botão selecionado
+- Quando o usuário seleciona um botão no menu interativo, seguir apenas a edge correspondente ao botão selecionado (usando `sourceHandle`)
+- Atualmente segue **todas** as edges de saída após o match
+
+#### 4. Adicionar template "URA de Atendimento" pré-configurado
+- Um botão no FluxoAutomacaoBuilder que cria um fluxo pronto com:
+  - Gatilho: Nova Mensagem
+  - Menu: "Escolha o setor: 1-Vendas 2-Suporte 3-Financeiro"
+  - 3x Rotear Departamento (um para cada opção)
+
+### Arquivos a editar
+
+- `src/components/fluxos/NodePropertiesPanel.tsx` - Dropdown de usuários reais no route_department
+- `src/components/fluxos/nodes/InteractiveMenuNode.tsx` - Handles de saída por botão
+- `supabase/functions/executar-fluxo/index.ts` - Seguir edge correta após seleção de botão
+- `src/components/fluxos/FluxoAutomacaoBuilder.tsx` - Template URA pronto
 
