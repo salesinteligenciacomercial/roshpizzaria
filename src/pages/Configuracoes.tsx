@@ -1082,7 +1082,7 @@ export default function Configuracoes() {
       )}
 
       <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className={`grid w-full ${isMasterAccount ? 'grid-cols-8' : 'grid-cols-7'}`}>
+        <TabsList className={`grid w-full ${isMasterAccount ? 'grid-cols-7' : 'grid-cols-6'}`}>
           {isMasterAccount && (
             <TabsTrigger value="subcontas">
               <Building2 className="mr-2 h-4 w-4" />
@@ -1092,10 +1092,6 @@ export default function Configuracoes() {
           <TabsTrigger value="team">Equipe</TabsTrigger>
           <TabsTrigger value="produtos">Produtos</TabsTrigger>
           <TabsTrigger value="channels">Canais</TabsTrigger>
-          <TabsTrigger value="whatsapp-meta" className="text-green-600">
-            <Smartphone className="mr-2 h-4 w-4" />
-            WhatsApp Meta
-          </TabsTrigger>
           <TabsTrigger value="ia">IA</TabsTrigger>
           <TabsTrigger value="webhooks_api">Webhooks</TabsTrigger>
           <TabsTrigger value="avancado" className="text-destructive">Avançado</TabsTrigger>
@@ -1165,151 +1161,7 @@ export default function Configuracoes() {
           </div>
         </TabsContent>
 
-        {/* Nova Aba: WhatsApp Meta API */}
-        {currentCompany?.id && (
-          <TabsContent value="whatsapp-meta" className="space-y-4">
-            <Card className="border-green-500/30 bg-green-500/5">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-green-700">
-                  <Smartphone className="h-5 w-5" />
-                  Central de Controle - WhatsApp Meta API
-                </CardTitle>
-                <CardDescription>
-                  Gerencie templates, disparos em massa, métricas e custos da API oficial do WhatsApp sem precisar acessar o Facebook Business Manager
-                </CardDescription>
-              </CardHeader>
-            </Card>
-
-            <Tabs defaultValue="dashboard" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="dashboard" className="flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4" />
-                  Dashboard
-                </TabsTrigger>
-                <TabsTrigger value="templates" className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Templates
-                </TabsTrigger>
-                <TabsTrigger value="disparo" className="flex items-center gap-2">
-                  <Send className="h-4 w-4" />
-                  Disparo em Massa
-                </TabsTrigger>
-                <TabsTrigger value="custos" className="flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />
-                  Custos
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="dashboard" className="mt-4">
-                <WhatsAppDashboard companyId={currentCompany.id} />
-              </TabsContent>
-
-              <TabsContent value="templates" className="mt-4">
-                <WhatsAppTemplatesManager companyId={currentCompany.id} />
-              </TabsContent>
-
-              <TabsContent value="disparo" className="mt-4">
-                <DisparoEmMassa />
-              </TabsContent>
-
-              <TabsContent value="custos" className="mt-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <DollarSign className="h-5 w-5 text-green-600" />
-                      Tabela de Preços - WhatsApp Business API
-                    </CardTitle>
-                    <CardDescription>
-                      Preços por categoria de mensagem (valores aproximados em BRL, podem variar)
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-6">
-                      {/* Tabela de Preços */}
-                      <div className="rounded-lg border overflow-hidden">
-                        <table className="w-full">
-                          <thead className="bg-muted/50">
-                            <tr>
-                              <th className="text-left p-3 font-medium">Categoria</th>
-                              <th className="text-left p-3 font-medium">Descrição</th>
-                              <th className="text-right p-3 font-medium">Preço (BRL)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr className="border-t">
-                              <td className="p-3">
-                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                                  UTILITY
-                                </span>
-                              </td>
-                              <td className="p-3 text-sm text-muted-foreground">
-                                Confirmações de pedidos, atualizações de entrega, alertas de conta
-                              </td>
-                              <td className="p-3 text-right font-medium">R$ 0,0625</td>
-                            </tr>
-                            <tr className="border-t">
-                              <td className="p-3">
-                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
-                                  MARKETING
-                                </span>
-                              </td>
-                              <td className="p-3 text-sm text-muted-foreground">
-                                Promoções, ofertas, newsletters, campanhas de vendas
-                              </td>
-                              <td className="p-3 text-right font-medium">R$ 0,1250</td>
-                            </tr>
-                            <tr className="border-t">
-                              <td className="p-3">
-                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
-                                  AUTHENTICATION
-                                </span>
-                              </td>
-                              <td className="p-3 text-sm text-muted-foreground">
-                                Códigos OTP, verificação de identidade, 2FA
-                              </td>
-                              <td className="p-3 text-right font-medium">R$ 0,0525</td>
-                            </tr>
-                            <tr className="border-t bg-green-50">
-                              <td className="p-3">
-                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                                  SERVICE
-                                </span>
-                              </td>
-                              <td className="p-3 text-sm text-muted-foreground">
-                                Respostas a mensagens iniciadas pelo cliente (janela de 24h)
-                              </td>
-                              <td className="p-3 text-right font-medium text-green-600">Grátis*</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* Notas */}
-                      <div className="space-y-2 text-sm text-muted-foreground">
-                        <p>* Mensagens SERVICE são gratuitas quando enviadas dentro da janela de 24 horas após a última mensagem do cliente.</p>
-                        <p>• Preços podem variar de acordo com a região e volume de mensagens.</p>
-                        <p>• Consulte o <a href="https://developers.facebook.com/docs/whatsapp/pricing" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">site oficial da Meta</a> para valores atualizados.</p>
-                      </div>
-
-                      {/* Dicas de Economia */}
-                      <Card className="bg-blue-50 border-blue-200">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm text-blue-700">💡 Dicas para Economizar</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-2 text-sm text-blue-600">
-                          <p>• Use templates UTILITY ao invés de MARKETING quando possível</p>
-                          <p>• Aproveite a janela de 24h para mensagens SERVICE gratuitas</p>
-                          <p>• Agrupe informações em uma única mensagem template</p>
-                          <p>• Evite enviar mensagens fora do horário comercial (menor taxa de resposta)</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
-        )}
+        {/* WhatsApp Meta API movido para página de Fluxos e Automação */}
 
         <TabsContent value="ia" className="space-y-4">
           <Card>
