@@ -27,6 +27,9 @@ import { AgendarRetornoDialog } from "@/components/agenda/AgendarRetornoDialog";
 import { AgendaColaboradores } from "@/components/agenda/AgendaColaboradores";
 import { HorarioComercialConfig, criarHorarioPadrao, converterHorarioAntigo, HorarioComercial } from "@/components/agenda/HorarioComercialConfig";
 import { HorarioSeletor } from "@/components/agenda/HorarioSeletor";
+import { AgendaWeekView } from "@/components/agenda/AgendaWeekView";
+import { AgendaDayView } from "@/components/agenda/AgendaDayView";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 interface Lembrete {
   id: string;
   compromisso_id: string;
@@ -128,6 +131,7 @@ export default function Agenda() {
   const [lembretes, setLembretes] = useState<Lembrete[]>([]);
   const [activeTab, setActiveTab] = useState<string>("agenda");
   const [activeMainTab, setActiveMainTab] = useState<string>("visao-geral");
+  const [calendarViewMode, setCalendarViewMode] = useState<"day" | "week">("week");
   const [filtroStatusLembrete, setFiltroStatusLembrete] = useState<string>("all");
   const [filtroCanalLembrete, setFiltroCanalLembrete] = useState<string>("all");
   const [filtroRecorrencia, setFiltroRecorrencia] = useState<string>("all");
@@ -2749,150 +2753,57 @@ export default function Agenda() {
               </CardContent>
             </Card>
 
-            {/* Compromissos do dia */}
+            {/* Vista de Compromissos - Day/Week Toggle */}
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle className="flex items-center gap-2">
                     <Clock className="h-5 w-5" />
-                    {format(selectedDate, "dd 'de' MMMM", {
-                    locale: ptBR
-                  })}
+                    {calendarViewMode === "day" 
+                      ? format(selectedDate, "dd 'de' MMMM", { locale: ptBR })
+                      : "Visão Semanal"
+                    }
                   </CardTitle>
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="agendado">Agendados</SelectItem>
-                      <SelectItem value="concluido">Concluídos</SelectItem>
-                      <SelectItem value="cancelado">Cancelados</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <ToggleGroup type="single" value={calendarViewMode} onValueChange={(v) => v && setCalendarViewMode(v as "day" | "week")}>
+                      <ToggleGroupItem value="day" className="text-xs px-3 h-8">Dia</ToggleGroupItem>
+                      <ToggleGroupItem value="week" className="text-xs px-3 h-8">Semana</ToggleGroupItem>
+                    </ToggleGroup>
+                    <Select value={filterStatus} onValueChange={setFilterStatus}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="agendado">Agendados</SelectItem>
+                        <SelectItem value="concluido">Concluídos</SelectItem>
+                        <SelectItem value="cancelado">Cancelados</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-[400px]">
-                  {compromissosDoDia.length === 0 ? <div className="text-center py-8 text-muted-foreground">
-                      <AlertCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                      <p>Nenhum compromisso para este dia</p>
-                    </div> : <div className="space-y-3">
-                      {compromissosDoDia.map(compromisso => <Card key={compromisso.id} className="border-l-4 border-l-blue-500">
-                          <CardContent className="pt-4">
-                            <div className="flex justify-between items-start mb-2">
-                              <div className="space-y-1 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium">{compromisso.titulo || compromisso.tipo_servico}</span>
-                                  {getStatusBadge(compromisso.status)}
-                                </div>
-                                <p className="text-sm text-muted-foreground flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {format(parseISO(compromisso.data_hora_inicio), "HH:mm")} - {format(parseISO(compromisso.data_hora_fim), "HH:mm")}
-                                </p>
-                                {compromisso.agenda && <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                    <CalendarIcon className="h-3 w-3" />
-                                    {compromisso.agenda.nome} ({compromisso.agenda.tipo})
-                                  </p>}
-                                {/* Exibir lead ou paciente com foto */}
-                                {compromisso.lead ? (
-                                  <div className="flex items-center gap-2">
-                                    <Avatar className="h-6 w-6">
-                                      <AvatarImage 
-                                        src={compromisso.lead.profile_picture_url || (compromisso.lead_id ? leadAvatars[compromisso.lead_id] : undefined)} 
-                                        alt={compromisso.lead.name} 
-                                        onError={e => {
-                                          // Se falhar, tentar buscar
-                                          if (compromisso.lead_id && compromisso.lead) {
-                                            buscarAvatarLead({
-                                              id: compromisso.lead_id,
-                                              name: compromisso.lead.name,
-                                              phone: compromisso.lead.phone,
-                                              telefone: compromisso.lead.phone
-                                            });
-                                          }
-                                        }} 
-                                      />
-                                      <AvatarFallback className="h-6 w-6 text-xs bg-primary/10">
-                                        {compromisso.lead.name.charAt(0).toUpperCase()}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                    <span className="text-sm">{compromisso.lead.name}</span>
-                                    {compromisso.lead.phone && (
-                                      <span className="text-xs text-muted-foreground">({compromisso.lead.phone})</span>
-                                    )}
-                                  </div>
-                                ) : compromisso.paciente && (
-                                  <div className="flex items-center gap-2">
-                                    <Avatar className="h-6 w-6">
-                                      <AvatarFallback className="h-6 w-6 text-xs bg-primary/10">
-                                        {compromisso.paciente.charAt(0).toUpperCase()}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                    <span className="text-sm">{compromisso.paciente}</span>
-                                    {compromisso.telefone && (
-                                      <span className="text-xs text-muted-foreground">({compromisso.telefone})</span>
-                                    )}
-                                  </div>
-                                )}
-                                {/* Exibir profissional/colaborador */}
-                                {compromisso.profissional && (
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <User className="h-3 w-3 text-muted-foreground" />
-                                    <span className="text-xs text-muted-foreground">
-                                      Colaborador: <strong>{compromisso.profissional.nome}</strong>
-                                      {compromisso.profissional.especialidade && ` (${compromisso.profissional.especialidade})`}
-                                    </span>
-                                  </div>
-                                )}
-                                {compromisso.observacoes && <p className="text-xs text-muted-foreground mt-2">
-                                    {compromisso.observacoes}
-                                  </p>}
-                              </div>
-                              <div className="flex gap-1">
-                                <Button size="sm" variant="ghost" onClick={() => duplicarCompromisso(compromisso)} title="Duplicar compromisso">
-                                  <Copy className="h-4 w-4" />
-                                </Button>
-                                <AgendarRetornoDialog 
-                                  compromissoOriginal={compromisso}
-                                  onRetornoAgendado={carregarCompromissos}
-                                />
-                                <EditarCompromissoDialog compromisso={compromisso} onCompromissoUpdated={carregarCompromissos} />
-                                {compromisso.status === 'agendado' && <>
-                                    <Button size="sm" variant="ghost" onClick={() => atualizarStatus(compromisso.id, 'concluido')} title="Marcar como concluído">
-                                      <CheckCircle2 className="h-4 w-4" />
-                                    </Button>
-                                    <Button size="sm" variant="ghost" onClick={() => atualizarStatus(compromisso.id, 'cancelado')} title="Cancelar compromisso">
-                                      <XCircle className="h-4 w-4" />
-                                    </Button>
-                                  </>}
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" title="Deletar compromisso">
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Tem certeza que deseja deletar este compromisso? Esta ação não pode ser desfeita e todos os lembretes associados também serão removidos.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => deletarCompromisso(compromisso.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                        Deletar
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>)}
-                    </div>}
-                </ScrollArea>
+              <CardContent className="p-0">
+                {calendarViewMode === "week" ? (
+                  <AgendaWeekView
+                    selectedDate={selectedDate}
+                    compromissos={filterStatus === "all" ? compromissosDoMes : compromissosDoMes.filter(c => c.status === filterStatus)}
+                    onSelectDate={setSelectedDate}
+                    onSelectCompromisso={(comp) => {
+                      // Set date to the compromisso's date for context
+                      setSelectedDate(parseISO(comp.data_hora_inicio));
+                      setCalendarViewMode("day");
+                    }}
+                  />
+                ) : (
+                  <AgendaDayView
+                    selectedDate={selectedDate}
+                    compromissos={filterStatus === "all" ? compromissos : compromissos.filter(c => c.status === filterStatus)}
+                    onSelectCompromisso={(comp) => {
+                      // Could open edit dialog in the future
+                    }}
+                  />
+                )}
               </CardContent>
             </Card>
           </div>
