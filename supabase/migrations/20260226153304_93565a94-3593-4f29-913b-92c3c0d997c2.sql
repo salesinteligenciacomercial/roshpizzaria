@@ -1,0 +1,1 @@
+DELETE FROM public.conversation_ai_settings WHERE conversation_id LIKE 'conv-%';
