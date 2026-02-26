@@ -1,48 +1,35 @@
 
 
-## Plano: Integrar botão IA das Conversas com o backend (IA Atendimento, IA Agendamento e Fluxo/URA)
+## Plan: Visual Kanban/Google Calendar View for Agenda
 
-### Problema atual
+### What changes
+Replace the right-side "Compromissos do dia" card in the "Visão Geral" tab with a Google Calendar-style weekly timeline view showing appointments as colored blocks with title, time, and description.
 
-O botão "IA" no header das conversas salva apenas no `localStorage` do navegador — não tem efeito real no backend. O webhook ignora esse estado e usa apenas `ia_configurations.learning_mode` (global). Não há como escolher qual IA usar por conversa.
+### Implementation Steps
 
-### Solução
+1. **Create `AgendaWeekView` component** (`src/components/agenda/AgendaWeekView.tsx`)
+   - Weekly timeline grid (7 columns for days, rows for hours 7AM-8PM)
+   - Appointments rendered as colored blocks positioned by start time and sized by duration
+   - Color coding by status: blue = agendado, green = concluído, red = cancelado
+   - Each block shows: title, time range, patient/lead name
+   - Click on block opens existing edit dialog
+   - Current time indicator (red line like Google Calendar)
 
-#### 1. Criar tabela `conversation_ai_settings` no banco
-Armazena por conversa qual modo de IA está ativo:
-- `conversation_id` (text, unique)
-- `company_id` (uuid)
-- `ai_mode` (text): `'off'` | `'atendimento'` | `'agendamento'` | `'fluxo'` | `'all'`
-- `activated_by` (uuid)
-- `created_at` / `updated_at`
+2. **Create `AgendaDayView` component** (`src/components/agenda/AgendaDayView.tsx`)
+   - Single day expanded timeline view (taller slots, more detail per block)
+   - Reuses same color scheme and block rendering
+   - Shows more detail: observações, profissional, etc.
 
-#### 2. Refatorar botão IA no `ConversationHeader.tsx`
-Trocar o botão simples por um **dropdown** com 4 opções:
-- ❌ **Desativar IA** — nenhuma IA responde
-- 🤖 **IA Atendimento** — só IA de atendimento responde
-- 📅 **IA Agendamento** — só IA de agendamento responde
-- 🔄 **Fluxo/URA** — ativa apenas fluxos de automação
-- ✨ **Todas as IAs** — orchestrator decide qual usar
+3. **Update `src/pages/Agenda.tsx` "Visão Geral" tab**
+   - Replace the right-side Card (compromissos do dia list) with a toggle: Day View / Week View
+   - Keep the calendar on the left as-is (it's the date picker)
+   - Import and render the new components, passing `compromissosDoMes`, `selectedDate`, and action handlers (edit, delete, status change)
+   - Keep all existing functionality (status badges, duplicate, retorno, edit, delete buttons) accessible via click/popover on each block
 
-O estado visual do botão mostra qual modo está ativo.
-
-#### 3. Atualizar `Conversas.tsx`
-- Substituir `aiMode` (localStorage) por consulta/gravação na tabela `conversation_ai_settings`
-- `toggleAiMode` vira `setConversationAIMode(convId, mode)` que faz upsert no banco
-- Carregar o modo ativo ao selecionar uma conversa
-
-#### 4. Atualizar `webhook-conversas/index.ts`
-Antes de chamar IA ou fluxo, consultar `conversation_ai_settings`:
-- Se `ai_mode = 'off'` → não fazer nada
-- Se `ai_mode = 'atendimento'` → chamar só `ia-atendimento`
-- Se `ai_mode = 'agendamento'` → chamar só `ia-agendamento`
-- Se `ai_mode = 'fluxo'` → só processar fluxos de automação
-- Se `ai_mode = 'all'` → usar orchestrator (comportamento atual)
-- Se não existe registro → usar lógica atual (global `learning_mode`)
-
-### Arquivos a editar
-- **Migration SQL**: criar tabela `conversation_ai_settings` com RLS
-- **`src/components/conversas/ConversationHeader.tsx`**: dropdown de modos IA
-- **`src/pages/Conversas.tsx`**: integração com banco em vez de localStorage
-- **`supabase/functions/webhook-conversas/index.ts`**: respeitar modo por conversa
+### Technical Details
+- No database changes needed
+- No new dependencies — pure CSS grid positioning for the timeline
+- Block position: `top = (startHour - 7) * hourHeight`, `height = durationMinutes / 60 * hourHeight`
+- Status colors map: `{ agendado: 'bg-blue-500', concluido: 'bg-green-500', cancelado: 'bg-red-500', confirmado: 'bg-emerald-500' }`
+- Week view columns derived from `eachDayOfInterval` around `selectedDate`
 
