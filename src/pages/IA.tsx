@@ -1,10 +1,11 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bot, Sparkles, Target, Workflow, BarChart3, Send, AlertTriangle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Bot, Sparkles, Target, Workflow, BarChart3, Send, AlertTriangle, Smartphone, FileText, DollarSign } from "lucide-react";
 import { N8nIntegration } from "@/components/ia/N8nIntegration";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FluxoAutomacaoBuilder } from "@/components/fluxos/FluxoAutomacaoBuilder";
 import { IAAgentCard } from "@/components/ia/IAAgentCard";
-
+import { WhatsAppDashboard } from "@/components/whatsapp/WhatsAppDashboard";
+import { WhatsAppTemplatesManager } from "@/components/whatsapp/WhatsAppTemplatesManager";
 import { DisparoEmMassa } from "@/components/campanhas/DisparoEmMassa";
 import { CampanhasDashboard } from "@/components/campanhas/CampanhasDashboard";
 import { useEffect, useState } from "react";
@@ -19,19 +20,14 @@ export default function IA() {
   const [agentStates, setAgentStates] = useState({ atendimento: false, agendamento: false });
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const [loadingAiPermission, setLoadingAiPermission] = useState(true);
+  const [companyId, setCompanyId] = useState<string | null>(null);
   const { getAgentConfigs, updateAgentConfig } = useAIAgents();
-
-  // Verificar permissão de acesso à Automação
-  if (!permissionsLoading && !canAccess('automacao') && !isAdmin) {
-    return <Navigate to="/leads" replace />;
-  }
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
-      // Verificar diretamente no banco se é super_admin
       const { data: userRoleData } = await supabase
         .from('user_roles')
         .select('role, company_id')
@@ -40,15 +36,15 @@ export default function IA() {
       
       const isUserSuperAdmin = userRoleData?.role === 'super_admin';
       
-      // Super admin tem acesso total - não precisa verificar permissões
       if (isUserSuperAdmin) {
         console.log('✅ Super Admin detectado - liberando IA');
         setAiEnabled(true);
         setLoadingAiPermission(false);
+        if (userRoleData?.company_id) setCompanyId(userRoleData.company_id);
       } else {
         if (!userRoleData?.company_id) return;
+        setCompanyId(userRoleData.company_id);
         
-        // Verificar se a empresa tem permissão para usar IA
         const { data: company } = await supabase
           .from('companies')
           .select('allow_ai_features')
@@ -59,7 +55,6 @@ export default function IA() {
         setLoadingAiPermission(false);
       }
       
-      // Carregar configs dos agentes (sempre desativados por padrão)
       const configs = await getAgentConfigs();
       const state = { atendimento: false, agendamento: false } as any;
       if (configs && Array.isArray(configs)) {
@@ -69,6 +64,12 @@ export default function IA() {
     };
     load();
   }, [getAgentConfigs]);
+
+  // Verificar permissão de acesso à Automação
+  if (!permissionsLoading && !canAccess('automacao') && !isAdmin) {
+    return <Navigate to="/leads" replace />;
+  }
+
 
   const handleAgentToggle = async (id: string, active: boolean) => {
     setAgentStates(prev => ({ ...prev, [id]: active }));
@@ -135,7 +136,7 @@ export default function IA() {
       )}
 
       <Tabs defaultValue="agentes" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="agentes" className="gap-2">
             <Bot className="h-4 w-4" />
             Agentes
@@ -143,6 +144,10 @@ export default function IA() {
           <TabsTrigger value="fluxos" className="gap-2">
             <Workflow className="h-4 w-4" />
             Fluxos
+          </TabsTrigger>
+          <TabsTrigger value="whatsapp-meta" className="gap-2 text-green-600">
+            <Smartphone className="h-4 w-4" />
+            WhatsApp Meta
           </TabsTrigger>
           <TabsTrigger value="campanhas" className="gap-2">
             <Send className="h-4 w-4" />
@@ -233,6 +238,119 @@ export default function IA() {
         <TabsContent value="fluxos" className="space-y-4 mt-6">
           <FluxoAutomacaoBuilder />
         </TabsContent>
+
+        {/* WhatsApp Meta API */}
+        {companyId && (
+          <TabsContent value="whatsapp-meta" className="space-y-4 mt-6">
+            <Card className="border-green-500/30 bg-green-500/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-green-700">
+                  <Smartphone className="h-5 w-5" />
+                  Central de Controle - WhatsApp Meta API
+                </CardTitle>
+                <CardDescription>
+                  Gerencie templates, disparos em massa, métricas e custos da API oficial do WhatsApp
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Tabs defaultValue="dashboard" className="w-full">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="dashboard" className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  Dashboard
+                </TabsTrigger>
+                <TabsTrigger value="templates" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Templates
+                </TabsTrigger>
+                <TabsTrigger value="disparo" className="flex items-center gap-2">
+                  <Send className="h-4 w-4" />
+                  Disparo em Massa
+                </TabsTrigger>
+                <TabsTrigger value="custos" className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Custos
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="dashboard" className="mt-4">
+                <WhatsAppDashboard companyId={companyId} />
+              </TabsContent>
+
+              <TabsContent value="templates" className="mt-4">
+                <WhatsAppTemplatesManager companyId={companyId} />
+              </TabsContent>
+
+              <TabsContent value="disparo" className="mt-4">
+                <DisparoEmMassa />
+              </TabsContent>
+
+              <TabsContent value="custos" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <DollarSign className="h-5 w-5 text-green-600" />
+                      Tabela de Preços - WhatsApp Business API
+                    </CardTitle>
+                    <CardDescription>
+                      Preços por categoria de mensagem (valores aproximados em BRL)
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-6">
+                      <div className="rounded-lg border overflow-hidden">
+                        <table className="w-full">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="text-left p-3 font-medium">Categoria</th>
+                              <th className="text-left p-3 font-medium">Descrição</th>
+                              <th className="text-right p-3 font-medium">Preço (BRL)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr className="border-t">
+                              <td className="p-3">
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">UTILITY</span>
+                              </td>
+                              <td className="p-3 text-sm text-muted-foreground">Confirmações de pedidos, atualizações de entrega, alertas</td>
+                              <td className="p-3 text-right font-medium">R$ 0,0625</td>
+                            </tr>
+                            <tr className="border-t">
+                              <td className="p-3">
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">MARKETING</span>
+                              </td>
+                              <td className="p-3 text-sm text-muted-foreground">Promoções, ofertas, newsletters, campanhas</td>
+                              <td className="p-3 text-right font-medium">R$ 0,1250</td>
+                            </tr>
+                            <tr className="border-t">
+                              <td className="p-3">
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">AUTHENTICATION</span>
+                              </td>
+                              <td className="p-3 text-sm text-muted-foreground">Códigos OTP, verificação de identidade, 2FA</td>
+                              <td className="p-3 text-right font-medium">R$ 0,0525</td>
+                            </tr>
+                            <tr className="border-t bg-green-50">
+                              <td className="p-3">
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">SERVICE</span>
+                              </td>
+                              <td className="p-3 text-sm text-muted-foreground">Respostas na janela de 24h</td>
+                              <td className="p-3 text-right font-medium text-green-600">Grátis*</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="space-y-2 text-sm text-muted-foreground">
+                        <p>* Mensagens SERVICE são gratuitas dentro da janela de 24h.</p>
+                        <p>• Preços podem variar por região e volume.</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+        )}
 
         <TabsContent value="campanhas" className="space-y-4 mt-6">
           <Tabs defaultValue="disparo" className="w-full">
