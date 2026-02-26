@@ -25,16 +25,16 @@ interface AgendaWeekViewProps {
   onSelectCompromisso?: (compromisso: Compromisso) => void;
 }
 
-const HOUR_HEIGHT = 60;
+const HOUR_HEIGHT = 80;
 const START_HOUR = 7;
 const END_HOUR = 21;
 const HOURS = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i);
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  agendado: { bg: "bg-blue-500/15", border: "border-l-blue-500", text: "text-blue-900 dark:text-blue-200" },
-  concluido: { bg: "bg-green-500/15", border: "border-l-green-500", text: "text-green-900 dark:text-green-200" },
-  cancelado: { bg: "bg-red-500/15", border: "border-l-red-500", text: "text-red-900 dark:text-red-200" },
-  confirmado: { bg: "bg-emerald-500/15", border: "border-l-emerald-500", text: "text-emerald-900 dark:text-emerald-200" },
+  agendado: { bg: "bg-blue-100 dark:bg-blue-900/40", border: "border-l-blue-600", text: "text-blue-950 dark:text-blue-100" },
+  concluido: { bg: "bg-green-100 dark:bg-green-900/40", border: "border-l-green-600", text: "text-green-950 dark:text-green-100" },
+  cancelado: { bg: "bg-red-100 dark:bg-red-900/40", border: "border-l-red-600", text: "text-red-950 dark:text-red-100" },
+  confirmado: { bg: "bg-emerald-100 dark:bg-emerald-900/40", border: "border-l-emerald-600", text: "text-emerald-950 dark:text-emerald-100" },
 };
 
 export function AgendaWeekView({ selectedDate, compromissos, onSelectDate, onSelectCompromisso }: AgendaWeekViewProps) {
@@ -141,7 +141,7 @@ export function AgendaWeekView({ selectedDate, compromissos, onSelectDate, onSel
                     const startHour = start.getHours() + start.getMinutes() / 60;
                     const endHour = end.getHours() + end.getMinutes() / 60;
                     const top = Math.max(0, (startHour - START_HOUR) * HOUR_HEIGHT);
-                    const height = Math.max(20, (endHour - startHour) * HOUR_HEIGHT);
+                    const height = Math.max(28, (endHour - startHour) * HOUR_HEIGHT);
                     const colors = STATUS_COLORS[comp.status] || STATUS_COLORS.agendado;
                     const title = comp.titulo || comp.tipo_servico;
                     const clientName = comp.lead?.name || comp.paciente || "";
@@ -150,19 +150,19 @@ export function AgendaWeekView({ selectedDate, compromissos, onSelectDate, onSel
                       <Tooltip key={comp.id}>
                         <TooltipTrigger asChild>
                           <div
-                            className={`absolute left-0.5 right-0.5 rounded-md border-l-3 px-1.5 py-0.5 cursor-pointer 
-                              hover:shadow-md transition-shadow overflow-hidden z-10 ${colors.bg} ${colors.border} ${colors.text}`}
+                            className={`absolute left-0.5 right-0.5 rounded-md border-l-[3px] px-2 py-1 cursor-pointer 
+                              hover:shadow-lg hover:brightness-95 transition-all overflow-hidden z-10 ${colors.bg} ${colors.border} ${colors.text}`}
                             style={{ top, height: Math.min(height, (END_HOUR - START_HOUR) * HOUR_HEIGHT - top) }}
                             onClick={() => onSelectCompromisso?.(comp)}
                           >
-                            <div className="text-[11px] font-semibold truncate">{title}</div>
-                            {height > 30 && (
-                              <div className="text-[10px] opacity-80 truncate">
+                            <div className="text-xs font-bold truncate leading-tight">{title}</div>
+                            {height > 35 && (
+                              <div className="text-[11px] font-medium opacity-90 truncate leading-tight mt-0.5">
                                 {format(start, "HH:mm")} - {format(end, "HH:mm")}
                               </div>
                             )}
-                            {height > 48 && clientName && (
-                              <div className="text-[10px] opacity-70 truncate">{clientName}</div>
+                            {height > 55 && clientName && (
+                              <div className="text-[11px] opacity-80 truncate leading-tight mt-0.5">👤 {clientName}</div>
                             )}
                           </div>
                         </TooltipTrigger>
