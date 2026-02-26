@@ -4104,7 +4104,11 @@ function Conversas() {
         .eq('company_id', userCompanyId);
       if (data) {
         const modes: Record<string, string> = {};
-        data.forEach((row: any) => { modes[row.conversation_id] = row.ai_mode; });
+        data.forEach((row: any) => { 
+          modes[row.conversation_id] = row.ai_mode;
+          // Mapear também para formatos com prefixo para garantir lookup
+          modes[`conv-${row.conversation_id}`] = row.ai_mode;
+        });
         setAiMode(modes);
       }
     } catch (e) {
@@ -4124,13 +4128,21 @@ function Conversas() {
     // Apenas atualiza estado local - o save real acontece no addQuickCategory
     setQuickCategories(updated);
   };
+  const getConversationPhoneKey = (conv: Conversation): string => {
+    // Extrair apenas o número do telefone, sem prefixo "conv-"
+    const raw = conv.phoneNumber || conv.id;
+    return raw.replace(/[^0-9]/g, '');
+  };
   const setConversationAIMode = async (convId: string, mode: string) => {
     if (!userCompanyId || !currentUserId) return;
+    // Usar telefone normalizado como chave (mesmo formato do webhook)
+    const conv = conversations.find(c => c.id === convId);
+    const phoneKey = conv ? getConversationPhoneKey(conv) : convId.replace(/[^0-9]/g, '');
     try {
       const { error } = await supabase
         .from('conversation_ai_settings')
         .upsert({
-          conversation_id: convId,
+          conversation_id: phoneKey,
           company_id: userCompanyId,
           ai_mode: mode,
           activated_by: currentUserId,
@@ -4138,13 +4150,14 @@ function Conversas() {
       
       if (error) throw error;
       
-      setAiMode(prev => ({ ...prev, [convId]: mode }));
+      // Salvar no state com ambas as chaves para garantir lookup
+      setAiMode(prev => ({ ...prev, [convId]: mode, [phoneKey]: mode }));
       const labels: Record<string, string> = {
-        off: 'IA desativada',
-        atendimento: 'IA Atendimento ativada',
-        agendamento: 'IA Agendamento ativada',
-        fluxo: 'Fluxo/URA ativado',
-        all: 'Todas as IAs ativadas',
+        off: 'IA desativada para este contato',
+        atendimento: 'IA Atendimento ativada para este contato',
+        agendamento: 'IA Agendamento ativada para este contato',
+        fluxo: 'Fluxo/URA ativado para este contato',
+        all: 'Todas as IAs ativadas para este contato',
       };
       toast.success(labels[mode] || 'Modo IA alterado');
     } catch (e) {
