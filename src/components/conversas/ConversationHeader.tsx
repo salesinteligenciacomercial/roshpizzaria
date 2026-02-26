@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Phone, Video, Info, User, MessageSquare, Instagram, Facebook, FileText, DollarSign, RefreshCw, CheckCircle2, AlertCircle, Loader2, Check, Plus, RotateCcw, ArrowRightLeft, Bot, ArrowLeft } from "lucide-react";
 import { AIModeSelectorDropdown, type AIMode } from "./AIModeSelectorDropdown";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -194,63 +195,70 @@ import { useEffect, useState } from "react";
               </div>
             </div>
          </div>
-            {/* Ações - Versão Desktop */}
+            {/* Ações - Versão Desktop (apenas ícones com tooltip) */}
+              <TooltipProvider delayDuration={0}>
               <div className="hidden md:flex items-center gap-1">
-               {/* Botão Restaurar Histórico do WhatsApp - SEMPRE VISÍVEL */}
+               {/* Botão Restaurar Histórico do WhatsApp */}
                {onRestoreConversation && (
-                 <Button
-                   variant="outline"
-                   size="sm"
-                   onClick={onRestoreConversation}
-                   disabled={restoringConversation}
-                   className="mr-2 gap-1.5"
-                   title="Puxar histórico de mensagens do WhatsApp"
-                 >
-                   {restoringConversation ? (
-                     <>
-                       <Loader2 className="h-4 w-4 animate-spin" />
-                       Puxando...
-                     </>
-                   ) : (
-                     <>
-                       <RotateCcw className="h-4 w-4" />
-                       Puxar Histórico
-                     </>
-                   )}
-                 </Button>
+                 <Tooltip>
+                   <TooltipTrigger asChild>
+                     <Button
+                       variant="outline"
+                       size="icon"
+                       onClick={onRestoreConversation}
+                       disabled={restoringConversation}
+                       className="h-8 w-8"
+                     >
+                       {restoringConversation ? (
+                         <Loader2 className="h-4 w-4 animate-spin" />
+                       ) : (
+                         <RotateCcw className="h-4 w-4" />
+                       )}
+                     </Button>
+                   </TooltipTrigger>
+                   <TooltipContent>Puxar Histórico</TooltipContent>
+                 </Tooltip>
                )}
                {/* Botão IA - Dropdown */}
                {onChangeAIMode && (
                  <AIModeSelectorDropdown
                    currentMode={currentAIMode}
                    onModeChange={onChangeAIMode}
+                   compact
                  />
                )}
                {/* Botão Transferir Atendimento */}
                {onTransferAtendimento && (
-                 <Button
-                   variant="outline"
-                   size="sm"
-                   onClick={onTransferAtendimento}
-                   className="mr-1 gap-1.5"
-                   title="Transferir atendimento"
-                 >
-                   <ArrowRightLeft className="h-4 w-4" />
-                   Transferir
-                 </Button>
+                 <Tooltip>
+                   <TooltipTrigger asChild>
+                     <Button
+                       variant="outline"
+                       size="icon"
+                       onClick={onTransferAtendimento}
+                       className="h-8 w-8"
+                     >
+                       <ArrowRightLeft className="h-4 w-4" />
+                     </Button>
+                   </TooltipTrigger>
+                   <TooltipContent>Transferir</TooltipContent>
+                 </Tooltip>
                )}
                {onFinalizeAtendimento && (
                 <Dialog open={finalizeOpen} onOpenChange={setFinalizeOpen}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      variant="outline"
-                      size="sm"
-                      className="mr-2"
-                      title="Finalizar atendimento"
-                    >
-                      Finalizar
-                    </Button>
-                  </DialogTrigger>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DialogTrigger asChild>
+                        <Button 
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                        </Button>
+                      </DialogTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>Finalizar</TooltipContent>
+                  </Tooltip>
                   <DialogContent className="sm:max-w-lg">
                     <UIDialogHeader>
                       <DialogTitle>Mensagem de finalização</DialogTitle>
@@ -300,16 +308,21 @@ import { useEffect, useState } from "react";
                 </Dialog>
               )}
               
-              <Button 
-                variant="ghost" 
-                size="icon"
-                onClick={onToggleInfoPanel}
-                className={showInfoPanel ? "bg-primary/10 text-primary" : "hover:bg-primary/10"}
-                title="Informações"
-              >
-                <Info className="h-5 w-5" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={onToggleInfoPanel}
+                    className={`h-8 w-8 ${showInfoPanel ? "bg-primary/10 text-primary" : "hover:bg-primary/10"}`}
+                  >
+                    <Info className="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Informações</TooltipContent>
+              </Tooltip>
             </div>
+            </TooltipProvider>
 
             {/* Ações - Versão Mobile (apenas ícones) */}
             <div className="flex md:hidden items-center gap-0.5">
