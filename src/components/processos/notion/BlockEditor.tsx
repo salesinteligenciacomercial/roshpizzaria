@@ -90,6 +90,91 @@ const BLOCK_TYPES = [
   { type: 'embed', icon: Video, label: 'Embed (YouTube, etc)', shortcut: '', category: 'Mídia' },
 ];
 
+// Sub-component that maintains local state for fluid typing
+function EditableBlockTextarea({
+  block,
+  commonClassName,
+  placeholder,
+  onUpdateBlock,
+  onKeyDown,
+  onFocus,
+  blockRefs,
+  autoResize,
+  extraClassName,
+  wrapper,
+}: {
+  block: Block;
+  commonClassName: string;
+  placeholder: string;
+  onUpdateBlock: (blockId: string, content: Block['content']) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onFocus: () => void;
+  blockRefs: React.MutableRefObject<Map<string, HTMLTextAreaElement>>;
+  autoResize: (el: HTMLTextAreaElement | null) => void;
+  extraClassName?: string;
+  wrapper?: (textarea: React.ReactNode) => React.ReactNode;
+}) {
+  const [localText, setLocalText] = useState(block.content.text || '');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blockIdRef = useRef(block.id);
+
+  // Sync local text when block.id changes (different block) but NOT on every re-render
+  useEffect(() => {
+    if (blockIdRef.current !== block.id) {
+      blockIdRef.current = block.id;
+      setLocalText(block.content.text || '');
+    }
+  }, [block.id, block.content.text]);
+
+  // Also sync if text changed externally (e.g. shortcut cleared text) and user is not actively typing
+  useEffect(() => {
+    const externalText = block.content.text || '';
+    if (externalText !== localText && !debounceRef.current) {
+      setLocalText(externalText);
+    }
+  }, [block.content.text]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value;
+    setLocalText(newText);
+    autoResize(e.target);
+
+    // Debounce the save to DB
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      onUpdateBlock(block.id, { ...block.content, text: newText });
+    }, 500);
+  };
+
+  const textareaEl = (
+    <textarea
+      ref={(el: HTMLTextAreaElement) => {
+        if (el) {
+          blockRefs.current.set(block.id, el);
+          autoResize(el);
+        }
+      }}
+      value={localText}
+      onChange={handleChange}
+      onKeyDown={onKeyDown}
+      onFocus={onFocus}
+      className={cn(commonClassName, extraClassName)}
+      placeholder={placeholder}
+      style={{ minHeight: '24px', maxHeight: '200px', overflow: localText.length > 200 ? 'hidden' : 'auto' }}
+    />
+  );
+
+  return wrapper ? <>{wrapper(textareaEl)}</> : textareaEl;
+}
+
 export function BlockEditor({ pageId, blocks, onBlocksChange, companyId }: BlockEditorProps) {
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
   const [showBlockMenu, setShowBlockMenu] = useState<string | null>(null);
@@ -255,118 +340,125 @@ export function BlockEditor({ pageId, blocks, onBlocksChange, companyId }: Block
   }, []);
 
   const renderBlockContent = (block: Block, index: number) => {
-    const textContent = block.content.text || '';
-    const isLongText = textContent.length > 200 || textContent.split('\n').length > 5;
-    
-    const commonProps = {
-      ref: (el: HTMLTextAreaElement) => {
-        if (el) {
-          blockRefs.current.set(block.id, el);
-          autoResize(el);
-        }
-      },
-      value: textContent,
-      onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        updateBlock(block.id, { ...block.content, text: e.target.value });
-        autoResize(e.target);
-      },
+    const baseClassName = cn(
+      "w-full resize-none border-0 bg-transparent focus:ring-0 focus-visible:ring-0 p-0",
+      "placeholder:text-muted-foreground/50"
+    );
+
+    const editableProps = {
+      block,
+      commonClassName: baseClassName,
+      onUpdateBlock: updateBlock,
       onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => handleKeyDown(e, block, index),
       onFocus: () => setFocusedBlockId(block.id),
-      className: cn(
-        "w-full resize-none border-0 bg-transparent focus:ring-0 focus-visible:ring-0 p-0",
-        "placeholder:text-muted-foreground/50"
-      ),
-      placeholder: block.block_type === 'paragraph' ? "Digite '/' para comandos ou clique + para adicionar..." : '',
-      style: { minHeight: '24px', maxHeight: '200px', overflow: isLongText ? 'hidden' : 'auto' }
-    };
-
-    // Wrapper para adicionar botão de expandir em textos longos
-    const wrapWithExpand = (content: React.ReactNode) => {
-      if (!isLongText) return content;
-      return (
-        <div className="relative">
-          {content}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="absolute bottom-0 right-0 h-6 px-2 text-xs bg-background/80 hover:bg-muted"
-            onClick={() => setExpandedBlock(block)}
-            title="Expandir texto"
-          >
-            <Maximize2 className="h-3 w-3 mr-1" />
-            Ver mais
-          </Button>
-        </div>
-      );
+      blockRefs,
+      autoResize,
     };
 
     switch (block.block_type) {
       case 'heading1':
-        return wrapWithExpand(<textarea {...commonProps} className={cn(commonProps.className, "text-3xl font-bold")} placeholder="Título 1" />);
+        return <EditableBlockTextarea {...editableProps} extraClassName="text-3xl font-bold" placeholder="Título 1" />;
       case 'heading2':
-        return wrapWithExpand(<textarea {...commonProps} className={cn(commonProps.className, "text-2xl font-semibold")} placeholder="Título 2" />);
+        return <EditableBlockTextarea {...editableProps} extraClassName="text-2xl font-semibold" placeholder="Título 2" />;
       case 'heading3':
-        return wrapWithExpand(<textarea {...commonProps} className={cn(commonProps.className, "text-xl font-medium")} placeholder="Título 3" />);
+        return <EditableBlockTextarea {...editableProps} extraClassName="text-xl font-medium" placeholder="Título 3" />;
       case 'bullet_list':
-        return wrapWithExpand(
-          <div className="flex items-start gap-2">
-            <span className="mt-1">•</span>
-            <textarea {...commonProps} placeholder="Item da lista" />
-          </div>
+        return (
+          <EditableBlockTextarea
+            {...editableProps}
+            placeholder="Item da lista"
+            wrapper={(textarea) => (
+              <div className="flex items-start gap-2">
+                <span className="mt-1">•</span>
+                {textarea}
+              </div>
+            )}
+          />
         );
       case 'numbered_list':
-        return wrapWithExpand(
-          <div className="flex items-start gap-2">
-            <span className="mt-1 text-muted-foreground">{index + 1}.</span>
-            <textarea {...commonProps} placeholder="Item da lista" />
-          </div>
+        return (
+          <EditableBlockTextarea
+            {...editableProps}
+            placeholder="Item da lista"
+            wrapper={(textarea) => (
+              <div className="flex items-start gap-2">
+                <span className="mt-1 text-muted-foreground">{index + 1}.</span>
+                {textarea}
+              </div>
+            )}
+          />
         );
       case 'checklist':
-        return wrapWithExpand(
-          <div className="flex items-start gap-2">
-            <input
-              type="checkbox"
-              checked={block.content.checked || false}
-              onChange={(e) => updateBlock(block.id, { ...block.content, checked: e.target.checked })}
-              className="mt-1.5 h-4 w-4 rounded border-muted-foreground/50"
-            />
-            <textarea
-              {...commonProps}
-              className={cn(commonProps.className, block.content.checked && "line-through text-muted-foreground")}
-              placeholder="Tarefa"
-            />
-          </div>
+        return (
+          <EditableBlockTextarea
+            {...editableProps}
+            extraClassName={block.content.checked ? "line-through text-muted-foreground" : ""}
+            placeholder="Tarefa"
+            wrapper={(textarea) => (
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={block.content.checked || false}
+                  onChange={(e) => updateBlock(block.id, { ...block.content, checked: e.target.checked })}
+                  className="mt-1.5 h-4 w-4 rounded border-muted-foreground/50"
+                />
+                {textarea}
+              </div>
+            )}
+          />
         );
       case 'quote':
-        return wrapWithExpand(
-          <div className="border-l-4 border-primary/50 pl-4 italic">
-            <textarea {...commonProps} placeholder="Citação..." />
-          </div>
+        return (
+          <EditableBlockTextarea
+            {...editableProps}
+            placeholder="Citação..."
+            wrapper={(textarea) => (
+              <div className="border-l-4 border-primary/50 pl-4 italic">{textarea}</div>
+            )}
+          />
         );
       case 'code':
-        return wrapWithExpand(
-          <div className="bg-muted rounded-lg p-3 font-mono text-sm">
-            <textarea {...commonProps} className={cn(commonProps.className, "font-mono")} placeholder="// Código..." />
-          </div>
+        return (
+          <EditableBlockTextarea
+            {...editableProps}
+            extraClassName="font-mono"
+            placeholder="// Código..."
+            wrapper={(textarea) => (
+              <div className="bg-muted rounded-lg p-3 font-mono text-sm">{textarea}</div>
+            )}
+          />
         );
       case 'callout':
-        return wrapWithExpand(
-          <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-start gap-3">
-            <span>💡</span>
-            <textarea {...commonProps} placeholder="Destaque..." />
-          </div>
+        return (
+          <EditableBlockTextarea
+            {...editableProps}
+            placeholder="Destaque..."
+            wrapper={(textarea) => (
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-start gap-3">
+                <span>💡</span>
+                {textarea}
+              </div>
+            )}
+          />
         );
       case 'divider':
         return <hr className="border-border my-2" />;
       case 'toggle':
         return (
-          <details className="group">
-            <summary className="cursor-pointer list-none flex items-center gap-2">
-              <ToggleRight className="h-4 w-4 group-open:rotate-90 transition-transform" />
-              <textarea {...commonProps} className={cn(commonProps.className, "font-medium")} placeholder="Toggle..." />
-            </summary>
-            <div className="ml-6 mt-2 text-muted-foreground">Conteúdo colapsável...</div>
-          </details>
+          <EditableBlockTextarea
+            {...editableProps}
+            extraClassName="font-medium"
+            placeholder="Toggle..."
+            wrapper={(textarea) => (
+              <details className="group">
+                <summary className="cursor-pointer list-none flex items-center gap-2">
+                  <ToggleRight className="h-4 w-4 group-open:rotate-90 transition-transform" />
+                  {textarea}
+                </summary>
+                <div className="ml-6 mt-2 text-muted-foreground">Conteúdo colapsável...</div>
+              </details>
+            )}
+          />
         );
       case 'image':
         return (
@@ -457,7 +549,7 @@ export function BlockEditor({ pageId, blocks, onBlocksChange, companyId }: Block
           />
         );
       default:
-        return wrapWithExpand(<textarea {...commonProps} />);
+        return <EditableBlockTextarea {...editableProps} placeholder="Digite '/' para comandos ou clique + para adicionar..." />;
     }
   };
 
