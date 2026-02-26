@@ -393,7 +393,7 @@ function Conversas() {
   const inflightAvatarPromisesRef = useRef<Map<string, Promise<string | undefined>>>(new Map());
   const initialLoadRef = useRef<boolean>(false);
   const notifiedMessagesRef = useRef<Set<string>>(new Set()); // ⚡ Rastrear mensagens já notificadas
-  const [aiMode, setAiMode] = useState<Record<string, boolean>>({});
+  const [aiMode, setAiMode] = useState<Record<string, string>>({}); // conversation_id -> AIMode ('off'|'atendimento'|'agendamento'|'fluxo'|'all')
   const [quickMessages, setQuickMessages] = useState<QuickMessage[]>([]);
   const [quickCategories, setQuickCategories] = useState<QuickMessageCategory[]>([]);
   const [showQuickRepliesPopup, setShowQuickRepliesPopup] = useState(false); // Estado para popup de respostas rápidas
@@ -4095,9 +4095,21 @@ function Conversas() {
       setLoadingHistory(false);
     }
   };
-  const loadAiMode = () => {
-    const saved = localStorage.getItem(AI_MODE_KEY);
-    if (saved) setAiMode(JSON.parse(saved));
+  const loadAiMode = async () => {
+    if (!userCompanyId) return;
+    try {
+      const { data } = await supabase
+        .from('conversation_ai_settings')
+        .select('conversation_id, ai_mode')
+        .eq('company_id', userCompanyId);
+      if (data) {
+        const modes: Record<string, string> = {};
+        data.forEach((row: any) => { modes[row.conversation_id] = row.ai_mode; });
+        setAiMode(modes);
+      }
+    } catch (e) {
+      console.error('Erro ao carregar AI modes:', e);
+    }
   };
   const saveConversations = (updated: Conversation[]) => {
     // Não salvar no localStorage para evitar QuotaExceededError
@@ -4112,9 +4124,33 @@ function Conversas() {
     // Apenas atualiza estado local - o save real acontece no addQuickCategory
     setQuickCategories(updated);
   };
-  const saveAiMode = (updated: Record<string, boolean>) => {
-    localStorage.setItem(AI_MODE_KEY, JSON.stringify(updated));
-    setAiMode(updated);
+  const setConversationAIMode = async (convId: string, mode: string) => {
+    if (!userCompanyId || !currentUserId) return;
+    try {
+      const { error } = await supabase
+        .from('conversation_ai_settings')
+        .upsert({
+          conversation_id: convId,
+          company_id: userCompanyId,
+          ai_mode: mode,
+          activated_by: currentUserId,
+        }, { onConflict: 'conversation_id,company_id' });
+      
+      if (error) throw error;
+      
+      setAiMode(prev => ({ ...prev, [convId]: mode }));
+      const labels: Record<string, string> = {
+        off: 'IA desativada',
+        atendimento: 'IA Atendimento ativada',
+        agendamento: 'IA Agendamento ativada',
+        fluxo: 'Fluxo/URA ativado',
+        all: 'Todas as IAs ativadas',
+      };
+      toast.success(labels[mode] || 'Modo IA alterado');
+    } catch (e) {
+      console.error('Erro ao salvar AI mode:', e);
+      toast.error('Erro ao salvar modo IA');
+    }
   };
   const getChannelIcon = (channel: string) => {
     switch (channel) {
@@ -4127,14 +4163,6 @@ function Conversas() {
       default:
         return <MessageSquare className="h-3.5 w-3.5" />;
     }
-  };
-  const toggleAiMode = (convId: string) => {
-    const updated = {
-      ...aiMode,
-      [convId]: !aiMode[convId]
-    };
-    saveAiMode(updated);
-    toast.success(updated[convId] ? "IA ativada" : "IA desativada");
   };
 
   // Função auxiliar para download de mídias (data: URIs e URLs normais)
@@ -8698,7 +8726,7 @@ function Conversas() {
         {selectedConv ? <>
             {/* Header - FIXO NO TOPO */}
             <div className="flex-shrink-0 bg-background border-b z-10" style={{ minHeight: '56px', maxHeight: '84px' }}>
-              <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onFinalizeAtendimentoSilent={finalizarAtendimentoSilent} onTransferAtendimento={() => setTransferDialogOpen(true)} onToggleAI={() => toggleAiMode(selectedConv.id)} isAIActive={aiMode[selectedConv.id] || false} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} restoreProgress={restoreProgress} showBackButton={isMobile} onBack={() => setSelectedConv(null)} />
+              <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onFinalizeAtendimentoSilent={finalizarAtendimentoSilent} onTransferAtendimento={() => setTransferDialogOpen(true)} onChangeAIMode={(mode) => setConversationAIMode(selectedConv.id, mode)} currentAIMode={(aiMode[selectedConv.id] as any) || 'off'} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} restoreProgress={restoreProgress} showBackButton={isMobile} onBack={() => setSelectedConv(null)} />
             </div>
             
             {/* Dialog de Transferir Atendimento */}

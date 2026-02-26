@@ -1345,6 +1345,44 @@ export type Database = {
           },
         ]
       }
+      conversation_ai_settings: {
+        Row: {
+          activated_by: string | null
+          ai_mode: string
+          company_id: string | null
+          conversation_id: string
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          activated_by?: string | null
+          ai_mode?: string
+          company_id?: string | null
+          conversation_id: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          activated_by?: string | null
+          ai_mode?: string
+          company_id?: string | null
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_ai_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_assignments: {
         Row: {
           assigned_user_id: string | null

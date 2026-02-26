@@ -1902,70 +1902,125 @@ serve(async (req) => {
             }
           }
           
-          // 3. Se nenhum fluxo foi iniciado, usar IA como antes
+          // 3. Se nenhum fluxo foi iniciado, verificar modo IA por conversa
           if (!flowStarted && leadId) {
             console.log('🤖 [WEBHOOK-IA] Nenhum fluxo ativo, verificando IA...');
             
-            const { data: iaConfig } = await supabase
-              .from('ia_configurations')
-              .select('learning_mode, custom_prompts')
-              .eq('company_id', companyId)
-              .maybeSingle();
+            // Consultar conversation_ai_settings para modo por conversa
+            let aiModeForConversation: string | null = null;
+            const telefoneParaBusca = telefoneFormatadoFinal || numeroLimpo;
             
-            if (iaConfig?.learning_mode) {
-              console.log('✅ [WEBHOOK] IA ativada - processando mensagem:', companyId);
+            if (telefoneParaBusca) {
+              const { data: aiSetting } = await supabase
+                .from('conversation_ai_settings')
+                .select('ai_mode')
+                .eq('conversation_id', telefoneParaBusca)
+                .eq('company_id', companyId)
+                .maybeSingle();
               
+              if (aiSetting) {
+                aiModeForConversation = aiSetting.ai_mode;
+                console.log('🎯 [WEBHOOK-IA] Modo IA por conversa encontrado:', aiModeForConversation);
+              }
+            }
+            
+            // Se modo = 'off', não fazer nada
+            if (aiModeForConversation === 'off') {
+              console.log('⛔ [WEBHOOK-IA] IA desativada para esta conversa');
+            }
+            // Se modo = 'fluxo', não chamar IA (apenas fluxos, já tratados acima)
+            else if (aiModeForConversation === 'fluxo') {
+              console.log('🔄 [WEBHOOK-IA] Modo fluxo - IA não será chamada');
+            }
+            // Se modo = 'atendimento', chamar só ia-atendimento
+            else if (aiModeForConversation === 'atendimento') {
+              console.log('🤖 [WEBHOOK-IA] Modo atendimento - chamando ia-atendimento...');
               const supabaseUrlEnv = Deno.env.get('SUPABASE_URL')!;
               const supabaseKeyEnv = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
               
               const { data: leadDataForIA } = await supabase
-                .from('leads')
-                .select('*')
-                .eq('id', leadId)
-                .single();
+                .from('leads').select('*').eq('id', leadId).single();
               
-              fetch(`${supabaseUrlEnv}/functions/v1/ia-orchestrator`, {
+              fetch(`${supabaseUrlEnv}/functions/v1/ia-atendimento`, {
                 method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${supabaseKeyEnv}`,
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  conversationId: data.id,
-                  message: validatedData.mensagem,
-                  numero: numeroLimpo,
-                  leadData: leadDataForIA,
-                  companyId
-                })
-              }).then(async (iaResponse) => {
-                if (!iaResponse.ok) {
-                  console.log('⚠️ [WEBHOOK-IA] IA não respondeu');
-                  return;
-                }
-                const iaResult = await iaResponse.json();
-                if (!iaResult.active || iaResult.shouldTransfer) return;
-                
-                if (iaResult.response) {
-                  console.log('🤖 [WEBHOOK-IA] Enviando resposta da IA...');
+                headers: { 'Authorization': `Bearer ${supabaseKeyEnv}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversationId: data.id, message: validatedData.mensagem, numero: numeroLimpo, leadData: leadDataForIA, companyId })
+              }).then(async (r) => {
+                const result = await r.json();
+                if (result.response) {
                   await fetch(`${supabaseUrlEnv}/functions/v1/enviar-whatsapp`, {
                     method: 'POST',
-                    headers: {
-                      'Authorization': `Bearer ${supabaseKeyEnv}`,
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                      numero: numeroLimpo,
-                      mensagem: iaResult.response,
-                      tipo_mensagem: 'text',
-                      company_id: companyId
-                    })
+                    headers: { 'Authorization': `Bearer ${supabaseKeyEnv}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ numero: numeroLimpo, mensagem: result.response, tipo_mensagem: 'text', company_id: companyId })
                   });
                 }
-              }).catch((iaError) => {
-                console.error('❌ [WEBHOOK-IA] Erro:', iaError);
-              });
-            } else {
-              console.log('⚠️ [WEBHOOK] IA desativada para empresa:', companyId);
+              }).catch(e => console.error('❌ [WEBHOOK-IA] Erro ia-atendimento:', e));
+            }
+            // Se modo = 'agendamento', chamar só ia-agendamento
+            else if (aiModeForConversation === 'agendamento') {
+              console.log('📅 [WEBHOOK-IA] Modo agendamento - chamando ia-agendamento...');
+              const supabaseUrlEnv = Deno.env.get('SUPABASE_URL')!;
+              const supabaseKeyEnv = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+              
+              const { data: leadDataForIA } = await supabase
+                .from('leads').select('*').eq('id', leadId).single();
+              
+              fetch(`${supabaseUrlEnv}/functions/v1/ia-agendamento`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${supabaseKeyEnv}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversationId: data.id, message: validatedData.mensagem, numero: numeroLimpo, leadData: leadDataForIA, companyId })
+              }).then(async (r) => {
+                const result = await r.json();
+                if (result.response) {
+                  await fetch(`${supabaseUrlEnv}/functions/v1/enviar-whatsapp`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${supabaseKeyEnv}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ numero: numeroLimpo, mensagem: result.response, tipo_mensagem: 'text', company_id: companyId })
+                  });
+                }
+              }).catch(e => console.error('❌ [WEBHOOK-IA] Erro ia-agendamento:', e));
+            }
+            // Se modo = 'all' ou sem registro, usar lógica atual (orchestrator/global)
+            else {
+              // Comportamento padrão: verificar ia_configurations global
+              const { data: iaConfig } = await supabase
+                .from('ia_configurations')
+                .select('learning_mode, custom_prompts')
+                .eq('company_id', companyId)
+                .maybeSingle();
+              
+              // Ativar se modo = 'all' OU se learning_mode global estiver ativo (sem registro por conversa)
+              const shouldActivateIA = aiModeForConversation === 'all' || (!aiModeForConversation && iaConfig?.learning_mode);
+              
+              if (shouldActivateIA) {
+                console.log('✅ [WEBHOOK] IA ativada - processando mensagem:', companyId, 'modo:', aiModeForConversation || 'global');
+                
+                const supabaseUrlEnv = Deno.env.get('SUPABASE_URL')!;
+                const supabaseKeyEnv = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+                
+                const { data: leadDataForIA } = await supabase
+                  .from('leads').select('*').eq('id', leadId).single();
+                
+                fetch(`${supabaseUrlEnv}/functions/v1/ia-orchestrator`, {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${supabaseKeyEnv}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ conversationId: data.id, message: validatedData.mensagem, numero: numeroLimpo, leadData: leadDataForIA, companyId })
+                }).then(async (iaResponse) => {
+                  if (!iaResponse.ok) { console.log('⚠️ [WEBHOOK-IA] IA não respondeu'); return; }
+                  const iaResult = await iaResponse.json();
+                  if (!iaResult.active || iaResult.shouldTransfer) return;
+                  if (iaResult.response) {
+                    console.log('🤖 [WEBHOOK-IA] Enviando resposta da IA...');
+                    await fetch(`${supabaseUrlEnv}/functions/v1/enviar-whatsapp`, {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${supabaseKeyEnv}`, 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ numero: numeroLimpo, mensagem: iaResult.response, tipo_mensagem: 'text', company_id: companyId })
+                    });
+                  }
+                }).catch((iaError) => { console.error('❌ [WEBHOOK-IA] Erro:', iaError); });
+              } else {
+                console.log('⚠️ [WEBHOOK] IA desativada para empresa:', companyId);
+              }
             }
           }
         }
