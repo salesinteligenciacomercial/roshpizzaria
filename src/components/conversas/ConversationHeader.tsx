@@ -3,6 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Phone, Video, Info, User, MessageSquare, Instagram, Facebook, FileText, DollarSign, RefreshCw, CheckCircle2, AlertCircle, Loader2, Check, Plus, RotateCcw, ArrowRightLeft, Bot, ArrowLeft } from "lucide-react";
+import { AIModeSelectorDropdown, type AIMode } from "./AIModeSelectorDropdown";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Dialog, DialogContent, DialogHeader as UIDialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,9 +30,9 @@ import { useEffect, useState } from "react";
   onFinalizeAtendimento?: (message: string) => void;
   onFinalizeAtendimentoSilent?: () => void;
    onTransferAtendimento?: () => void;
-   onToggleAI?: () => void;
-   isAIActive?: boolean;
-   onlineStatus?: OnlineStatus;
+    onChangeAIMode?: (mode: AIMode) => void;
+    currentAIMode?: AIMode;
+    onlineStatus?: OnlineStatus;
    isContactInactive?: boolean;
    onRestoreConversation?: () => void;
    restoringConversation?: boolean;
@@ -58,9 +59,9 @@ import { useEffect, useState } from "react";
    onFinalizeAtendimento,
    onFinalizeAtendimentoSilent,
    onTransferAtendimento,
-   onToggleAI,
-   isAIActive = false,
-   onlineStatus = 'unknown',
+    onChangeAIMode,
+    currentAIMode = 'off',
+    onlineStatus = 'unknown',
    isContactInactive = false,
    onRestoreConversation,
    restoringConversation = false,
@@ -218,18 +219,12 @@ import { useEffect, useState } from "react";
                    )}
                  </Button>
                )}
-               {/* Botão IA */}
-               {onToggleAI && (
-                 <Button
-                   variant={isAIActive ? "default" : "outline"}
-                   size="sm"
-                   onClick={onToggleAI}
-                   className="mr-1 gap-1.5"
-                   title={isAIActive ? "Desativar IA" : "Ativar IA"}
-                 >
-                   <Bot className="h-4 w-4" />
-                   {isAIActive ? "IA Ativa" : "IA"}
-                 </Button>
+               {/* Botão IA - Dropdown */}
+               {onChangeAIMode && (
+                 <AIModeSelectorDropdown
+                   currentMode={currentAIMode}
+                   onModeChange={onChangeAIMode}
+                 />
                )}
                {/* Botão Transferir Atendimento */}
                {onTransferAtendimento && (
@@ -335,17 +330,13 @@ import { useEffect, useState } from "react";
                   )}
                 </Button>
               )}
-              {/* Botão IA */}
-              {onToggleAI && (
-                <Button
-                  variant={isAIActive ? "default" : "ghost"}
-                  size="icon"
-                  onClick={onToggleAI}
-                  className="h-8 w-8"
-                  title={isAIActive ? "Desativar IA" : "Ativar IA"}
-                >
-                  <Bot className="h-4 w-4" />
-                </Button>
+              {/* Botão IA - Dropdown Mobile */}
+              {onChangeAIMode && (
+                <AIModeSelectorDropdown
+                  currentMode={currentAIMode}
+                  onModeChange={onChangeAIMode}
+                  compact
+                />
               )}
               {/* Botão Transferir Atendimento */}
               {onTransferAtendimento && (
