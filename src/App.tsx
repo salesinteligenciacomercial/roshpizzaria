@@ -18,6 +18,7 @@ import Relatorios from "./pages/Relatorios";
 import ChatInterno from "./pages/ChatInterno";
 import Reunioes from "./pages/Reunioes";
 import PublicMeeting from "./pages/PublicMeeting";
+import CapturaPublica from "./pages/CapturaPublica";
 import Discador from "./pages/Discador";
 import ProcessosComerciais from "./pages/ProcessosComerciais";
 import Treinamento from "./pages/Treinamento";
@@ -73,6 +74,7 @@ const App = () => (
             <Route path="/oauth/gmail/callback" element={<GmailCallback />} />
             <Route path="/agenda/:slug" element={<AgendaPublica />} />
             <Route path="/meeting/:meetingId" element={<PublicMeeting />} />
+            <Route path="/captura/:companyId" element={<CapturaPublica />} />
             <Route path="/" element={<MainLayout />}>
               <Route index element={<Navigate to="/analytics" replace />} />
               <Route path="dashboard" element={<Navigate to="/analytics" replace />} />
