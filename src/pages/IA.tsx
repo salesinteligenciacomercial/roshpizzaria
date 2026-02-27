@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Bot, Sparkles, Target, Workflow, BarChart3, Send, AlertTriangle, Smartphone, FileText, DollarSign } from "lucide-react";
+import { Bot, Sparkles, Target, Workflow, BarChart3, Send, AlertTriangle, Smartphone, FileText, DollarSign, Globe } from "lucide-react";
 import { N8nIntegration } from "@/components/ia/N8nIntegration";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FluxoAutomacaoBuilder } from "@/components/fluxos/FluxoAutomacaoBuilder";
@@ -8,6 +8,7 @@ import { WhatsAppDashboard } from "@/components/whatsapp/WhatsAppDashboard";
 import { WhatsAppTemplatesManager } from "@/components/whatsapp/WhatsAppTemplatesManager";
 import { DisparoEmMassa } from "@/components/campanhas/DisparoEmMassa";
 import { CampanhasDashboard } from "@/components/campanhas/CampanhasDashboard";
+import { CapturePageConfig } from "@/components/ia/CapturePageConfig";
 import { useEffect, useState } from "react";
 import { useAIAgents } from "@/hooks/useAIAgents";
 import { supabase } from "@/integrations/supabase/client";
@@ -136,7 +137,7 @@ export default function IA() {
       )}
 
       <Tabs defaultValue="agentes" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="agentes" className="gap-2">
             <Bot className="h-4 w-4" />
             Agentes
@@ -144,6 +145,10 @@ export default function IA() {
           <TabsTrigger value="fluxos" className="gap-2">
             <Workflow className="h-4 w-4" />
             Fluxos
+          </TabsTrigger>
+          <TabsTrigger value="captura" className="gap-2">
+            <Globe className="h-4 w-4" />
+            Página de Captura
           </TabsTrigger>
           <TabsTrigger value="whatsapp-meta" className="gap-2 text-green-600">
             <Smartphone className="h-4 w-4" />
@@ -238,6 +243,13 @@ export default function IA() {
         <TabsContent value="fluxos" className="space-y-4 mt-6">
           <FluxoAutomacaoBuilder />
         </TabsContent>
+
+        {/* Página de Captura */}
+        {companyId && (
+          <TabsContent value="captura" className="space-y-4 mt-6">
+            <CapturePageConfig companyId={companyId} />
+          </TabsContent>
+        )}
 
         {/* WhatsApp Meta API */}
         {companyId && (

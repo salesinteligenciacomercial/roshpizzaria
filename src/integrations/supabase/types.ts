@@ -846,6 +846,7 @@ export type Database = {
           allow_group_messages: boolean | null
           allow_processos_comerciais: boolean | null
           allow_reunioes: boolean | null
+          capture_page_config: Json | null
           cnpj: string | null
           created_at: string | null
           created_by: string | null
@@ -872,6 +873,7 @@ export type Database = {
           allow_group_messages?: boolean | null
           allow_processos_comerciais?: boolean | null
           allow_reunioes?: boolean | null
+          capture_page_config?: Json | null
           cnpj?: string | null
           created_at?: string | null
           created_by?: string | null
@@ -898,6 +900,7 @@ export type Database = {
           allow_group_messages?: boolean | null
           allow_processos_comerciais?: boolean | null
           allow_reunioes?: boolean | null
+          capture_page_config?: Json | null
           cnpj?: string | null
           created_at?: string | null
           created_by?: string | null
