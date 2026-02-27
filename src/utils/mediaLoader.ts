@@ -367,9 +367,14 @@ export async function getMediaUrl(messageId: string, type?: string): Promise<str
           throw downloadError;
         }
       }
-    } catch (jsonError) {
-      // Não é JSON, pode ser URL simples
-      console.log('🌐 [MEDIA-LOADER] Não é JSON, tentando como URL simples');
+    } catch (jsonError: any) {
+      // Se for erro de parse JSON, continuar para fallback de URL
+      if (jsonError instanceof SyntaxError) {
+        console.log('🌐 [MEDIA-LOADER] Não é JSON, tentando como URL simples');
+      } else {
+        // Re-lançar erros de download/expiração (NÃO são erros de parse)
+        throw jsonError;
+      }
     }
 
     // Fallback: tentar carregar URL diretamente
