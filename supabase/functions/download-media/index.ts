@@ -224,7 +224,8 @@ Deno.serve(async (req) => {
         .from('whatsapp_connections')
         .select('instance_name, evolution_api_url, evolution_api_key')
         .eq('company_id', body.company_id)
-        .eq('status', 'connected')
+        .not('evolution_api_url', 'is', null)
+        .limit(1)
         .single();
 
       if (configError || !whatsappConfig) {
