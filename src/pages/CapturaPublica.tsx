@@ -34,6 +34,7 @@ export default function CapturaPublica() {
   const [companyName, setCompanyName] = useState('');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [resolvedCompanyId, setResolvedCompanyId] = useState<string | null>(null);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -60,24 +61,47 @@ export default function CapturaPublica() {
   const loadCompanyConfig = async () => {
     if (!companyId) { setNotFound(true); setLoading(false); return; }
 
-    const { data, error } = await supabase
-      .from('companies')
-      .select('id, name, capture_page_config')
-      .eq('id', companyId)
-      .single();
+    // Try by ID first, then by slug in capture_page_config
+    let data: any = null;
+    
+    // Check if it's a UUID
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(companyId);
+    
+    if (isUUID) {
+      const res = await supabase
+        .from('companies')
+        .select('id, name, capture_page_config')
+        .eq('id', companyId)
+        .single();
+      data = res.data;
+    }
+    
+    // If not found by ID, search by slug in capture_page_config
+    if (!data) {
+      const res = await supabase
+        .from('companies')
+        .select('id, name, capture_page_config')
+        .not('capture_page_config', 'is', null);
+      
+      if (res.data) {
+        data = res.data.find((c: any) => {
+          const cfg = c.capture_page_config as any;
+          return cfg?.slug === companyId;
+        });
+      }
+    }
 
-    if (error || !data) { setNotFound(true); setLoading(false); return; }
+    if (!data) { setNotFound(true); setLoading(false); return; }
 
+    setResolvedCompanyId(data.id);
     setCompanyName(data.name);
     const cfg = (data as any).capture_page_config as CaptureConfig || {};
     setConfig(cfg);
     setLoading(false);
 
-    // Start with welcome message
     const welcome = cfg.mensagem_boas_vindas || `Olá! 👋 Bem-vindo(a) à ${data.name}. Como posso te ajudar?`;
     setMessages([{ role: 'assistant', content: welcome }]);
 
-    // If has questions, ask the first one
     if (cfg.perguntas && cfg.perguntas.length > 0) {
       setChatMode('questions');
       setTimeout(() => {
@@ -132,13 +156,13 @@ export default function CapturaPublica() {
         empresa: data.empresa || data.company,
         mensagem: Object.entries(data).map(([k, v]) => `${k}: ${v}`).join('\n'),
         origem: 'pagina-captura',
-        company_slug: companyId,
+        company_slug: resolvedCompanyId || companyId,
         utm_source: 'capture-page',
         utm_medium: 'chat-ia',
       };
 
       const res = await supabase.functions.invoke('api-public-leads', {
-        body: { ...payload, company_slug: companyId },
+        body: { ...payload, company_slug: resolvedCompanyId || companyId },
       });
 
       setLeadCreated(true);
@@ -164,7 +188,7 @@ export default function CapturaPublica() {
       const res = await supabase.functions.invoke('api-public-ia', {
         body: {
           message,
-          company_slug: companyId,
+          company_slug: resolvedCompanyId || companyId,
           context: 'atendimento',
           history,
           nome: collectedData.nome,
