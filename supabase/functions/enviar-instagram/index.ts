@@ -56,8 +56,9 @@ serve(async (req) => {
       );
     }
 
-    // Usar instagram_access_token OU meta_access_token como fallback
-    const accessToken = connection.instagram_access_token || connection.meta_access_token;
+    // Usar meta_access_token como preferência (Page Token válido para Instagram Messaging API)
+    // instagram_access_token (IGG tokens) NÃO funcionam para envio de mensagens via Graph API
+    const accessToken = connection.meta_access_token || connection.instagram_access_token;
     const accountId = connection.instagram_account_id;
 
     if (!accessToken) {
