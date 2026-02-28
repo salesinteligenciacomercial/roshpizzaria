@@ -3526,6 +3526,11 @@ function Conversas() {
         const isInstagramConv = mensagens.some(m => m.origem === 'Instagram');
         const channelDetected: "whatsapp" | "instagram" | "facebook" = isInstagramConv ? 'instagram' : 'whatsapp';
 
+        // ⚡ CORREÇÃO: Detectar origemApi a partir das mensagens
+        const detectedOrigemApi: "evolution" | "meta" | undefined = 
+          mensagens.some(m => m.origem_api === 'meta') ? 'meta' : 
+          mensagens.some(m => m.origem_api === 'evolution') ? 'evolution' : undefined;
+
         const conversaCriada = {
           id: telefone,
           contactName,
@@ -3548,7 +3553,9 @@ function Conversas() {
           assignedUser: assignedUserData ? {
             id: assignedUserData.id,
             name: assignedUserData.name
-          } : undefined // Objeto completo para exibição
+          } : undefined, // Objeto completo para exibição
+          // ⚡ CORREÇÃO: Definir origemApi para roteamento correto de envio
+          origemApi: detectedOrigemApi,
         };
 
         // ⚡ LOG: Debug de conversa criada
@@ -5258,14 +5265,19 @@ function Conversas() {
     });
 
     // Validar e formatar número - usar phoneNumber prioritariamente
-    try {
-      const phoneToValidate = selectedConv.phoneNumber || selectedConv.id;
-      const formattedPhone = formatPhoneNumber(phoneToValidate);
-      console.log('✅ [VALIDAÇÃO] Número validado:', formattedPhone);
-    } catch (error: any) {
-      console.error('❌ [VALIDAÇÃO] Erro ao validar número:', error);
-      toast.error('Número de telefone inválido. Selecione outra conversa ou atualize a página.');
-      return;
+    // ⚡ CORREÇÃO: Pular validação de telefone para Instagram (usa IDs numéricos longos)
+    if (selectedConv.channel !== 'instagram') {
+      try {
+        const phoneToValidate = selectedConv.phoneNumber || selectedConv.id;
+        const formattedPhone = formatPhoneNumber(phoneToValidate);
+        console.log('✅ [VALIDAÇÃO] Número validado:', formattedPhone);
+      } catch (error: any) {
+        console.error('❌ [VALIDAÇÃO] Erro ao validar número:', error);
+        toast.error('Número de telefone inválido. Selecione outra conversa ou atualize a página.');
+        return;
+      }
+    } else {
+      console.log('📸 [VALIDAÇÃO] Instagram - pulando validação de telefone');
     }
 
     // ⚡ CORREÇÃO CRÍTICA: NÃO adicionar mensagem localmente (evita duplicação)
@@ -5334,15 +5346,14 @@ function Conversas() {
             numero: numeroOriginal,
             telefone_formatado: numeroNormalizado,
             mensagem: messageContent,
-            origem: 'WhatsApp',
+            origem: selectedConv.channel === 'instagram' ? 'Instagram' : 'WhatsApp',
+            origem_api: selectedConv.channel === 'instagram' ? 'meta' : (selectedConv.origemApi || undefined),
             status: 'Enviada',
             tipo_mensagem: type,
             nome_contato: selectedConv.contactName,
             company_id: userRole.company_id,
             owner_id: user.id,
-            // Adicionar ID do usuário que enviou
             sent_by: sentByName,
-            // ⚡ NOVO: Salvar nome do usuário permanentemente
             fromme: true,
             replied_to_message: repliedMessage || null,
             delivered: true,
@@ -5361,30 +5372,51 @@ function Conversas() {
       console.error('❌ [ENVIO] Erro ao salvar mensagem no banco:', saveError);
     }
 
-    // Enviar mensagem via Evolution API (após salvar no banco)
+    // Enviar mensagem via API correta (Instagram ou WhatsApp)
     try {
-      console.log('📤 [ENVIO] Preparando envio via WhatsApp:', {
+      const isInstagramChannel = selectedConv.channel === 'instagram';
+      console.log('📤 [ENVIO] Preparando envio via', isInstagramChannel ? 'Instagram' : 'WhatsApp', ':', {
         numeroNormalizado,
         mensagem: messageContent.substring(0, 50),
         tipo: type,
         userCompanyId,
+        canal: selectedConv.channel,
         telefoneOriginal: selectedConv.phoneNumber || selectedConv.id
       });
-      // 🔥 CORREÇÃO: Passar force_provider para manter consistência do canal de comunicação
-      // Se a conversa foi iniciada pelo Meta, responder pelo Meta. Se foi pela Evolution, responder pela Evolution.
-      const forceProvider = selectedConv.origemApi;
-      console.log('🎯 [ENVIO] Canal de origem:', forceProvider || 'não definido (usar padrão)');
-      
-      const {
-        data,
-        error
-      } = await enviarWhatsApp({
-        numero: numeroNormalizado,
-        ...mensagemParaEnviar,
-        quotedMessageId: replyingTo || undefined,
-        tipo_mensagem: type,
-        force_provider: forceProvider
-      });
+
+      let data: any = null;
+      let error: any = null;
+
+      if (isInstagramChannel) {
+        // 📸 INSTAGRAM: Enviar via edge function dedicada
+        console.log('📸 [ENVIO-INSTAGRAM] Enviando via Instagram API...');
+        const recipientId = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
+        const companyId = await getCompanyId();
+        
+        const res = await supabase.functions.invoke('enviar-instagram', {
+          body: {
+            recipient_id: recipientId,
+            mensagem: messageContent,
+            company_id: companyId,
+          }
+        });
+        data = res.data;
+        error = res.error || (res.data && !res.data.success ? { message: res.data.error || 'Erro ao enviar' } : null);
+      } else {
+        // 📱 WHATSAPP: Enviar via Evolution/Meta API
+        const forceProvider = selectedConv.origemApi;
+        console.log('🎯 [ENVIO] Canal de origem:', forceProvider || 'não definido (usar padrão)');
+        
+        const result = await enviarWhatsApp({
+          numero: numeroNormalizado,
+          ...mensagemParaEnviar,
+          quotedMessageId: replyingTo || undefined,
+          tipo_mensagem: type,
+          force_provider: forceProvider
+        });
+        data = result.data;
+        error = result.error;
+      }
       console.log('📥 [ENVIO] Resposta do enviarWhatsApp:', {
         data,
         error
@@ -5422,10 +5454,11 @@ function Conversas() {
         }
         return;
       }
-      console.log('✅ [ENVIO] Resposta Evolution API:', data);
+      console.log('✅ [ENVIO] Resposta API:', data);
 
       // Não mostrar notificação ao enviar - apenas logs
-      console.log('✅ [ENVIO] Mensagem enviada para WhatsApp com sucesso');
+      const canalEnvio = selectedConv.channel === 'instagram' ? 'Instagram' : 'WhatsApp';
+      console.log(`✅ [ENVIO] Mensagem enviada para ${canalEnvio} com sucesso`);
 
       // ⚡ CORREÇÃO: Se a mensagem já foi salva antes, não salvar novamente
       if (!mensagemSalva) {
@@ -5456,15 +5489,14 @@ function Conversas() {
                 numero: numeroOriginal,
                 telefone_formatado: numeroNormalizado,
                 mensagem: messageContent,
-                origem: 'WhatsApp',
+                origem: selectedConv.channel === 'instagram' ? 'Instagram' : 'WhatsApp',
+                origem_api: selectedConv.channel === 'instagram' ? 'meta' : (selectedConv.origemApi || undefined),
                 status: 'Enviada',
                 tipo_mensagem: type,
                 nome_contato: selectedConv.contactName,
                 company_id: userRole.company_id,
                 owner_id: user.id,
-                // Adicionar ID do usuário que enviou
                 sent_by: sentByName,
-                // ⚡ CORREÇÃO: Salvar nome do usuário permanentemente
                 fromme: true,
                 replied_to_message: repliedMessage || null,
                 delivered: true,
