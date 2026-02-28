@@ -765,7 +765,7 @@ serve(async (req) => {
             if (msg.instagram_account_id) {
               const { data: conn } = await supabase
                 .from('whatsapp_connections')
-                .select('company_id, instagram_access_token, instagram_username')
+                .select('company_id, instagram_access_token, instagram_username, meta_access_token')
                 .eq('instagram_account_id', msg.instagram_account_id)
                 .single();
               
@@ -776,7 +776,7 @@ serve(async (req) => {
             if (!connection) {
               const { data: conn } = await supabase
                 .from('whatsapp_connections')
-                .select('company_id, instagram_access_token, instagram_username')
+                .select('company_id, instagram_access_token, instagram_username, meta_access_token')
                 .not('instagram_account_id', 'is', null)
                 .limit(1)
                 .single();
@@ -796,20 +796,47 @@ serve(async (req) => {
 
             // 📸 CORREÇÃO: Buscar username real do Instagram via Graph API
             let instagramUsername = msg.contact_name || instagramUserId;
-            if (connection.instagram_access_token && instagramUserId !== 'instagram_user') {
+            const igAccessToken = connection.instagram_access_token || connection.meta_access_token;
+            
+            if (igAccessToken && instagramUserId !== 'instagram_user') {
               try {
                 console.log('📸 [INSTAGRAM] Buscando username para ID:', instagramUserId);
-                const userInfoUrl = `https://graph.facebook.com/v18.0/${instagramUserId}?fields=username,name&access_token=${connection.instagram_access_token}`;
+                
+                // Tentar buscar perfil do usuário via Instagram Graph API
+                // Para Instagram Messaging, o sender ID é um IGSID (Instagram Scoped ID)
+                // Endpoint correto: /{user-id}?fields=username,name
+                const userInfoUrl = `https://graph.facebook.com/v18.0/${instagramUserId}?fields=username,name&access_token=${igAccessToken}`;
                 const userInfoRes = await fetch(userInfoUrl);
+                
                 if (userInfoRes.ok) {
                   const userInfo = await userInfoRes.json();
-                  console.log('📸 [INSTAGRAM] User info:', JSON.stringify(userInfo));
-                  instagramUsername = userInfo.name || userInfo.username || instagramUserId;
-                  if (userInfo.username) {
-                    instagramUsername = userInfo.username; // Preferir username (@handle)
+                  console.log('📸 [INSTAGRAM] User info obtido:', JSON.stringify(userInfo));
+                  
+                  // Preferir name > username > ID
+                  if (userInfo.name) {
+                    instagramUsername = userInfo.name;
+                  } else if (userInfo.username) {
+                    instagramUsername = userInfo.username;
                   }
                 } else {
-                  console.warn('⚠️ [INSTAGRAM] Falha ao buscar username:', await userInfoRes.text());
+                  const errText = await userInfoRes.text();
+                  console.warn('⚠️ [INSTAGRAM] Falha ao buscar username (tentativa 1):', errText);
+                  
+                  // Fallback: tentar endpoint alternativo com instagram_business_basic
+                  try {
+                    const altUrl = `https://graph.instagram.com/v18.0/${instagramUserId}?fields=username,name&access_token=${igAccessToken}`;
+                    const altRes = await fetch(altUrl);
+                    if (altRes.ok) {
+                      const altInfo = await altRes.json();
+                      console.log('📸 [INSTAGRAM] User info (alt):', JSON.stringify(altInfo));
+                      if (altInfo.name) instagramUsername = altInfo.name;
+                      else if (altInfo.username) instagramUsername = altInfo.username;
+                    } else {
+                      console.warn('⚠️ [INSTAGRAM] Fallback também falhou:', await altRes.text());
+                    }
+                  } catch (altErr) {
+                    console.warn('⚠️ [INSTAGRAM] Erro no fallback:', altErr);
+                  }
                 }
               } catch (userErr) {
                 console.warn('⚠️ [INSTAGRAM] Erro ao buscar username:', userErr);
