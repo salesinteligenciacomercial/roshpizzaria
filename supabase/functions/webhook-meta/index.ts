@@ -801,7 +801,28 @@ serve(async (req) => {
             const igAccessToken = connection.instagram_access_token || connection.meta_access_token;
             const igAccountId = msg.instagram_account_id;
             
-            if (igAccessToken && instagramUserId !== 'instagram_user' && igAccountId) {
+            // Método 0 (CACHE): Buscar nome de conversa anterior no banco
+            try {
+              const { data: prevConv } = await supabase
+                .from('conversas')
+                .select('nome_contato')
+                .eq('company_id', company_id)
+                .eq('telefone_formatado', instagramUserId)
+                .not('nome_contato', 'eq', instagramUserId)
+                .not('nome_contato', 'is', null)
+                .limit(1)
+                .single();
+              
+              if (prevConv?.nome_contato) {
+                instagramUsername = prevConv.nome_contato;
+                console.log('📸 [INSTAGRAM] Nome encontrado no cache (conversa anterior):', instagramUsername);
+              }
+            } catch (e) {
+              // Sem cache, continuar para API
+            }
+            
+            // Se não encontrou no cache, tentar via API
+            if (instagramUsername === instagramUserId && igAccessToken && instagramUserId !== 'instagram_user' && igAccountId) {
               try {
                 console.log('📸 [INSTAGRAM] Buscando nome para IGSID:', instagramUserId);
                 
@@ -814,7 +835,6 @@ serve(async (req) => {
                   const convData = await convRes.json();
                   console.log('📸 [INSTAGRAM] Conversations data:', JSON.stringify(convData));
                   
-                  // Extrair nome do participante que não é a página
                   if (convData.data && convData.data.length > 0) {
                     const conversation = convData.data[0];
                     const participants = conversation.participants?.data || [];
@@ -823,7 +843,6 @@ serve(async (req) => {
                       instagramUsername = otherParticipant.username || otherParticipant.name || instagramUserId;
                       console.log('📸 [INSTAGRAM] Nome encontrado via conversations:', instagramUsername);
                     }
-                    // Também pode vir como "name" da conversa
                     if (instagramUsername === instagramUserId && conversation.name) {
                       instagramUsername = conversation.name;
                     }
@@ -833,7 +852,7 @@ serve(async (req) => {
                   console.warn('⚠️ [INSTAGRAM] Conversations API falhou:', errText);
                 }
                 
-                // Método 2 (fallback): Tentar buscar username via user_id direto com Page token
+                // Método 2 (fallback): user_id direto
                 if (instagramUsername === instagramUserId) {
                   try {
                     const userUrl = `https://graph.facebook.com/v18.0/${instagramUserId}?fields=name,username,profile_pic&access_token=${igAccessToken}`;
@@ -843,10 +862,17 @@ serve(async (req) => {
                       console.log('📸 [INSTAGRAM] User data (fallback):', JSON.stringify(userData));
                       if (userData.name) instagramUsername = userData.name;
                       else if (userData.username) instagramUsername = userData.username;
+                    } else {
+                      await userRes.text();
                     }
                   } catch (e) {
                     console.warn('⚠️ [INSTAGRAM] User fallback falhou');
                   }
+                }
+                
+                // Método 3 (fallback): Buscar do contact_name que veio no webhook
+                if (instagramUsername === instagramUserId && msg.contact_name && msg.contact_name !== instagramUserId) {
+                  instagramUsername = msg.contact_name;
                 }
               } catch (userErr) {
                 console.warn('⚠️ [INSTAGRAM] Erro ao buscar username:', userErr);
