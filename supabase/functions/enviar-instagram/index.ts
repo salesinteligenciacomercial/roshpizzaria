@@ -6,7 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const META_API_VERSION = 'v18.0';
+const META_API_VERSION = 'v23.0';
+const INSTAGRAM_API_BASE_URL = 'https://graph.instagram.com';
 const META_API_BASE_URL = 'https://graph.facebook.com';
 
 serve(async (req) => {
@@ -56,12 +57,14 @@ serve(async (req) => {
       );
     }
 
-    // Usar meta_access_token como preferência (Page Token válido para Instagram Messaging API)
-    // instagram_access_token (IGG tokens) NÃO funcionam para envio de mensagens via Graph API
-    const accessToken = connection.meta_access_token || connection.instagram_access_token;
+    // Para Instagram Messaging API, usar instagram_access_token (IGAAT) como preferência
+    // O endpoint correto é graph.instagram.com (NÃO graph.facebook.com)
+    // Ref: https://developers.facebook.com/community/threads/1030645562609158/
+    const igToken = connection.instagram_access_token;
+    const metaToken = connection.meta_access_token;
     const accountId = connection.instagram_account_id;
 
-    if (!accessToken) {
+    if (!igToken && !metaToken) {
       return new Response(
         JSON.stringify({ error: 'Token de acesso do Instagram não configurado' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -69,24 +72,42 @@ serve(async (req) => {
     }
 
     console.log('📸 [INSTAGRAM-SEND] Enviando para:', recipient_id, 'account_id:', accountId);
+    console.log('📸 [INSTAGRAM-SEND] Tem IG token:', !!igToken, '| Tem Meta token:', !!metaToken);
 
-    // Instagram Messaging API: tentar endpoints em ordem
-    // 1. {account_id}/messages (endpoint correto para Instagram Business)
-    // 2. /me/messages (fallback)
-    const endpoints = [
-      accountId ? `${META_API_BASE_URL}/${META_API_VERSION}/${accountId}/messages` : null,
-      `${META_API_BASE_URL}/${META_API_VERSION}/me/messages`,
-    ].filter(Boolean) as string[];
+    // Estratégia de endpoints em ordem de prioridade:
+    // 1. graph.instagram.com/me/messages com IG token (endpoint correto para Instagram Business Login)
+    // 2. graph.facebook.com/{account_id}/messages com Meta token (fallback)
+    // 3. graph.facebook.com/me/messages com Meta token (último recurso)
+    const endpoints: Array<{ url: string; token: string }> = [];
+    
+    if (igToken) {
+      endpoints.push({ 
+        url: `${INSTAGRAM_API_BASE_URL}/${META_API_VERSION}/me/messages`, 
+        token: igToken 
+      });
+    }
+    if (metaToken && accountId) {
+      endpoints.push({ 
+        url: `${META_API_BASE_URL}/${META_API_VERSION}/${accountId}/messages`, 
+        token: metaToken 
+      });
+    }
+    if (metaToken) {
+      endpoints.push({ 
+        url: `${META_API_BASE_URL}/${META_API_VERSION}/me/messages`, 
+        token: metaToken 
+      });
+    }
 
     let lastError: any = null;
 
-    for (const url of endpoints) {
-      console.log('📸 [INSTAGRAM-SEND] Tentando endpoint:', url);
+    for (const ep of endpoints) {
+      console.log('📸 [INSTAGRAM-SEND] Tentando endpoint:', ep.url);
       
-      const response = await fetch(url, {
+      const response = await fetch(ep.url, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          'Authorization': `Bearer ${ep.token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -98,7 +119,7 @@ serve(async (req) => {
       const data = await response.json();
 
       if (response.ok) {
-        console.log('✅ [INSTAGRAM-SEND] Mensagem enviada com sucesso:', data);
+        console.log('✅ [INSTAGRAM-SEND] Mensagem enviada com sucesso via:', ep.url, data);
         return new Response(
           JSON.stringify({ 
             success: true, 
@@ -110,7 +131,7 @@ serve(async (req) => {
         );
       }
 
-      console.warn('⚠️ [INSTAGRAM-SEND] Falha no endpoint:', url, JSON.stringify(data));
+      console.warn('⚠️ [INSTAGRAM-SEND] Falha no endpoint:', ep.url, JSON.stringify(data));
       lastError = data;
     }
 
