@@ -1108,6 +1108,9 @@ function Conversas() {
         if (conv.isGroup === true) return false;
         return conv.assignedUser?.id === currentUserId;
       });
+    } else if (filter === "instagram") {
+      // ✅ Filtro "Instagram": Mostrar APENAS conversas do Instagram Direct
+      filtered = filtered.filter(conv => conv.channel === 'instagram');
     }
     console.log('📊 [DEBUG] Após filtro de status:', filtered.length);
 
@@ -1118,9 +1121,6 @@ function Conversas() {
         if (!conv.tags || conv.tags.length === 0) return false;
         return advancedFilters.tags.some(tag => conv.tags.includes(tag));
       });
-    } else if (filter === "instagram") {
-      // ✅ Filtro "Instagram": Mostrar APENAS conversas do Instagram Direct
-      filtered = filtered.filter(conv => conv.channel === 'instagram');
     }
 
     // Filtrar por responsáveis
@@ -1554,13 +1554,17 @@ function Conversas() {
         }
         // ✅ CORREÇÃO: Para grupos, usar o número original com @g.us
         const isGroupMessage = novaMensagem.is_group === true || /@g\.us$/.test(novaMensagem.numero || '');
+        // ⚡ CORREÇÃO: Detectar Instagram via origem
+        const isInstagramMessage = novaMensagem.origem === 'Instagram' || (novaMensagem.origem_api === 'meta' && String(novaMensagem.telefone_formatado || novaMensagem.numero || '').replace(/[^0-9]/g, '').length > 13);
+        
         const telefone = isGroupMessage 
           ? (novaMensagem.numero || '') // Manter formato original para grupos
-          : (novaMensagem.telefone_formatado || novaMensagem.numero || '').replace(/[^0-9]/g, '');
+          : isInstagramMessage
+            ? `ig_${novaMensagem.telefone_formatado || novaMensagem.numero || ''}`
+            : (novaMensagem.telefone_formatado || novaMensagem.numero || '').replace(/[^0-9]/g, '');
         
-        // Validar telefone apenas para contatos individuais (grupos têm formato diferente)
-        // ⚡ CORREÇÃO: Aceitar até 15 dígitos (consistente com loadAllUniqueConversations)
-        if (!isGroupMessage && (telefone.length < 10 || telefone.length > 15)) {
+        // Validar telefone apenas para contatos individuais (grupos e Instagram têm formato diferente)
+        if (!isGroupMessage && !isInstagramMessage && (telefone.length < 10 || telefone.length > 15)) {
           console.warn('⚠️ [REALTIME-MULTIUSER] Telefone inválido ignorado:', telefone);
           return;
         }
@@ -1657,8 +1661,13 @@ function Conversas() {
           if (!prevSelected) return prevSelected;
 
           // Verificar se a mensagem pertence à conversa selecionada
-          const telSelected = (prevSelected.phoneNumber || prevSelected.id || '').replace(/[^0-9]/g, '');
-          if (telSelected === telefone) {
+          const telSelected = isInstagramMessage 
+            ? (prevSelected.id || '')
+            : (prevSelected.phoneNumber || prevSelected.id || '').replace(/[^0-9]/g, '');
+          const isMatch = isInstagramMessage 
+            ? (telSelected === telefone || prevSelected.id?.startsWith('ig_'))
+            : telSelected === telefone;
+          if (isMatch) {
             // ⚡ DEDUPLICAÇÃO: Verificar se mensagem já existe por ID
             const mensagemJaExiste = prevSelected.messages.some(m => m.id === novaMensagem.id);
             if (mensagemJaExiste) {
@@ -1694,6 +1703,10 @@ function Conversas() {
         setConversations(prev => {
           const telefoneKey = telefone;
           const conversaExistente = prev.find(c => {
+            if (isInstagramMessage) {
+              // Instagram: match by ig_ prefix in conversation id
+              return c.id === telefoneKey || c.id?.startsWith('ig_');
+            }
             const tel = (c.phoneNumber || c.id || '').replace(/[^0-9]/g, '');
             return tel === telefoneKey;
           });
@@ -1750,14 +1763,15 @@ function Conversas() {
             const novaConversa: Conversation = {
               id: novaMensagem.lead_id || `conv-${telefoneKey}`,
               contactName: novaMensagem.nome_contato || telefoneKey,
-              channel: 'whatsapp' as const,
+              channel: isInstagramMessage ? 'instagram' : 'whatsapp' as const,
               status: novaMensagemObj.sender === 'user' ? 'answered' : 'waiting',
               lastMessage: novaMensagem.mensagem || '',
               unread: novaMensagemObj.sender === 'contact' ? 1 : 0,
               messages: [novaMensagemObj],
               tags: [],
-              phoneNumber: telefoneKey,
+              phoneNumber: novaMensagem.telefone_formatado || novaMensagem.numero || telefoneKey,
               isGroup: novaMensagem.is_group || /@g\.us$/.test(novaMensagem.numero || ''),
+              origemApi: isInstagramMessage ? 'meta' : undefined,
               avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent((novaMensagem.nome_contato || telefoneKey).substring(0, 2))}&background=0ea5e9&color=fff`
             };
             return [novaConversa, ...prev];
