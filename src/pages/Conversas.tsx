@@ -375,7 +375,7 @@ function Conversas() {
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
-  const [filter, setFilter] = useState<"all" | "waiting" | "answered" | "resolved" | "group" | "responsible" | "transferred">("all");
+  const [filter, setFilter] = useState<"all" | "waiting" | "answered" | "resolved" | "group" | "responsible" | "transferred" | "instagram">("all");
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(defaultFilters);
   const [searchTerm, setSearchTerm] = useState("");
   // MELHORIA: Estado para busca debounced (otimização de performance)
@@ -1118,6 +1118,9 @@ function Conversas() {
         if (!conv.tags || conv.tags.length === 0) return false;
         return advancedFilters.tags.some(tag => conv.tags.includes(tag));
       });
+    } else if (filter === "instagram") {
+      // ✅ Filtro "Instagram": Mostrar APENAS conversas do Instagram Direct
+      filtered = filtered.filter(conv => conv.channel === 'instagram');
     }
 
     // Filtrar por responsáveis
@@ -2900,7 +2903,7 @@ function Conversas() {
 
       // ⚡ OTIMIZAÇÃO: Query com campos essenciais (midia_url necessário para exibir mídias)
       // ⚡ CORREÇÃO: Incluir campos read e delivered para exibir status de visualização
-      let query = supabase.from('conversas').select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme, sent_by, owner_id, arquivo_nome, midia_url, read, delivered').eq('company_id', companyId).order('created_at', {
+      let query = supabase.from('conversas').select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme, sent_by, owner_id, arquivo_nome, midia_url, read, delivered, origem, origem_api').eq('company_id', companyId).order('created_at', {
         ascending: false
       });
 
@@ -2984,12 +2987,10 @@ function Conversas() {
         // VALIDAÇÃO 3: BLOQUEAR telefones malformados/corrompidos de outras instâncias
         const telefoneNormalizado = conv.telefone_formatado?.replace(/[^0-9]/g, '') || conv.numero?.replace(/[^0-9]/g, '') || '';
 
-        // ⚡ CORREÇÃO CRÍTICA: Telefones válidos brasileiros têm 11-13 dígitos APENAS
-        // - 11 dígitos: DDD + número (ex: 11987654321)
-        // - 12 dígitos: 0 + DDD + número (ex: 011987654321) 
-        // - 13 dígitos: 55 + DDD + número (ex: 5511987654321)
-        // QUALQUER COISA DIFERENTE = número corrompido/malformado/de outra instância
-        if (telefoneNormalizado.length > 0) {
+        // ⚡ CORREÇÃO: Permitir Instagram (IDs numéricos longos) e telefones brasileiros
+        // Instagram usa IDs numéricos de 15-20 dígitos como identificador
+        const isInstagram = conv.origem === 'Instagram' || conv.origem_api === 'meta' && telefoneNormalizado.length > 13;
+        if (telefoneNormalizado.length > 0 && !isInstagram) {
           if (telefoneNormalizado.length < 11 || telefoneNormalizado.length > 13) {
             console.warn(`🚫 [FILTRO CRÍTICO] Telefone malformado/outra instância bloqueado: ${telefoneNormalizado} (${telefoneNormalizado.length} dígitos) - company: ${conv.company_id}`);
             return false;
@@ -3046,25 +3047,25 @@ function Conversas() {
         if (isGroup) {
           key = String(conv.numero || ''); // SEMPRE usar numero para grupos (contém JID do grupo)
         } else {
-          // ⚡ CORREÇÃO CRÍTICA: Normalizar telefone de forma ULTRA flexível
-          // Tentar TODAS as variações possíveis para garantir agrupamento
-          const telefoneFormatado = conv.telefone_formatado || '';
-          const numeroOriginal = conv.numero || '';
-
-          // Tentar usar telefone_formatado primeiro, senão normalizar número original
-          let telefoneNormalizado = telefoneFormatado ? telefoneFormatado.replace(/[^0-9]/g, '') : numeroOriginal.replace(/[^0-9]/g, '');
-
-          // ⚡ CORREÇÃO: NUNCA descartar - sempre criar uma chave válida
-          if (telefoneNormalizado.length >= 10) {
-            // Se não começa com 55, adicionar (padrão brasileiro)
-            key = telefoneNormalizado.startsWith('55') ? telefoneNormalizado : `55${telefoneNormalizado}`;
-          } else if (telefoneNormalizado.length > 0) {
-            // Mesmo que não tenha 10 dígitos, usar como está (pode ser número incompleto)
-            key = telefoneNormalizado;
+          // ⚡ CORREÇÃO: Detectar mensagens do Instagram (não são telefones)
+          const isInstagramMsg = conv.origem === 'Instagram' || (conv.origem_api === 'meta' && String(conv.telefone_formatado || conv.numero || '').replace(/[^0-9]/g, '').length > 13);
+          
+          if (isInstagramMsg) {
+            // Instagram usa IDs numéricos como identificador - usar diretamente
+            key = `ig_${conv.telefone_formatado || conv.numero || 'unknown'}`;
           } else {
-            // ⚡ FALLBACK: Se não tem número válido, usar o número original como chave
-            // Isso garante que mensagens sejam agrupadas mesmo com números inválidos
-            key = numeroOriginal || telefoneFormatado || 'unknown';
+            // ⚡ CORREÇÃO CRÍTICA: Normalizar telefone de forma ULTRA flexível
+            const telefoneFormatado = conv.telefone_formatado || '';
+            const numeroOriginal = conv.numero || '';
+            let telefoneNormalizado = telefoneFormatado ? telefoneFormatado.replace(/[^0-9]/g, '') : numeroOriginal.replace(/[^0-9]/g, '');
+
+            if (telefoneNormalizado.length >= 10) {
+              key = telefoneNormalizado.startsWith('55') ? telefoneNormalizado : `55${telefoneNormalizado}`;
+            } else if (telefoneNormalizado.length > 0) {
+              key = telefoneNormalizado;
+            } else {
+              key = numeroOriginal || telefoneFormatado || 'unknown';
+            }
           }
         }
 
@@ -3521,10 +3522,14 @@ function Conversas() {
         const telKey = telefone.replace(/[^0-9]/g, '');
         const assignedUserData = assignmentsMap.get(telKey); // ⚡ CORRIGIDO: Agora é {id, nome} do usuário
 
+        // Detectar canal baseado na origem das mensagens
+        const isInstagramConv = mensagens.some(m => m.origem === 'Instagram');
+        const channelDetected: "whatsapp" | "instagram" | "facebook" = isInstagramConv ? 'instagram' : 'whatsapp';
+
         const conversaCriada = {
           id: telefone,
           contactName,
-          channel: "whatsapp" as const,
+          channel: channelDetected,
           status: statusConversa,
           lastMessage: messagensFormatadas[messagensFormatadas.length - 1]?.content || '',
           unread: messagensFormatadas.length > 0 && messagensFormatadas[messagensFormatadas.length - 1]?.sender === 'contact' ? 1 : 0,
@@ -8544,6 +8549,12 @@ function Conversas() {
                 <span className="text-xs">Grupos</span>
               </Button>
             )}
+            <Button variant={filter === "instagram" ? "default" : "ghost"} size="sm" onClick={() => setFilter("instagram")} className="relative flex flex-col items-center gap-0.5 h-auto py-1 px-2">
+              <Badge variant="secondary" className="bg-pink-500 hover:bg-pink-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
+                {conversations.filter(c => c.channel === 'instagram').length}
+              </Badge>
+              <span className="text-xs flex items-center gap-0.5"><Instagram className="h-3 w-3" />Instagram</span>
+            </Button>
             <Button variant={filter === "responsible" ? "default" : "ghost"} size="sm" onClick={() => setFilter("responsible")} className="relative flex flex-col items-center gap-0.5 h-auto py-1 px-2">
               <Badge variant="secondary" className="bg-green-500 hover:bg-green-600 text-white min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs">
                 {responsibleCount}
