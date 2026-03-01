@@ -2907,6 +2907,24 @@ function Conversas() {
         }
       }
 
+      // ⚡ CORREÇÃO: Buscar instagram_account_id para filtrar ecos de mensagens enviadas
+      let instagramPageAccountId: string | null = null;
+      try {
+        const { data: igConn } = await supabase
+          .from('whatsapp_connections')
+          .select('instagram_account_id')
+          .eq('company_id', companyId)
+          .not('instagram_account_id', 'is', null)
+          .limit(1)
+          .maybeSingle();
+        if (igConn?.instagram_account_id) {
+          instagramPageAccountId = igConn.instagram_account_id;
+          console.log('📸 [LOAD] Instagram Page Account ID:', instagramPageAccountId);
+        }
+      } catch (e) {
+        // Silently continue
+      }
+
       // ⚡ OTIMIZAÇÃO: Carregamento balanceado entre velocidade e completude
       const MESSAGES_PER_CONVERSATION = 5; // Reduzido para 5 (carrega mais depois)
 
@@ -3000,6 +3018,12 @@ function Conversas() {
 
         // VALIDAÇÃO 3: BLOQUEAR telefones malformados/corrompidos de outras instâncias
         const telefoneNormalizado = conv.telefone_formatado?.replace(/[^0-9]/g, '') || conv.numero?.replace(/[^0-9]/g, '') || '';
+
+        // ⚡ CORREÇÃO: Filtrar ecos de mensagens do Instagram (page ID como contato)
+        if (instagramPageAccountId && telefoneNormalizado === instagramPageAccountId) {
+          console.log('🚫 [FILTRO] Eco de Instagram (page account ID) filtrado:', telefoneNormalizado);
+          return false;
+        }
 
         // ⚡ CORREÇÃO: Permitir Instagram (IDs numéricos longos) e telefones brasileiros
         // Instagram usa IDs numéricos de 15-20 dígitos como identificador
@@ -3560,7 +3584,9 @@ function Conversas() {
             ? `https://ui-avatars.com/api/?name=${encodeURIComponent('Grupo')}&background=10b981&color=fff` 
             : (leadInfo?.profilePictureUrl && !isExpiredWhatsAppUrl(leadInfo.profilePictureUrl) 
               ? leadInfo.profilePictureUrl 
-              : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`),
+              : channelDetected === 'instagram'
+                ? `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=E1306C&color=fff`
+                : `https://ui-avatars.com/api/?name=${encodeURIComponent(contactName.substring(0, 2))}&background=0ea5e9&color=fff`),
           isGroup: isGroup,
           // ⚡ CORREÇÃO: Incluir assignedUser com id e nome para filtros funcionarem
           responsavel: assignedUserData?.id || undefined,
@@ -4617,7 +4643,7 @@ function Conversas() {
           origem: selectedConv.channel === 'whatsapp' ? 'WhatsApp' : selectedConv.channel === 'instagram' ? 'Instagram' : 'Facebook',
           status: 'Enviada',
           tipo_mensagem: 'text',
-          nome_contato: selectedConv.contactName,
+          nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
           company_id: userRole?.company_id,
           owner_id: user?.id,
           sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
@@ -4805,7 +4831,7 @@ function Conversas() {
         origem: 'WhatsApp',
         status: 'Enviada',
         tipo_mensagem: type,
-        nome_contato: selectedConv.contactName,
+        nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
         arquivo_nome: file.name,
         midia_url: publicUrl,
         company_id: userRole?.company_id,
@@ -5028,7 +5054,7 @@ function Conversas() {
         origem: 'WhatsApp',
         status: 'Enviada',
         tipo_mensagem: 'audio',
-        nome_contato: selectedConv.contactName,
+        nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
         arquivo_nome: 'audio.ogg',
         midia_url: storageUrl,
         // ⚡ CORREÇÃO CRÍTICA: Salvar URL do Storage
@@ -5513,7 +5539,7 @@ function Conversas() {
                 origem_api: selectedConv.channel === 'instagram' ? 'meta' : (selectedConv.origemApi || undefined),
                 status: 'Enviada',
                 tipo_mensagem: type,
-                nome_contato: selectedConv.contactName,
+                nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
                 company_id: userRole.company_id,
                 owner_id: user.id,
                 sent_by: sentByName,
@@ -8221,7 +8247,7 @@ function Conversas() {
         origem: selectedConv.channel === 'whatsapp' ? 'WhatsApp' : selectedConv.channel === 'instagram' ? 'Instagram' : 'Facebook',
         status: 'Resolvida',
         tipo_mensagem: 'text',
-        nome_contato: selectedConv.contactName,
+        nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
         company_id: userRole?.company_id,
         owner_id: user?.id,
         sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
