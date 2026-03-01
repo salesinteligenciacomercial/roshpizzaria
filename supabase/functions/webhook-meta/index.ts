@@ -465,19 +465,26 @@ function transformInstagramPayload(entry: any) {
           messageContent = `[Reação: ${messageData.reaction}]`;
         }
         
-        messages.push({
-          message_id: messageData.mid || `ig_${Date.now()}`,
-          from: senderId,
-          timestamp: value.timestamp || Math.floor(Date.now() / 1000),
-          type: messageType,
-          content: messageContent || '[Mensagem Instagram]',
-          media_id: mediaUrl,
-          contact_name: senderId, // Será atualizado com o username se disponível
-          instagram_account_id: instagramAccountId,
-          recipient_id: recipientId,
-          is_from_me: false,
-          source: 'instagram',
-        });
+        // Detectar se é eco de mensagem enviada (sender = page ID)
+        const isEcho = senderId === instagramAccountId;
+        
+        if (isEcho) {
+          console.log('📸 [INSTAGRAM] Ignorando eco de mensagem enviada (sender === account)');
+        } else {
+          messages.push({
+            message_id: messageData.mid || `ig_${Date.now()}`,
+            from: senderId,
+            timestamp: value.timestamp || Math.floor(Date.now() / 1000),
+            type: messageType,
+            content: messageContent || '[Mensagem Instagram]',
+            media_id: mediaUrl,
+            contact_name: senderId,
+            instagram_account_id: instagramAccountId,
+            recipient_id: recipientId,
+            is_from_me: false,
+            source: 'instagram',
+          });
+        }
       }
     }
     
@@ -827,7 +834,7 @@ serve(async (req) => {
                 console.log('📸 [INSTAGRAM] Buscando nome para IGSID:', instagramUserId);
                 
                 // Método 1: Buscar via conversations API do Instagram
-                const convUrl = `https://graph.facebook.com/v18.0/${igAccountId}/conversations?user_id=${instagramUserId}&platform=instagram&fields=participants,name&access_token=${igAccessToken}`;
+                const convUrl = `https://graph.facebook.com/v23.0/${igAccountId}/conversations?user_id=${instagramUserId}&platform=instagram&fields=participants,name&access_token=${igAccessToken}`;
                 console.log('📸 [INSTAGRAM] Conversations URL:', convUrl.replace(igAccessToken, '***'));
                 const convRes = await fetch(convUrl);
                 
@@ -855,7 +862,7 @@ serve(async (req) => {
                 // Método 2 (fallback): user_id direto
                 if (instagramUsername === instagramUserId) {
                   try {
-                    const userUrl = `https://graph.facebook.com/v18.0/${instagramUserId}?fields=name,username,profile_pic&access_token=${igAccessToken}`;
+                    const userUrl = `https://graph.facebook.com/v23.0/${instagramUserId}?fields=name,username,profile_pic&access_token=${igAccessToken}`;
                     const userRes = await fetch(userUrl);
                     if (userRes.ok) {
                       const userData = await userRes.json();
