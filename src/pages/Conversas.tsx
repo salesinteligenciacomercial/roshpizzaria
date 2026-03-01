@@ -3446,8 +3446,9 @@ function Conversas() {
 
           // ⚡ CORREÇÃO CRÍTICA: FALLBACK para contatos individuais
           // Contatos individuais SEMPRE usam telefone como fallback, NUNCA "Grupo"
-          if (!contactName || contactName.trim() === '') {
-            contactName = telefone;
+          // ⚡ CORREÇÃO: Para Instagram, remover prefixo ig_ do nome exibido
+          if (!contactName || contactName.trim() === '' || contactName === telefone) {
+            contactName = telefone.replace(/^ig_/, '');
           }
         }
 
@@ -5368,7 +5369,7 @@ function Conversas() {
             origem_api: selectedConv.channel === 'instagram' ? 'meta' : (selectedConv.origemApi || undefined),
             status: 'Enviada',
             tipo_mensagem: type,
-            nome_contato: selectedConv.contactName,
+            nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
             company_id: userRole.company_id,
             owner_id: user.id,
             sent_by: sentByName,
