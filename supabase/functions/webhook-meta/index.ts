@@ -465,11 +465,14 @@ function transformInstagramPayload(entry: any) {
           messageContent = `[Reação: ${messageData.reaction}]`;
         }
         
-        // Detectar se é eco de mensagem enviada (sender = page ID)
-        const isEcho = senderId === instagramAccountId;
+        // Detectar se é eco de mensagem enviada
+        // Verificar: sender === page ID, is_echo flag, ou recipient === sender
+        const isEcho = senderId === instagramAccountId || 
+                       messageData.is_echo === true ||
+                       recipientId === senderId;
         
         if (isEcho) {
-          console.log('📸 [INSTAGRAM] Ignorando eco de mensagem enviada (sender === account)');
+          console.log('📸 [INSTAGRAM] Ignorando eco de mensagem enviada (sender:', senderId, 'account:', instagramAccountId, 'is_echo:', messageData.is_echo, ')');
         } else {
           messages.push({
             message_id: messageData.mid || `ig_${Date.now()}`,
@@ -800,6 +803,15 @@ serve(async (req) => {
             
             // Usar o sender ID como número (Instagram não tem telefone)
             const instagramUserId = msg.from || 'instagram_user';
+            
+            // ⚡ CORREÇÃO: Segunda verificação de eco usando instagram_account_id do banco
+            // A primeira verificação é feita no transformInstagramPayload, mas pode falhar
+            // se entry.id não corresponder exatamente ao sender.id
+            const storedIgAccountId = msg.instagram_account_id;
+            if (instagramUserId === storedIgAccountId) {
+              console.log('📸 [INSTAGRAM] Ignorando eco (sender === stored instagram_account_id):', instagramUserId);
+              continue;
+            }
 
             // 📸 CORREÇÃO: Buscar username real do Instagram
             // IGSID (Instagram Scoped ID) NÃO funciona com /{id}?fields=username,name
