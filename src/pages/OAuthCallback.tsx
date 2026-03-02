@@ -16,12 +16,11 @@ export default function OAuthCallback() {
     const processOAuthCallback = async () => {
       const code = searchParams.get('code');
       const error = searchParams.get('error');
-      const errorReason = searchParams.get('error_reason');
       const errorDescription = searchParams.get('error_description');
 
       if (error) {
         setStatus('error');
-        setMessage(errorDescription || errorReason || 'Autenticação cancelada pelo usuário');
+        setMessage(errorDescription || 'Autenticação cancelada pelo usuário');
         return;
       }
 
@@ -32,84 +31,79 @@ export default function OAuthCallback() {
       }
 
       try {
-        // Wait for session to be restored (important after redirect)
-        const user = await new Promise<any>((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('Timeout aguardando sessão')), 10000);
+        // Try to get companyId from localStorage first (saved before redirect)
+        let companyId = localStorage.getItem('instagram_oauth_company_id');
+        
+        if (!companyId) {
+          // Fallback: try to get from authenticated user
+          console.log('No companyId in localStorage, trying auth session...');
+          const { data: { session } } = await supabase.auth.getSession();
           
-          // First check if session already exists
-          supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session?.user) {
-              clearTimeout(timeout);
-              resolve(session.user);
+          if (!session?.user) {
+            // Wait a bit for session restoration
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+              setStatus('error');
+              setMessage('Usuário não autenticado. Faça login e tente novamente.');
               return;
             }
             
-            // Wait for auth state change
-            const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-              if (session?.user) {
-                clearTimeout(timeout);
-                subscription.unsubscribe();
-                resolve(session.user);
-              }
-            });
-            
-            // Also retry getUser after a short delay
-            setTimeout(async () => {
-              const { data: { user } } = await supabase.auth.getUser();
-              if (user) {
-                clearTimeout(timeout);
-                subscription.unsubscribe();
-                resolve(user);
-              }
-            }, 1000);
-          });
-        });
+            const { data: userRole } = await supabase
+              .from('user_roles')
+              .select('company_id')
+              .eq('user_id', user.id)
+              .limit(1)
+              .single();
+            companyId = userRole?.company_id || null;
+          } else {
+            const { data: userRole } = await supabase
+              .from('user_roles')
+              .select('company_id')
+              .eq('user_id', session.user.id)
+              .limit(1)
+              .single();
+            companyId = userRole?.company_id || null;
+          }
+        }
 
-        if (!user) {
+        if (!companyId) {
           setStatus('error');
-          setMessage('Usuário não autenticado. Faça login e tente novamente.');
+          setMessage('Empresa do usuário não encontrada. Faça login e tente novamente.');
           return;
         }
 
-        // Get user's company_id from user_roles table
-        const { data: userRole } = await supabase
-          .from('user_roles')
-          .select('company_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .single();
+        // Clean up localStorage
+        localStorage.removeItem('instagram_oauth_company_id');
 
-        if (!userRole) {
-          setStatus('error');
-          setMessage('Empresa do usuário não encontrada.');
-          return;
-        }
+        console.log('Calling instagram-oauth-callback with companyId:', companyId);
 
         // Call edge function to exchange code for token
         const { data, error: fnError } = await supabase.functions.invoke('instagram-oauth-callback', {
           body: {
             code,
-            companyId: userRole.company_id,
+            companyId,
             redirectUri: window.location.origin + '/oauth/callback'
           }
         });
 
         if (fnError) {
           console.error('Edge function error:', fnError);
-          // Try to parse the error body for more detail
-          let errorMsg = fnError.message || 'Erro na função de autenticação';
+          let errorMsg = 'Erro na função de autenticação';
+          if (typeof fnError.message === 'string') {
+            errorMsg = fnError.message;
+          }
+          // Try to extract error from response body
           try {
-            if (typeof fnError === 'object' && (fnError as any).context?.body) {
-              const body = JSON.parse((fnError as any).context.body);
-              errorMsg = body.error || errorMsg;
-            }
+            const body = JSON.parse((fnError as any)?.context?.body || '{}');
+            if (body.error) errorMsg = body.error;
           } catch {}
           throw new Error(errorMsg);
         }
 
         if (data?.success) {
           setStatus('success');
-          setMessage(`Instagram conectado com sucesso! @${data.username || ''}`);
+          setMessage(`Instagram conectado com sucesso! ${data.username ? '@' + data.username : ''}`);
           toast({
             title: 'Sucesso!',
             description: 'Instagram conectado ao CRM com sucesso.'

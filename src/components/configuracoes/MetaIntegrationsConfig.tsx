@@ -114,8 +114,10 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
 
   const handleOAuthLogin = (scope: string) => {
     if (scope === 'instagram') {
-      // Usar URL específica do Instagram OAuth
-      window.open(INSTAGRAM_OAUTH_URL, '_blank', 'width=600,height=700');
+      // Save companyId to localStorage so the callback page can retrieve it
+      localStorage.setItem('instagram_oauth_company_id', companyId);
+      // Redirect in same window so session is preserved
+      window.location.href = INSTAGRAM_OAUTH_URL;
       return;
     }
     
