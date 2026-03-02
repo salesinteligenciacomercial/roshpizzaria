@@ -433,8 +433,46 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
                 className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
               >
                 <Instagram className="h-4 w-4 mr-2" />
-                Conectar com Facebook/Instagram
+                {integration?.instagram_status === 'connected' ? 'Reconectar Instagram' : 'Conectar com Facebook/Instagram'}
               </Button>
+
+              {integration?.instagram_status === 'connected' && (
+                <Button 
+                  variant="destructive"
+                  onClick={async () => {
+                    if (!confirm('Tem certeza que deseja desconectar o Instagram?')) return;
+                    try {
+                      await supabase
+                        .from('tenant_integrations')
+                        .update({
+                          instagram_status: 'disconnected',
+                          instagram_ig_id: null,
+                          instagram_username: null,
+                          updated_at: new Date().toISOString()
+                        })
+                        .eq('company_id', companyId);
+                      
+                      // Also clear from whatsapp_connections
+                      await supabase
+                        .from('whatsapp_connections')
+                        .update({
+                          instagram_account_id: null,
+                          instagram_access_token: null,
+                        })
+                        .eq('company_id', companyId);
+                      
+                      toast({ title: 'Instagram desconectado com sucesso' });
+                      loadIntegration();
+                    } catch (err: any) {
+                      toast({ title: 'Erro ao desconectar', description: err.message, variant: 'destructive' });
+                    }
+                  }}
+                  className="w-full"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Desconectar Instagram {integration?.instagram_username ? `(@${integration.instagram_username})` : ''}
+                </Button>
+              )}
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">

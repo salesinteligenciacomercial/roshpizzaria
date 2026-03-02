@@ -32,8 +32,39 @@ export default function OAuthCallback() {
       }
 
       try {
-        // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
+        // Wait for session to be restored (important after redirect)
+        const user = await new Promise<any>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Timeout aguardando sessão')), 10000);
+          
+          // First check if session already exists
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user) {
+              clearTimeout(timeout);
+              resolve(session.user);
+              return;
+            }
+            
+            // Wait for auth state change
+            const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+              if (session?.user) {
+                clearTimeout(timeout);
+                subscription.unsubscribe();
+                resolve(session.user);
+              }
+            });
+            
+            // Also retry getUser after a short delay
+            setTimeout(async () => {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) {
+                clearTimeout(timeout);
+                subscription.unsubscribe();
+                resolve(user);
+              }
+            }, 1000);
+          });
+        });
+
         if (!user) {
           setStatus('error');
           setMessage('Usuário não autenticado. Faça login e tente novamente.');
@@ -65,18 +96,25 @@ export default function OAuthCallback() {
 
         if (fnError) {
           console.error('Edge function error:', fnError);
-          throw new Error(fnError.message || 'Edge Function returned a non-2xx status code');
+          // Try to parse the error body for more detail
+          let errorMsg = fnError.message || 'Erro na função de autenticação';
+          try {
+            if (typeof fnError === 'object' && (fnError as any).context?.body) {
+              const body = JSON.parse((fnError as any).context.body);
+              errorMsg = body.error || errorMsg;
+            }
+          } catch {}
+          throw new Error(errorMsg);
         }
 
         if (data?.success) {
           setStatus('success');
-          setMessage('Instagram conectado com sucesso!');
+          setMessage(`Instagram conectado com sucesso! @${data.username || ''}`);
           toast({
             title: 'Sucesso!',
             description: 'Instagram conectado ao CRM com sucesso.'
           });
           
-          // Redirect to settings after 2 seconds
           setTimeout(() => {
             navigate('/configuracoes', { replace: true });
           }, 2000);
