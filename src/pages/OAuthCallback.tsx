@@ -58,7 +58,8 @@ export default function OAuthCallback() {
         const { data, error: fnError } = await supabase.functions.invoke('instagram-oauth-callback', {
           body: {
             code,
-            companyId: userRole.company_id
+            companyId: userRole.company_id,
+            redirectUri: window.location.origin + '/oauth/callback'
           }
         });
 

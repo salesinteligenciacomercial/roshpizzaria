@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const INSTAGRAM_APP_ID = Deno.env.get('META_APP_ID') || '1353481286527361';
 const INSTAGRAM_APP_SECRET = Deno.env.get('META_APP_SECRET') || '';
-const REDIRECT_URI = 'https://wazecrm.lovable.app/oauth/callback';
+const DEFAULT_REDIRECT_URI = 'https://wazecrm.lovable.app/oauth/callback';
 
 serve(async (req: Request) => {
   // Handle CORS
@@ -17,7 +17,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { code, companyId } = await req.json();
+    const { code, companyId, redirectUri } = await req.json();
 
     if (!code || !companyId) {
       return new Response(
@@ -26,7 +26,13 @@ serve(async (req: Request) => {
       );
     }
 
+    // Use the redirect_uri sent from frontend to ensure exact match
+    const REDIRECT_URI = redirectUri || DEFAULT_REDIRECT_URI;
+
     console.log('Processing Instagram OAuth callback for company:', companyId);
+    console.log('Using redirect_uri:', REDIRECT_URI);
+    console.log('App ID:', INSTAGRAM_APP_ID);
+    console.log('App Secret length:', INSTAGRAM_APP_SECRET.length);
 
     // Exchange code for short-lived access token
     const tokenUrl = 'https://api.instagram.com/oauth/access_token';
