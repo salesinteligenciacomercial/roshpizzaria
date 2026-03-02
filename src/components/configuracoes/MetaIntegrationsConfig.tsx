@@ -116,8 +116,8 @@ export function MetaIntegrationsConfig({ companyId }: MetaIntegrationsConfigProp
     if (scope === 'instagram') {
       // Save companyId to localStorage so the callback page can retrieve it
       localStorage.setItem('instagram_oauth_company_id', companyId);
-      // Redirect in same window so session is preserved
-      window.location.href = INSTAGRAM_OAUTH_URL;
+      // Open in new tab - localStorage is shared across tabs on same origin
+      window.open(INSTAGRAM_OAUTH_URL, '_blank');
       return;
     }
     
