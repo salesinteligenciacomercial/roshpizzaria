@@ -3,32 +3,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 const META_API_VERSION = 'v18.0';
 const META_API_BASE_URL = 'https://graph.facebook.com';
-
-interface TemplateComponent {
-  type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
-  format?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
-  text?: string;
-  example?: { header_text?: string[]; body_text?: string[][] };
-  buttons?: Array<{
-    type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER';
-    text: string;
-    url?: string;
-    phone_number?: string;
-  }>;
-}
-
-interface CreateTemplatePayload {
-  name: string;
-  language: string;
-  category: 'UTILITY' | 'MARKETING' | 'AUTHENTICATION';
-  components: TemplateComponent[];
-  company_id: string;
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -41,10 +20,9 @@ serve(async (req) => {
   );
 
   try {
-    const url = new URL(req.url);
-    const method = req.method;
-    const body = method !== 'GET' ? await req.json() : {};
-    const companyId = url.searchParams.get('company_id') || body.company_id;
+    const body = await req.json().catch(() => ({}));
+    const action = body.action || (req.method === 'GET' ? 'list' : req.method === 'DELETE' ? 'delete' : 'create');
+    const companyId = body.company_id;
 
     if (!companyId) {
       return new Response(
@@ -53,7 +31,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`WhatsApp Templates - ${method} - Company: ${companyId}`);
+    console.log(`WhatsApp Templates - action: ${action} - Company: ${companyId}`);
 
     // Buscar conexão Meta da empresa
     const { data: connection, error: connError } = await supabase
@@ -80,20 +58,17 @@ serve(async (req) => {
       );
     }
 
-    // === GET: Listar templates ===
-    if (method === 'GET') {
-      const syncFromMeta = url.searchParams.get('sync') === 'true';
+    // === LIST: Listar templates ===
+    if (action === 'list') {
+      const syncFromMeta = body.sync === true;
       
       if (syncFromMeta) {
-        // Buscar templates da Meta API
         const metaUrl = `${META_API_BASE_URL}/${META_API_VERSION}/${meta_business_account_id}/message_templates?fields=id,name,status,category,language,components,quality_score`;
-        
         console.log('Sincronizando templates da Meta:', metaUrl);
         
         const metaResponse = await fetch(metaUrl, {
           headers: { 'Authorization': `Bearer ${meta_access_token}` }
         });
-
         const metaData = await metaResponse.json();
         
         if (!metaResponse.ok) {
@@ -104,7 +79,6 @@ serve(async (req) => {
           );
         }
 
-        // Sincronizar com banco local
         const templates = metaData.data || [];
         console.log(`Templates encontrados: ${templates.length}`);
 
@@ -127,11 +101,7 @@ serve(async (req) => {
         }
 
         return new Response(
-          JSON.stringify({ 
-            success: true, 
-            templates: templates,
-            synced: templates.length
-          }),
+          JSON.stringify({ success: true, templates, synced: templates.length }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -151,31 +121,26 @@ serve(async (req) => {
       );
     }
 
-    // === POST: Criar template ===
-    if (method === 'POST') {
-      const payload = body as CreateTemplatePayload;
-      
-      if (!payload.name || !payload.category || !payload.components) {
+    // === CREATE: Criar template ===
+    if (action === 'create') {
+      if (!body.name || !body.category || !body.components) {
         return new Response(
           JSON.stringify({ error: 'name, category e components são obrigatórios' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Validar nome do template (Meta exige lowercase, underscore)
-      const templateName = payload.name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
-
+      const templateName = body.name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
       const metaPayload = {
         name: templateName,
-        language: payload.language || 'pt_BR',
-        category: payload.category,
-        components: payload.components
+        language: body.language || 'pt_BR',
+        category: body.category,
+        components: body.components
       };
 
       console.log('Criando template na Meta:', JSON.stringify(metaPayload, null, 2));
 
       const metaUrl = `${META_API_BASE_URL}/${META_API_VERSION}/${meta_business_account_id}/message_templates`;
-      
       const metaResponse = await fetch(metaUrl, {
         method: 'POST',
         headers: {
@@ -205,10 +170,10 @@ serve(async (req) => {
           company_id: companyId,
           meta_template_id: metaData.id,
           name: templateName,
-          language: payload.language || 'pt_BR',
-          category: payload.category,
+          language: body.language || 'pt_BR',
+          category: body.category,
           status: 'PENDING',
-          components: payload.components,
+          components: body.components,
           synced_at: new Date().toISOString()
         })
         .select()
@@ -230,9 +195,8 @@ serve(async (req) => {
     }
 
     // === DELETE: Deletar template ===
-    if (method === 'DELETE') {
-      const templateId = body.template_id || url.searchParams.get('template_id');
-      const templateName = body.template_name || url.searchParams.get('template_name');
+    if (action === 'delete') {
+      const templateName = body.template_name;
 
       if (!templateName) {
         return new Response(
@@ -242,7 +206,6 @@ serve(async (req) => {
       }
 
       const metaUrl = `${META_API_BASE_URL}/${META_API_VERSION}/${meta_business_account_id}/message_templates?name=${templateName}`;
-      
       console.log('Deletando template:', templateName);
 
       const metaResponse = await fetch(metaUrl, {
@@ -274,7 +237,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ error: 'Método não suportado' }),
+      JSON.stringify({ error: 'Ação não suportada' }),
       { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

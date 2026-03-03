@@ -84,27 +84,20 @@ export function WhatsAppTemplatesManager({ companyId }: TemplatesManagerProps) {
       else setLoading(true);
       setMetaNotConfigured(false);
 
-      const session = await supabase.auth.getSession();
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates?company_id=${companyId}${sync ? '&sync=true' : ''}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${session.data.session?.access_token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+      const { data: result, error: fnError } = await supabase.functions.invoke('whatsapp-templates', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        body: { company_id: companyId, action: 'list', sync }
+      });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        // Verificar se é erro de conexão não configurada
-        if (result.error?.includes('não configurada') || result.error?.includes('not configured')) {
+      if (fnError) {
+        const errorMsg = result?.error || fnError.message || 'Erro ao carregar templates';
+        if (errorMsg.includes('não configurada') || errorMsg.includes('not configured')) {
           setMetaNotConfigured(true);
           setTemplates([]);
           return;
         }
-        throw new Error(result.error || 'Erro ao carregar templates');
+        throw new Error(errorMsg);
       }
 
       if (sync) {
@@ -200,29 +193,20 @@ export function WhatsAppTemplatesManager({ companyId }: TemplatesManagerProps) {
         });
       }
 
-      const session = await supabase.auth.getSession();
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.data.session?.access_token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            company_id: companyId,
-            name: newTemplate.name,
-            category: newTemplate.category,
-            language: newTemplate.language,
-            components
-          })
+      const { data: result, error: fnError } = await supabase.functions.invoke('whatsapp-templates', {
+        method: 'POST',
+        body: {
+          action: 'create',
+          company_id: companyId,
+          name: newTemplate.name,
+          category: newTemplate.category,
+          language: newTemplate.language,
+          components
         }
-      );
+      });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Erro ao criar template');
+      if (fnError || result?.error) {
+        throw new Error(result?.error || fnError?.message || 'Erro ao criar template');
       }
 
       toast({
@@ -252,26 +236,17 @@ export function WhatsAppTemplatesManager({ companyId }: TemplatesManagerProps) {
     try {
       setDeleting(template.id);
 
-      const session = await supabase.auth.getSession();
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-templates`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${session.data.session?.access_token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            company_id: companyId,
-            template_name: template.name
-          })
+      const { data: result, error: fnError } = await supabase.functions.invoke('whatsapp-templates', {
+        method: 'POST',
+        body: {
+          action: 'delete',
+          company_id: companyId,
+          template_name: template.name
         }
-      );
+      });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Erro ao deletar template');
+      if (fnError || result?.error) {
+        throw new Error(result?.error || fnError?.message || 'Erro ao deletar template');
       }
 
       toast({
