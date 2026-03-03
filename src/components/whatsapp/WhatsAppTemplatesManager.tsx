@@ -85,8 +85,7 @@ export function WhatsAppTemplatesManager({ companyId }: TemplatesManagerProps) {
       setMetaNotConfigured(false);
 
       const { data: result, error: fnError } = await supabase.functions.invoke('whatsapp-templates', {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
         body: { company_id: companyId, action: 'list', sync }
       });
 
