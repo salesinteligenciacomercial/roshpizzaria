@@ -791,17 +791,9 @@ serve(async (req) => {
               connection = conn;
             }
             
-            // Se não encontrar, tentar buscar qualquer conexão com Instagram configurado
-            if (!connection) {
-              const { data: conn } = await supabase
-                .from('whatsapp_connections')
-                .select('company_id, instagram_access_token, instagram_username, meta_access_token, instagram_account_id')
-                .not('instagram_account_id', 'is', null)
-                .limit(1)
-                .single();
-              
-              connection = conn;
-            }
+            // ⚡ REMOVIDO: Fallback genérico que buscava QUALQUER conexão Instagram
+            // Isso causava duplicação quando webhooks de contas não cadastradas
+            // eram roteados incorretamente para a empresa errada
             
             if (!connection) {
               console.warn('❌ Conexão Instagram não encontrada para account_id:', msg.instagram_account_id);
