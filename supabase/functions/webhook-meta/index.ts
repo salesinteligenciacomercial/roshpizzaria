@@ -814,11 +814,17 @@ serve(async (req) => {
             const instagramUserId = msg.from || 'instagram_user';
             
             // ⚡ CORREÇÃO: Segunda verificação de eco usando instagram_account_id do banco
-            // A primeira verificação é feita no transformInstagramPayload, mas pode falhar
-            // se entry.id não corresponder exatamente ao sender.id
             const storedIgAccountId = connection.instagram_account_id || msg.instagram_account_id;
             if (instagramUserId === storedIgAccountId) {
               console.log('📸 [INSTAGRAM] Ignorando eco (sender === stored instagram_account_id):', instagramUserId);
+              continue;
+            }
+
+            // ⚡ CORREÇÃO: Verificar se a mensagem pertence a ESTA conta Instagram
+            // Quando múltiplas contas estão conectadas, o webhook envia a mesma mensagem
+            // para todas as entries. Devemos processar apenas na conta correta (recipient).
+            if (msg.recipient_id && storedIgAccountId && msg.recipient_id !== storedIgAccountId) {
+              console.log('📸 [INSTAGRAM] Ignorando mensagem - destinatário', msg.recipient_id, 'não corresponde à conta', storedIgAccountId);
               continue;
             }
 
