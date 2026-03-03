@@ -520,6 +520,15 @@ function transformInstagramPayload(entry: any) {
     const messageData = messaging.message;
     
     if (messageData && senderId !== recipientId) {
+      // ⚡ CORREÇÃO: Detectar eco de mensagem enviada pelo CRM
+      const isEcho = senderId === instagramAccountId || 
+                     messageData.is_echo === true;
+      
+      if (isEcho) {
+        console.log('📸 [INSTAGRAM] Ignorando eco em messaging direto (sender:', senderId, 'account:', instagramAccountId, ')');
+        continue;
+      }
+
       let messageType = 'text';
       let messageContent = '';
       let mediaUrl = '';

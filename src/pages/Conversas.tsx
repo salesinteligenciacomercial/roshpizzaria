@@ -1665,7 +1665,7 @@ function Conversas() {
             ? (prevSelected.id || '')
             : (prevSelected.phoneNumber || prevSelected.id || '').replace(/[^0-9]/g, '');
           const isMatch = isInstagramMessage 
-            ? (telSelected === telefone || prevSelected.id?.startsWith('ig_'))
+            ? (telSelected === telefone)
             : telSelected === telefone;
           if (isMatch) {
             // ⚡ DEDUPLICAÇÃO: Verificar se mensagem já existe por ID
@@ -1704,8 +1704,8 @@ function Conversas() {
           const telefoneKey = telefone;
           const conversaExistente = prev.find(c => {
             if (isInstagramMessage) {
-              // Instagram: match by ig_ prefix in conversation id
-              return c.id === telefoneKey || c.id?.startsWith('ig_');
+              // Instagram: match by exact ig_ key
+              return c.id === telefoneKey;
             }
             const tel = (c.phoneNumber || c.id || '').replace(/[^0-9]/g, '');
             return tel === telefoneKey;
