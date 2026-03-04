@@ -622,9 +622,10 @@ function Conversas() {
   };
 
   // MELHORIA: Avatar com cache + fallback (NÃO cacheia placeholders para permitir retentativas)
-  const getProfilePictureWithFallback = async (number: string, companyId: string, contactName: string): Promise<string | undefined> => {
+  const getProfilePictureWithFallback = async (number: string, companyId: string, contactName: string, channel?: string): Promise<string | undefined> => {
     if (!number) return undefined;
     const isGroup = /@g\.us$/.test(String(number));
+    const isInstagram = channel === 'instagram' || /^\d{15,20}$/.test(String(number).replace(/^ig_/, ''));
     const normalized = isGroup ? number : normalizePhoneForWA(number);
     const cacheKey = `${companyId || 'no-company'}:${normalized}`;
     const cached = avatarCacheRef.current.get(cacheKey);
@@ -637,7 +638,8 @@ function Conversas() {
         profilePictureUrl?: string;
       }>('get-profile-picture', {
         number: normalized,
-        company_id: companyId
+        company_id: companyId,
+        channel: isInstagram ? 'instagram' : undefined
       }, {
         maxRetries: 2,
         timeout: 8000,
@@ -1362,7 +1364,7 @@ function Conversas() {
             await Promise.all(batch.map(async conv => {
               if (conv.phoneNumber) {
                 try {
-                  const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, userCompanyId, conv.contactName);
+                  const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, userCompanyId, conv.contactName, conv.channel);
                   if (profilePicUrl && !profilePicUrl.includes('ui-avatars.com')) {
                     setConversations(prev => prev.map(c => c.phoneNumber === conv.phoneNumber || c.id === conv.id ? {
                       ...c,
@@ -3851,7 +3853,7 @@ function Conversas() {
             await Promise.all(batch.map(async conv => {
               if (conv.phoneNumber) {
                 try {
-                  const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, companyId, conv.contactName);
+                  const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, companyId, conv.contactName, conv.channel);
                   if (profilePicUrl && !profilePicUrl.includes('ui-avatars.com')) {
                     setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, avatarUrl: profilePicUrl } : c));
                   }

@@ -824,6 +824,7 @@ serve(async (req) => {
             // IGSID (Instagram Scoped ID) NÃO funciona com /{id}?fields=username,name
             // Solução: usar /{ig-page-id}/conversations?user_id={igsid}&platform=instagram
             let instagramUsername = instagramUserId; // Default: ID numérico
+            let instagramProfilePic: string | null = null;
             const igAccessToken = connection.instagram_access_token || connection.meta_access_token;
             const igAccountId = msg.instagram_account_id;
             
@@ -888,6 +889,11 @@ serve(async (req) => {
                       console.log('📸 [INSTAGRAM] User data (fallback):', JSON.stringify(userData));
                       if (userData.name) instagramUsername = userData.name;
                       else if (userData.username) instagramUsername = userData.username;
+                      // ⚡ Capturar foto de perfil do Instagram
+                      if (userData.profile_pic) {
+                        instagramProfilePic = userData.profile_pic;
+                        console.log('📸 [INSTAGRAM] Foto de perfil encontrada:', instagramProfilePic?.substring(0, 80));
+                      }
                     } else {
                       await userRes.text();
                     }
@@ -905,7 +911,7 @@ serve(async (req) => {
               }
             }
             
-            console.log('📸 [INSTAGRAM] Nome final do contato:', instagramUsername);
+            console.log('📸 [INSTAGRAM] Nome final do contato:', instagramUsername, '| Foto:', instagramProfilePic ? 'SIM' : 'NÃO');
 
             // Buscar lead existente pelo Instagram ID ou criar identificador
             const { data: existingLead } = await supabase
@@ -930,6 +936,7 @@ serve(async (req) => {
                     phone: instagramUserId,
                     company_id: company_id,
                     lead_source_type: 'instagram',
+                    profile_picture_url: instagramProfilePic || null,
                     notes: `Lead criado automaticamente via Instagram DM`,
                   })
                   .select('id, name')
@@ -941,6 +948,19 @@ serve(async (req) => {
                 }
               } catch (e) {
                 console.warn('⚠️ [INSTAGRAM] Erro ao criar lead automático:', e);
+              }
+            }
+
+            // ⚡ Atualizar foto de perfil do lead existente se encontramos uma nova
+            if (leadId && instagramProfilePic && (!existingLead?.profile_picture_url || existingLead.profile_picture_url !== instagramProfilePic)) {
+              try {
+                await supabase
+                  .from('leads')
+                  .update({ profile_picture_url: instagramProfilePic })
+                  .eq('id', leadId);
+                console.log('📸 [INSTAGRAM] Foto de perfil salva no lead:', leadId);
+              } catch (e) {
+                console.warn('⚠️ [INSTAGRAM] Erro ao salvar foto no lead:', e);
               }
             }
 
