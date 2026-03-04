@@ -164,13 +164,52 @@ async function saveProfilePictureToLead(
   }
 }
 
+// Buscar foto de perfil do Instagram via Graph API
+async function getInstagramProfilePicture(
+  supabase: any,
+  companyId: string,
+  instagramUserId: string
+): Promise<string | null> {
+  try {
+    // Buscar token de acesso do Instagram
+    const { data: conn } = await supabase
+      .from('whatsapp_connections')
+      .select('instagram_access_token, meta_access_token, instagram_account_id')
+      .eq('company_id', companyId)
+      .maybeSingle();
+
+    const token = conn?.instagram_access_token || conn?.meta_access_token;
+    if (!token) return null;
+
+    const cleanId = String(instagramUserId).replace(/^ig_/, '');
+    console.log('📸 [INSTAGRAM-PIC] Buscando foto para IGSID:', cleanId);
+
+    const userUrl = `https://graph.facebook.com/v23.0/${cleanId}?fields=name,username,profile_pic&access_token=${token}`;
+    const res = await fetch(userUrl);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.profile_pic) {
+        console.log('✅ [INSTAGRAM-PIC] Foto encontrada:', data.profile_pic.substring(0, 80));
+        return data.profile_pic;
+      }
+    } else {
+      const errText = await res.text();
+      console.log('⚠️ [INSTAGRAM-PIC] API retornou erro:', errText.substring(0, 200));
+    }
+    return null;
+  } catch (e) {
+    console.log('⚠️ [INSTAGRAM-PIC] Erro:', e);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { number, company_id, force_refresh } = await req.json();
+    const { number, company_id, force_refresh, channel } = await req.json();
 
     if (!number) {
       return new Response(
@@ -182,7 +221,8 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    const isGroup = /@g\.us$/.test(String(number));
+    const isInstagram = channel === 'instagram' || /^\d{15,20}$/.test(String(number).replace(/^ig_/, ''));
+    const isGroup = !isInstagram && /@g\.us$/.test(String(number));
     const cacheKey = `${company_id || 'global'}:${number}`;
     const cached = profilePictureCache.get(cacheKey);
     
@@ -246,53 +286,76 @@ serve(async (req) => {
       }
     }
 
-    // 2. Buscar via Evolution API ou Meta API (se não tem foto válida ou precisa renovar)
+    // 2. Buscar via API (Instagram ou WhatsApp)
     if ((!profilePictureUrl || needsRefresh) && company_id && supabase) {
-      const { data: conn } = await supabase
-        .from('whatsapp_connections')
-        .select('instance_name, evolution_api_key, evolution_api_url, api_provider, status, meta_access_token, meta_phone_number_id')
-        .eq('company_id', company_id)
-        .maybeSingle();
-
-      // 2a. Tentar Evolution API DIRETAMENTE (sem verificar estado - mais confiável)
-      if (!profilePictureUrl && conn?.instance_name && conn?.evolution_api_key && conn?.evolution_api_url) {
-        console.log('📗 [PROFILE-PICTURE] Tentando Evolution API diretamente...');
-        try {
-          const freshUrl = await getEvolutionProfilePicture(
-            conn.evolution_api_url.replace(/\/$/, ''),
-            conn.instance_name,
-            conn.evolution_api_key,
-            String(number),
-            isGroup
-          );
-          if (freshUrl) {
-            profilePictureUrl = freshUrl;
-            console.log('✅ [PROFILE-PICTURE] Foto encontrada/renovada via Evolution!');
-          } else {
-            console.log('⚠️ [PROFILE-PICTURE] Evolution não retornou foto');
+      
+      // 2-IG. Instagram: Buscar via Graph API
+      if (isInstagram && !profilePictureUrl) {
+        console.log('📸 [PROFILE-PICTURE] Canal Instagram detectado, buscando via Graph API...');
+        profilePictureUrl = await getInstagramProfilePicture(supabase, company_id, String(number));
+        
+        // Salvar no lead se encontrou
+        if (profilePictureUrl) {
+          const cleanId = String(number).replace(/^ig_/, '');
+          try {
+            await supabase
+              .from('leads')
+              .update({ profile_picture_url: profilePictureUrl })
+              .eq('company_id', company_id)
+              .or(`telefone.eq.${cleanId},phone.eq.${cleanId}`);
+          } catch (e) {
+            console.log('⚠️ [PROFILE-PICTURE] Erro ao salvar foto Instagram no lead:', e);
           }
-        } catch (e) {
-          console.log('⚠️ [PROFILE-PICTURE] Evolution falhou:', e);
         }
       }
+      
+      // 2-WA. WhatsApp: Buscar via Evolution ou Meta API
+      if (!isInstagram) {
+        const { data: conn } = await supabase
+          .from('whatsapp_connections')
+          .select('instance_name, evolution_api_key, evolution_api_url, api_provider, status, meta_access_token, meta_phone_number_id')
+          .eq('company_id', company_id)
+          .maybeSingle();
 
-      // 2b. Tentar Meta API como fallback
-      if (!profilePictureUrl && !isGroup && conn?.meta_access_token && conn?.meta_phone_number_id) {
-        profilePictureUrl = await getMetaProfilePicture(
-          conn.meta_access_token,
-          conn.meta_phone_number_id,
-          String(number)
-        );
-      }
+        // 2a. Tentar Evolution API DIRETAMENTE
+        if (!profilePictureUrl && conn?.instance_name && conn?.evolution_api_key && conn?.evolution_api_url) {
+          console.log('📗 [PROFILE-PICTURE] Tentando Evolution API diretamente...');
+          try {
+            const freshUrl = await getEvolutionProfilePicture(
+              conn.evolution_api_url.replace(/\/$/, ''),
+              conn.instance_name,
+              conn.evolution_api_key,
+              String(number),
+              isGroup
+            );
+            if (freshUrl) {
+              profilePictureUrl = freshUrl;
+              console.log('✅ [PROFILE-PICTURE] Foto encontrada/renovada via Evolution!');
+            } else {
+              console.log('⚠️ [PROFILE-PICTURE] Evolution não retornou foto');
+            }
+          } catch (e) {
+            console.log('⚠️ [PROFILE-PICTURE] Evolution falhou:', e);
+          }
+        }
 
-      // Salvar foto encontrada (ou limpar URL expirada se não encontrou nova)
-      if (supabase && company_id && !isGroup) {
-        if (profilePictureUrl) {
-          await saveProfilePictureToLead(supabase, company_id, String(number), profilePictureUrl);
-        } else if (needsRefresh) {
-          // Limpar URL expirada do banco para não ficar tentando usar
-          console.log('🗑️ [PROFILE-PICTURE] Limpando URL expirada do banco');
-          await saveProfilePictureToLead(supabase, company_id, String(number), null);
+        // 2b. Tentar Meta API como fallback
+        if (!profilePictureUrl && !isGroup && conn?.meta_access_token && conn?.meta_phone_number_id) {
+          profilePictureUrl = await getMetaProfilePicture(
+            conn.meta_access_token,
+            conn.meta_phone_number_id,
+            String(number)
+          );
+        }
+
+        // Salvar foto encontrada (ou limpar URL expirada)
+        if (supabase && company_id && !isGroup) {
+          if (profilePictureUrl) {
+            await saveProfilePictureToLead(supabase, company_id, String(number), profilePictureUrl);
+          } else if (needsRefresh) {
+            console.log('🗑️ [PROFILE-PICTURE] Limpando URL expirada do banco');
+            await saveProfilePictureToLead(supabase, company_id, String(number), null);
+          }
         }
       }
     }
