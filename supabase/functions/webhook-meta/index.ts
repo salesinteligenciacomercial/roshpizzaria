@@ -910,11 +910,46 @@ serve(async (req) => {
             // Buscar lead existente pelo Instagram ID ou criar identificador
             const { data: existingLead } = await supabase
               .from('leads')
-              .select('id, name')
+              .select('id, name, profile_picture_url')
               .eq('company_id', company_id)
               .or(`telefone.eq.${instagramUserId},phone.eq.${instagramUserId}`)
               .limit(1)
-              .single();
+              .maybeSingle();
+
+            let leadId = existingLead?.id || null;
+            let leadName = existingLead?.name || instagramUsername;
+
+            // ⚡ AUTO-CREATE: Se não existe lead para este contato Instagram, criar automaticamente
+            if (!leadId && instagramUsername && instagramUsername !== instagramUserId) {
+              try {
+                const { data: newLead, error: createErr } = await supabase
+                  .from('leads')
+                  .insert({
+                    name: instagramUsername,
+                    telefone: instagramUserId,
+                    phone: instagramUserId,
+                    company_id: company_id,
+                    lead_source_type: 'instagram',
+                    notes: `Lead criado automaticamente via Instagram DM`,
+                  })
+                  .select('id, name')
+                  .single();
+                if (!createErr && newLead) {
+                  leadId = newLead.id;
+                  leadName = newLead.name || instagramUsername;
+                  console.log('✅ [INSTAGRAM] Lead criado automaticamente:', leadId, leadName);
+                }
+              } catch (e) {
+                console.warn('⚠️ [INSTAGRAM] Erro ao criar lead automático:', e);
+              }
+            }
+
+            // ⚡ Garantir que nome_contato NUNCA seja o ID numérico quando temos um nome real
+            const finalContactName = (() => {
+              if (existingLead?.name) return existingLead.name;
+              if (instagramUsername && instagramUsername !== instagramUserId) return instagramUsername;
+              return instagramUserId;
+            })();
 
             const conversaData = {
               numero: instagramUserId,
@@ -925,8 +960,8 @@ serve(async (req) => {
               status: 'Recebida',
               fromme: false,
               company_id: company_id,
-              lead_id: existingLead?.id || null,
-              nome_contato: existingLead?.name || instagramUsername,
+              lead_id: leadId,
+              nome_contato: finalContactName,
               midia_url: msg.media_id || null,
               is_group: false,
               origem_api: 'meta',

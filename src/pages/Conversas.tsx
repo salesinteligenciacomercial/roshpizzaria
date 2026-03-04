@@ -1661,15 +1661,13 @@ function Conversas() {
           if (!prevSelected) return prevSelected;
 
           // Verificar se a mensagem pertence à conversa selecionada
-          const telSelected = isInstagramMessage 
-            ? (prevSelected.id || '')
-            : (prevSelected.phoneNumber || prevSelected.id || '').replace(/[^0-9]/g, '');
           const igUserId = telefone.replace(/^ig_/, '');
+          const convId = (prevSelected.id || '').replace(/^ig_/, '');
+          const convPhone = (prevSelected.phoneNumber || '').replace(/^ig_/, '');
           const isMatch = isInstagramMessage 
-            ? (telSelected === telefone || 
-               (prevSelected.phoneNumber || '') === igUserId ||
-               (prevSelected.channel === 'instagram' && (prevSelected.id || '').replace(/^ig_/, '') === igUserId))
-            : telSelected === telefone;
+            ? (convId === igUserId || convPhone === igUserId || prevSelected.id === telefone ||
+               (prevSelected.channel === 'instagram' && convId === igUserId))
+            : (prevSelected.phoneNumber || prevSelected.id || '').replace(/[^0-9]/g, '') === telefone;
           if (isMatch) {
             // ⚡ DEDUPLICAÇÃO: Verificar se mensagem já existe por ID
             const mensagemJaExiste = prevSelected.messages.some(m => m.id === novaMensagem.id);
@@ -1707,12 +1705,15 @@ function Conversas() {
           const telefoneKey = telefone;
           const conversaExistente = prev.find(c => {
             if (isInstagramMessage) {
-              // Instagram: match by id OR phoneNumber containing the IG user ID
+              // Instagram: match robustamente por ID numérico ou prefixado
               const igUserId = telefoneKey.replace(/^ig_/, '');
+              const convId = (c.id || '').replace(/^ig_/, '');
+              const convPhone = (c.phoneNumber || '').replace(/^ig_/, '');
               return c.id === telefoneKey || 
-                     c.phoneNumber === igUserId || 
+                     convId === igUserId ||
+                     convPhone === igUserId || 
                      c.phoneNumber === telefoneKey ||
-                     (c.channel === 'instagram' && (c.id || '').replace(/^ig_/, '') === igUserId);
+                     (c.channel === 'instagram' && convId === igUserId);
             }
             const tel = (c.phoneNumber || c.id || '').replace(/[^0-9]/g, '');
             return tel === telefoneKey;
@@ -1769,14 +1770,22 @@ function Conversas() {
             console.log('✅ [REALTIME-MULTIUSER] Criando nova conversa para TODOS:', telefoneKey);
             const novaConversa: Conversation = {
               id: isInstagramMessage ? telefoneKey : (novaMensagem.lead_id || `conv-${telefoneKey}`),
-              contactName: novaMensagem.nome_contato || telefoneKey,
+              contactName: (() => {
+                // Para nova conversa, usar nome_contato apenas se NÃO for um número puro
+                const nome = novaMensagem.nome_contato || '';
+                const nomeDigits = nome.replace(/[^0-9]/g, '');
+                if (nome && !(nomeDigits.length > 8 && nomeDigits === nome)) {
+                  return nome;
+                }
+                return telefoneKey.replace(/^ig_/, '');
+              })(),
               channel: isInstagramMessage ? 'instagram' : 'whatsapp' as const,
               status: novaMensagemObj.sender === 'user' ? 'answered' : 'waiting',
               lastMessage: novaMensagem.mensagem || '',
               unread: novaMensagemObj.sender === 'contact' ? 1 : 0,
               messages: [novaMensagemObj],
               tags: [],
-              phoneNumber: novaMensagem.telefone_formatado || novaMensagem.numero || telefoneKey,
+              phoneNumber: isInstagramMessage ? telefoneKey : (novaMensagem.telefone_formatado || novaMensagem.numero || telefoneKey),
               isGroup: novaMensagem.is_group || /@g\.us$/.test(novaMensagem.numero || ''),
               origemApi: isInstagramMessage ? 'meta' : undefined,
               avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent((novaMensagem.nome_contato || telefoneKey).substring(0, 2))}&background=0ea5e9&color=fff`
@@ -3247,11 +3256,14 @@ function Conversas() {
       // ETAPA 1: Criar mapa de nome -> telefones para detectar duplicatas por nome
       const nomeParaTelefones = new Map<string, Set<string>>();
       conversasMap.forEach((msgs, key) => {
-        // Pegar nome do contato (ignorar nomes genéricos)
-        const nomesProibidos = ['jeohvah lima', 'jeohvah i.a', 'jeova costa de lima', 'jeo', key];
+        // Pegar nome do contato (ignorar nomes que são apenas o telefone/ID)
+        const keyDigits = key.replace(/[^0-9]/g, '');
         const nomeContato = msgs.find(m => {
-          const nome = m.nome_contato?.trim().toLowerCase();
-          return nome && nome !== key && !nomesProibidos.includes(nome);
+          const nome = m.nome_contato?.trim();
+          if (!nome) return false;
+          // Ignorar nomes que são apenas números (telefone/ID)
+          const nomeDigits = nome.replace(/[^0-9]/g, '');
+          return nome !== key && nome !== keyDigits && !(nomeDigits.length > 8 && nomeDigits === nome);
         })?.nome_contato?.trim();
         if (nomeContato && nomeContato !== key) {
           if (!nomeParaTelefones.has(nomeContato)) {
@@ -3463,15 +3475,21 @@ function Conversas() {
           // PRIORIDADE 1: Nome do Lead (se existir) - APENAS para contatos individuais
           contactName = leadInfo?.name || '';
 
-          // PRIORIDADE 2: Nome da mensagem (para contatos individuais)
-          const nomesProibidos = ['jeohvah lima', 'jeohvah i.a', 'jeova costa de lima', 'jeo', telefone];
-          if (!contactName || contactName === telefone) {
-            const nomeMensagem = mensagens.find(m => {
-              const nomeMsg = m.nome_contato?.trim().toLowerCase();
-              return nomeMsg && nomeMsg !== telefone && !nomesProibidos.includes(nomeMsg);
-            })?.nome_contato;
-            if (nomeMensagem) {
-              contactName = nomeMensagem;
+          // PRIORIDADE 2: Nome da mensagem (priorizar mensagens mais recentes com nome real)
+          const telefoneDigits = telefone.replace(/[^0-9]/g, '');
+          if (!contactName || contactName === telefone || contactName === telefoneDigits) {
+            // Buscar da mensagem mais recente que tenha um nome real (não número)
+            const mensagensComNome = mensagens
+              .filter(m => {
+                const nome = m.nome_contato?.trim();
+                if (!nome) return false;
+                const nomeDigits = nome.replace(/[^0-9]/g, '');
+                // Rejeitar nomes que são apenas números (telefone/ID do Instagram)
+                return nome !== telefone && nome !== telefoneDigits && !(nomeDigits.length > 8 && nomeDigits === nome);
+              })
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            if (mensagensComNome.length > 0) {
+              contactName = mensagensComNome[0].nome_contato!;
             }
           }
 
