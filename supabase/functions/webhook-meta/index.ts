@@ -933,7 +933,8 @@ serve(async (req) => {
               whatsapp_message_id: msg.message_id || null,
             };
 
-            // ⚡ CORREÇÃO: Verificar duplicata por message_id antes de inserir
+            // ⚡ CORREÇÃO ANTI-DUPLICAÇÃO: Múltiplas verificações
+            // 1. Verificar por message_id (mid) do Meta
             if (msg.message_id) {
               const { data: existingMsg } = await supabase
                 .from('conversas')
@@ -944,6 +945,26 @@ serve(async (req) => {
               
               if (existingMsg) {
                 console.log('📸 [INSTAGRAM] Mensagem duplicada ignorada (mid já existe):', msg.message_id);
+                continue;
+              }
+            }
+            
+            // 2. Verificar se já existe mensagem idêntica enviada pelo CRM nos últimos 30 segundos
+            // (protege contra race condition onde o mid ainda não foi salvo)
+            {
+              const thirtySecsAgo = new Date(Date.now() - 30000).toISOString();
+              const { data: recentDup } = await supabase
+                .from('conversas')
+                .select('id')
+                .eq('company_id', company_id)
+                .eq('mensagem', msg.content)
+                .or(`numero.eq.${instagramUserId},telefone_formatado.eq.${instagramUserId}`)
+                .gte('created_at', thirtySecsAgo)
+                .limit(1)
+                .maybeSingle();
+              
+              if (recentDup) {
+                console.log('📸 [INSTAGRAM] Mensagem duplicada ignorada (conteúdo idêntico recente):', msg.content?.substring(0, 50));
                 continue;
               }
             }

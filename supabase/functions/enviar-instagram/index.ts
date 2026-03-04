@@ -40,7 +40,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Buscar configuração Instagram da empresa (aceitar com ou sem instagram_access_token)
+    // Buscar configuração Instagram da empresa
     const { data: connection, error: connError } = await supabase
       .from('whatsapp_connections')
       .select('instagram_access_token, instagram_account_id, instagram_username, meta_access_token')
@@ -57,9 +57,6 @@ serve(async (req) => {
       );
     }
 
-    // Para Instagram Messaging API, usar instagram_access_token (IGAAT) como preferência
-    // O endpoint correto é graph.instagram.com (NÃO graph.facebook.com)
-    // Ref: https://developers.facebook.com/community/threads/1030645562609158/
     const igToken = connection.instagram_access_token;
     const metaToken = connection.meta_access_token;
     const accountId = connection.instagram_account_id;
@@ -72,12 +69,7 @@ serve(async (req) => {
     }
 
     console.log('📸 [INSTAGRAM-SEND] Enviando para:', recipient_id, 'account_id:', accountId);
-    console.log('📸 [INSTAGRAM-SEND] Tem IG token:', !!igToken, '| Tem Meta token:', !!metaToken);
 
-    // Estratégia de endpoints em ordem de prioridade:
-    // 1. graph.instagram.com/me/messages com IG token (endpoint correto para Instagram Business Login)
-    // 2. graph.facebook.com/{account_id}/messages com Meta token (fallback)
-    // 3. graph.facebook.com/me/messages com Meta token (último recurso)
     const endpoints: Array<{ url: string; token: string }> = [];
     
     if (igToken) {
@@ -120,6 +112,39 @@ serve(async (req) => {
 
       if (response.ok) {
         console.log('✅ [INSTAGRAM-SEND] Mensagem enviada com sucesso via:', ep.url, data);
+        
+        // ⚡ CORREÇÃO ANTI-DUPLICAÇÃO: Salvar o message_id (mid) do Meta na mensagem do banco
+        // Isso permite que o webhook-meta detecte a duplicata quando receber o echo
+        const messageId = data.message_id;
+        if (messageId) {
+          try {
+            // Buscar a mensagem mais recente enviada pelo CRM para este destinatário
+            const { data: recentMsg, error: findErr } = await supabase
+              .from('conversas')
+              .select('id')
+              .eq('company_id', company_id)
+              .eq('fromme', true)
+              .eq('mensagem', mensagem)
+              .or(`numero.eq.${recipient_id},telefone_formatado.eq.${recipient_id}`)
+              .is('whatsapp_message_id', null)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            
+            if (recentMsg && !findErr) {
+              await supabase
+                .from('conversas')
+                .update({ whatsapp_message_id: messageId })
+                .eq('id', recentMsg.id);
+              console.log('✅ [INSTAGRAM-SEND] whatsapp_message_id salvo:', messageId, 'para msg:', recentMsg.id);
+            } else {
+              console.log('⚠️ [INSTAGRAM-SEND] Não encontrou mensagem recente para vincular mid:', messageId);
+            }
+          } catch (updateErr) {
+            console.error('⚠️ [INSTAGRAM-SEND] Erro ao salvar mid:', updateErr);
+          }
+        }
+
         return new Response(
           JSON.stringify({ 
             success: true, 
@@ -135,7 +160,6 @@ serve(async (req) => {
       lastError = data;
     }
 
-    // Todos os endpoints falharam
     console.error('❌ [INSTAGRAM-SEND] Todos os endpoints falharam. Último erro:', JSON.stringify(lastError));
     return new Response(
       JSON.stringify({ 
