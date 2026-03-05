@@ -780,7 +780,7 @@ serve(async (req) => {
             // Buscar conexão pelo instagram_account_id
             let connection = null;
             
-            // Primeiro tentar pelo instagram_account_id
+            // Primeiro tentar pelo instagram_account_id exato
             if (msg.instagram_account_id) {
               const { data: conn } = await supabase
                 .from('whatsapp_connections')
@@ -791,9 +791,24 @@ serve(async (req) => {
               connection = conn;
             }
             
-            // ⚡ REMOVIDO: Fallback genérico que buscava QUALQUER conexão Instagram
-            // Isso causava duplicação quando webhooks de contas não cadastradas
-            // eram roteados incorretamente para a empresa errada
+            // ⚡ Fallback para subcontas: buscar por instagram_account_id parcial ou meta_access_token ativo
+            if (!connection && msg.instagram_account_id) {
+              const { data: conns } = await supabase
+                .from('whatsapp_connections')
+                .select('company_id, instagram_access_token, instagram_username, meta_access_token, instagram_account_id')
+                .not('instagram_account_id', 'is', null)
+                .not('meta_access_token', 'is', null);
+              
+              if (conns && conns.length > 0) {
+                // Verificar se alguma conexão tem token válido para esta conta
+                for (const c of conns) {
+                  if (c.instagram_account_id === msg.instagram_account_id) {
+                    connection = c;
+                    break;
+                  }
+                }
+              }
+            }
             
             if (!connection) {
               console.warn('❌ Conexão Instagram não encontrada para account_id:', msg.instagram_account_id);
@@ -925,13 +940,43 @@ serve(async (req) => {
             let leadId = existingLead?.id || null;
             let leadName = existingLead?.name || instagramUsername;
 
+            // ⚡ CORREÇÃO SUBCONTAS: Se o lead existe mas o nome é o ID numérico, atualizar com nome real
+            if (leadId && existingLead?.name && instagramUsername !== instagramUserId) {
+              const existingName = existingLead.name.trim();
+              // Verificar se o nome atual é um ID numérico (só dígitos, 10+ chars)
+              const isNumericName = /^\d{10,}$/.test(existingName);
+              if (isNumericName && existingName !== instagramUsername) {
+                try {
+                  await supabase
+                    .from('leads')
+                    .update({ name: instagramUsername })
+                    .eq('id', leadId);
+                  leadName = instagramUsername;
+                  console.log('📸 [INSTAGRAM] Nome do lead atualizado de ID numérico para:', instagramUsername);
+                  
+                  // Também atualizar conversas anteriores que ficaram com ID numérico
+                  await supabase
+                    .from('conversas')
+                    .update({ nome_contato: instagramUsername })
+                    .eq('company_id', company_id)
+                    .eq('telefone_formatado', instagramUserId)
+                    .eq('nome_contato', existingName);
+                  console.log('📸 [INSTAGRAM] Conversas anteriores atualizadas com nome correto');
+                } catch (e) {
+                  console.warn('⚠️ [INSTAGRAM] Erro ao atualizar nome do lead:', e);
+                }
+              }
+            }
+
             // ⚡ AUTO-CREATE: Se não existe lead para este contato Instagram, criar automaticamente
-            if (!leadId && instagramUsername && instagramUsername !== instagramUserId) {
+            if (!leadId) {
+              // Usar o melhor nome disponível (username real ou ID como fallback)
+              const leadNameToCreate = instagramUsername !== instagramUserId ? instagramUsername : `Instagram ${instagramUserId.slice(-6)}`;
               try {
                 const { data: newLead, error: createErr } = await supabase
                   .from('leads')
                   .insert({
-                    name: instagramUsername,
+                    name: leadNameToCreate,
                     telefone: instagramUserId,
                     phone: instagramUserId,
                     company_id: company_id,
@@ -943,7 +988,7 @@ serve(async (req) => {
                   .single();
                 if (!createErr && newLead) {
                   leadId = newLead.id;
-                  leadName = newLead.name || instagramUsername;
+                  leadName = newLead.name || leadNameToCreate;
                   console.log('✅ [INSTAGRAM] Lead criado automaticamente:', leadId, leadName);
                 }
               } catch (e) {
