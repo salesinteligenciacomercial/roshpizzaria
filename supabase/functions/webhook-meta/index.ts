@@ -826,7 +826,7 @@ serve(async (req) => {
             let instagramUsername = instagramUserId; // Default: ID numérico
             let instagramProfilePic: string | null = null;
             const igAccessToken = connection.instagram_access_token || connection.meta_access_token;
-            const igAccountId = msg.instagram_account_id;
+            const igAccountId = connection.instagram_account_id || msg.instagram_account_id;
             
             // Método 0 (CACHE): Buscar nome de conversa anterior no banco
             try {
