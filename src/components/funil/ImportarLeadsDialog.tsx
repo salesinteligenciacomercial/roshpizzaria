@@ -3,7 +3,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, FileSpreadsheet, AlertCircle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Upload, FileSpreadsheet, AlertCircle, ClipboardPaste } from "lucide-react";
+import { ImportarContatosTexto } from "./ImportarContatosTexto";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -804,6 +806,32 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
           <DialogTitle>Importar Leads</DialogTitle>
         </DialogHeader>
 
+        <Tabs defaultValue="arquivo" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="arquivo">
+              <Upload className="mr-2 h-4 w-4" />
+              Arquivo
+            </TabsTrigger>
+            <TabsTrigger value="colar">
+              <ClipboardPaste className="mr-2 h-4 w-4" />
+              Colar Números
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="colar" className="mt-4">
+            <ImportarContatosTexto
+              onLeadsImported={onLeadsImported}
+              onClose={() => {
+                setOpen(false);
+                setFile(null);
+                setPreview([]);
+                setImportReport(null);
+                setImportTags("");
+              }}
+            />
+          </TabsContent>
+
+          <TabsContent value="arquivo" className="mt-4">
         <div className="space-y-4">
           <Alert>
             <AlertCircle className="h-4 w-4" />
@@ -945,6 +973,8 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
             </Button>
           </div>
         </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
