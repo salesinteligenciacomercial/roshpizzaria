@@ -1249,6 +1249,7 @@ export default function Configuracoes() {
         </TabsContent>
 
         <TabsContent value="avancado" className="space-y-4">
+          <StorageCleanup />
           <Card>
             <CardHeader>
               <CardTitle className="text-destructive">🚨 Zona de Perigo</CardTitle>
