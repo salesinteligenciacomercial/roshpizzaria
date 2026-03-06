@@ -78,7 +78,12 @@ export function useTagsManager(): TagsManagerHook {
       globalTags = sortedTags;
       setAllTags(sortedTags);
       notifyListeners();
-    } catch (error) {
+    } catch (error: any) {
+      // Silently ignore AbortError from auth lock contention
+      if (error?.name === 'AbortError' || error?.message?.includes('Lock broken')) {
+        console.debug("Tags: auth lock contention, will retry on next cycle");
+        return;
+      }
       console.error("Erro ao carregar tags:", error);
     } finally {
       setLoading(false);
