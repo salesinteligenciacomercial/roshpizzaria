@@ -83,3 +83,6 @@ verify_jwt = false
 
 [functions.configure-webhook]
 verify_jwt = false
+
+[functions.nvoip-call]
+verify_jwt = true
