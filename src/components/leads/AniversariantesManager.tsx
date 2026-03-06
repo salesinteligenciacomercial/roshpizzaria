@@ -320,9 +320,9 @@ export function AniversariantesManager() {
       toast.success(`Mensagem de aniversário enviada para ${lead.name}!`);
       carregarDados();
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao enviar mensagem:", error);
-      toast.error("Erro ao enviar mensagem de aniversário");
+      toast.error(error?.message || "Erro ao enviar mensagem de aniversário");
     } finally {
       setEnviando(prev => ({ ...prev, [lead.id]: false }));
     }
