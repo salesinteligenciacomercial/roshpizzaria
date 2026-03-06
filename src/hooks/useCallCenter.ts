@@ -29,10 +29,26 @@ interface CallState {
   leadName: string;
   phoneNumber: string;
   callRecordId: string | null;
+  nvoipCallId: string | null;
   startTime: Date | null;
   duration: number;
   isMuted: boolean;
 }
+
+// Map Nvoip status → CRM status
+const mapNvoipStatus = (nvoipStatus: string): CallStatus => {
+  switch (nvoipStatus) {
+    case 'calling_origin': return 'iniciando';
+    case 'calling_destination': return 'chamando';
+    case 'ringing': return 'tocando';
+    case 'established': return 'conectado';
+    case 'noanswer':
+    case 'busy':
+    case 'failed': return 'falha';
+    case 'finished': return 'finalizado';
+    default: return 'chamando';
+  }
+};
 
 export const useCallCenter = () => {
   const [callState, setCallState] = useState<CallState>({
@@ -42,6 +58,7 @@ export const useCallCenter = () => {
     leadName: '',
     phoneNumber: '',
     callRecordId: null,
+    nvoipCallId: null,
     startTime: null,
     duration: 0,
     isMuted: false
@@ -50,7 +67,7 @@ export const useCallCenter = () => {
   const [callHistory, setCallHistory] = useState<CallRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const simulationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load call history
   const loadCallHistory = useCallback(async () => {
@@ -83,6 +100,88 @@ export const useCallCenter = () => {
     }
   }, []);
 
+  // Call Nvoip edge function
+  const callNvoip = useCallback(async (action: string, payload: Record<string, any> = {}) => {
+    const { data, error } = await supabase.functions.invoke('nvoip-call', {
+      body: { action, ...payload }
+    });
+    if (error) throw new Error(error.message || 'Erro na edge function');
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }, []);
+
+  // Poll call status from Nvoip
+  const startPolling = useCallback((nvoipCallId: string, callRecordId: string) => {
+    // Start duration counter
+    durationIntervalRef.current = setInterval(() => {
+      setCallState(prev => {
+        if (prev.status === 'conectado') {
+          return { ...prev, duration: prev.duration + 1 };
+        }
+        return prev;
+      });
+    }, 1000);
+
+    // Poll every 2 seconds
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const result = await callNvoip('check-call', { callId: nvoipCallId });
+        
+        // Nvoip returns array or object
+        const callData = Array.isArray(result) ? result[0] : result;
+        if (!callData) return;
+
+        const nvoipStatus = callData.status || callData.callStatus;
+        const crmStatus = mapNvoipStatus(nvoipStatus);
+
+        setCallState(prev => {
+          if (prev.status === crmStatus) return prev;
+          return { ...prev, status: crmStatus };
+        });
+
+        // Update DB status
+        await supabase
+          .from('call_history')
+          .update({ status: crmStatus })
+          .eq('id', callRecordId);
+
+        // If call ended, stop polling and save recording
+        if (['finalizado', 'falha'].includes(crmStatus)) {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          if (durationIntervalRef.current) {
+            clearInterval(durationIntervalRef.current);
+            durationIntervalRef.current = null;
+          }
+
+          const recordingUrl = callData.linkAudio || callData.recording_url || null;
+          const duration = callData.duration || callData.callDuration || 0;
+
+          await supabase
+            .from('call_history')
+            .update({
+              status: crmStatus,
+              call_end: new Date().toISOString(),
+              duration_seconds: duration,
+              recording_url: recordingUrl,
+              call_result: crmStatus === 'falha' ? nvoipStatus : 'atendida'
+            })
+            .eq('id', callRecordId);
+
+          setCallState(prev => ({
+            ...prev,
+            duration: duration || prev.duration,
+            status: crmStatus
+          }));
+        }
+      } catch (error) {
+        console.error('Erro no polling:', error);
+      }
+    }, 2000);
+  }, [callNvoip]);
+
   // Start a call
   const startCall = useCallback(async (leadId: string | null, leadName: string, phoneNumber: string) => {
     try {
@@ -102,6 +201,18 @@ export const useCallCenter = () => {
         toast.error('Empresa não encontrada');
         return false;
       }
+
+      // Get Nvoip config (NumberSIP)
+      const configResult = await callNvoip('get-config');
+      if (!configResult?.config?.number_sip) {
+        toast.error('Configuração Nvoip não encontrada. Configure o NumberSIP.');
+        return false;
+      }
+
+      const numberSip = configResult.config.number_sip;
+
+      // Clean phone number
+      const cleanPhone = phoneNumber.replace(/\D/g, '');
 
       // Create call record
       const { data: callRecord, error } = await supabase
@@ -126,47 +237,43 @@ export const useCallCenter = () => {
         leadName,
         phoneNumber,
         callRecordId: callRecord.id,
+        nvoipCallId: null,
         startTime: new Date(),
         duration: 0,
         isMuted: false
       });
 
-      // Simulate call progression (will be replaced with real telephony integration)
-      simulateCallProgression(callRecord.id);
+      // Make real call via Nvoip
+      const nvoipResult = await callNvoip('make-call', {
+        caller: numberSip,
+        called: cleanPhone
+      });
 
+      const nvoipCallId = nvoipResult?.callId || nvoipResult?.id;
+      if (!nvoipCallId) {
+        throw new Error('Nvoip não retornou callId');
+      }
+
+      // Save nvoip_call_id
+      await supabase
+        .from('call_history')
+        .update({ nvoip_call_id: nvoipCallId })
+        .eq('id', callRecord.id);
+
+      setCallState(prev => ({ ...prev, nvoipCallId }));
+
+      // Start polling
+      startPolling(nvoipCallId, callRecord.id);
+
+      toast.success('Ligação iniciada!');
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao iniciar ligação:', error);
-      toast.error('Erro ao iniciar ligação');
+      toast.error(`Erro ao iniciar ligação: ${error.message || 'Erro desconhecido'}`);
+      setCallState(prev => ({ ...prev, status: 'falha', isActive: false }));
       return false;
     }
-  }, []);
-
-  // Simulate call status changes (for testing - will be replaced with real telephony)
-  const simulateCallProgression = useCallback((callId: string) => {
-    // After 1s: chamando
-    simulationTimeoutRef.current = setTimeout(async () => {
-      setCallState(prev => ({ ...prev, status: 'chamando' }));
-      await supabase.from('call_history').update({ status: 'chamando' }).eq('id', callId);
-
-      // After 2s more: tocando
-      simulationTimeoutRef.current = setTimeout(async () => {
-        setCallState(prev => ({ ...prev, status: 'tocando' }));
-        await supabase.from('call_history').update({ status: 'tocando' }).eq('id', callId);
-
-        // After 2s more: conectado (simulating answer)
-        simulationTimeoutRef.current = setTimeout(async () => {
-          setCallState(prev => ({ ...prev, status: 'conectado' }));
-          await supabase.from('call_history').update({ status: 'conectado' }).eq('id', callId);
-
-          // Start duration counter
-          durationIntervalRef.current = setInterval(() => {
-            setCallState(prev => ({ ...prev, duration: prev.duration + 1 }));
-          }, 1000);
-        }, 2000);
-      }, 2000);
-    }, 1000);
-  }, []);
+  }, [callNvoip, startPolling]);
 
   // End call
   const endCall = useCallback(async (result?: string) => {
@@ -175,9 +282,18 @@ export const useCallCenter = () => {
       durationIntervalRef.current = null;
     }
 
-    if (simulationTimeoutRef.current) {
-      clearTimeout(simulationTimeoutRef.current);
-      simulationTimeoutRef.current = null;
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+
+    // End call on Nvoip
+    if (callState.nvoipCallId) {
+      try {
+        await callNvoip('end-call', { callId: callState.nvoipCallId });
+      } catch (error) {
+        console.error('Erro ao encerrar chamada na Nvoip:', error);
+      }
     }
 
     if (callState.callRecordId) {
@@ -200,7 +316,7 @@ export const useCallCenter = () => {
       ...prev,
       status: 'finalizado'
     }));
-  }, [callState.callRecordId, callState.duration]);
+  }, [callState.callRecordId, callState.duration, callState.nvoipCallId, callNvoip]);
 
   // Save notes after call
   const saveCallNotes = useCallback(async (notes: string) => {
@@ -214,7 +330,6 @@ export const useCallCenter = () => {
 
       if (error) throw error;
 
-      // Reset call state
       setCallState({
         isActive: false,
         status: 'idle',
@@ -222,6 +337,7 @@ export const useCallCenter = () => {
         leadName: '',
         phoneNumber: '',
         callRecordId: null,
+        nvoipCallId: null,
         startTime: null,
         duration: 0,
         isMuted: false
@@ -256,7 +372,6 @@ export const useCallCenter = () => {
 
       if (!userRole?.company_id) return null;
 
-      // Get today's date range
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
@@ -283,7 +398,6 @@ export const useCallCenter = () => {
       const totalDuration = calls.reduce((acc, c) => acc + (c.duration_seconds || 0), 0);
       const avgDuration = totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0;
 
-      // Calculate user rankings
       const userCallCounts: Record<string, number> = {};
       allCallsData.forEach(call => {
         userCallCounts[call.user_id] = (userCallCounts[call.user_id] || 0) + 1;
@@ -310,8 +424,8 @@ export const useCallCenter = () => {
       if (durationIntervalRef.current) {
         clearInterval(durationIntervalRef.current);
       }
-      if (simulationTimeoutRef.current) {
-        clearTimeout(simulationTimeoutRef.current);
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
       }
     };
   }, []);

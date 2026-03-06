@@ -753,7 +753,9 @@ export type Database = {
           lead_name: string | null
           notes: string | null
           notes_required: boolean | null
+          nvoip_call_id: string | null
           phone_number: string
+          recording_url: string | null
           status: string
           updated_at: string
           user_id: string
@@ -770,7 +772,9 @@ export type Database = {
           lead_name?: string | null
           notes?: string | null
           notes_required?: boolean | null
+          nvoip_call_id?: string | null
           phone_number: string
+          recording_url?: string | null
           status?: string
           updated_at?: string
           user_id: string
@@ -787,7 +791,9 @@ export type Database = {
           lead_name?: string | null
           notes?: string | null
           notes_required?: boolean | null
+          nvoip_call_id?: string | null
           phone_number?: string
+          recording_url?: string | null
           status?: string
           updated_at?: string
           user_id?: string
@@ -3634,6 +3640,41 @@ export type Database = {
             foreignKeyName: "notificacoes_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nvoip_config: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          number_sip: string
+          updated_at: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          number_sip: string
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          number_sip?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nvoip_config_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },

@@ -1,0 +1,192 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const NVOIP_BASE = "https://api.nvoip.com.br/v2";
+
+// Cache token in memory (resets on cold start, but good enough for burst calls)
+let cachedToken: string | null = null;
+let tokenExpiresAt = 0;
+
+async function getAccessToken(): Promise<string> {
+  if (cachedToken && Date.now() < tokenExpiresAt) {
+    return cachedToken;
+  }
+
+  const userToken = Deno.env.get("NVOIP_USER_TOKEN");
+  if (!userToken) throw new Error("NVOIP_USER_TOKEN not configured");
+
+  const res = await fetch(`${NVOIP_BASE}/oauth/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "client_credentials",
+      user_token: userToken,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OAuth failed (${res.status}): ${text}`);
+  }
+
+  const data = await res.json();
+  cachedToken = data.access_token;
+  // Expire 1h before actual expiry to be safe
+  tokenExpiresAt = Date.now() + (data.expires_in - 3600) * 1000;
+  return cachedToken!;
+}
+
+async function makeCall(caller: string, called: string): Promise<any> {
+  const token = await getAccessToken();
+
+  const res = await fetch(`${NVOIP_BASE}/calls/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      caller,
+      called,
+      napikey: Deno.env.get("NVOIP_NAPIKEY"),
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`make-call failed (${res.status}): ${text}`);
+  }
+
+  return await res.json();
+}
+
+async function checkCall(callId: string): Promise<any> {
+  const token = await getAccessToken();
+
+  const res = await fetch(`${NVOIP_BASE}/calls?callId=${callId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`check-call failed (${res.status}): ${text}`);
+  }
+
+  return await res.json();
+}
+
+async function endCall(callId: string): Promise<any> {
+  const token = await getAccessToken();
+
+  const res = await fetch(`${NVOIP_BASE}/endcall?callId=${callId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`end-call failed (${res.status}): ${text}`);
+  }
+
+  return await res.json();
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    // Verify JWT
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "No authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const body = await req.json();
+    const { action } = body;
+
+    let result: any;
+
+    switch (action) {
+      case "make-call": {
+        const { caller, called } = body;
+        if (!caller || !called) {
+          throw new Error("caller and called are required");
+        }
+        result = await makeCall(caller, called);
+        break;
+      }
+      case "check-call": {
+        const { callId } = body;
+        if (!callId) throw new Error("callId is required");
+        result = await checkCall(callId);
+        break;
+      }
+      case "end-call": {
+        const { callId } = body;
+        if (!callId) throw new Error("callId is required");
+        result = await endCall(callId);
+        break;
+      }
+      case "get-config": {
+        // Get nvoip_config for user's company
+        const { data: userRole } = await supabase
+          .from("user_roles")
+          .select("company_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (!userRole?.company_id) {
+          throw new Error("Company not found");
+        }
+
+        const { data: config } = await supabase
+          .from("nvoip_config")
+          .select("*")
+          .eq("company_id", userRole.company_id)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        result = { config, company_id: userRole.company_id };
+        break;
+      }
+      default:
+        throw new Error(`Unknown action: ${action}`);
+    }
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("nvoip-call error:", error);
+    return new Response(
+      JSON.stringify({ error: error.message || "Internal error" }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+});
