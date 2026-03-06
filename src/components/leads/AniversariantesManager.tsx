@@ -250,7 +250,41 @@ export function AniversariantesManager() {
       
       console.log("Resposta enviar-whatsapp:", { error, data });
 
-      if (error) throw error;
+      // Tratar erros da edge function com mensagens descritivas
+      if (error) {
+        // Tentar extrair mensagem de erro do corpo da resposta
+        let errorMsg = "Erro ao enviar mensagem";
+        try {
+          if (error instanceof Error && 'context' in error) {
+            const ctx = (error as any).context;
+            if (ctx?.body) {
+              const reader = ctx.body.getReader?.();
+              if (reader) {
+                const { value } = await reader.read();
+                const text = new TextDecoder().decode(value);
+                const parsed = JSON.parse(text);
+                errorMsg = parsed.error || errorMsg;
+              }
+            }
+          }
+        } catch (_) {
+          errorMsg = error.message || errorMsg;
+        }
+        
+        // Mostrar erro específico ao usuário
+        if (errorMsg.includes('desconectad') || errorMsg.includes('Connection') || errorMsg.includes('QR Code')) {
+          throw new Error("WhatsApp desconectado. Reconecte sua instância nas Configurações → WhatsApp.");
+        } else if (errorMsg.includes('JANELA_24H')) {
+          throw new Error("Janela de 24h expirada. Este contato precisa enviar uma mensagem primeiro.");
+        } else {
+          throw new Error(errorMsg);
+        }
+      }
+      
+      // Verificar se a resposta indica falha
+      if (data && data.error) {
+        throw new Error(data.error);
+      }
 
       // Formatar telefone para salvar na conversa
       const telefoneFormatado = telefone.replace(/\D/g, "").replace(/^55/, "");
