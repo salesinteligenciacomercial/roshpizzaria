@@ -86,3 +86,6 @@ verify_jwt = false
 
 [functions.nvoip-call]
 verify_jwt = true
+
+[functions.cleanup-storage]
+verify_jwt = true

@@ -44,6 +44,7 @@ import { GmailConfig } from "@/components/configuracoes/GmailConfig";
 import { ProdutosServicosManager } from "@/components/configuracoes/ProdutosServicosManager";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { WebhooksConfig } from "@/components/configuracoes/WebhooksConfig";
+import { StorageCleanup } from "@/components/configuracoes/StorageCleanup";
 import { UsuariosSubcontaDialog } from "@/components/configuracoes/UsuariosSubcontaDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -1248,6 +1249,7 @@ export default function Configuracoes() {
         </TabsContent>
 
         <TabsContent value="avancado" className="space-y-4">
+          <StorageCleanup />
           <Card>
             <CardHeader>
               <CardTitle className="text-destructive">🚨 Zona de Perigo</CardTitle>
