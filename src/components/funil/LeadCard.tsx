@@ -140,16 +140,36 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
     return "55" + n;
   };
 
-  const getCompanyId = async (): Promise<string | null> => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-    const { data: userRole } = await supabase
-      .from("user_roles")
-      .select("company_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    return userRole?.company_id || null;
-  };
+  const getCompanyId = useCallback(async (): Promise<string | null> => {
+    // Use cached value if available
+    if (userCompanyId) return userCompanyId;
+    
+    // Module-level cache to avoid concurrent auth calls across cards
+    if ((getCompanyId as any).__cache) return (getCompanyId as any).__cache;
+    if ((getCompanyId as any).__pending) return (getCompanyId as any).__pending;
+    
+    const promise = (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return null;
+        const { data: userRole } = await supabase
+          .from("user_roles")
+          .select("company_id")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+        const cid = userRole?.company_id || null;
+        if (cid) (getCompanyId as any).__cache = cid;
+        return cid;
+      } catch {
+        return null;
+      } finally {
+        (getCompanyId as any).__pending = null;
+      }
+    })();
+    
+    (getCompanyId as any).__pending = promise;
+    return promise;
+  }, [userCompanyId]);
 
   useEffect(() => {
     const fetchAvatar = async () => {
@@ -374,8 +394,10 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
       if (!error && count !== null) {
         setAttachmentsCount(count);
       }
-    } catch (error) {
-      console.error("Erro ao carregar anexos:", error);
+    } catch (error: any) {
+      if (error?.name !== 'AbortError' && !error?.message?.includes('Lock broken')) {
+        console.error("Erro ao carregar anexos:", error);
+      }
     }
   }, [lead.id]);
 

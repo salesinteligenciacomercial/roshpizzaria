@@ -250,6 +250,14 @@ export default function KanbanPage() {
         })));
 
       } catch (err: any) {
+        // Ignore AbortError from auth lock contention - just retry silently
+        if (err?.name === 'AbortError' || err?.message?.includes('Lock broken')) {
+          console.debug("Kanban: auth lock contention, retrying...");
+          if (mounted) {
+            setTimeout(() => loadData(), 1000);
+          }
+          return;
+        }
         console.error("Erro ao carregar dados:", err);
         if (mounted) {
           setError(err.message || "Erro ao carregar dados");
