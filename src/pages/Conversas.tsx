@@ -5049,8 +5049,12 @@ function Conversas() {
         data: userRole
       } = await supabase.from('user_roles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id).single();
 
-      // Enviar via WhatsApp com company_id
-      const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
+      // Enviar via API correta (Instagram ou WhatsApp)
+      const isInstagramChannel = selectedConv.channel === 'instagram';
+      const rawPhoneOrId = selectedConv.phoneNumber || selectedConv.id;
+      const numeroNormalizado = isInstagramChannel 
+        ? rawPhoneOrId.replace(/^ig_/, '').replace(/[^0-9]/g, '') 
+        : normalizePhoneForWA(rawPhoneOrId);
       const quotedPayload = replyingTo && selectedConv.messages.find(m => m.id === replyingTo) ? {
         quoted: {
           key: {
@@ -5062,32 +5066,55 @@ function Conversas() {
         },
         quotedMessageId: replyingTo
       } : {};
-      console.log('🎤 Enviando áudio via WhatsApp:', {
-        numeroNormalizado,
-        hasBase64: !!base64,
-        base64Length: base64.length,
-        companyId: userRole?.company_id
-      });
-      const {
-        data,
-        error
-      } = await enviarWhatsApp({
-        numero: numeroNormalizado,
-        mensagem: '',
-        tipo_mensagem: 'audio',
-        mediaBase64: base64,
-        fileName: 'audio.ogg',
-        mimeType: 'audio/ogg; codecs=opus',
-        caption: '',
-        company_id: userRole?.company_id,
-        ...quotedPayload
-      });
+      
+      let data: any = null;
+      let error: any = null;
+      
+      if (isInstagramChannel) {
+        // 📸 INSTAGRAM: Enviar áudio via edge function dedicada
+        console.log('📸 Enviando áudio via Instagram API...', { storageUrl });
+        const companyId = userRole?.company_id || (await getCompanyId());
+        const res = await supabase.functions.invoke('enviar-instagram', {
+          body: {
+            recipient_id: numeroNormalizado,
+            mensagem: '',
+            company_id: companyId,
+            tipo_mensagem: 'audio',
+            media_url: storageUrl,
+          }
+        });
+        data = res.data;
+        error = res.error || (res.data && !res.data.success ? { message: res.data.error || 'Erro ao enviar' } : null);
+      } else {
+        // 📱 WHATSAPP: Enviar via Evolution/Meta API
+        console.log('🎤 Enviando áudio via WhatsApp:', {
+          numeroNormalizado,
+          hasBase64: !!base64,
+          base64Length: base64.length,
+          companyId: userRole?.company_id
+        });
+        const result = await enviarWhatsApp({
+          numero: numeroNormalizado,
+          mensagem: '',
+          tipo_mensagem: 'audio',
+          mediaBase64: base64,
+          fileName: 'audio.ogg',
+          mimeType: 'audio/ogg; codecs=opus',
+          caption: '',
+          company_id: userRole?.company_id,
+          ...quotedPayload
+        });
+        data = result.data;
+        error = result.error;
+      }
+      
       if (error) {
-        console.error('❌ Erro ao enviar áudio via WhatsApp:', error);
+        const canalNome = isInstagramChannel ? 'Instagram' : 'WhatsApp';
+        console.error(`❌ Erro ao enviar áudio via ${canalNome}:`, error);
         toast.error('Erro ao enviar áudio. Tente novamente.');
         throw error;
       }
-      console.log('✅ Áudio enviado com sucesso via WhatsApp');
+      console.log('✅ Áudio enviado com sucesso via', isInstagramChannel ? 'Instagram' : 'WhatsApp');
 
       // 4️⃣ Salvar no banco com URL do Storage
       const {
@@ -5107,13 +5134,13 @@ function Conversas() {
         numero: numeroNormalizado,
         telefone_formatado: numeroNormalizado,
         mensagem: '[Áudio]',
-        origem: 'WhatsApp',
+        origem: isInstagramChannel ? 'Instagram' : 'WhatsApp',
+        origem_api: isInstagramChannel ? 'meta' : (selectedConv.origemApi || undefined),
         status: 'Enviada',
         tipo_mensagem: 'audio',
         nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
         arquivo_nome: 'audio.ogg',
         midia_url: storageUrl,
-        // ⚡ CORREÇÃO CRÍTICA: Salvar URL do Storage
         company_id: userRole?.company_id,
         owner_id: user?.id,
         sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
