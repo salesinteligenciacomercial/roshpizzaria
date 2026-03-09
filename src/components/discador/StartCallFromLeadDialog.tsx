@@ -290,13 +290,22 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
                             <p className="text-sm text-muted-foreground">{phone}</p>
                           </div>
                         </div>
-                        <Button variant="ghost" size="sm">
-                          <Phone className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    );
-                  })
-                )}
+                        <div className="flex items-center gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            title="Enviar mensagem"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSendMessage(phone || '');
+                            }}
+                          >
+                            <MessageSquare className="w-4 h-4 text-green-500" />
+                          </Button>
+                          <Button variant="ghost" size="sm" title="Ligar">
+                            <Phone className="w-4 h-4" />
+                          </Button>
+                        </div>
               </div>
             </ScrollArea>
           </TabsContent>
