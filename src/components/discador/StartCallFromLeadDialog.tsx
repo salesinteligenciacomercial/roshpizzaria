@@ -53,7 +53,6 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
   onClose,
   onStartCall
 }) => {
-  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,6 +62,8 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('leads');
   const channelRef = useRef<any>(null);
+  const [conversaPopupOpen, setConversaPopupOpen] = useState(false);
+  const [selectedLeadForChat, setSelectedLeadForChat] = useState<{id: string; name: string; phone: string} | null>(null);
 
   // Load all leads (no limit) with real-time sync
   const loadLeads = useCallback(async () => {
