@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Phone, Search, User, Hash, Loader2, UserPlus, MessageSquare } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { ConversaPopup } from '@/components/leads/ConversaPopup';
 
 interface Lead {
   id: string;
@@ -53,7 +53,6 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
   onClose,
   onStartCall
 }) => {
-  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,6 +62,8 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('leads');
   const channelRef = useRef<any>(null);
+  const [conversaPopupOpen, setConversaPopupOpen] = useState(false);
+  const [selectedLeadForChat, setSelectedLeadForChat] = useState<{id: string; name: string; phone: string} | null>(null);
 
   // Load all leads (no limit) with real-time sync
   const loadLeads = useCallback(async () => {
@@ -153,10 +154,10 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
     }
   };
 
-  const handleSendMessage = (phone: string) => {
+  const handleSendMessage = (leadId: string, leadName: string, phone: string) => {
     const cleanPhone = phone.replace(/\D/g, '');
-    onClose();
-    navigate(`/conversas?numero=${cleanPhone}`);
+    setSelectedLeadForChat({ id: leadId, name: leadName, phone: cleanPhone });
+    setConversaPopupOpen(true);
   };
 
   const handleManualCall = async () => {
@@ -225,6 +226,7 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
@@ -297,7 +299,7 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
                             title="Enviar mensagem"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleSendMessage(phone || '');
+                              handleSendMessage(lead.id, lead.name, phone || '');
                             }}
                           >
                             <MessageSquare className="w-4 h-4 text-green-500" />
@@ -356,7 +358,7 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
                   variant="outline"
                   size="lg"
                   className="flex-1"
-                  onClick={() => handleSendMessage(manualNumber)}
+                  onClick={() => handleSendMessage('', manualName || manualNumber, manualNumber)}
                   disabled={manualNumber.replace(/\D/g, '').length < 10}
                 >
                   <MessageSquare className="w-4 h-4 mr-2 text-green-600" />
@@ -381,5 +383,20 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
         </Tabs>
       </DialogContent>
     </Dialog>
+
+    {/* Popup de Conversa */}
+    {selectedLeadForChat && (
+      <ConversaPopup
+        open={conversaPopupOpen}
+        onOpenChange={(isOpen) => {
+          setConversaPopupOpen(isOpen);
+          if (!isOpen) setSelectedLeadForChat(null);
+        }}
+        leadId={selectedLeadForChat.id}
+        leadName={selectedLeadForChat.name}
+        leadPhone={selectedLeadForChat.phone}
+      />
+    )}
+    </>
   );
 };
