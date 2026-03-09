@@ -298,7 +298,7 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
                             title="Enviar mensagem"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleSendMessage(phone || '');
+                              handleSendMessage(lead.id, lead.name, phone || '');
                             }}
                           >
                             <MessageSquare className="w-4 h-4 text-green-500" />
