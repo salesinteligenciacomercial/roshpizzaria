@@ -11,9 +11,10 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Phone, Search, User, Hash, Loader2, UserPlus } from 'lucide-react';
+import { Phone, Search, User, Hash, Loader2, UserPlus, MessageSquare } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 interface Lead {
   id: string;
@@ -52,6 +53,7 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
   onClose,
   onStartCall
 }) => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -149,6 +151,12 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
       onStartCall(lead.id, lead.name, phoneNumber);
       onClose();
     }
+  };
+
+  const handleSendMessage = (phone: string) => {
+    const cleanPhone = phone.replace(/\D/g, '');
+    onClose();
+    navigate(`/conversas?numero=${cleanPhone}`);
   };
 
   const handleManualCall = async () => {
@@ -282,9 +290,22 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
                             <p className="text-sm text-muted-foreground">{phone}</p>
                           </div>
                         </div>
-                        <Button variant="ghost" size="sm">
-                          <Phone className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            title="Enviar mensagem"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSendMessage(phone || '');
+                            }}
+                          >
+                            <MessageSquare className="w-4 h-4 text-green-500" />
+                          </Button>
+                          <Button variant="ghost" size="sm" title="Ligar">
+                            <Phone className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                     );
                   })
@@ -330,19 +351,31 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
                 </label>
               </div>
 
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={handleManualCall}
-                disabled={manualNumber.replace(/\D/g, '').length < 10 || isSaving}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Phone className="w-4 h-4 mr-2" />
-                )}
-                Ligar para {manualName || manualNumber || 'número'}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="flex-1"
+                  onClick={() => handleSendMessage(manualNumber)}
+                  disabled={manualNumber.replace(/\D/g, '').length < 10}
+                >
+                  <MessageSquare className="w-4 h-4 mr-2 text-green-600" />
+                  Enviar Mensagem
+                </Button>
+                <Button
+                  className="flex-1"
+                  size="lg"
+                  onClick={handleManualCall}
+                  disabled={manualNumber.replace(/\D/g, '').length < 10 || isSaving}
+                >
+                  {isSaving ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Phone className="w-4 h-4 mr-2" />
+                  )}
+                  Ligar
+                </Button>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
