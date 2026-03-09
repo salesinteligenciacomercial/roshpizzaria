@@ -382,5 +382,20 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
         </Tabs>
       </DialogContent>
     </Dialog>
+
+    {/* Popup de Conversa */}
+    {selectedLeadForChat && (
+      <ConversaPopup
+        open={conversaPopupOpen}
+        onOpenChange={(isOpen) => {
+          setConversaPopupOpen(isOpen);
+          if (!isOpen) setSelectedLeadForChat(null);
+        }}
+        leadId={selectedLeadForChat.id}
+        leadName={selectedLeadForChat.name}
+        leadPhone={selectedLeadForChat.phone}
+      />
+    )}
+    </>
   );
 };
