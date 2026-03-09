@@ -351,19 +351,31 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
                 </label>
               </div>
 
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={handleManualCall}
-                disabled={manualNumber.replace(/\D/g, '').length < 10 || isSaving}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Phone className="w-4 h-4 mr-2" />
-                )}
-                Ligar para {manualName || manualNumber || 'número'}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="flex-1"
+                  onClick={() => handleSendMessage(manualNumber)}
+                  disabled={manualNumber.replace(/\D/g, '').length < 10}
+                >
+                  <MessageSquare className="w-4 h-4 mr-2 text-green-600" />
+                  Enviar Mensagem
+                </Button>
+                <Button
+                  className="flex-1"
+                  size="lg"
+                  onClick={handleManualCall}
+                  disabled={manualNumber.replace(/\D/g, '').length < 10 || isSaving}
+                >
+                  {isSaving ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Phone className="w-4 h-4 mr-2" />
+                  )}
+                  Ligar
+                </Button>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
