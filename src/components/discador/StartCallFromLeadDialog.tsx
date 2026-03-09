@@ -357,7 +357,7 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
                   variant="outline"
                   size="lg"
                   className="flex-1"
-                  onClick={() => handleSendMessage(manualNumber)}
+                  onClick={() => handleSendMessage('', manualName || manualNumber, manualNumber)}
                   disabled={manualNumber.replace(/\D/g, '').length < 10}
                 >
                   <MessageSquare className="w-4 h-4 mr-2 text-green-600" />
