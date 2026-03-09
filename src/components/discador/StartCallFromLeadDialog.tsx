@@ -226,6 +226,7 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
