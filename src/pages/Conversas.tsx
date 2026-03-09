@@ -4800,9 +4800,14 @@ function Conversas() {
       } = supabase.storage.from('conversation-media').getPublicUrl(uploadData.path);
       console.log('📍 [FASE 3] URL pública:', publicUrl);
 
-      // FASE 4: Enviar via WhatsApp usando base64
-      const numeroNormalizado = normalizePhoneForWA(selectedConv.phoneNumber || selectedConv.id);
-      console.log('📤 [FASE 4] Enviando via WhatsApp...', {
+      // FASE 4: Enviar via API correta (Instagram ou WhatsApp)
+      const isInstagramChannel = selectedConv.channel === 'instagram';
+      const rawPhoneOrId = selectedConv.phoneNumber || selectedConv.id;
+      const numeroNormalizado = isInstagramChannel 
+        ? rawPhoneOrId.replace(/^ig_/, '').replace(/[^0-9]/g, '') 
+        : normalizePhoneForWA(rawPhoneOrId);
+      
+      console.log('📤 [FASE 4] Enviando via', isInstagramChannel ? 'Instagram' : 'WhatsApp', '...', {
         numero: numeroNormalizado,
         tipo: type,
         fileName: file.name,
@@ -4823,22 +4828,45 @@ function Conversas() {
         },
         quotedMessageId: replyingTo
       } : {};
-      const {
-        data,
-        error
-      } = await enviarWhatsApp({
-        numero: numeroNormalizado,
-        mensagem: caption || '',
-        tipo_mensagem: type,
-        mediaBase64: base64Data,
-        fileName: file.name,
-        mimeType: file.type,
-        caption: caption || '',
-        company_id: userRole?.company_id,
-        ...quotedPayload
-      });
+
+      let data: any = null;
+      let error: any = null;
+
+      if (isInstagramChannel) {
+        // 📸 INSTAGRAM: Enviar mídia via edge function dedicada
+        console.log('📸 [FASE 4] Enviando mídia via Instagram API...', { publicUrl, type });
+        const companyId = userRole?.company_id || (await getCompanyId());
+        const res = await supabase.functions.invoke('enviar-instagram', {
+          body: {
+            recipient_id: numeroNormalizado,
+            mensagem: caption || '',
+            company_id: companyId,
+            tipo_mensagem: type,
+            media_url: publicUrl,
+          }
+        });
+        data = res.data;
+        error = res.error || (res.data && !res.data.success ? { message: res.data.error || 'Erro ao enviar' } : null);
+      } else {
+        // 📱 WHATSAPP: Enviar via Evolution/Meta API
+        const result = await enviarWhatsApp({
+          numero: numeroNormalizado,
+          mensagem: caption || '',
+          tipo_mensagem: type,
+          mediaBase64: base64Data,
+          fileName: file.name,
+          mimeType: file.type,
+          caption: caption || '',
+          company_id: userRole?.company_id,
+          ...quotedPayload
+        });
+        data = result.data;
+        error = result.error;
+      }
+
       if (error) {
-        console.error('❌ Erro ao enviar:', error);
+        const canalNome = isInstagramChannel ? 'Instagram' : 'WhatsApp';
+        console.error(`❌ Erro ao enviar mídia via ${canalNome}:`, error);
         toast.error(`Erro ao enviar ${type}: ${error.message || 'Erro desconhecido'}`);
         throw error;
       }
@@ -4852,10 +4880,11 @@ function Conversas() {
         data: inserted,
         error: dbError
       } = await supabase.from('conversas').insert({
-        numero: numeroNormalizado,
+        numero: isInstagramChannel ? numeroNormalizado : numeroNormalizado,
         telefone_formatado: numeroNormalizado,
         mensagem: caption || '[Mídia]',
-        origem: 'WhatsApp',
+        origem: isInstagramChannel ? 'Instagram' : 'WhatsApp',
+        origem_api: isInstagramChannel ? 'meta' : (selectedConv.origemApi || undefined),
         status: 'Enviada',
         tipo_mensagem: type,
         nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
