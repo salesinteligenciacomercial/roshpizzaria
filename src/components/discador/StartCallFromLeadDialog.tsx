@@ -53,6 +53,7 @@ export const StartCallFromLeadDialog: React.FC<StartCallFromLeadDialogProps> = (
   onClose,
   onStartCall
 }) => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(false);
