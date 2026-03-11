@@ -1773,10 +1773,11 @@ function Conversas() {
             const novaConversa: Conversation = {
               id: isInstagramMessage ? telefoneKey : (novaMensagem.lead_id || `conv-${telefoneKey}`),
               contactName: (() => {
-                // Para nova conversa, usar nome_contato apenas se NÃO for um número puro
+                // Para nova conversa, usar nome_contato apenas se NÃO for um número puro e NÃO for fallback
                 const nome = novaMensagem.nome_contato || '';
                 const nomeDigits = nome.replace(/[^0-9]/g, '');
-                if (nome && !(nomeDigits.length > 8 && nomeDigits === nome)) {
+                const isFallback = /^Instagram\s+\d+$/i.test(nome);
+                if (nome && !isFallback && !(nomeDigits.length > 8 && nomeDigits === nome)) {
                   return nome;
                 }
                 // ⚡ CORREÇÃO: Para Instagram, usar fallback amigável ao invés de ID numérico
