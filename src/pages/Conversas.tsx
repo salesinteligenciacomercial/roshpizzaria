@@ -3508,8 +3508,8 @@ function Conversas() {
                 const nome = m.nome_contato?.trim();
                 if (!nome) return false;
                 const nomeDigits = nome.replace(/[^0-9]/g, '');
-                // Rejeitar nomes que são apenas números (telefone/ID do Instagram)
-                return nome !== telefone && nome !== telefoneDigits && !(nomeDigits.length > 8 && nomeDigits === nome);
+                // Rejeitar nomes que são apenas números (telefone/ID do Instagram) ou fallbacks "Instagram XXXX"
+                return nome !== telefone && nome !== telefoneDigits && !(nomeDigits.length > 8 && nomeDigits === nome) && !/^Instagram\s+\d+$/i.test(nome);
               })
               .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
             if (mensagensComNome.length > 0) {
