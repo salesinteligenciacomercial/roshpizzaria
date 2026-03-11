@@ -1779,7 +1779,12 @@ function Conversas() {
                 if (nome && !(nomeDigits.length > 8 && nomeDigits === nome)) {
                   return nome;
                 }
-                return telefoneKey.replace(/^ig_/, '');
+                // ⚡ CORREÇÃO: Para Instagram, usar fallback amigável ao invés de ID numérico
+                const cleanKey = telefoneKey.replace(/^ig_/, '');
+                if (isInstagramMessage && /^\d{10,}$/.test(cleanKey)) {
+                  return `Instagram ${cleanKey.slice(-6)}`;
+                }
+                return cleanKey;
               })(),
               channel: isInstagramMessage ? 'instagram' : 'whatsapp' as const,
               status: novaMensagemObj.sender === 'user' ? 'answered' : 'waiting',
@@ -2495,7 +2500,12 @@ function Conversas() {
             const isRealGroup = Boolean((msg as any)?.is_group) || numeroLimpo.length >= 17 && /@g\.us$/.test(String(msg.numero || ''));
             conversationsMap.set(convId, {
               id: convId,
-              contactName: leadData.name || msg.nome_contato || 'Desconhecido',
+              contactName: (() => {
+                const rawName = leadData.name || msg.nome_contato || 'Desconhecido';
+                const isIg = msg.origem?.toLowerCase() === 'instagram';
+                if (isIg && /^\d{10,}$/.test(rawName)) return `Instagram ${rawName.slice(-6)}`;
+                return rawName;
+              })(),
               // PRIORIZAR NOME DO LEAD
               channel: msg.origem?.toLowerCase() === 'whatsapp' ? 'whatsapp' : msg.origem?.toLowerCase() === 'instagram' ? 'instagram' : 'facebook',
               status: msg.status === 'Enviada' ? 'answered' : 'waiting',
@@ -3496,10 +3506,22 @@ function Conversas() {
           }
 
           // ⚡ CORREÇÃO CRÍTICA: FALLBACK para contatos individuais
-          // Contatos individuais SEMPRE usam telefone como fallback, NUNCA "Grupo"
-          // ⚡ CORREÇÃO: Para Instagram, remover prefixo ig_ do nome exibido
+          // Detectar se é Instagram baseado nas mensagens (antes da variável isInstagramConv)
+          const isInstagramForName = mensagens.some(m => m.origem === 'Instagram');
+          
           if (!contactName || contactName.trim() === '' || contactName === telefone) {
-            contactName = telefone.replace(/^ig_/, '');
+            const cleanTel = telefone.replace(/^ig_/, '');
+            const isInstagramNumericId = isInstagramForName && /^\d{10,}$/.test(cleanTel);
+            if (isInstagramNumericId) {
+              contactName = `Instagram ${cleanTel.slice(-6)}`;
+            } else {
+              contactName = cleanTel;
+            }
+          } else {
+            // ⚡ CORREÇÃO SUBCONTAS: Se o nome é um ID numérico longo do Instagram, substituir
+            if (isInstagramForName && /^\d{10,}$/.test(contactName)) {
+              contactName = `Instagram ${contactName.slice(-6)}`;
+            }
           }
         }
 
