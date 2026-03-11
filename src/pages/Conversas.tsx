@@ -3494,7 +3494,10 @@ function Conversas() {
           }
         } else {
           // PRIORIDADE 1: Nome do Lead (se existir) - APENAS para contatos individuais
-          contactName = leadInfo?.name || '';
+          // ⚡ CORREÇÃO: Rejeitar nomes fallback "Instagram XXXXXX" do lead
+          const leadNameRaw = leadInfo?.name || '';
+          const isLeadNameFallback = /^Instagram\s+\d+$/i.test(leadNameRaw);
+          contactName = (leadNameRaw && !isLeadNameFallback) ? leadNameRaw : '';
 
           // PRIORIDADE 2: Nome da mensagem (priorizar mensagens mais recentes com nome real)
           const telefoneDigits = telefone.replace(/[^0-9]/g, '');
