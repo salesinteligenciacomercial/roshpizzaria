@@ -946,27 +946,26 @@ serve(async (req) => {
             let leadId = existingLead?.id || null;
             let leadName = existingLead?.name || instagramUsername;
 
-            // ⚡ CORREÇÃO SUBCONTAS: Se o lead existe mas o nome é o ID numérico, atualizar com nome real
+            // ⚡ CORREÇÃO SUBCONTAS: Se o lead existe mas o nome é ruim (ID numérico OU fallback "Instagram XXXX"), atualizar
             if (leadId && existingLead?.name && instagramUsername !== instagramUserId) {
               const existingName = existingLead.name.trim();
-              // Verificar se o nome atual é um ID numérico (só dígitos, 10+ chars)
               const isNumericName = /^\d{10,}$/.test(existingName);
-              if (isNumericName && existingName !== instagramUsername) {
+              const isFallbackName = /^Instagram\s+\d+$/i.test(existingName);
+              if ((isNumericName || isFallbackName) && existingName !== instagramUsername) {
                 try {
                   await supabase
                     .from('leads')
                     .update({ name: instagramUsername })
                     .eq('id', leadId);
                   leadName = instagramUsername;
-                  console.log('📸 [INSTAGRAM] Nome do lead atualizado de ID numérico para:', instagramUsername);
+                  console.log('📸 [INSTAGRAM] Nome do lead atualizado para:', instagramUsername);
                   
-                  // Também atualizar conversas anteriores que ficaram com ID numérico
+                  // Também atualizar TODAS conversas anteriores com nomes ruins
                   await supabase
                     .from('conversas')
                     .update({ nome_contato: instagramUsername })
                     .eq('company_id', company_id)
-                    .eq('telefone_formatado', instagramUserId)
-                    .eq('nome_contato', existingName);
+                    .eq('telefone_formatado', instagramUserId);
                   console.log('📸 [INSTAGRAM] Conversas anteriores atualizadas com nome correto');
                 } catch (e) {
                   console.warn('⚠️ [INSTAGRAM] Erro ao atualizar nome do lead:', e);
