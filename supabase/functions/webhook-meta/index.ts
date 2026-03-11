@@ -844,6 +844,7 @@ serve(async (req) => {
             const igAccountId = connection.instagram_account_id || msg.instagram_account_id;
             
             // Método 0 (CACHE): Buscar nome de conversa anterior no banco
+            // ⚡ CORREÇÃO: Rejeitar nomes fallback "Instagram XXXXXX" do cache
             try {
               const { data: prevConv } = await supabase
                 .from('conversas')
@@ -856,8 +857,13 @@ serve(async (req) => {
                 .single();
               
               if (prevConv?.nome_contato) {
-                instagramUsername = prevConv.nome_contato;
-                console.log('📸 [INSTAGRAM] Nome encontrado no cache (conversa anterior):', instagramUsername);
+                const isFallbackName = /^Instagram\s+\d+$/i.test(prevConv.nome_contato);
+                if (!isFallbackName) {
+                  instagramUsername = prevConv.nome_contato;
+                  console.log('📸 [INSTAGRAM] Nome encontrado no cache (conversa anterior):', instagramUsername);
+                } else {
+                  console.log('📸 [INSTAGRAM] Cache rejeitado (nome é fallback):', prevConv.nome_contato);
+                }
               }
             } catch (e) {
               // Sem cache, continuar para API
