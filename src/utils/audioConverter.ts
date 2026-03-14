@@ -45,7 +45,7 @@ export async function convertWebmToMp3(webmBlob: Blob): Promise<Blob> {
     // Flush remaining data
     const end = mp3Encoder.flush();
     if (end.length > 0) {
-      mp3Data.push(new Int8Array(end));
+      mp3Data.push(new Uint8Array(end));
     }
 
     const mp3Blob = new Blob(mp3Data, { type: 'audio/mpeg' });
