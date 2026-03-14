@@ -809,6 +809,20 @@ export default function ChatInterno() {
       }
     }} />}
 
+      {/* Start Call Dialog */}
+      <StartCallDialog
+        open={showStartCallDialog}
+        onClose={() => setShowStartCallDialog(false)}
+        onStartCall={handleStartCallFromDialog}
+      />
+
+      {/* Create Public Meeting Dialog */}
+      <CreatePublicMeetingDialog
+        open={showCreatePublicMeeting}
+        onClose={() => setShowCreatePublicMeeting(false)}
+        onMeetingCreated={(id) => console.log('Meeting created:', id)}
+      />
+
       {/* Video/Audio Call Modal */}
       {activeCall && currentUserId && <VideoCallModalV2 open={true} onClose={() => setActiveCall(null)} meetingId={activeCall.meetingId} localUserId={currentUserId} remoteUserId={activeCall.remoteUserId} remoteUserName={activeCall.remoteUserName} callType={activeCall.callType} isCaller={activeCall.isCaller} onCallEnded={handleCallEnded} />}
 
