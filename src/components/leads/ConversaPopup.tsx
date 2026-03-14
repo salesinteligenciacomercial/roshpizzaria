@@ -1030,6 +1030,11 @@ export function ConversaPopup({
 
     setSending(true);
     try {
+      const audioMimeType = (audioBlob.type || 'audio/webm').split(';')[0].trim().toLowerCase();
+      const audioExtension = audioMimeType.includes('ogg') ? 'ogg' :
+        audioMimeType.includes('mp4') ? 'm4a' :
+        audioMimeType.includes('mpeg') ? 'mp3' : 'webm';
+
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -1047,8 +1052,8 @@ export function ConversaPopup({
         mensagem: 'Áudio enviado',
         tipo_mensagem: 'audio',
         mediaBase64: base64,
-        fileName: 'audio.ogg',
-        mimeType: 'audio/ogg; codecs=opus',
+        fileName: `audio.${audioExtension}`,
+        mimeType: audioBlob.type || audioMimeType,
         caption: '',
       });
 
@@ -1063,8 +1068,8 @@ export function ConversaPopup({
       try {
         if (companyId) {
           audioStorageUrl = await uploadMediaToStorage(audioBlob, companyId, {
-            fileName: 'audio.ogg',
-            contentType: 'audio/ogg; codecs=opus',
+            fileName: `audio.${audioExtension}`,
+            contentType: audioBlob.type || audioMimeType,
           });
         }
       } catch (uploadErr) {
