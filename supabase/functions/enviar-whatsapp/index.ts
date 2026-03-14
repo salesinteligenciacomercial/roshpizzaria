@@ -1274,13 +1274,18 @@ serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } else {
+      const errorText = result.error || "Falha ao enviar mensagem";
+      const isDisconnected = /Instância desconectada|Reconecte via QR Code/i.test(errorText);
+      const statusCode = isDisconnected ? 503 : 500;
+      const errorCode = isDisconnected ? "INSTANCE_DISCONNECTED" : "SEND_FAILED";
+
       return new Response(
         JSON.stringify({ 
-          error: result.error || "Falha ao enviar mensagem",
+          error: errorText,
           provider: result.provider,
-          code: "SEND_FAILED"
+          code: errorCode
         }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: statusCode, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

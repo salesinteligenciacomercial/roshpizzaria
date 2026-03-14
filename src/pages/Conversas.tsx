@@ -748,27 +748,53 @@ function Conversas() {
         if (err) {
           let code: string | undefined;
           let httpStatus: number | undefined = (err as any)?.status || (err as any)?.context?.status;
-          // Tentar extrair code do message (JSON) ou string
-          const raw = err?.message || '';
+          const raw = String(err?.message || '');
+
+          let parsedPayload: any = null;
           try {
-            const parsed = JSON.parse(raw);
-            code = parsed?.code || parsed?.error?.code || parsed?.error;
+            parsedPayload = JSON.parse(raw);
           } catch {
-            if (/NO_API_KEY/.test(raw)) code = 'NO_API_KEY';else if (/NO_WHATSAPP_CONNECTION/.test(raw)) code = 'NO_WHATSAPP_CONNECTION';else if (/EXTERNAL_API_ERROR/.test(raw)) code = 'EXTERNAL_API_ERROR';else if (/CONFIG_ERROR/.test(raw)) code = 'CONFIG_ERROR';
+            const jsonStart = raw.indexOf('{');
+            if (jsonStart >= 0) {
+              try {
+                parsedPayload = JSON.parse(raw.slice(jsonStart));
+              } catch {
+                parsedPayload = null;
+              }
+            }
           }
-          showWhatsAppErrorToast(code, httpStatus, raw);
+
+          if (parsedPayload) {
+            code = parsedPayload?.code || parsedPayload?.error?.code || parsedPayload?.error_code;
+            httpStatus = httpStatus ?? parsedPayload?.status;
+          }
+
+          if (!code) {
+            if (/INSTANCE_DISCONNECTED|Reconecte via QR Code|Instância desconectada/i.test(raw)) code = 'INSTANCE_DISCONNECTED';
+            else if (/NO_API_KEY/.test(raw)) code = 'NO_API_KEY';
+            else if (/NO_WHATSAPP_CONNECTION/.test(raw)) code = 'NO_WHATSAPP_CONNECTION';
+            else if (/EXTERNAL_API_ERROR/.test(raw)) code = 'EXTERNAL_API_ERROR';
+            else if (/CONFIG_ERROR/.test(raw)) code = 'CONFIG_ERROR';
+            else if (/SEND_FAILED/.test(raw)) code = 'SEND_FAILED';
+          }
+
+          const messageFromPayload = parsedPayload?.error || parsedPayload?.message;
+          const finalMessage = String(messageFromPayload || raw).slice(0, 240);
+          const details = parsedPayload || raw;
+
+          showWhatsAppErrorToast(code, httpStatus, details);
           console.debug('❌ [WHATSAPP] Erro detalhado:', {
             attempt,
             httpStatus,
             code,
-            raw: (err?.message || '').slice(0, 200)
+            raw: finalMessage
           });
           return {
             success: false,
             errorCode: code,
             httpStatus,
-            message: String(raw).slice(0, 200),
-            details: raw
+            message: finalMessage,
+            details
           };
         }
         if (data?.success) {
@@ -824,7 +850,13 @@ function Conversas() {
     const opts = description ? {
       description
     } as any : undefined;
-    if (httpStatus === 401 || httpStatus === 403) {
+
+    const detailsText = typeof details === 'string' ? details : JSON.stringify(details || {});
+    const isDisconnected = code === 'INSTANCE_DISCONNECTED' || /Instância desconectada|Reconecte via QR Code/i.test(detailsText);
+
+    if (isDisconnected) {
+      toast.error(`${prefix}Instância desconectada. Reconecte via QR Code nas Configurações.`, opts);
+    } else if (httpStatus === 401 || httpStatus === 403) {
       toast.error(`${prefix}Sem autorização. Faça login novamente ou verifique permissões.`, opts);
     } else if (httpStatus === 404 || code === 'NO_WHATSAPP_CONNECTION') {
       toast.error(`${prefix}Conexão/instância não encontrada. Verifique suas conexões WhatsApp.`, opts);
@@ -5261,6 +5293,7 @@ function Conversas() {
       setSyncStatus('error');
       setTimeout(() => setSyncStatus('idle'), 2000);
       toast.error("Erro ao enviar áudio");
+      throw error instanceof Error ? error : new Error('Falha ao enviar áudio');
     }
   };
 
