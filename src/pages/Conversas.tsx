@@ -3933,6 +3933,49 @@ function Conversas() {
           }
         })().catch(() => {});
       }
+
+      // ⚡ LAZY RESOLUTION DE NOMES INSTAGRAM: Resolver nomes "Instagram XXXXXX" ou IDs numéricos
+      const conversasComNomeFallback = novasConversas.filter(c => {
+        if (c.channel !== 'instagram') return false;
+        const nome = c.contactName || '';
+        return /^Instagram\s+\d+$/i.test(nome) || /^\d{10,}$/.test(nome);
+      });
+      if (conversasComNomeFallback.length > 0 && companyId) {
+        (async () => {
+          const BATCH_SIZE = 3;
+          const BATCH_DELAY = 800;
+          const resolvedNamesCache = new Set<string>();
+          for (let i = 0; i < conversasComNomeFallback.length; i += BATCH_SIZE) {
+            const batch = conversasComNomeFallback.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(async conv => {
+              const igId = (conv.phoneNumber || conv.id || '').replace(/^ig_/, '').replace(/[^0-9]/g, '');
+              if (!igId || resolvedNamesCache.has(igId)) return;
+              resolvedNamesCache.add(igId);
+              try {
+                const res = await supabase.functions.invoke('resolve-instagram-name', {
+                  body: { company_id: companyId, instagram_user_id: igId }
+                });
+                const resolvedName = res.data?.name;
+                if (resolvedName && !/^Instagram\s+\d+$/i.test(resolvedName) && !/^\d{10,}$/.test(resolvedName)) {
+                  console.log(`📸 [INSTAGRAM] Nome resolvido: ${igId} → ${resolvedName}`);
+                  setConversations(prev => prev.map(c => {
+                    const cIgId = (c.phoneNumber || c.id || '').replace(/^ig_/, '').replace(/[^0-9]/g, '');
+                    if (cIgId === igId) {
+                      return { ...c, contactName: resolvedName };
+                    }
+                    return c;
+                  }));
+                }
+              } catch (e) {
+                console.warn(`⚠️ [INSTAGRAM] Falha ao resolver nome para ${igId}:`, e);
+              }
+            }));
+            if (i + BATCH_SIZE < conversasComNomeFallback.length) {
+              await new Promise(r => setTimeout(r, BATCH_DELAY));
+            }
+          }
+        })().catch(() => {});
+      }
     } catch (error) {
       console.error('Erro ao carregar conversas:', error);
       toast.error('Erro ao carregar conversas');
