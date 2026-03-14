@@ -5199,7 +5199,7 @@ function Conversas() {
             resolve(b64);
           };
           reader.onerror = () => reject(new Error('Erro ao ler áudio'));
-          reader.readAsDataURL(audioBlob);
+          reader.readAsDataURL(finalAudioBlob);
         }),
         // Buscar user e company_id
         supabase.auth.getUser()
