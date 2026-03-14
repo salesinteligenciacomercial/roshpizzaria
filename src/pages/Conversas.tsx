@@ -5245,7 +5245,7 @@ function Conversas() {
             const result = await enviarWhatsApp({
               numero: numeroNormalizado, mensagem: '', tipo_mensagem: 'audio',
               mediaBase64: base64, fileName: `audio.${audioExtension}`,
-              mimeType: audioBlob.type || audioMimeType, caption: '',
+              mimeType: finalAudioBlob.type || audioMimeType, caption: '',
               company_id: userRole?.company_id, ...quotedPayload
             });
             return { data: result.data, error: result.error };
