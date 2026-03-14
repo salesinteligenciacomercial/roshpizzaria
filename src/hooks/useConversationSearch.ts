@@ -34,7 +34,7 @@ export const useConversationSearch = (companyId: string | null) => {
       // ========== 1. BUSCAR EM CONVERSAS ==========
       let conversasQuery = supabase
         .from('conversas')
-        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme, company_id, sent_by, owner_id, midia_url, origem_api')
+        .select('id, numero, telefone_formatado, mensagem, nome_contato, tipo_mensagem, status, created_at, is_group, fromme, company_id, sent_by, owner_id, midia_url, origem, origem_api')
         .eq('company_id', companyId)
         .order('created_at', { ascending: false });
 
@@ -85,14 +85,19 @@ export const useConversationSearch = (companyId: string | null) => {
 
       conversasData.forEach(conv => {
         const isGroup = conv.is_group || /@g\.us$/.test(conv.numero || '');
-        const key = isGroup 
-          ? conv.numero 
-          : (conv.telefone_formatado?.replace(/[^0-9]/g, '') || conv.numero?.replace(/[^0-9]/g, '') || '');
-        
+        const normalizedDigits = String(conv.telefone_formatado || conv.numero || '').replace(/[^0-9]/g, '');
+        const isInstagram = conv.origem === 'Instagram' || (conv.origem_api === 'meta' && normalizedDigits.length >= 15);
+
+        const key = isGroup
+          ? String(conv.numero || '')
+          : isInstagram
+            ? `ig_${normalizedDigits}`
+            : (normalizedDigits || '');
+
         if (!key) return;
-        
-        processedPhones.add(key);
-        
+
+        processedPhones.add(normalizedDigits || key);
+
         if (!conversasMap.has(key)) {
           conversasMap.set(key, []);
         }
