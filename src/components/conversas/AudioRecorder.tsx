@@ -15,12 +15,22 @@ export function AudioRecorder({ onSendAudio }: AudioRecorderProps) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const recordingMimeTypeRef = useRef<string>('audio/webm');
+
+  const getPreferredAudioMimeType = () => {
+    const candidates = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'];
+    return candidates.find((type) => MediaRecorder.isTypeSupported(type));
+  };
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const preferredMimeType = getPreferredAudioMimeType();
+      const mediaRecorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
+      recordingMimeTypeRef.current = preferredMimeType || mediaRecorder.mimeType || 'audio/webm';
       chunksRef.current = [];
 
       mediaRecorder.ondataavailable = (e) => {
@@ -30,7 +40,7 @@ export function AudioRecorder({ onSendAudio }: AudioRecorderProps) {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/ogg; codecs=opus" });
+        const blob = new Blob(chunksRef.current, { type: recordingMimeTypeRef.current || mediaRecorder.mimeType || 'audio/webm' });
         setAudioBlob(blob);
         stream.getTracks().forEach(track => track.stop());
       };
@@ -109,7 +119,7 @@ export function AudioRecorder({ onSendAudio }: AudioRecorderProps) {
     return (
       <div className="flex items-center gap-2 bg-muted p-2 rounded-lg">
         <audio controls className="flex-1 h-8">
-          <source src={URL.createObjectURL(audioBlob)} type="audio/ogg" />
+          <source src={URL.createObjectURL(audioBlob)} type={audioBlob.type || 'audio/webm'} />
         </audio>
         <Button size="icon" variant="ghost" onClick={cancelRecording} disabled={isSending}>
           <X className="h-4 w-4" />

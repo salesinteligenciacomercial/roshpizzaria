@@ -63,6 +63,24 @@ const enviarWhatsAppSchema = z.object({
   message: 'Mensagem, mídia URL, mídia Base64 ou template é obrigatório'
 });
 
+function normalizeMimeType(mimeType?: string): string {
+  return (mimeType || '').split(';')[0].trim().toLowerCase();
+}
+
+function isMetaSupportedAudioMime(mimeType: string): boolean {
+  return ['audio/aac', 'audio/amr', 'audio/mpeg', 'audio/mp4', 'audio/ogg'].includes(mimeType);
+}
+
+function isLikelyOggAudioBase64(base64Data: string): boolean {
+  try {
+    const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '');
+    const header = atob(cleanBase64.slice(0, 24));
+    return header.startsWith('OggS');
+  } catch {
+    return false;
+  }
+}
+
 // Send template message via Meta API
 async function sendMetaTemplateMessage(
   phoneNumberId: string,
@@ -169,7 +187,7 @@ async function uploadMetaMedia(
     const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '');
     
     // Sanitize mimeType: Meta API rejects parameters like "; codecs=opus"
-    const cleanMimeType = mimeType.split(';')[0].trim();
+    const cleanMimeType = normalizeMimeType(mimeType);
     
     // Convert base64 to binary
     const binaryString = atob(cleanBase64);
@@ -187,7 +205,7 @@ async function uploadMetaMedia(
     
     const url = `${META_API_BASE_URL}/${META_API_VERSION}/${phoneNumberId}/media`;
     
-    console.log("📤 Meta API - Uploading media:", fileName, mimeType);
+    console.log("📤 Meta API - Uploading media:", fileName, cleanMimeType);
     
     const response = await fetch(url, {
       method: 'POST',
@@ -942,36 +960,24 @@ serve(async (req) => {
         if (mediaType === 'pdf') mediaType = 'document';
         
         const mimeType = validatedData.mimeType || 'application/octet-stream';
+        const cleanMimeType = normalizeMimeType(mimeType) || 'application/octet-stream';
         const fileName = validatedData.fileName || 'arquivo';
-        
-        // Upload media to Meta
-        const uploadResult = await uploadMetaMedia(
-          connection.meta_phone_number_id,
-          connection.meta_access_token,
-          validatedData.mediaBase64,
-          mimeType,
-          fileName
-        );
-        
-        if (uploadResult.success && uploadResult.media_id) {
-          // Send message with uploaded media_id
-          result = await sendMetaMediaMessage(
-            connection.meta_phone_number_id,
-            connection.meta_access_token,
-            formattedNumber,
-            uploadResult.media_id,
-            mediaType as 'image' | 'video' | 'audio' | 'document',
-            validatedData.mensagem || validatedData.caption,
-            true // isMediaId = true
-          );
-        } else {
-          console.log("⚠️ Upload Meta falhou:", uploadResult.error);
-          // Fallback para Evolution se disponível
+
+        const isAudioMessage = mediaType === 'audio';
+        const isSupportedAudioMime = !isAudioMessage || isMetaSupportedAudioMime(cleanMimeType);
+        const isValidOggPayload = !isAudioMessage || cleanMimeType !== 'audio/ogg' || isLikelyOggAudioBase64(validatedData.mediaBase64);
+
+        if (isAudioMessage && (!isSupportedAudioMime || !isValidOggPayload)) {
+          const reason = !isSupportedAudioMime
+            ? `MIME não suportado pela Meta (${cleanMimeType})`
+            : 'conteúdo não corresponde a áudio OGG válido';
+          console.warn(`⚠️ Áudio incompatível com Meta API (${reason})`);
+
           if (hasEvolutionConfig) {
-            console.log("🔄 Tentando Evolution como fallback...");
+            console.log('🔄 Usando Evolution para áudio incompatível com Meta...');
             const baseUrl = resolvedEvolutionUrl;
             const apiKey = resolvedEvolutionKey;
-            
+
             result = await sendEvolutionMessage(
               baseUrl,
               connection.instance_name,
@@ -981,7 +987,52 @@ serve(async (req) => {
               validatedData
             );
           } else {
-            result = { success: false, provider: 'meta', error: uploadResult.error || 'Falha no upload de mídia' };
+            result = {
+              success: false,
+              provider: 'meta',
+              error: `Áudio incompatível com API oficial (${reason}). Use OGG/Opus válido.`
+            };
+          }
+        } else {
+          // Upload media to Meta
+          const uploadResult = await uploadMetaMedia(
+            connection.meta_phone_number_id,
+            connection.meta_access_token,
+            validatedData.mediaBase64,
+            cleanMimeType,
+            fileName
+          );
+
+          if (uploadResult.success && uploadResult.media_id) {
+            // Send message with uploaded media_id
+            result = await sendMetaMediaMessage(
+              connection.meta_phone_number_id,
+              connection.meta_access_token,
+              formattedNumber,
+              uploadResult.media_id,
+              mediaType as 'image' | 'video' | 'audio' | 'document',
+              validatedData.mensagem || validatedData.caption,
+              true // isMediaId = true
+            );
+          } else {
+            console.log("⚠️ Upload Meta falhou:", uploadResult.error);
+            // Fallback para Evolution se disponível
+            if (hasEvolutionConfig) {
+              console.log("🔄 Tentando Evolution como fallback...");
+              const baseUrl = resolvedEvolutionUrl;
+              const apiKey = resolvedEvolutionKey;
+
+              result = await sendEvolutionMessage(
+                baseUrl,
+                connection.instance_name,
+                apiKey,
+                validatedData.numero,
+                false,
+                validatedData
+              );
+            } else {
+              result = { success: false, provider: 'meta', error: uploadResult.error || 'Falha no upload de mídia' };
+            }
           }
         }
       }

@@ -5037,13 +5037,17 @@ function Conversas() {
     try {
       console.log('🎤 Enviando áudio via edge function...');
 
-      // 1️⃣ Upload do áudio para o Storage PRIMEIRO
-      const fileName = `outgoing/${Date.now()}-audio.ogg`;
+      // 1️⃣ Detectar formato real do áudio e fazer upload para o Storage
+      const audioMimeType = (audioBlob.type || 'audio/webm').split(';')[0].trim().toLowerCase();
+      const audioExtension = audioMimeType.includes('ogg') ? 'ogg' :
+        audioMimeType.includes('mp4') ? 'm4a' :
+        audioMimeType.includes('mpeg') ? 'mp3' : 'webm';
+      const fileName = `outgoing/${Date.now()}-audio.${audioExtension}`;
       const {
         data: uploadData,
         error: uploadError
       } = await supabase.storage.from('conversation-media').upload(fileName, audioBlob, {
-        contentType: 'audio/ogg; codecs=opus',
+        contentType: audioBlob.type || audioMimeType,
         upsert: false
       });
       if (uploadError) {
@@ -5133,8 +5137,8 @@ function Conversas() {
           mensagem: '',
           tipo_mensagem: 'audio',
           mediaBase64: base64,
-          fileName: 'audio.ogg',
-          mimeType: 'audio/ogg; codecs=opus',
+          fileName: `audio.${audioExtension}`,
+          mimeType: audioBlob.type || audioMimeType,
           caption: '',
           company_id: userRole?.company_id,
           ...quotedPayload
@@ -5174,7 +5178,7 @@ function Conversas() {
         status: 'Enviada',
         tipo_mensagem: 'audio',
         nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
-        arquivo_nome: 'audio.ogg',
+        arquivo_nome: `audio.${audioExtension}`,
         midia_url: storageUrl,
         company_id: userRole?.company_id,
         owner_id: user?.id,
