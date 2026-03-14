@@ -351,7 +351,9 @@ export const loadAllUniqueConversations = async (companyId: string): Promise<Con
     const conversations: Conversation[] = Array.from(conversasMap.entries()).map(([telefone, conv]) => {
       const isGroup = conv.is_group || /@g\.us$/.test(telefone);
       const isFromMe = conv.fromme === true || String(conv.fromme) === 'true';
-      
+      const normalizedDigits = String(conv.telefone_formatado || conv.numero || '').replace(/[^0-9]/g, '');
+      const isInstagramConversation = telefone.startsWith('ig_') || conv.origem === 'Instagram' || (conv.origem_api === 'meta' && normalizedDigits.length >= 15);
+
       const message: Message = {
         id: conv.id || `msg-${Date.now()}-${Math.random()}`,
         content: conv.mensagem || '',
@@ -365,7 +367,7 @@ export const loadAllUniqueConversations = async (companyId: string): Promise<Con
       };
 
       const contactName = conv.nome_contato || telefone;
-      
+
       let statusConversa: "waiting" | "answered" | "resolved" = "waiting";
       if (conv.status === 'Resolvida' || conv.status === 'Finalizada') {
         statusConversa = "resolved";
@@ -374,15 +376,15 @@ export const loadAllUniqueConversations = async (companyId: string): Promise<Con
       }
 
       const origemApi = conv.origem_api || 'evolution';
-      
+
       // ⚡ CRÍTICO: Incluir assignedUser do banco para manter filtro "Transferidos"
-      const telKey = telefone.replace(/[^0-9]/g, '');
+      const telKey = String(telefone).replace(/^ig_/, '').replace(/[^0-9]/g, '');
       const assignedUserData = assignmentsMap.get(telKey);
 
       return {
-        id: `conv-${telefone}`,
+        id: telefone,
         contactName,
-        channel: "whatsapp" as const,
+        channel: isInstagramConversation ? "instagram" as const : "whatsapp" as const,
         status: statusConversa,
         lastMessage: message.content,
         unread: 0,
