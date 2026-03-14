@@ -85,8 +85,12 @@ export default function ChatInterno() {
 
   // Note: Incoming calls are handled globally by GlobalCallListenerV2 in MainLayout
   const {
+    meetings,
+    loading: meetingsLoading,
     createMeeting,
-    endMeeting
+    endMeeting,
+    addNotes,
+    deleteMeeting
   } = useMeetings();
 
   // Get the other participant for 1:1 calls
