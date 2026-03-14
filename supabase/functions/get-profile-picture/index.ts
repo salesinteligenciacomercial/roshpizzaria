@@ -171,15 +171,67 @@ async function getInstagramProfilePicture(
   instagramUserId: string
 ): Promise<string | null> {
   try {
-    // Buscar token de acesso do Instagram
-    const { data: conn } = await supabase
+    // Buscar token de acesso do Instagram na empresa direta
+    let { data: conn } = await supabase
       .from('whatsapp_connections')
       .select('instagram_access_token, meta_access_token, instagram_account_id')
       .eq('company_id', companyId)
+      .not('instagram_account_id', 'is', null)
       .maybeSingle();
 
+    // Se não encontrou, buscar nas subcontas
+    if (!conn) {
+      const { data: subcontas } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('parent_company_id', companyId);
+
+      if (subcontas && subcontas.length > 0) {
+        const subIds = subcontas.map((s: any) => s.id);
+        const { data: subConn } = await supabase
+          .from('whatsapp_connections')
+          .select('instagram_access_token, meta_access_token, instagram_account_id')
+          .in('company_id', subIds)
+          .not('instagram_account_id', 'is', null)
+          .not('instagram_access_token', 'is', null)
+          .limit(1)
+          .maybeSingle();
+        if (subConn) {
+          console.log('✅ [INSTAGRAM-PIC] Token encontrado via subconta');
+          conn = subConn;
+        }
+      }
+    }
+
+    // Se ainda não encontrou, buscar na empresa pai
+    if (!conn) {
+      const { data: parentCompany } = await supabase
+        .from('companies')
+        .select('parent_company_id')
+        .eq('id', companyId)
+        .maybeSingle();
+
+      if (parentCompany?.parent_company_id) {
+        const { data: parentConn } = await supabase
+          .from('whatsapp_connections')
+          .select('instagram_access_token, meta_access_token, instagram_account_id')
+          .eq('company_id', parentCompany.parent_company_id)
+          .not('instagram_account_id', 'is', null)
+          .not('instagram_access_token', 'is', null)
+          .limit(1)
+          .maybeSingle();
+        if (parentConn) {
+          console.log('✅ [INSTAGRAM-PIC] Token encontrado via empresa pai');
+          conn = parentConn;
+        }
+      }
+    }
+
     const token = conn?.instagram_access_token || conn?.meta_access_token;
-    if (!token) return null;
+    if (!token) {
+      console.log('⚠️ [INSTAGRAM-PIC] Nenhum token Instagram encontrado para empresa:', companyId);
+      return null;
+    }
 
     const cleanId = String(instagramUserId).replace(/^ig_/, '');
     console.log('📸 [INSTAGRAM-PIC] Buscando foto para IGSID:', cleanId);
