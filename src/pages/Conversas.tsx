@@ -5341,7 +5341,7 @@ function Conversas() {
       setSyncStatus('error');
       setTimeout(() => setSyncStatus('idle'), 2000);
       toast.error("Erro ao enviar áudio");
-      throw error instanceof Error ? error : new Error('Falha ao enviar áudio');
+      return;
     }
   };
 

@@ -973,6 +973,7 @@ serve(async (req) => {
             : 'conteúdo não corresponde a áudio OGG válido';
           console.warn(`⚠️ Áudio incompatível com Meta API (${reason})`);
 
+          // 1) Tentar Evolution como fallback (mantém áudio nativo quando possível)
           if (hasEvolutionConfig) {
             console.log('🔄 Usando Evolution para áudio incompatível com Meta...');
             const baseUrl = resolvedEvolutionUrl;
@@ -986,12 +987,36 @@ serve(async (req) => {
               false,
               validatedData
             );
-          } else {
-            result = {
-              success: false,
-              provider: 'meta',
-              error: `Áudio incompatível com API oficial (${reason}). Use OGG/Opus válido.`
-            };
+          }
+
+          // 2) Se Evolution falhar (ex: instância desconectada), enviar pela Meta como documento
+          if (!result?.success) {
+            console.log('📎 Evolution indisponível para áudio. Tentando envio via Meta como documento...');
+            const uploadAsDocument = await uploadMetaMedia(
+              connection.meta_phone_number_id,
+              connection.meta_access_token,
+              validatedData.mediaBase64,
+              cleanMimeType,
+              fileName || 'audio.webm'
+            );
+
+            if (uploadAsDocument.success && uploadAsDocument.media_id) {
+              result = await sendMetaMediaMessage(
+                connection.meta_phone_number_id,
+                connection.meta_access_token,
+                formattedNumber,
+                uploadAsDocument.media_id,
+                'document',
+                validatedData.mensagem || validatedData.caption || 'Áudio enviado como documento (formato não suportado para áudio nativo).',
+                true
+              );
+            } else {
+              result = {
+                success: false,
+                provider: 'meta',
+                error: `Áudio incompatível com API oficial (${reason}) e fallback como documento falhou: ${uploadAsDocument.error || 'erro desconhecido'}`
+              };
+            }
           }
         } else {
           // Upload media to Meta
