@@ -342,7 +342,7 @@ export default function ChatInterno() {
     if (!name || name === 'Conversa') return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
-  return <div className="h-[calc(100vh-7rem)] flex bg-background rounded-xl border border-border" style={{ overflow: 'hidden' }}>
+  return <><div className="h-[calc(100vh-7rem)] flex bg-background rounded-xl border border-border" style={{ overflow: 'hidden' }}>
       {/* Painel Esquerdo */}
       <div className={`w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card ${!showMobileList && 'hidden md:flex'}`}>
         {/* Header */}
