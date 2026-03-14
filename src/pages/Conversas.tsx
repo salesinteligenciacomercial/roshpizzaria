@@ -3658,7 +3658,10 @@ function Conversas() {
         const assignedUserData = assignmentsMap.get(telKey); // ⚡ CORRIGIDO: Agora é {id, nome} do usuário
 
         // Detectar canal baseado na origem das mensagens
-        const isInstagramConv = mensagens.some(m => m.origem === 'Instagram');
+        const isInstagramConv = telefone.startsWith('ig_') || mensagens.some(m => {
+          const digits = String(m.telefone_formatado || m.numero || '').replace(/[^0-9]/g, '');
+          return m.origem === 'Instagram' || (m.origem_api === 'meta' && digits.length >= 15);
+        });
         const channelDetected: "whatsapp" | "instagram" | "facebook" = isInstagramConv ? 'instagram' : 'whatsapp';
 
         // ⚡ CORREÇÃO: Detectar origemApi a partir das mensagens
