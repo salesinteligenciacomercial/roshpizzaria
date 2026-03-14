@@ -976,7 +976,7 @@ serve(async (req) => {
             // ⚡ AUTO-CREATE: Se não existe lead para este contato Instagram, criar automaticamente
             if (!leadId) {
               // Usar o melhor nome disponível (username real ou ID como fallback)
-              const leadNameToCreate = instagramUsername !== instagramUserId ? instagramUsername : `Instagram ${instagramUserId.slice(-6)}`;
+              const leadNameToCreate = instagramUsername !== instagramUserId ? instagramUsername : `Contato Instagram`;
               try {
                 const { data: newLead, error: createErr } = await supabase
                   .from('leads')
