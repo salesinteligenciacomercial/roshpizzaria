@@ -973,8 +973,34 @@ serve(async (req) => {
             : 'conteúdo não corresponde a áudio OGG válido';
           console.warn(`⚠️ Áudio incompatível com Meta API (${reason})`);
 
-          // 1) Tentar Evolution como fallback (mantém áudio nativo quando possível)
-          if (hasEvolutionConfig) {
+          // ⚡ Tentar detectar se o conteúdo é realmente OGG/Opus (comum em webm do Chrome)
+          const isActuallyOgg = isLikelyOggAudioBase64(validatedData.mediaBase64);
+          
+          if (isActuallyOgg) {
+            // O conteúdo é OGG válido, apenas o MIME está errado - enviar diretamente pela Meta como audio/ogg
+            console.log('🔄 Conteúdo é OGG válido, reenviando com MIME correto (audio/ogg)...');
+            const uploadOgg = await uploadMetaMedia(
+              connection.meta_phone_number_id,
+              connection.meta_access_token,
+              validatedData.mediaBase64,
+              'audio/ogg',
+              'audio.ogg'
+            );
+            if (uploadOgg.success && uploadOgg.media_id) {
+              result = await sendMetaMediaMessage(
+                connection.meta_phone_number_id,
+                connection.meta_access_token,
+                formattedNumber,
+                uploadOgg.media_id,
+                'audio',
+                undefined,
+                true
+              );
+            }
+          }
+
+          // Se OGG direto não funcionou, tentar Evolution como fallback
+          if (!result?.success && hasEvolutionConfig) {
             console.log('🔄 Usando Evolution para áudio incompatível com Meta...');
             const baseUrl = resolvedEvolutionUrl;
             const apiKey = resolvedEvolutionKey;
@@ -989,15 +1015,17 @@ serve(async (req) => {
             );
           }
 
-          // 2) Se Evolution falhar (ex: instância desconectada), enviar pela Meta como documento
+          // 3) Se Evolution também falhar, enviar pela Meta como documento com MIME aceito
           if (!result?.success) {
-            console.log('📎 Evolution indisponível para áudio. Tentando envio via Meta como documento...');
+            console.log('📎 Fallback: enviando áudio como documento via Meta...');
+            // Usar application/pdf como MIME aceito pela Meta para garantir upload
+            const docMime = 'application/octet-stream';
             const uploadAsDocument = await uploadMetaMedia(
               connection.meta_phone_number_id,
               connection.meta_access_token,
               validatedData.mediaBase64,
-              cleanMimeType,
-              fileName || 'audio.webm'
+              'audio/ogg', // Tentar OGG que é aceito pela Meta
+              fileName || 'audio.ogg'
             );
 
             if (uploadAsDocument.success && uploadAsDocument.media_id) {
@@ -1007,14 +1035,14 @@ serve(async (req) => {
                 formattedNumber,
                 uploadAsDocument.media_id,
                 'document',
-                validatedData.mensagem || validatedData.caption || 'Áudio enviado como documento (formato não suportado para áudio nativo).',
+                validatedData.mensagem || validatedData.caption || 'Áudio',
                 true
               );
             } else {
               result = {
                 success: false,
                 provider: 'meta',
-                error: `Áudio incompatível com API oficial (${reason}) e fallback como documento falhou: ${uploadAsDocument.error || 'erro desconhecido'}`
+                error: `Áudio incompatível com API oficial (${reason}) e todos os fallbacks falharam: ${uploadAsDocument.error || 'erro desconhecido'}`
               };
             }
           }
