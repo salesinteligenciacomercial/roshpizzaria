@@ -220,12 +220,19 @@ export const useConversationsCache = (companyId: string | null) => {
         console.log(`👥 [DATABASE] ${ownerNamesMap.size} nomes de usuários carregados`);
       }
 
-      // ⚡ FASE 2.3: Agrupar APENAS por telefone (ignorar nome)
+      // ⚡ FASE 2.3: Agrupar APENAS por identificador da conversa (telefone, grupo ou Instagram)
       const conversasMap = new Map<string, any[]>();
       validConversas.forEach(conv => {
         const isGroup = conv.is_group || /@g\.us$/.test(conv.numero || '');
-        const key = isGroup ? conv.numero : (conv.telefone_formatado || conv.numero.replace(/[^0-9]/g, ''));
-        
+        const normalizedDigits = String(conv.telefone_formatado || conv.numero || '').replace(/[^0-9]/g, '');
+        const isInstagram = conv.origem === 'Instagram' || (conv.origem_api === 'meta' && normalizedDigits.length >= 15);
+
+        const key = isGroup
+          ? String(conv.numero || '')
+          : isInstagram
+            ? `ig_${normalizedDigits}`
+            : (normalizedDigits || String(conv.numero || '').replace(/[^0-9]/g, ''));
+
         if (!conversasMap.has(key)) {
           conversasMap.set(key, []);
         }
