@@ -1015,34 +1015,32 @@ serve(async (req) => {
             );
           }
 
-          // 3) Se Evolution também falhar, enviar pela Meta como documento com MIME aceito
+          // 3) Se Evolution também falhar, enviar pela Meta como áudio OGG (não como documento)
           if (!result?.success) {
-            console.log('📎 Fallback: enviando áudio como documento via Meta...');
-            // Usar application/pdf como MIME aceito pela Meta para garantir upload
-            const docMime = 'application/octet-stream';
-            const uploadAsDocument = await uploadMetaMedia(
+            console.log('🔊 Fallback: enviando áudio como audio/ogg via Meta (não como documento)...');
+            const uploadAsAudio = await uploadMetaMedia(
               connection.meta_phone_number_id,
               connection.meta_access_token,
               validatedData.mediaBase64,
-              'audio/ogg', // Tentar OGG que é aceito pela Meta
-              fileName || 'audio.ogg'
+              'audio/ogg',
+              'audio.ogg'
             );
 
-            if (uploadAsDocument.success && uploadAsDocument.media_id) {
+            if (uploadAsAudio.success && uploadAsAudio.media_id) {
               result = await sendMetaMediaMessage(
                 connection.meta_phone_number_id,
                 connection.meta_access_token,
                 formattedNumber,
-                uploadAsDocument.media_id,
-                'document',
-                validatedData.mensagem || validatedData.caption || 'Áudio',
+                uploadAsAudio.media_id,
+                'audio',
+                undefined, // Meta não suporta caption em áudio
                 true
               );
             } else {
               result = {
                 success: false,
                 provider: 'meta',
-                error: `Áudio incompatível com API oficial (${reason}) e todos os fallbacks falharam: ${uploadAsDocument.error || 'erro desconhecido'}`
+                error: `Áudio incompatível com API oficial (${reason}) e todos os fallbacks falharam: ${uploadAsAudio.error || 'erro desconhecido'}`
               };
             }
           }
