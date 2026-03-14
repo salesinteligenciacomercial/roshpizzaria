@@ -140,8 +140,14 @@ function MessageItemComponent({
         return;
       }
       
-      // ⚠️ Blob URLs expiram - NÃO usar diretamente, buscar URL permanente
+      // ⚡ Blob URLs: usar diretamente para mensagens otimistas (temp-*), senão buscar permanente
       if (message.mediaUrl.startsWith('blob:')) {
+        if (message.id.startsWith('temp-')) {
+          // Mensagem otimista - usar blob URL diretamente (será substituída depois)
+          setMediaUrl(message.mediaUrl);
+          setMediaLoading(false);
+          return;
+        }
         console.log('⚠️ [MESSAGE-ITEM] Blob URL detectada (expira) - buscando URL permanente:', {
           id: message.id,
           type: message.type
