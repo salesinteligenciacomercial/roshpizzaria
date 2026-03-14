@@ -253,6 +253,28 @@ export const GlobalCallListenerV2 = () => {
           } else if (signal.signal_type === 'guest-joined' && !isOnMeetingPage) {
             // Guest joined public meeting - only handle if not already on meeting page
             await handleGuestJoinSignal(signal);
+          } else if (signal.signal_type === 'group-room-invite') {
+            // Group room invite from another team member
+            const signalData = signal.signal_data as any;
+            const hostName = signalData?.hostName || 'Colega';
+            const inviteMeetingId = signalData?.meetingId || signal.meeting_id;
+            
+            playGuestJoinNotification();
+            
+            toast.info(
+              `${hostName} convidou você para uma sala de grupo`,
+              {
+                duration: 15000,
+                icon: '📹',
+                action: {
+                  label: 'Entrar na Sala',
+                  onClick: () => {
+                    // Navigate to the public meeting page as an authenticated user
+                    navigate(`/meeting/${inviteMeetingId}`);
+                  },
+                },
+              }
+            );
           }
         }
       )
