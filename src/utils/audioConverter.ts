@@ -23,7 +23,7 @@ export async function convertWebmToMp3(webmBlob: Blob): Promise<Blob> {
 
     // Encode to MP3 at 128kbps mono
     const mp3Encoder = new lamejs.Mp3Encoder(1, sampleRate, 128);
-    const mp3Data: Uint8Array[] = [];
+    const mp3Data: BlobPart[] = [];
     const sampleBlockSize = 1152;
 
     // Convert Float32 samples to Int16
