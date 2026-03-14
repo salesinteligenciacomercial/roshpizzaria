@@ -3558,14 +3558,16 @@ function Conversas() {
             const cleanTel = telefone.replace(/^ig_/, '');
             const isInstagramNumericId = isInstagramForName && /^\d{10,}$/.test(cleanTel);
             if (isInstagramNumericId) {
-              contactName = `Instagram ${cleanTel.slice(-6)}`;
+              // ⚡ CORREÇÃO: Usar "Contato Instagram" como placeholder mais limpo
+              // O nome real será resolvido async via resolve-instagram-name
+              contactName = `Contato Instagram`;
             } else {
               contactName = cleanTel;
             }
           } else {
-            // ⚡ CORREÇÃO SUBCONTAS: Se o nome é um ID numérico longo do Instagram, substituir
+            // ⚡ CORREÇÃO: Se o nome é um ID numérico longo do Instagram, usar placeholder
             if (isInstagramForName && /^\d{10,}$/.test(contactName)) {
-              contactName = `Instagram ${contactName.slice(-6)}`;
+              contactName = `Contato Instagram`;
             }
           }
         }
