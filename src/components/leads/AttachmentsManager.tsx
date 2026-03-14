@@ -47,13 +47,13 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
   const [viewMode, setViewMode] = useState<"leads" | "all">("leads");
 
   const categories = [
-    { id: "antes", label: "Antes", color: "bg-blue-500" },
-    { id: "depois", label: "Depois", color: "bg-green-500" },
-    { id: "durante", label: "Durante", color: "bg-yellow-500" },
-    { id: "exame", label: "Exame", color: "bg-purple-500" },
-    { id: "laudo", label: "Laudo", color: "bg-red-500" },
-    { id: "outros", label: "Outros", color: "bg-gray-500" },
-  ];
+  { id: "antes", label: "Antes", color: "bg-blue-500" },
+  { id: "depois", label: "Depois", color: "bg-green-500" },
+  { id: "durante", label: "Durante", color: "bg-yellow-500" },
+  { id: "exame", label: "Exame", color: "bg-purple-500" },
+  { id: "laudo", label: "Laudo", color: "bg-red-500" },
+  { id: "outros", label: "Outros", color: "bg-gray-500" }];
+
 
   useEffect(() => {
     if (open) {
@@ -72,11 +72,11 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: userRole } = await supabase
-        .from("user_roles")
-        .select("company_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const { data: userRole } = await supabase.
+      from("user_roles").
+      select("company_id").
+      eq("user_id", user.id).
+      maybeSingle();
 
       if (userRole?.company_id) {
         setUserCompanyId(userRole.company_id);
@@ -104,16 +104,16 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
 
   const loadLeadsWithAttachments = async () => {
     // Buscar leads com contagem de anexos
-    const { data: attachments, error } = await supabase
-      .from("lead_attachments")
-      .select("lead_id, leads!inner(id, name, phone, telefone)")
-      .eq("company_id", userCompanyId);
+    const { data: attachments, error } = await supabase.
+    from("lead_attachments").
+    select("lead_id, leads!inner(id, name, phone, telefone)").
+    eq("company_id", userCompanyId);
 
     if (error) throw error;
 
     // Agrupar por lead
     const leadsMap = new Map<string, LeadWithAttachments>();
-    
+
     attachments?.forEach((att: any) => {
       const lead = att.leads;
       if (lead && !leadsMap.has(lead.id)) {
@@ -121,7 +121,7 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
           id: lead.id,
           name: lead.name,
           phone: lead.phone || lead.telefone,
-          attachmentsCount: 0,
+          attachmentsCount: 0
         });
       }
       if (lead) {
@@ -130,18 +130,18 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
       }
     });
 
-    const leadsArray = Array.from(leadsMap.values())
-      .sort((a, b) => b.attachmentsCount - a.attachmentsCount);
+    const leadsArray = Array.from(leadsMap.values()).
+    sort((a, b) => b.attachmentsCount - a.attachmentsCount);
 
     setLeadsWithAttachments(leadsArray);
   };
 
   const loadAllAttachments = async () => {
-    let query = supabase
-      .from("lead_attachments")
-      .select("*, leads!inner(id, name, phone, telefone)")
-      .eq("company_id", userCompanyId)
-      .order("created_at", { ascending: false });
+    let query = supabase.
+    from("lead_attachments").
+    select("*, leads!inner(id, name, phone, telefone)").
+    eq("company_id", userCompanyId).
+    order("created_at", { ascending: false });
 
     if (selectedCategory) {
       query = query.eq("category", selectedCategory);
@@ -154,7 +154,7 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
     const attachmentsWithLead: AttachmentWithLead[] = (data || []).map((att: any) => ({
       ...att,
       leadName: att.leads?.name || "Lead desconhecido",
-      leadPhone: att.leads?.phone || att.leads?.telefone,
+      leadPhone: att.leads?.phone || att.leads?.telefone
     }));
 
     setAllAttachments(attachmentsWithLead);
@@ -163,7 +163,7 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
   const getFileIcon = (fileType: string, mimeType?: string | null) => {
     const type = fileType?.toLowerCase() || '';
     const mime = mimeType?.toLowerCase() || '';
-    
+
     if (type === 'image' || mime.startsWith("image/")) return <Image className="h-4 w-4" />;
     if (type === 'video' || mime.startsWith("video/")) return <Video className="h-4 w-4" />;
     if (type === 'audio' || mime.startsWith("audio/")) return <Music className="h-4 w-4" />;
@@ -172,11 +172,11 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
   };
 
   const getCategoryColor = (category: string) => {
-    return categories.find(c => c.id === category)?.color || "bg-gray-500";
+    return categories.find((c) => c.id === category)?.color || "bg-gray-500";
   };
 
   const getCategoryLabel = (category: string) => {
-    return categories.find(c => c.id === category)?.label || category;
+    return categories.find((c) => c.id === category)?.label || category;
   };
 
   const handleOpenLeadAttachments = (lead: LeadWithAttachments) => {
@@ -192,10 +192,10 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
 
   const handleDeleteAttachment = async (attachmentId: string) => {
     try {
-      const { error } = await supabase
-        .from("lead_attachments")
-        .delete()
-        .eq("id", attachmentId);
+      const { error } = await supabase.
+      from("lead_attachments").
+      delete().
+      eq("id", attachmentId);
 
       if (error) throw error;
 
@@ -207,15 +207,15 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
     }
   };
 
-  const filteredLeads = leadsWithAttachments.filter(lead =>
-    lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (lead.phone && lead.phone.includes(searchTerm))
+  const filteredLeads = leadsWithAttachments.filter((lead) =>
+  lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  lead.phone && lead.phone.includes(searchTerm)
   );
 
-  const filteredAttachments = allAttachments.filter(att =>
-    att.leadName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    att.file_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (att.treatment_name && att.treatment_name.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filteredAttachments = allAttachments.filter((att) =>
+  att.leadName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  att.file_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  att.treatment_name && att.treatment_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const totalAttachments = leadsWithAttachments.reduce((sum, lead) => sum + lead.attachmentsCount, 0);
@@ -226,7 +226,7 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
         <DialogTrigger asChild>
           <Button variant="outline" size="sm" className="md:size-default gap-2">
             <Paperclip className="h-4 w-4" />
-            <span className="hidden md:inline">Prontuários</span>
+            <span className="hidden md:inline">Ficha Técnica</span>
           </Button>
         </DialogTrigger>
         <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
@@ -246,16 +246,16 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
               <Button
                 size="sm"
                 variant={viewMode === "leads" ? "default" : "outline"}
-                onClick={() => setViewMode("leads")}
-              >
+                onClick={() => setViewMode("leads")}>
+                
                 <Users className="h-4 w-4 mr-2" />
                 Por Lead
               </Button>
               <Button
                 size="sm"
                 variant={viewMode === "all" ? "default" : "outline"}
-                onClick={() => setViewMode("all")}
-              >
+                onClick={() => setViewMode("all")}>
+                
                 <FileText className="h-4 w-4 mr-2" />
                 Todos os Arquivos
               </Button>
@@ -268,62 +268,62 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
                   placeholder={viewMode === "leads" ? "Buscar lead..." : "Buscar arquivo..."}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+                  className="pl-10" />
+                
               </div>
             </div>
 
-            {viewMode === "all" && (
-              <div className="flex flex-wrap gap-2">
+            {viewMode === "all" &&
+            <div className="flex flex-wrap gap-2">
                 <Button
-                  size="sm"
-                  variant={!selectedCategory ? "default" : "outline"}
-                  onClick={() => {
-                    setSelectedCategory(null);
-                    loadAllAttachments();
-                  }}
-                >
+                size="sm"
+                variant={!selectedCategory ? "default" : "outline"}
+                onClick={() => {
+                  setSelectedCategory(null);
+                  loadAllAttachments();
+                }}>
+                
                   Todas
                 </Button>
-                {categories.map((cat) => (
-                  <Button
-                    key={cat.id}
-                    size="sm"
-                    variant={selectedCategory === cat.id ? "default" : "outline"}
-                    onClick={() => {
-                      setSelectedCategory(cat.id);
-                    }}
-                  >
+                {categories.map((cat) =>
+              <Button
+                key={cat.id}
+                size="sm"
+                variant={selectedCategory === cat.id ? "default" : "outline"}
+                onClick={() => {
+                  setSelectedCategory(cat.id);
+                }}>
+                
                     <span className={`w-2 h-2 rounded-full ${cat.color} mr-2`} />
                     {cat.label}
                   </Button>
-                ))}
+              )}
               </div>
-            )}
+            }
           </div>
 
           <Separator />
 
           {/* Conteúdo */}
           <ScrollArea className="flex-1 min-h-0">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
+            {loading ?
+            <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-              </div>
-            ) : viewMode === "leads" ? (
-              <div className="space-y-2 p-1">
-                {filteredLeads.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
+              </div> :
+            viewMode === "leads" ?
+            <div className="space-y-2 p-1">
+                {filteredLeads.length === 0 ?
+              <div className="text-center py-12 text-muted-foreground">
                     <Paperclip className="h-12 w-12 mx-auto mb-3 opacity-50" />
                     <p>Nenhum lead com prontuário encontrado</p>
-                  </div>
-                ) : (
-                  filteredLeads.map((lead) => (
-                    <Card
-                      key={lead.id}
-                      className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => handleOpenLeadAttachments(lead)}
-                    >
+                  </div> :
+
+              filteredLeads.map((lead) =>
+              <Card
+                key={lead.id}
+                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => handleOpenLeadAttachments(lead)}>
+                
                       <CardContent className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -331,9 +331,9 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
                           </div>
                           <div>
                             <p className="font-medium">{lead.name}</p>
-                            {lead.phone && (
-                              <p className="text-sm text-muted-foreground">{lead.phone}</p>
-                            )}
+                            {lead.phone &&
+                      <p className="text-sm text-muted-foreground">{lead.phone}</p>
+                      }
                           </div>
                         </div>
                         <Badge variant="secondary" className="gap-1">
@@ -342,19 +342,19 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
                         </Badge>
                       </CardContent>
                     </Card>
-                  ))
-                )}
-              </div>
-            ) : (
-              <div className="space-y-2 p-1">
-                {filteredAttachments.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
+              )
+              }
+              </div> :
+
+            <div className="space-y-2 p-1">
+                {filteredAttachments.length === 0 ?
+              <div className="text-center py-12 text-muted-foreground">
                     <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
                     <p>Nenhum arquivo encontrado</p>
-                  </div>
-                ) : (
-                  filteredAttachments.map((att) => (
-                    <Card key={att.id} className="hover:bg-muted/50 transition-colors">
+                  </div> :
+
+              filteredAttachments.map((att) =>
+              <Card key={att.id} className="hover:bg-muted/50 transition-colors">
                       <CardContent className="p-4">
                         <div className="flex items-start gap-3">
                           <div className="w-10 h-10 rounded bg-muted flex items-center justify-center flex-shrink-0">
@@ -380,60 +380,60 @@ export function AttachmentsManager({ onLeadSelected }: AttachmentsManagerProps) 
                           </div>
                           <div className="flex gap-1">
                             <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8"
-                              onClick={() => handleViewAttachment(att)}
-                            >
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => handleViewAttachment(att)}>
+                        
                               <Eye className="h-4 w-4" />
                             </Button>
                             <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => handleDeleteAttachment(att.id)}
-                            >
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => handleDeleteAttachment(att.id)}>
+                        
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
                       </CardContent>
                     </Card>
-                  ))
-                )}
+              )
+              }
               </div>
-            )}
+            }
           </ScrollArea>
         </DialogContent>
       </Dialog>
 
       {/* Modal de Prontuário do Lead */}
-      {selectedLeadId && userCompanyId && (
-        <LeadAttachments
-          open={leadAttachmentsOpen}
-          onOpenChange={(o) => {
-            setLeadAttachmentsOpen(o);
-            if (!o) {
-              setSelectedLeadId(null);
-              loadData();
-            }
-          }}
-          leadId={selectedLeadId}
-          companyId={userCompanyId}
-          leadName={selectedLeadName}
-        />
-      )}
+      {selectedLeadId && userCompanyId &&
+      <LeadAttachments
+        open={leadAttachmentsOpen}
+        onOpenChange={(o) => {
+          setLeadAttachmentsOpen(o);
+          if (!o) {
+            setSelectedLeadId(null);
+            loadData();
+          }
+        }}
+        leadId={selectedLeadId}
+        companyId={userCompanyId}
+        leadName={selectedLeadName} />
+
+      }
 
       {/* Visualizador de Arquivo */}
-      {selectedAttachment && (
-        <AttachmentViewer
-          open={viewerOpen}
-          onOpenChange={setViewerOpen}
-          attachment={selectedAttachment}
-          allAttachments={allAttachments}
-          onNavigate={(att) => setSelectedAttachment(att)}
-        />
-      )}
-    </>
-  );
+      {selectedAttachment &&
+      <AttachmentViewer
+        open={viewerOpen}
+        onOpenChange={setViewerOpen}
+        attachment={selectedAttachment}
+        allAttachments={allAttachments}
+        onNavigate={(att) => setSelectedAttachment(att)} />
+
+      }
+    </>);
+
 }
