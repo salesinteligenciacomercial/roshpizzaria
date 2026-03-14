@@ -143,7 +143,7 @@ export function Sidebar({
   }, []);
 
   // Módulos premium que requerem liberação
-  const premiumModules = ['automacao', 'chat-equipe', 'reunioes', 'discador', 'processos'];
+  const premiumModules = ['automacao', 'chat-equipe', 'discador', 'processos'];
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
