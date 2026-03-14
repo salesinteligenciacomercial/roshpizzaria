@@ -187,7 +187,7 @@ async function uploadMetaMedia(
     const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '');
     
     // Sanitize mimeType: Meta API rejects parameters like "; codecs=opus"
-    const cleanMimeType = mimeType.split(';')[0].trim();
+    const cleanMimeType = normalizeMimeType(mimeType);
     
     // Convert base64 to binary
     const binaryString = atob(cleanBase64);
