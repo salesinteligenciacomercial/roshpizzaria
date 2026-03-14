@@ -11,12 +11,16 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, Send, Paperclip, Image as ImageIcon, File as FileIcon, Share2, Users, MoreVertical, ArrowLeft, Video, Mic, Square, Loader2, X, Settings, Phone, VideoIcon } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Plus, Search, Send, Paperclip, Image as ImageIcon, File as FileIcon, Share2, Users, MoreVertical, ArrowLeft, Video, Mic, Square, Loader2, X, Settings, Phone, VideoIcon, Clock, Link2, MessagesSquare } from 'lucide-react';
 import { NewConversationDialog } from '@/components/internal-chat/NewConversationDialog';
 import { ShareItemDialog } from '@/components/internal-chat/ShareItemDialog';
 import { EditGroupDialog } from '@/components/internal-chat/EditGroupDialog';
 import { MessageItem } from '@/components/internal-chat/MessageItem';
 import { VideoCallModalV2 } from '@/components/meetings/VideoCallModalV2';
+import { StartCallDialog } from '@/components/meetings/StartCallDialog';
+import { CreatePublicMeetingDialog } from '@/components/meetings/CreatePublicMeetingDialog';
+import { MeetingHistory } from '@/components/meetings/MeetingHistory';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -34,6 +38,9 @@ export default function ChatInterno() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [activeTab, setActiveTab] = useState('conversas');
+  const [showStartCallDialog, setShowStartCallDialog] = useState(false);
+  const [showCreatePublicMeeting, setShowCreatePublicMeeting] = useState(false);
 
   // Call states
   const [activeCall, setActiveCall] = useState<{
@@ -78,8 +85,12 @@ export default function ChatInterno() {
 
   // Note: Incoming calls are handled globally by GlobalCallListenerV2 in MainLayout
   const {
+    meetings,
+    loading: meetingsLoading,
     createMeeting,
-    endMeeting
+    endMeeting,
+    addNotes,
+    deleteMeeting
   } = useMeetings();
 
   // Get the other participant for 1:1 calls
@@ -109,6 +120,22 @@ export default function ChatInterno() {
         isCaller: true
       });
       toast.info(`Chamando ${target.userName}...`);
+    }
+  };
+
+  // Start call from dialog (any team member)
+  const handleStartCallFromDialog = async (userId: string, userName: string, callType: 'audio' | 'video') => {
+    const meeting = await createMeeting(callType, userId, userName);
+    if (meeting) {
+      setActiveCall({
+        meetingId: meeting.id,
+        remoteUserId: userId,
+        remoteUserName: userName,
+        callType,
+        isCaller: true
+      });
+      setShowStartCallDialog(false);
+      toast.info(`Chamando ${userName}...`);
     }
   };
 
@@ -315,92 +342,183 @@ export default function ChatInterno() {
     if (!name || name === 'Conversa') return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
-  return <div className="h-[calc(100vh-7rem)] flex bg-background rounded-xl border border-border" style={{ overflow: 'hidden' }}>
-      {/* Lista de Conversas */}
+  return <><div className="h-[calc(100vh-7rem)] flex bg-background rounded-xl border border-border" style={{ overflow: 'hidden' }}>
+      {/* Painel Esquerdo */}
       <div className={`w-full md:w-80 lg:w-96 border-r border-border flex flex-col bg-card ${!showMobileList && 'hidden md:flex'}`}>
         {/* Header */}
         <div className="p-4 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-foreground">Chat Equipe Interno</h2>
-            <Button size="icon" variant="ghost" onClick={() => setNewConversationOpen(true)}>
-              <Plus className="h-5 w-5" />
-            </Button>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold text-foreground">Chat Equipe</h2>
+            <div className="flex gap-1">
+              <Button size="icon" variant="ghost" onClick={() => setShowStartCallDialog(true)} title="Nova Chamada">
+                <Phone className="h-4 w-4" />
+              </Button>
+              <Button size="icon" variant="ghost" onClick={() => setShowCreatePublicMeeting(true)} title="Sala Pública">
+                <Link2 className="h-4 w-4" />
+              </Button>
+              <Button size="icon" variant="ghost" onClick={() => setNewConversationOpen(true)} title="Nova Conversa">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar conversas..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" />
-          </div>
+          
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3 h-9">
+              <TabsTrigger value="conversas" className="text-xs gap-1">
+                <MessagesSquare className="h-3.5 w-3.5" />
+                Chats
+              </TabsTrigger>
+              <TabsTrigger value="chamadas" className="text-xs gap-1">
+                <Video className="h-3.5 w-3.5" />
+                Chamadas
+              </TabsTrigger>
+              <TabsTrigger value="historico" className="text-xs gap-1">
+                <Clock className="h-3.5 w-3.5" />
+                Histórico
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
 
-        {/* Lista */}
-        <ScrollArea className="flex-1">
-          {conversationsLoading ? <div className="p-4 text-center text-muted-foreground">Carregando...</div> : filteredConversations.length === 0 ? <div className="p-4 text-center text-muted-foreground">
-              {searchTerm ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa ainda'}
-            </div> : <div className="divide-y divide-border">
-              {filteredConversations.map(conv => {
-            const isSelected = selectedConversation?.id === conv.id;
-            return <div key={conv.id} className={`w-full p-4 flex items-center gap-3 hover:bg-accent/50 transition-colors ${isSelected ? 'bg-accent' : ''}`}>
-                    <button onClick={() => handleConversationSelect(conv)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-                      <Avatar className="h-12 w-12 flex-shrink-0">
-                        <AvatarImage src={getConversationAvatar(conv) || undefined} />
-                        <AvatarFallback className={conv.is_group ? 'bg-primary/20' : 'bg-muted'}>
-                          {conv.is_group ? <Users className="h-5 w-5 text-primary" /> : getInitials(getConversationName(conv))}
-                        </AvatarFallback>
-                      </Avatar>
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-foreground truncate">
-                            {getConversationName(conv)}
-                          </span>
-                          {conv.last_message && <span className="text-xs text-muted-foreground flex-shrink-0">
-                              {format(new Date(conv.last_message.created_at), 'HH:mm', {
-                        locale: ptBR
-                      })}
-                            </span>}
-                        </div>
-                        <div className="flex items-center justify-between mt-1">
-                          <p className="text-sm text-muted-foreground truncate">
-                            {conv.last_message?.content || 'Sem mensagens'}
-                          </p>
-                          {conv.unread_count > 0 && <Badge variant="destructive" className="ml-2 flex-shrink-0">
-                              {conv.unread_count}
-                            </Badge>}
-                        </div>
-                      </div>
-                    </button>
-                    
-                    {/* Menu de três pontos */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="bg-popover border shadow-lg z-50">
-                        {conv.is_group && <>
+        {/* Conteúdo baseado na tab ativa */}
+        {activeTab === 'conversas' && (
+          <>
+            <div className="px-4 py-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Buscar conversas..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 h-9" />
+              </div>
+            </div>
+            <ScrollArea className="flex-1">
+              {conversationsLoading ? <div className="p-4 text-center text-muted-foreground">Carregando...</div> : filteredConversations.length === 0 ? <div className="p-4 text-center text-muted-foreground">
+                  {searchTerm ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa ainda'}
+                </div> : <div className="divide-y divide-border">
+                  {filteredConversations.map(conv => {
+                const isSelected = selectedConversation?.id === conv.id;
+                return <div key={conv.id} className={`w-full p-4 flex items-center gap-3 hover:bg-accent/50 transition-colors ${isSelected ? 'bg-accent' : ''}`}>
+                        <button onClick={() => handleConversationSelect(conv)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                          <Avatar className="h-12 w-12 flex-shrink-0">
+                            <AvatarImage src={getConversationAvatar(conv) || undefined} />
+                            <AvatarFallback className={conv.is_group ? 'bg-primary/20' : 'bg-muted'}>
+                              {conv.is_group ? <Users className="h-5 w-5 text-primary" /> : getInitials(getConversationName(conv))}
+                            </AvatarFallback>
+                          </Avatar>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-foreground truncate">
+                                {getConversationName(conv)}
+                              </span>
+                              {conv.last_message && <span className="text-xs text-muted-foreground flex-shrink-0">
+                                  {format(new Date(conv.last_message.created_at), 'HH:mm', {
+                            locale: ptBR
+                          })}
+                                </span>}
+                            </div>
+                            <div className="flex items-center justify-between mt-1">
+                              <p className="text-sm text-muted-foreground truncate">
+                                {conv.last_message?.content || 'Sem mensagens'}
+                              </p>
+                              {conv.unread_count > 0 && <Badge variant="destructive" className="ml-2 flex-shrink-0">
+                                  {conv.unread_count}
+                                </Badge>}
+                            </div>
+                          </div>
+                        </button>
+                        
+                        {/* Menu de três pontos */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-popover border shadow-lg z-50">
+                            {conv.is_group && <>
+                                <DropdownMenuItem onClick={() => {
+                          setSelectedConversation(conv);
+                          setEditGroupOpen(true);
+                        }}>
+                                  <Settings className="h-4 w-4 mr-2" />
+                                  Editar grupo
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                              </>}
                             <DropdownMenuItem onClick={() => {
-                      setSelectedConversation(conv);
-                      setEditGroupOpen(true);
-                    }}>
-                              <Settings className="h-4 w-4 mr-2" />
-                              Editar grupo
+                        setSelectedConversation(conv);
+                        setShareDialogOpen(true);
+                      }}>
+                              <Share2 className="h-4 w-4 mr-2" />
+                              Compartilhar item
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                          </>}
-                        <DropdownMenuItem onClick={() => {
-                    setSelectedConversation(conv);
-                    setShareDialogOpen(true);
-                  }}>
-                          <Share2 className="h-4 w-4 mr-2" />
-                          Compartilhar item
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>;
-          })}
-            </div>}
-        </ScrollArea>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>;
+              })}
+                </div>}
+            </ScrollArea>
+          </>
+        )}
+
+        {activeTab === 'chamadas' && (
+          <ScrollArea className="flex-1">
+            <div className="p-4 space-y-3">
+              {/* Quick call cards */}
+              <div
+                onClick={() => setShowStartCallDialog(true)}
+                className="flex items-center gap-3 p-4 rounded-lg border border-primary/20 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
+              >
+                <div className="p-2 rounded-full bg-primary/20">
+                  <VideoIcon className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Chamada de Vídeo</h3>
+                  <p className="text-xs text-muted-foreground">Inicie uma videochamada</p>
+                </div>
+              </div>
+
+              <div
+                onClick={() => setShowStartCallDialog(true)}
+                className="flex items-center gap-3 p-4 rounded-lg border border-green-500/20 bg-green-500/5 cursor-pointer hover:bg-green-500/10 transition-colors"
+              >
+                <div className="p-2 rounded-full bg-green-500/20">
+                  <Phone className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Chamada de Áudio</h3>
+                  <p className="text-xs text-muted-foreground">Inicie uma ligação de áudio</p>
+                </div>
+              </div>
+
+              <div
+                onClick={() => setShowCreatePublicMeeting(true)}
+                className="flex items-center gap-3 p-4 rounded-lg border border-blue-500/20 bg-blue-500/5 cursor-pointer hover:bg-blue-500/10 transition-colors"
+              >
+                <div className="p-2 rounded-full bg-blue-500/20">
+                  <Link2 className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Sala Pública</h3>
+                  <p className="text-xs text-muted-foreground">Crie link para participantes externos</p>
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
+        )}
+
+        {activeTab === 'historico' && (
+          <ScrollArea className="flex-1">
+            <div className="p-2">
+              <MeetingHistory
+                meetings={meetings}
+                loading={meetingsLoading}
+                onAddNotes={addNotes}
+                onDelete={deleteMeeting}
+              />
+            </div>
+          </ScrollArea>
+        )}
+      </div>
       </div>
 
       {/* Área de Chat */}
@@ -691,9 +809,18 @@ export default function ChatInterno() {
       }
     }} />}
 
-      {/* Video/Audio Call Modal */}
-      {activeCall && currentUserId && <VideoCallModalV2 open={true} onClose={() => setActiveCall(null)} meetingId={activeCall.meetingId} localUserId={currentUserId} remoteUserId={activeCall.remoteUserId} remoteUserName={activeCall.remoteUserName} callType={activeCall.callType} isCaller={activeCall.isCaller} onCallEnded={handleCallEnded} />}
+      <StartCallDialog
+        open={showStartCallDialog}
+        onClose={() => setShowStartCallDialog(false)}
+        onStartCall={handleStartCallFromDialog}
+      />
 
-      {/* Note: Incoming Call Modal removed - handled globally by GlobalCallListenerV2 in MainLayout */}
-    </div>;
+      <CreatePublicMeetingDialog
+        open={showCreatePublicMeeting}
+        onClose={() => setShowCreatePublicMeeting(false)}
+        onMeetingCreated={(id) => console.log('Meeting created:', id)}
+      />
+
+      {activeCall && currentUserId && <VideoCallModalV2 open={true} onClose={() => setActiveCall(null)} meetingId={activeCall.meetingId} localUserId={currentUserId} remoteUserId={activeCall.remoteUserId} remoteUserName={activeCall.remoteUserName} callType={activeCall.callType} isCaller={activeCall.isCaller} onCallEnded={handleCallEnded} />}
+    </>;
 }

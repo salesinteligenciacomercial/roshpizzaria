@@ -59,11 +59,6 @@ const navigation = [{
   menuKey: "chat-equipe",
   showBadge: true
 }, {
-  name: "Sala de Reunião",
-  href: "/reunioes",
-  icon: Video,
-  menuKey: "reunioes"
-}, {
   name: "Discador",
   href: "/discador",
   icon: PhoneCall,
@@ -148,7 +143,7 @@ export function Sidebar({
   }, []);
 
   // Módulos premium que requerem liberação
-  const premiumModules = ['automacao', 'chat-equipe', 'reunioes', 'discador', 'processos'];
+  const premiumModules = ['automacao', 'chat-equipe', 'discador', 'processos'];
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
