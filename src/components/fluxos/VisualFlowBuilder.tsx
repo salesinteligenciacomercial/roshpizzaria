@@ -53,6 +53,7 @@ interface FlowSettings {
     days: string[];
     startTime: string;
     endTime: string;
+    outOfHoursMessage?: string;
   };
   filters?: {
     tags?: string[];
