@@ -12,15 +12,47 @@ type Mp3EncoderCtor = new (
   flush: () => Int8Array | number[];
 };
 
-async function loadMp3Encoder(): Promise<Mp3EncoderCtor> {
-  const mod = await import('lamejs');
-  const ctor = (mod as any)?.Mp3Encoder ?? (mod as any)?.default?.Mp3Encoder;
+let cachedMp3EncoderCtor: Mp3EncoderCtor | null = null;
 
-  if (typeof ctor !== 'function') {
-    throw new Error('Mp3Encoder indisponível no módulo lamejs');
+function extractMp3EncoderFromModule(mod: any): Mp3EncoderCtor | null {
+  const ctor = mod?.Mp3Encoder ?? mod?.default?.Mp3Encoder;
+  return typeof ctor === 'function' ? (ctor as Mp3EncoderCtor) : null;
+}
+
+async function loadMp3Encoder(): Promise<Mp3EncoderCtor> {
+  if (cachedMp3EncoderCtor) {
+    return cachedMp3EncoderCtor;
   }
 
-  return ctor as Mp3EncoderCtor;
+  try {
+    const mod = await import('lamejs');
+    const ctor = extractMp3EncoderFromModule(mod);
+    if (ctor) {
+      cachedMp3EncoderCtor = ctor;
+      return ctor;
+    }
+  } catch (error) {
+    console.warn('⚠️ [AudioConverter] import("lamejs") falhou, aplicando fallback:', error);
+  }
+
+  // Fallback para bug conhecido do lamejs ("Lame is not defined") em ambientes ESM.
+  const rawMod = await import('lamejs/lame.min.js?raw');
+  const source = (rawMod as any)?.default;
+
+  if (typeof source !== 'string' || !source.trim()) {
+    throw new Error('Falha ao carregar fallback do encoder MP3');
+  }
+
+  const lameFactory = new Function(`${source}; return typeof lamejs !== 'undefined' ? lamejs : null;`);
+  const lameNamespace = lameFactory() as { Mp3Encoder?: Mp3EncoderCtor } | null;
+  const fallbackCtor = lameNamespace?.Mp3Encoder;
+
+  if (typeof fallbackCtor !== 'function') {
+    throw new Error('Mp3Encoder indisponível após fallback do lamejs');
+  }
+
+  cachedMp3EncoderCtor = fallbackCtor;
+  return fallbackCtor;
 }
 
 async function readBlobHeader(blob: Blob, bytes = 16): Promise<Uint8Array> {
@@ -114,8 +146,13 @@ export async function normalizeAudioForMeta(audioBlob: Blob): Promise<Blob> {
   const looksWebm = isWebmHeader(header);
 
   // Formatos aceitos nativamente sem transcodificação
-  const nativePassThrough = ['audio/aac', 'audio/mp4', 'audio/mpeg', 'audio/amr', 'audio/opus'];
+  const nativePassThrough = ['audio/aac', 'audio/mp4', 'audio/mpeg', 'audio/amr'];
   if (nativePassThrough.includes(cleanMime)) {
+    return audioBlob;
+  }
+
+  // Opus só passa direto quando não for payload WebM mascarado
+  if (cleanMime === 'audio/opus' && !looksWebm) {
     return audioBlob;
   }
 
