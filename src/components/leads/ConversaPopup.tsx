@@ -915,6 +915,12 @@ export function ConversaPopup({
   const handleSendMedia = async (file: File, caption: string, type: string) => {
     if (!leadPhone || sending) return;
 
+    // Áudio anexado deve usar o mesmo pipeline robusto do gravador
+    if (type === 'audio') {
+      await handleSendAudio(file);
+      return;
+    }
+
     setSending(true);
     try {
       // Converter arquivo para base64

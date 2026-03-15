@@ -4801,6 +4801,13 @@ function Conversas() {
   };
   const handleSendMedia = async (file: File, caption: string, type: string) => {
     if (!selectedConv) return;
+
+    // Áudio anexado deve seguir o pipeline robusto (normalização + confirmação do provedor)
+    if (type === 'audio') {
+      await handleSendAudio(file);
+      return;
+    }
+
     setSyncStatus('syncing');
     
     // ⚡ CORREÇÃO: Sanitizar nome do arquivo imediatamente para evitar erro InvalidKey
@@ -5266,9 +5273,8 @@ function Conversas() {
 
       if (localBlobUrl) URL.revokeObjectURL(localBlobUrl);
 
-      if (inserted?.id && storageUrl) {
-        transcreverAudio(inserted.id, storageUrl).catch(e => console.error('❌ Transcrição:', e));
-      }
+      // Não iniciar transcrição automática para áudio enviado pelo usuário
+      // (evita erro de transcrição ser confundido com erro de envio).
 
       setTimeout(() => setSyncStatus('idle'), 1000);
     } catch (error) {

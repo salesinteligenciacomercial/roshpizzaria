@@ -374,9 +374,13 @@ async function sendMetaFallback(
         uploadMime = 'audio/ogg';
         uploadFileName = 'audio.ogg';
       } else {
-        console.warn('⚠️ [MetaFallback] Áudio incompatível com Meta como áudio. Enviando como documento para garantir entrega.');
-        mediaType = 'document';
-        uploadMime = cleanMime || 'application/octet-stream';
+        const reason = `MIME não suportado pela Meta (${cleanMime || 'desconhecido'})`;
+        console.warn(`⚠️ [MetaFallback] Áudio incompatível com Meta API (${reason})`);
+        return {
+          success: false,
+          provider: 'meta',
+          error: `Áudio incompatível com API oficial (${reason}). Grave novamente e envie em MP3/OGG válido.`
+        };
       }
     }
 
@@ -1054,8 +1058,13 @@ serve(async (req) => {
             );
           } else {
             console.log("⚠️ Upload Meta falhou:", uploadResult.error);
-            // Fallback para Evolution se disponível
-            if (hasEvolutionConfig) {
+
+            // Para áudio na API oficial, não fazer fallback para Evolution (evita comportamento inconsistente)
+            if (mediaType === 'audio') {
+              result = { success: false, provider: 'meta', error: uploadResult.error || 'Falha no upload de áudio na API oficial' };
+            }
+            // Para os demais tipos, manter fallback para Evolution se disponível
+            else if (hasEvolutionConfig) {
               console.log("🔄 Tentando Evolution como fallback...");
               const baseUrl = resolvedEvolutionUrl;
               const apiKey = resolvedEvolutionKey;
@@ -1212,6 +1221,10 @@ serve(async (req) => {
             validatedData.template_language || 'pt_BR',
             validatedData.template_components
           );
+        } else if (hasMetaCredentials && validatedData.mediaBase64) {
+          // Importante: quando provider é 'both' e Evolution está desconectada,
+          // ainda precisamos tratar base64 (especialmente áudio) via Meta.
+          result = await sendMetaFallback(connection, formattedNumber, validatedData);
         } else if (hasMetaCredentials && validatedData.mensagem) {
           result = await sendMetaTextMessage(
             connection.meta_phone_number_id,
