@@ -1039,37 +1039,13 @@ serve(async (req) => {
             );
           }
 
-          // 3) Fallback final seguro: enviar como documento (evita falso "enviado" com áudio inválido)
+          // 3) Sem fallback por "document" para WebM na Meta (a API rejeita e gera falso positivo)
           if (!result?.success) {
-            console.log('📎 Fallback final: enviando arquivo de áudio como documento para garantir entrega...');
-            const fallbackMime = cleanMimeType || 'application/octet-stream';
-            const fallbackFileName = fileName || 'audio.webm';
-
-            const uploadAsDocument = await uploadMetaMedia(
-              connection.meta_phone_number_id,
-              connection.meta_access_token,
-              validatedData.mediaBase64,
-              fallbackMime,
-              fallbackFileName
-            );
-
-            if (uploadAsDocument.success && uploadAsDocument.media_id) {
-              result = await sendMetaMediaMessage(
-                connection.meta_phone_number_id,
-                connection.meta_access_token,
-                formattedNumber,
-                uploadAsDocument.media_id,
-                'document',
-                validatedData.caption || validatedData.mensagem,
-                true
-              );
-            } else {
-              result = {
-                success: false,
-                provider: 'meta',
-                error: `Áudio incompatível com API oficial (${reason}) e fallback como documento falhou: ${uploadAsDocument.error || 'erro desconhecido'}`
-              };
-            }
+            result = {
+              success: false,
+              provider: 'meta',
+              error: `Áudio incompatível com API oficial (${reason}). Converta para MP3/OGG válido antes do envio.`
+            };
           }
         } else {
           // Upload media to Meta

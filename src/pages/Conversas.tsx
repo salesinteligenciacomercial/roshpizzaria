@@ -5128,9 +5128,7 @@ function Conversas() {
           console.log('✅ Áudio convertido de WebM para MP3, tamanho:', finalAudioBlob.size);
         } catch (convError) {
           console.error('❌ Falha na conversão WebM→MP3:', convError);
-          // Tentar enviar como OGG (forçar MIME compatível) em vez de WebM
-          finalAudioBlob = new Blob([audioBlob], { type: 'audio/ogg' });
-          console.log('⚠️ Fallback: re-rotulando como audio/ogg');
+          throw new Error('Falha ao converter áudio WebM para formato compatível');
         }
       }
 
@@ -5233,48 +5231,47 @@ function Conversas() {
         ? await supabase.from('profiles').select('full_name, email').eq('id', userId).single() 
         : { data: null };
 
-      // ⚡ Enviar WhatsApp e salvar no banco SIMULTANEAMENTE
-      const [apiResult, dbResult] = await Promise.all([
-        // Envio via API
-        (async () => {
-          if (isInstagramChannel) {
-            const companyId = userRole?.company_id || (await getCompanyId());
-            const res = await supabase.functions.invoke('enviar-instagram', {
-              body: { recipient_id: numeroNormalizado, mensagem: '', company_id: companyId, tipo_mensagem: 'audio', media_url: storageUrl }
-            });
-            return { data: res.data, error: res.error || (res.data && !res.data.success ? { message: res.data.error } : null) };
-          } else {
-            const result = await enviarWhatsApp({
-              numero: numeroNormalizado, mensagem: '', tipo_mensagem: 'audio',
-              mediaBase64: base64, fileName: `audio.${audioExtension}`,
-              mimeType: finalAudioBlob.type || audioMimeType, caption: '',
-              company_id: userRole?.company_id, ...quotedPayload
-            });
-            return { data: result.data, error: result.error };
-          }
-        })(),
-        // Salvar no banco
-        supabase.from('conversas').insert([{
-          numero: numeroNormalizado, telefone_formatado: numeroNormalizado,
-          mensagem: '[Áudio]', origem: isInstagramChannel ? 'Instagram' : 'WhatsApp',
-          origem_api: isInstagramChannel ? 'meta' : (selectedConv.origemApi || undefined),
-          status: 'Enviada', tipo_mensagem: 'audio',
-          nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
-          arquivo_nome: `audio.${audioExtension}`, midia_url: storageUrl,
-          company_id: userRole?.company_id, owner_id: userId,
-          sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
-          fromme: true, delivered: true, read: false
-        }]).select('id, midia_url').single()
-      ]);
+      // ⚡ Primeiro envia pela API; só salva no banco se o envio realmente der certo
+      const apiResult = await (async () => {
+        if (isInstagramChannel) {
+          const companyId = userRole?.company_id || (await getCompanyId());
+          const res = await supabase.functions.invoke('enviar-instagram', {
+            body: { recipient_id: numeroNormalizado, mensagem: '', company_id: companyId, tipo_mensagem: 'audio', media_url: storageUrl }
+          });
+          return { data: res.data, error: res.error || (res.data && !res.data.success ? { message: res.data.error } : null) };
+        }
+
+        const result = await enviarWhatsApp({
+          numero: numeroNormalizado, mensagem: '', tipo_mensagem: 'audio',
+          mediaBase64: base64, fileName: `audio.${audioExtension}`,
+          mimeType: finalAudioBlob.type || audioMimeType, caption: '',
+          company_id: userRole?.company_id, ...quotedPayload
+        });
+        return { data: result.data, error: result.error };
+      })();
+
+      if (apiResult.error) {
+        console.error('❌ Erro ao enviar áudio:', apiResult.error);
+        throw new Error(apiResult.error?.message || 'Erro ao enviar áudio');
+      }
+
+      // Salvar no banco somente após confirmação de envio
+      const dbResult = await supabase.from('conversas').insert([{
+        numero: numeroNormalizado, telefone_formatado: numeroNormalizado,
+        mensagem: '[Áudio]', origem: isInstagramChannel ? 'Instagram' : 'WhatsApp',
+        origem_api: isInstagramChannel ? 'meta' : (selectedConv.origemApi || undefined),
+        status: 'Enviada', tipo_mensagem: 'audio',
+        nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
+        arquivo_nome: `audio.${audioExtension}`, midia_url: storageUrl,
+        company_id: userRole?.company_id, owner_id: userId,
+        sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
+        fromme: true, delivered: true, read: false
+      }]).select('id, midia_url').single();
 
       // Atualizar mensagem otimista com dados reais
       const inserted = dbResult.data;
       if (dbResult.error) {
         console.error('❌ Erro ao salvar no banco:', dbResult.error);
-      }
-      if (apiResult.error) {
-        console.error('❌ Erro ao enviar áudio:', apiResult.error);
-        toast.error('Erro ao enviar áudio. Tente novamente.');
       }
 
       // Atualizar UI com dados reais (trocar tempId pelo real, e blobUrl pela storageUrl)

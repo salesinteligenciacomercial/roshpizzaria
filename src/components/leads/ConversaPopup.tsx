@@ -1041,7 +1041,7 @@ export function ConversaPopup({
           console.log('✅ [ConversaPopup] Áudio convertido de WebM para MP3');
         } catch (convError) {
           console.error('❌ [ConversaPopup] Falha na conversão WebM→MP3:', convError);
-          finalAudioBlob = new Blob([audioBlob], { type: 'audio/ogg' });
+          throw new Error('Falha ao converter áudio WebM para formato compatível');
         }
       }
 
@@ -1118,7 +1118,7 @@ export function ConversaPopup({
         sender: "user",
         timestamp: new Date(),
         delivered: true,
-        mediaUrl: URL.createObjectURL(audioBlob),
+        mediaUrl: URL.createObjectURL(finalAudioBlob),
         sentBy: currentUserName || "Equipe", // ✅ Assinatura na mensagem local
       };
 
