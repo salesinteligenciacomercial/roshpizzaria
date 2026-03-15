@@ -5128,9 +5128,7 @@ function Conversas() {
           console.log('✅ Áudio convertido de WebM para MP3, tamanho:', finalAudioBlob.size);
         } catch (convError) {
           console.error('❌ Falha na conversão WebM→MP3:', convError);
-          // Tentar enviar como OGG (forçar MIME compatível) em vez de WebM
-          finalAudioBlob = new Blob([audioBlob], { type: 'audio/ogg' });
-          console.log('⚠️ Fallback: re-rotulando como audio/ogg');
+          throw new Error('Falha ao converter áudio WebM para formato compatível');
         }
       }
 
