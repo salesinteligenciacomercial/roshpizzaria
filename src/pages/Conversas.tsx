@@ -1892,7 +1892,56 @@ function Conversas() {
     };
   }, [userCompanyId, realtimeReconnectAttempts]);
 
-  // ✅ SINCRONIZAÇÃO MULTI-USER: Backup a cada 30s para garantir consistência entre usuários
+  // ✅ REALTIME: Escutar mudanças em conversation_assignments (transferências do bot/atendentes)
+  useEffect(() => {
+    if (!userCompanyId) return;
+    const assignChannel = supabase.channel(`assignments-realtime-${userCompanyId}-${Date.now()}`).on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'conversation_assignments',
+      filter: `company_id=eq.${userCompanyId}`
+    }, async (payload: any) => {
+      const data = (payload.new || payload.old) as any;
+      if (!data?.telefone_formatado) return;
+      const tel = data.telefone_formatado.replace(/[^0-9]/g, '');
+      console.log('📋 [ASSIGNMENT-RT] Evento:', payload.eventType, tel);
+
+      if (payload.eventType === 'DELETE') {
+        // Assignment removido - limpar assignedUser da conversa
+        setConversations(prev => prev.map(c => {
+          const cTel = (c.phoneNumber || c.id).replace(/[^0-9]/g, '');
+          if (cTel === tel) {
+            return { ...c, assignedUser: undefined, responsavel: undefined };
+          }
+          return c;
+        }));
+      } else if (data.assigned_user_id) {
+        // Assignment criado/atualizado - buscar nome do usuário
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', data.assigned_user_id)
+          .maybeSingle();
+        const userName = profile?.full_name || profile?.email || 'Usuário';
+
+        setConversations(prev => prev.map(c => {
+          const cTel = (c.phoneNumber || c.id).replace(/[^0-9]/g, '');
+          if (cTel === tel) {
+            return {
+              ...c,
+              assignedUser: { id: data.assigned_user_id, name: userName },
+              responsavel: data.assigned_user_id
+            };
+          }
+          return c;
+        }));
+      }
+    }).subscribe();
+
+    return () => { supabase.removeChannel(assignChannel); };
+  }, [userCompanyId]);
+
+
   useEffect(() => {
     if (userCompanyId && !loadingConversations) {
       const syncTimer = setInterval(() => {
