@@ -146,8 +146,13 @@ export async function normalizeAudioForMeta(audioBlob: Blob): Promise<Blob> {
   const looksWebm = isWebmHeader(header);
 
   // Formatos aceitos nativamente sem transcodificação
-  const nativePassThrough = ['audio/aac', 'audio/mp4', 'audio/mpeg', 'audio/amr', 'audio/opus'];
+  const nativePassThrough = ['audio/aac', 'audio/mp4', 'audio/mpeg', 'audio/amr'];
   if (nativePassThrough.includes(cleanMime)) {
+    return audioBlob;
+  }
+
+  // Opus só passa direto quando não for payload WebM mascarado
+  if (cleanMime === 'audio/opus' && !looksWebm) {
     return audioBlob;
   }
 
