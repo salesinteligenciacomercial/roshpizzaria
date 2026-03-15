@@ -1850,7 +1850,7 @@ serve(async (req) => {
           // 2. Verificar se empresa tem fluxo ativo com gatilho "nova_mensagem"
           const { data: activeFlows } = await supabase
             .from('automation_flows')
-            .select('id, nodes, company_id')
+            .select('id, nodes, company_id, settings')
             .in('company_id', companyIdsToSearch)
             .eq('active', true);
           
@@ -1860,6 +1860,99 @@ serve(async (req) => {
             console.log(`🔍 [WEBHOOK-FLOW] ${activeFlows.length} fluxo(s) ativo(s) encontrado(s), mensagem: "${validatedData.mensagem}"`);
             for (const flow of activeFlows) {
               const nodes = (flow.nodes as any[]) || [];
+              const flowSettings = (flow as any).settings || {};
+              
+              // ===== CHECK: Blocked tags =====
+              const excludeTags: string[] = flowSettings?.filters?.excludeTags || [];
+              if (excludeTags.length > 0 && leadId) {
+                const { data: leadData } = await supabase
+                  .from('leads')
+                  .select('tags')
+                  .eq('id', leadId)
+                  .maybeSingle();
+                
+                const leadTags: string[] = leadData?.tags || [];
+                const hasBlockedTag = leadTags.some((tag: string) => 
+                  excludeTags.some((bt: string) => bt.toLowerCase().trim() === tag.toLowerCase().trim())
+                );
+                
+                if (hasBlockedTag) {
+                  console.log(`🚫 [WEBHOOK-FLOW] Lead tem tag bloqueada, pulando fluxo ${flow.id}`, { leadTags, excludeTags });
+                  continue;
+                }
+              }
+              
+              // ===== CHECK: Schedule (horário de funcionamento) =====
+              const schedule = flowSettings?.schedule;
+              if (schedule?.enabled) {
+                const now = new Date();
+                // Convert to Brasilia time (UTC-3)
+                const brasiliaOffset = -3 * 60;
+                const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+                const brasiliaDate = new Date(utcMs + (brasiliaOffset * 60000));
+                
+                const dayMap: Record<number, string> = {
+                  0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday',
+                  4: 'thursday', 5: 'friday', 6: 'saturday'
+                };
+                const currentDay = dayMap[brasiliaDate.getDay()];
+                const currentTime = `${String(brasiliaDate.getHours()).padStart(2, '0')}:${String(brasiliaDate.getMinutes()).padStart(2, '0')}`;
+                
+                const allowedDays: string[] = schedule.days || [];
+                const startTime: string = schedule.startTime || '09:00';
+                const endTime: string = schedule.endTime || '18:00';
+                
+                const isAllowedDay = allowedDays.length === 0 || allowedDays.includes(currentDay);
+                const isWithinTime = currentTime >= startTime && currentTime <= endTime;
+                
+                if (!isAllowedDay || !isWithinTime) {
+                  console.log(`🕐 [WEBHOOK-FLOW] Fora do horário de funcionamento do fluxo ${flow.id}`, { currentDay, currentTime, allowedDays, startTime, endTime });
+                  
+                  // Send out-of-hours message if configured
+                  const outOfHoursMessage = flowSettings?.schedule?.outOfHoursMessage;
+                  if (outOfHoursMessage && numeroLimpo) {
+                    console.log('📩 [WEBHOOK-FLOW] Enviando mensagem fora de horário');
+                    const supabaseUrlEnv = Deno.env.get('SUPABASE_URL')!;
+                    const supabaseKeyEnv = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+                    
+                    try {
+                      await fetch(`${supabaseUrlEnv}/functions/v1/enviar-whatsapp`, {
+                        method: 'POST',
+                        headers: {
+                          'Authorization': `Bearer ${supabaseKeyEnv}`,
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                          numero: numeroLimpo,
+                          mensagem: outOfHoursMessage,
+                          companyId
+                        })
+                      });
+                      
+                      // Persist message in CRM
+                      const telefoneFormatado = numeroLimpo.replace(/\D/g, '');
+                      await supabase.from('conversas').insert({
+                        numero: telefoneFormatado,
+                        mensagem: outOfHoursMessage,
+                        fromme: true,
+                        origem: 'automacao',
+                        status: 'sent',
+                        company_id: companyId,
+                        lead_id: leadId || null,
+                        nome_contato: nomeContatoFinal || null,
+                        telefone_formatado: telefoneFormatado,
+                        sent_by: 'bot',
+                        tipo_mensagem: 'text'
+                      });
+                    } catch (e) {
+                      console.error('❌ [WEBHOOK-FLOW] Erro ao enviar msg fora de horário:', e);
+                    }
+                  }
+                  
+                  flowStarted = true; // Prevent IA from also responding
+                  break;
+                }
+              }
               
               // Check for keyword trigger first (more specific)
               const keywordTrigger = nodes.find((n: any) => 

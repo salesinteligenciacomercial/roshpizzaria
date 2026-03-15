@@ -21,6 +21,7 @@ interface FlowSettings {
     days: string[];
     startTime: string;
     endTime: string;
+    outOfHoursMessage?: string;
   };
   filters?: {
     tags?: string[];
@@ -203,6 +204,18 @@ export function FlowSettingsDialog({
                         onChange={(e) => updateSchedule('endTime', e.target.value)}
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Mensagem fora do horário</Label>
+                    <Input
+                      placeholder="Olá! Nosso horário de atendimento é de segunda a sexta, das 09h às 18h. Retornaremos em breve!"
+                      value={localSettings.schedule?.outOfHoursMessage || ''}
+                      onChange={(e) => updateSchedule('outOfHoursMessage', e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      📩 Esta mensagem será enviada automaticamente quando alguém entrar em contato fora do horário
+                    </p>
                   </div>
 
                   <p className="text-xs text-muted-foreground">

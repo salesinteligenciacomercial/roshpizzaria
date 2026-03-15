@@ -53,6 +53,7 @@ interface FlowSettings {
     days: string[];
     startTime: string;
     endTime: string;
+    outOfHoursMessage?: string;
   };
   filters?: {
     tags?: string[];
@@ -244,6 +245,7 @@ function FlowCanvas({ fluxoId, onSave, onBack }: VisualFlowBuilderProps) {
         nodes: nodes as any,
         edges: edges as any,
         active: flowActive,
+        settings: flowSettings as any,
         company_id: userRoles.company_id,
         owner_id: user.id,
         updated_at: new Date().toISOString(),
