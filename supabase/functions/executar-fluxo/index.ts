@@ -504,27 +504,78 @@ async function executeInteractiveMenu(node: any, context: any, supabase: any, fl
 }
 
 async function executeRouteDepartment(node: any, context: any, supabase: any) {
-  const { department, assignedUserId, transferMessage, notifyAssigned } = node.data;
-  console.log("🏢 Roteamento:", department, assignedUserId);
+  const { department, assignedUserId, assignedUserName, transferMessage, notifyAssigned } = node.data;
+  console.log("🏢 Roteamento:", { department, assignedUserId, assignedUserName });
 
-  // Enviar mensagem de transferência
+  // Enviar mensagem de transferência e persistir no CRM
   if (transferMessage && context.conversationNumber) {
     await sendWhatsAppMessage(supabase, context.conversationNumber, transferMessage, context.companyId);
+    await persistFlowMessage(supabase, context.conversationNumber, transferMessage, context.companyId, context.leadId);
   }
 
-  // Atribuir conversa ao usuário
-  if (assignedUserId && context.conversationNumber) {
-    await supabase.from("conversation_assignments").upsert({
-      telefone_formatado: context.conversationNumber,
-      company_id: context.companyId,
-      assigned_user_id: assignedUserId,
-    }, { onConflict: 'telefone_formatado,company_id' });
+  // Resolver assignedUserId - pode vir direto ou precisar lookup por nome
+  let resolvedUserId = assignedUserId || null;
+  
+  if (!resolvedUserId && assignedUserName && context.companyId) {
+    console.log("🔍 Buscando userId por nome:", assignedUserName);
+    const { data: userByName } = await supabase
+      .from("profiles")
+      .select("id")
+      .or(`full_name.ilike.%${assignedUserName}%,email.ilike.%${assignedUserName}%`)
+      .limit(5);
+    
+    if (userByName && userByName.length > 0) {
+      // Filtrar por company
+      for (const u of userByName) {
+        const { data: role } = await supabase
+          .from("user_roles")
+          .select("id")
+          .eq("user_id", u.id)
+          .eq("company_id", context.companyId)
+          .maybeSingle();
+        if (role) {
+          resolvedUserId = u.id;
+          console.log("✅ Usuário encontrado por nome:", resolvedUserId);
+          break;
+        }
+      }
+    }
+  }
 
-    // Atualizar conversas recentes com assigned_user_id
-    await supabase.from("conversas")
-      .update({ assigned_user_id: assignedUserId })
-      .eq("telefone_formatado", context.conversationNumber)
-      .eq("company_id", context.companyId);
+  // SEMPRE criar conversation_assignment para bloquear o fluxo
+  if (context.conversationNumber) {
+    if (resolvedUserId) {
+      const { error: upsertError } = await supabase.from("conversation_assignments").upsert({
+        telefone_formatado: context.conversationNumber,
+        company_id: context.companyId,
+        assigned_user_id: resolvedUserId,
+      }, { onConflict: 'company_id,telefone_formatado' });
+      
+      console.log("📋 Assignment criado:", { resolvedUserId, error: upsertError?.message });
+
+      // Atualizar conversas recentes com assigned_user_id
+      await supabase.from("conversas")
+        .update({ assigned_user_id: resolvedUserId })
+        .eq("telefone_formatado", context.conversationNumber)
+        .eq("company_id", context.companyId);
+    } else {
+      // Sem user específico - buscar qualquer user da company como placeholder para bloquear fluxo
+      const { data: anyUser } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("company_id", context.companyId)
+        .limit(1)
+        .maybeSingle();
+      
+      if (anyUser) {
+        await supabase.from("conversation_assignments").upsert({
+          telefone_formatado: context.conversationNumber,
+          company_id: context.companyId,
+          assigned_user_id: anyUser.user_id,
+        }, { onConflict: 'company_id,telefone_formatado' });
+        console.log("📋 Assignment genérico criado (departamento):", { department, userId: anyUser.user_id });
+      }
+    }
   }
 
   // Limpar estado do fluxo (conversa foi roteada)
@@ -533,6 +584,28 @@ async function executeRouteDepartment(node: any, context: any, supabase: any) {
       .delete()
       .eq("conversation_number", context.conversationNumber)
       .eq("company_id", context.companyId);
+    console.log("🗑️ Flow state limpo após transferência");
+  }
+}
+
+// Persistir mensagem enviada pelo fluxo na tabela conversas (para aparecer no CRM)
+async function persistFlowMessage(supabase: any, numero: string, mensagem: string, companyId: string, leadId?: string) {
+  try {
+    const telefoneFormatado = numero.replace(/\D/g, '');
+    await supabase.from("conversas").insert({
+      numero: telefoneFormatado,
+      telefone_formatado: telefoneFormatado,
+      mensagem,
+      fromme: true,
+      status: 'Enviada',
+      origem: 'automacao',
+      company_id: companyId,
+      lead_id: leadId || null,
+      tipo_mensagem: 'texto',
+      sent_by: 'bot',
+    });
+  } catch (e) {
+    console.error("❌ Erro ao persistir mensagem do fluxo:", e);
   }
 }
 
