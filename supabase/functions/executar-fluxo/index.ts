@@ -623,8 +623,7 @@ async function sendWhatsAppMessage(supabase: any, numero: string, mensagem: stri
   }
 }
 
-async function sendInteractiveButtons(supabase: any, numero: string, bodyText: string, buttons: any[], companyId: string) {
-  // Para Evolution API, enviar botões interativos
+async function sendInteractiveButtons(supabase: any, numero: string, bodyText: string, buttons: any[], companyId: string, leadId?: string) {
   try {
     await supabase.functions.invoke("enviar-whatsapp", {
       body: {
@@ -644,16 +643,18 @@ async function sendInteractiveButtons(supabase: any, numero: string, bodyText: s
         }
       },
     });
+    // Persistir no CRM
+    const menuText = bodyText + "\n\n" + buttons.map((b: any, i: number) => `${i + 1}️⃣ ${b.label}`).join("\n");
+    await persistFlowMessage(supabase, numero, menuText, companyId, leadId);
   } catch (e) {
     console.error("❌ Erro ao enviar botões:", e);
-    // Fallback: enviar como texto
     let textMenu = bodyText + "\n\n";
     buttons.forEach((btn: any, i: number) => { textMenu += `${i + 1}️⃣ ${btn.label}\n`; });
-    await sendWhatsAppMessage(supabase, numero, textMenu, companyId);
+    await sendWhatsAppMessage(supabase, numero, textMenu, companyId, leadId);
   }
 }
 
-async function sendInteractiveList(supabase: any, numero: string, bodyText: string, buttons: any[], companyId: string) {
+async function sendInteractiveList(supabase: any, numero: string, bodyText: string, buttons: any[], companyId: string, leadId?: string) {
   try {
     await supabase.functions.invoke("enviar-whatsapp", {
       body: {
@@ -677,10 +678,13 @@ async function sendInteractiveList(supabase: any, numero: string, bodyText: stri
         }
       },
     });
+    // Persistir no CRM
+    const menuText = bodyText + "\n\n" + buttons.map((b: any, i: number) => `${i + 1}️⃣ ${b.label}`).join("\n");
+    await persistFlowMessage(supabase, numero, menuText, companyId, leadId);
   } catch (e) {
     console.error("❌ Erro ao enviar lista:", e);
     let textMenu = bodyText + "\n\n";
     buttons.forEach((btn: any, i: number) => { textMenu += `${i + 1}️⃣ ${btn.label}\n`; });
-    await sendWhatsAppMessage(supabase, numero, textMenu, companyId);
+    await sendWhatsAppMessage(supabase, numero, textMenu, companyId, leadId);
   }
 }
