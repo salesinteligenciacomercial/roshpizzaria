@@ -1030,10 +1030,25 @@ export function ConversaPopup({
 
     setSending(true);
     try {
-      const audioMimeType = (audioBlob.type || 'audio/webm').split(';')[0].trim().toLowerCase();
+      // ⚡ CONVERSÃO: Se o áudio é WebM (não suportado pela Meta API), converter para MP3
+      let finalAudioBlob = audioBlob;
+      const rawMime = (audioBlob.type || 'audio/webm').split(';')[0].trim().toLowerCase();
+      
+      if (rawMime === 'audio/webm' || rawMime === 'audio/x-matroska' || rawMime.includes('webm')) {
+        try {
+          const { convertWebmToMp3 } = await import('@/utils/audioConverter');
+          finalAudioBlob = await convertWebmToMp3(audioBlob);
+          console.log('✅ [ConversaPopup] Áudio convertido de WebM para MP3');
+        } catch (convError) {
+          console.error('❌ [ConversaPopup] Falha na conversão WebM→MP3:', convError);
+          finalAudioBlob = new Blob([audioBlob], { type: 'audio/ogg' });
+        }
+      }
+
+      const audioMimeType = (finalAudioBlob.type || 'audio/mpeg').split(';')[0].trim().toLowerCase();
       const audioExtension = audioMimeType.includes('ogg') ? 'ogg' :
         audioMimeType.includes('mp4') ? 'm4a' :
-        audioMimeType.includes('mpeg') ? 'mp3' : 'webm';
+        audioMimeType.includes('mpeg') ? 'mp3' : 'ogg';
 
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();

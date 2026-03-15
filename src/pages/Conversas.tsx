@@ -5121,14 +5121,16 @@ function Conversas() {
       let finalAudioBlob = audioBlob;
       const rawMime = (audioBlob.type || 'audio/webm').split(';')[0].trim().toLowerCase();
       
-      if (rawMime === 'audio/webm' || rawMime === 'audio/x-matroska') {
+      if (rawMime === 'audio/webm' || rawMime === 'audio/x-matroska' || rawMime.includes('webm')) {
         try {
           const { convertWebmToMp3 } = await import('@/utils/audioConverter');
           finalAudioBlob = await convertWebmToMp3(audioBlob);
-          console.log('✅ Áudio convertido de WebM para MP3');
+          console.log('✅ Áudio convertido de WebM para MP3, tamanho:', finalAudioBlob.size);
         } catch (convError) {
-          console.warn('⚠️ Falha na conversão WebM→MP3, enviando como WebM:', convError);
-          finalAudioBlob = audioBlob; // Fallback: enviar como estava
+          console.error('❌ Falha na conversão WebM→MP3:', convError);
+          // Tentar enviar como OGG (forçar MIME compatível) em vez de WebM
+          finalAudioBlob = new Blob([audioBlob], { type: 'audio/ogg' });
+          console.log('⚠️ Fallback: re-rotulando como audio/ogg');
         }
       }
 
