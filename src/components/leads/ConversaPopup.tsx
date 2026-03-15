@@ -1058,7 +1058,7 @@ export function ConversaPopup({
 
       const telefoneNormalizado = normalizePhoneBR(leadPhone)!;
 
-      const { error: whatsappError } = await enviarWhatsApp({
+      const { data: whatsappData, error: whatsappError } = await enviarWhatsApp({
         numero: telefoneNormalizado,
         mensagem: 'Áudio enviado',
         tipo_mensagem: 'audio',
@@ -1072,8 +1072,18 @@ export function ConversaPopup({
         throw whatsappError;
       }
 
+      const whatsappMessageId =
+        whatsappData?.message_id ||
+        whatsappData?.data?.messages?.[0]?.id ||
+        whatsappData?.data?.key?.id ||
+        null;
+
+      if (!whatsappMessageId) {
+        throw new Error('Envio sem confirmação do provedor (message_id ausente).');
+      }
+
       const companyId = await getCompanyId();
-      
+
       // ⚡ Upload áudio para Storage
       let audioStorageUrl: string | null = null;
       try {
@@ -1086,10 +1096,10 @@ export function ConversaPopup({
       } catch (uploadErr) {
         console.warn('⚠️ Falha no upload de áudio para Storage:', uploadErr);
       }
-      
+
       // Buscar dados do usuário para assinatura
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       await supabase.from("conversas").insert([
         {
           numero: telefoneNormalizado,
@@ -1103,7 +1113,9 @@ export function ConversaPopup({
           company_id: companyId,
           owner_id: user?.id,
           sent_by: currentUserName || "Equipe",
+          whatsapp_message_id: whatsappMessageId,
           fromme: true,
+          delivered: false,
         },
       ]);
 
@@ -1113,7 +1125,7 @@ export function ConversaPopup({
         type: "audio",
         sender: "user",
         timestamp: new Date(),
-        delivered: true,
+        delivered: false,
         mediaUrl: URL.createObjectURL(finalAudioBlob),
         sentBy: currentUserName || "Equipe", // ✅ Assinatura na mensagem local
       };
@@ -1124,7 +1136,8 @@ export function ConversaPopup({
       emitGlobalEvent({ type: 'conversation-updated', source: 'conversa-popup', data: { numero: telefoneNormalizado, content: 'Áudio enviado', messageType: 'audio' } });
     } catch (error) {
       console.error("Erro ao enviar áudio:", error);
-      toast.error("Erro ao enviar áudio");
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao enviar áudio';
+      toast.error(errorMessage || 'Erro ao enviar áudio');
     } finally {
       setSending(false);
     }
