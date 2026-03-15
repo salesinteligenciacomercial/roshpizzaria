@@ -1823,6 +1823,30 @@ serve(async (req) => {
           
           // Não chamar IA - o fluxo já está tratando
         } else {
+          // 1.5. Verificar se conversa foi transferida (conversation_assignment ativo)
+          let hasActiveAssignment = false;
+          if (telefoneFormatadoFinal || numeroLimpo) {
+            const telCheck = telefoneFormatadoFinal || numeroLimpo;
+            const { data: assignment } = await supabase
+              .from('conversation_assignments')
+              .select('id')
+              .eq('telefone_formatado', telCheck)
+              .eq('company_id', companyId)
+              .not('assigned_user_id', 'is', null)
+              .maybeSingle();
+            
+            if (assignment) {
+              hasActiveAssignment = true;
+              console.log('🚫 [WEBHOOK-FLOW] Conversa transferida - fluxo BLOQUEADO:', {
+                telefone: telCheck,
+                assignmentId: assignment.id
+              });
+            }
+          }
+          
+          if (hasActiveAssignment) {
+            console.log('⏭️ [WEBHOOK-FLOW] Pulando inicialização de fluxo - conversa sob atendimento humano');
+          } else {
           // 2. Verificar se empresa tem fluxo ativo com gatilho "nova_mensagem"
           const { data: activeFlows } = await supabase
             .from('automation_flows')
@@ -2110,6 +2134,7 @@ serve(async (req) => {
             }
             } // fim do else humanIsAttending
           }
+          } // fim do else hasActiveAssignment
         }
       } catch (flowError) {
         console.error('❌ [WEBHOOK-FLOW] Erro ao processar fluxo/IA:', flowError);

@@ -8417,7 +8417,14 @@ function Conversas() {
         status: 'Resolvida'
       }).eq('telefone_formatado', telefoneFormatado).eq('company_id', userRole?.company_id).neq('status', 'Resolvida'); // Só atualizar as que ainda não estão resolvidas
 
-      console.log('✅ Conversa marcada como resolvida no banco');
+      // Limpar conversation_assignments para desbloquear fluxo futuro
+      await supabase
+        .from('conversation_assignments')
+        .delete()
+        .eq('telefone_formatado', telefoneFormatado)
+        .eq('company_id', userRole?.company_id);
+
+      console.log('✅ Conversa marcada como resolvida e assignment removido');
 
       // Atualizar estados localmente
       const updatedConv: Conversation = {
@@ -8458,7 +8465,14 @@ function Conversas() {
         .eq('company_id', userRole?.company_id)
         .neq('status', 'Resolvida');
 
-      console.log('✅ Conversa marcada como resolvida (sem mensagem)');
+      // Limpar conversation_assignments para desbloquear fluxo futuro
+      await supabase
+        .from('conversation_assignments')
+        .delete()
+        .eq('telefone_formatado', telefoneFormatado)
+        .eq('company_id', userRole?.company_id);
+
+      console.log('✅ Conversa marcada como resolvida e assignment removido (sem mensagem)');
 
       // Atualizar estados localmente
       const updatedConv: Conversation = {
