@@ -5114,31 +5114,24 @@ function Conversas() {
   const handleSendAudio = async (audioBlob: Blob) => {
     if (!selectedConv) return;
     setSyncStatus('syncing');
+
+    let tempId: string | null = null;
+    let localBlobUrl: string | null = null;
+
     try {
       console.log('🎤 Enviando áudio instantaneamente...');
 
-      // ⚡ NORMALIZAÇÃO ROBUSTA: evita MIME mascarado (ex.: áudio marcado como OGG mas payload WebM)
       const rawMime = (audioBlob.type || 'audio/webm').split(';')[0].trim().toLowerCase();
       const { normalizeAudioForMeta } = await import('@/utils/audioConverter');
       const finalAudioBlob = await normalizeAudioForMeta(audioBlob);
 
       const audioMimeType = (finalAudioBlob.type || 'audio/mpeg').split(';')[0].trim().toLowerCase();
-      console.log('✅ [AUDIO] Blob normalizado para envio:', {
-        rawMime,
-        finalMime: audioMimeType,
-        originalSize: audioBlob.size,
-        finalSize: finalAudioBlob.size,
-      });
-      const audioExtension = audioMimeType.includes('ogg') ? 'ogg' :
-        audioMimeType.includes('mp4') ? 'm4a' :
-        audioMimeType.includes('mpeg') ? 'mp3' : 'webm';
+      const audioExtension = audioMimeType.includes('ogg') ? 'ogg' : audioMimeType.includes('mp4') ? 'm4a' : audioMimeType.includes('mpeg') ? 'mp3' : 'webm';
       const storageFileName = `outgoing/${Date.now()}-audio.${audioExtension}`;
 
-      // ⚡ OTIMIZAÇÃO: Criar URL local do blob para UI otimista INSTANTÂNEA
-      const localBlobUrl = URL.createObjectURL(audioBlob);
+      localBlobUrl = URL.createObjectURL(audioBlob);
+      tempId = `temp-audio-${Date.now()}`;
 
-      // ⚡ OTIMIZAÇÃO: Mostrar mensagem na UI IMEDIATAMENTE (otimista)
-      const tempId = `temp-audio-${Date.now()}`;
       const optimisticMessage: Message = {
         id: tempId,
         content: "[Áudio]",
@@ -5151,13 +5144,11 @@ function Conversas() {
         sentBy: userName || "Equipe"
       };
 
-      const sortMessagesByTimestamp = (messages: Message[]): Message[] => {
-        return [...messages].sort((a, b) => {
-          const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-          const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-          return timeA - timeB;
-        });
-      };
+      const sortMessagesByTimestamp = (messages: Message[]): Message[] => [...messages].sort((a, b) => {
+        const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+        const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+        return timeA - timeB;
+      });
 
       const sortedWithOptimistic = sortMessagesByTimestamp([...selectedConv.messages, optimisticMessage]);
       const newStatus = calculateConversationStatus(sortedWithOptimistic);
@@ -5169,65 +5160,43 @@ function Conversas() {
         unread: 0
       } : conv);
       saveConversations(updatedConvsOptimistic);
-      setSelectedConv({
-        ...selectedConv,
-        messages: sortedWithOptimistic,
-        status: newStatus
-      });
+      setSelectedConv({ ...selectedConv, messages: sortedWithOptimistic, status: newStatus });
       setSyncStatus('synced');
 
-      // ⚡ OTIMIZAÇÃO: Executar storage upload, base64, e company_id em PARALELO
       const [storageResult, base64, authResult] = await Promise.all([
-        // Upload para Storage
         supabase.storage.from('conversation-media').upload(storageFileName, finalAudioBlob, {
           contentType: finalAudioBlob.type || audioMimeType,
           upsert: false
         }),
-        // Converter para base64
         new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => {
             const b64 = (reader.result as string)?.split(',')[1];
-            if (!b64 || b64.length === 0) {
-              reject(new Error('Base64 vazio'));
-              return;
-            }
+            if (!b64) return reject(new Error('Base64 vazio'));
             resolve(b64);
           };
           reader.onerror = () => reject(new Error('Erro ao ler áudio'));
           reader.readAsDataURL(finalAudioBlob);
         }),
-        // Buscar user e company_id
         supabase.auth.getUser()
       ]);
 
-      if (storageResult.error) {
-        console.error('❌ Erro upload storage:', storageResult.error);
-        throw new Error('Falha no upload do áudio');
-      }
+      if (storageResult.error) throw new Error('Falha no upload do áudio');
 
       const { data: urlData } = supabase.storage.from('conversation-media').getPublicUrl(storageFileName);
       const storageUrl = urlData.publicUrl;
-
       const userId = authResult.data.user?.id;
       const { data: userRole } = await supabase.from('user_roles').select('company_id').eq('user_id', userId).single();
 
-      // ⚡ Enviar via API e salvar no banco em PARALELO
       const isInstagramChannel = selectedConv.channel === 'instagram';
       const rawPhoneOrId = selectedConv.phoneNumber || selectedConv.id;
-      const numeroNormalizado = isInstagramChannel 
-        ? rawPhoneOrId.replace(/^ig_/, '').replace(/[^0-9]/g, '') 
-        : normalizePhoneForWA(rawPhoneOrId);
-      const quotedPayload = replyingTo && selectedConv.messages.find(m => m.id === replyingTo) ? {
-        quoted: { key: { id: replyingTo }, message: { conversation: selectedConv.messages.find(m => m.id === replyingTo)?.content || '' } },
-        quotedMessageId: replyingTo
-      } : {};
+      const numeroNormalizado = isInstagramChannel ? rawPhoneOrId.replace(/^ig_/, '').replace(/[^0-9]/g, '') : normalizePhoneForWA(rawPhoneOrId);
+      const quotedPayload = replyingTo && selectedConv.messages.find(m => m.id === replyingTo)
+        ? { quoted: { key: { id: replyingTo }, message: { conversation: selectedConv.messages.find(m => m.id === replyingTo)?.content || '' } }, quotedMessageId: replyingTo }
+        : {};
 
-      const { data: userProfile } = userId 
-        ? await supabase.from('profiles').select('full_name, email').eq('id', userId).single() 
-        : { data: null };
+      const { data: userProfile } = userId ? await supabase.from('profiles').select('full_name, email').eq('id', userId).single() : { data: null };
 
-      // ⚡ Primeiro envia pela API; só salva no banco se o envio realmente der certo
       const apiResult = await (async () => {
         if (isInstagramChannel) {
           const companyId = userRole?.company_id || (await getCompanyId());
@@ -5238,76 +5207,86 @@ function Conversas() {
         }
 
         const result = await enviarWhatsApp({
-          numero: numeroNormalizado, mensagem: '', tipo_mensagem: 'audio',
-          mediaBase64: base64, fileName: `audio.${audioExtension}`,
-          mimeType: finalAudioBlob.type || audioMimeType, caption: '',
-          company_id: userRole?.company_id, ...quotedPayload
+          numero: numeroNormalizado,
+          mensagem: '',
+          tipo_mensagem: 'audio',
+          mediaBase64: base64,
+          fileName: `audio.${audioExtension}`,
+          mimeType: finalAudioBlob.type || audioMimeType,
+          caption: '',
+          company_id: userRole?.company_id,
+          ...quotedPayload
         });
         return { data: result.data, error: result.error };
       })();
 
-      if (apiResult.error) {
-        console.error('❌ Erro ao enviar áudio:', apiResult.error);
-        throw new Error(apiResult.error?.message || 'Erro ao enviar áudio');
-      }
+      if (apiResult.error) throw new Error(apiResult.error?.message || 'Erro ao enviar áudio');
 
-      // Salvar no banco somente após confirmação de envio
+      const whatsappMessageId = apiResult.data?.message_id || apiResult.data?.data?.messages?.[0]?.id || apiResult.data?.data?.key?.id || null;
+      if (!isInstagramChannel && !whatsappMessageId) throw new Error('Envio sem confirmação do provedor (message_id ausente).');
+
       const dbResult = await supabase.from('conversas').insert([{
-        numero: numeroNormalizado, telefone_formatado: numeroNormalizado,
-        mensagem: '[Áudio]', origem: isInstagramChannel ? 'Instagram' : 'WhatsApp',
+        numero: numeroNormalizado,
+        telefone_formatado: numeroNormalizado,
+        mensagem: '[Áudio]',
+        origem: isInstagramChannel ? 'Instagram' : 'WhatsApp',
         origem_api: isInstagramChannel ? 'meta' : (selectedConv.origemApi || undefined),
-        status: 'Enviada', tipo_mensagem: 'audio',
+        status: 'Enviada',
+        tipo_mensagem: 'audio',
         nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
-        arquivo_nome: `audio.${audioExtension}`, midia_url: storageUrl,
-        company_id: userRole?.company_id, owner_id: userId,
+        arquivo_nome: `audio.${audioExtension}`,
+        midia_url: storageUrl,
+        company_id: userRole?.company_id,
+        owner_id: userId,
         sent_by: userProfile?.full_name || userProfile?.email || 'Equipe',
-        fromme: true, delivered: true, read: false
+        whatsapp_message_id: whatsappMessageId,
+        fromme: true,
+        delivered: false,
+        read: false
       }]).select('id, midia_url').single();
 
-      // Atualizar mensagem otimista com dados reais
       const inserted = dbResult.data;
-      if (dbResult.error) {
-        console.error('❌ Erro ao salvar no banco:', dbResult.error);
-      }
-
-      // Atualizar UI com dados reais (trocar tempId pelo real, e blobUrl pela storageUrl)
       const finalMessage: Message = {
         id: (inserted?.id || tempId).toString(),
-        content: "[Áudio]", type: "audio", sender: "user",
-        timestamp: new Date(), delivered: !apiResult.error,
-        read: false, mediaUrl: storageUrl, sentBy: userName || "Equipe"
+        content: '[Áudio]',
+        type: 'audio',
+        sender: 'user',
+        timestamp: new Date(),
+        delivered: false,
+        read: false,
+        mediaUrl: storageUrl,
+        sentBy: userName || 'Equipe'
       };
 
-      const finalMessages = sortMessagesByTimestamp(
-        selectedConv.messages.filter(m => m.id !== tempId).concat(finalMessage)
-      );
+      const finalMessages = sortMessagesByTimestamp(selectedConv.messages.filter(m => m.id !== tempId).concat(finalMessage));
       const finalStatus = calculateConversationStatus(finalMessages);
-      const finalConvs = conversations.map(conv => conv.id === selectedConv.id ? {
-        ...conv, messages: finalMessages, lastMessage: "[Áudio]", status: finalStatus, unread: 0
-      } : conv);
+      const finalConvs = conversations.map(conv => conv.id === selectedConv.id ? { ...conv, messages: finalMessages, lastMessage: '[Áudio]', status: finalStatus, unread: 0 } : conv);
       saveConversations(finalConvs);
       setSelectedConv(prev => prev?.id === selectedConv.id ? { ...prev, messages: finalMessages, status: finalStatus } : prev);
 
-      // Liberar blob URL
-      URL.revokeObjectURL(localBlobUrl);
+      if (localBlobUrl) URL.revokeObjectURL(localBlobUrl);
 
-      // 🔥 Fire-and-forget: transcrição e status update (não bloqueia)
       if (inserted?.id && storageUrl) {
         transcreverAudio(inserted.id, storageUrl).catch(e => console.error('❌ Transcrição:', e));
       }
-      const telefoneFormatado = selectedConv.phoneNumber?.replace(/[^0-9]/g, '') || selectedConv.id.replace(/[^0-9]/g, '');
-      supabase.from('conversas').update({ status: 'Enviada' })
-        .eq('telefone_formatado', telefoneFormatado).eq('company_id', userCompanyId)
-        .then(() => console.log('✅ Status atualizado'),
-              e => console.error('❌ Status:', e));
 
       setTimeout(() => setSyncStatus('idle'), 1000);
-      console.log('✅ Áudio enviado com sucesso');
     } catch (error) {
-      console.error("❌ Erro ao enviar áudio:", error);
+      console.error('❌ Erro ao enviar áudio:', error);
+
+      if (tempId && selectedConv) {
+        const cleanedMessages = selectedConv.messages.filter(m => m.id !== tempId);
+        const updatedConvs = conversations.map(conv => conv.id === selectedConv.id ? { ...conv, messages: cleanedMessages, lastMessage: cleanedMessages.at(-1)?.content || '' } : conv);
+        saveConversations(updatedConvs);
+        setSelectedConv(prev => prev?.id === selectedConv.id ? { ...prev, messages: cleanedMessages } : prev);
+      }
+
+      if (localBlobUrl) URL.revokeObjectURL(localBlobUrl);
+
       setSyncStatus('error');
       setTimeout(() => setSyncStatus('idle'), 2000);
-      toast.error("Erro ao enviar áudio");
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao enviar áudio';
+      toast.error(errorMessage || 'Erro ao enviar áudio');
       return;
     }
   };
