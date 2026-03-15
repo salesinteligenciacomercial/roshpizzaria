@@ -68,7 +68,7 @@ function normalizeMimeType(mimeType?: string): string {
 }
 
 function isMetaSupportedAudioMime(mimeType: string): boolean {
-  return ['audio/aac', 'audio/amr', 'audio/mpeg', 'audio/mp4', 'audio/ogg'].includes(mimeType);
+  return ['audio/aac', 'audio/amr', 'audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/opus'].includes(mimeType);
 }
 
 function isLikelyOggAudioBase64(base64Data: string): boolean {
@@ -998,7 +998,7 @@ serve(async (req) => {
             : 'conteúdo não corresponde a áudio OGG válido';
           console.warn(`⚠️ Áudio incompatível com Meta API (${reason})`);
 
-          // 1) Se o payload for OGG real, corrigir apenas o MIME e enviar como áudio
+          // Se o payload for OGG real, corrigir só o MIME e enviar como áudio
           const isActuallyOgg = isLikelyOggAudioBase64(validatedData.mediaBase64);
           if (isActuallyOgg) {
             console.log('🔄 Conteúdo é OGG válido, reenviando com MIME correto (audio/ogg)...');
@@ -1023,28 +1023,12 @@ serve(async (req) => {
             }
           }
 
-          // 2) Tentar Evolution quando disponível
-          if (!result?.success && hasEvolutionConfig) {
-            console.log('🔄 Usando Evolution para áudio incompatível com Meta...');
-            const baseUrl = resolvedEvolutionUrl;
-            const apiKey = resolvedEvolutionKey;
-
-            result = await sendEvolutionMessage(
-              baseUrl,
-              connection.instance_name,
-              apiKey,
-              validatedData.numero,
-              false,
-              validatedData
-            );
-          }
-
-          // 3) Sem fallback por "document" para WebM na Meta (a API rejeita e gera falso positivo)
+          // Sem fallback para Evolution nesse cenário para não gerar falso positivo de entrega.
           if (!result?.success) {
             result = {
               success: false,
               provider: 'meta',
-              error: `Áudio incompatível com API oficial (${reason}). Converta para MP3/OGG válido antes do envio.`
+              error: `Áudio incompatível com API oficial (${reason}). Grave novamente e envie em MP3/OGG válido.`
             };
           }
         } else {

@@ -1030,22 +1030,18 @@ export function ConversaPopup({
 
     setSending(true);
     try {
-      // ⚡ CONVERSÃO: Se o áudio é WebM (não suportado pela Meta API), converter para MP3
-      let finalAudioBlob = audioBlob;
+      // ⚡ NORMALIZAÇÃO ROBUSTA: evita MIME mascarado (ex.: OGG com payload WebM)
       const rawMime = (audioBlob.type || 'audio/webm').split(';')[0].trim().toLowerCase();
-      
-      if (rawMime === 'audio/webm' || rawMime === 'audio/x-matroska' || rawMime.includes('webm')) {
-        try {
-          const { convertWebmToMp3 } = await import('@/utils/audioConverter');
-          finalAudioBlob = await convertWebmToMp3(audioBlob);
-          console.log('✅ [ConversaPopup] Áudio convertido de WebM para MP3');
-        } catch (convError) {
-          console.error('❌ [ConversaPopup] Falha na conversão WebM→MP3:', convError);
-          throw new Error('Falha ao converter áudio WebM para formato compatível');
-        }
-      }
+      const { normalizeAudioForMeta } = await import('@/utils/audioConverter');
+      const finalAudioBlob = await normalizeAudioForMeta(audioBlob);
 
       const audioMimeType = (finalAudioBlob.type || 'audio/mpeg').split(';')[0].trim().toLowerCase();
+      console.log('✅ [ConversaPopup] Blob normalizado para envio:', {
+        rawMime,
+        finalMime: audioMimeType,
+        originalSize: audioBlob.size,
+        finalSize: finalAudioBlob.size,
+      });
       const audioExtension = audioMimeType.includes('ogg') ? 'ogg' :
         audioMimeType.includes('mp4') ? 'm4a' :
         audioMimeType.includes('mpeg') ? 'mp3' : 'ogg';

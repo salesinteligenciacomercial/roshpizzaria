@@ -23,6 +23,27 @@ async function loadMp3Encoder(): Promise<Mp3EncoderCtor> {
   return ctor as Mp3EncoderCtor;
 }
 
+async function readBlobHeader(blob: Blob, bytes = 16): Promise<Uint8Array> {
+  const ab = await blob.slice(0, bytes).arrayBuffer();
+  return new Uint8Array(ab);
+}
+
+function isOggHeader(header: Uint8Array): boolean {
+  return header.length >= 4 &&
+    header[0] === 0x4f && // O
+    header[1] === 0x67 && // g
+    header[2] === 0x67 && // g
+    header[3] === 0x53;   // S
+}
+
+function isWebmHeader(header: Uint8Array): boolean {
+  return header.length >= 4 &&
+    header[0] === 0x1a &&
+    header[1] === 0x45 &&
+    header[2] === 0xdf &&
+    header[3] === 0xa3;
+}
+
 export async function convertWebmToMp3(webmBlob: Blob): Promise<Blob> {
   console.log('🔄 [AudioConverter] Convertendo WebM para MP3...');
   const startTime = performance.now();
@@ -81,8 +102,48 @@ export async function convertWebmToMp3(webmBlob: Blob): Promise<Blob> {
   }
 }
 
+/**
+ * Garante um Blob realmente compatível com envio de áudio na API oficial.
+ * - Mantém OGG apenas quando o payload é OGG real
+ * - Converte formatos ambíguos (WebM/Opus/OGG inválido) para MP3
+ */
+export async function normalizeAudioForMeta(audioBlob: Blob): Promise<Blob> {
+  const cleanMime = (audioBlob.type || '').split(';')[0].trim().toLowerCase();
+  const header = await readBlobHeader(audioBlob);
+  const looksOgg = isOggHeader(header);
+  const looksWebm = isWebmHeader(header);
+
+  // Formatos aceitos nativamente sem transcodificação
+  const nativePassThrough = ['audio/aac', 'audio/mp4', 'audio/mpeg', 'audio/amr', 'audio/opus'];
+  if (nativePassThrough.includes(cleanMime)) {
+    return audioBlob;
+  }
+
+  // OGG só passa direto quando o payload realmente começa com "OggS"
+  if (cleanMime === 'audio/ogg' && looksOgg) {
+    return audioBlob;
+  }
+
+  // Cenários problemáticos: webm, ogg com header inválido, mime vazio/desconhecido
+  const shouldTranscode =
+    !cleanMime ||
+    cleanMime === 'audio/webm' ||
+    cleanMime === 'audio/x-matroska' ||
+    cleanMime.includes('webm') ||
+    cleanMime === 'audio/ogg' ||
+    cleanMime === 'audio/opus' ||
+    looksWebm ||
+    (cleanMime === 'audio/ogg' && !looksOgg);
+
+  if (!shouldTranscode) {
+    return audioBlob;
+  }
+
+  return convertWebmToMp3(audioBlob);
+}
+
 export function needsConversion(mimeType: string): boolean {
   const clean = (mimeType || '').split(';')[0].trim().toLowerCase();
-  const supported = ['audio/aac', 'audio/mp4', 'audio/mpeg', 'audio/amr', 'audio/ogg'];
+  const supported = ['audio/aac', 'audio/mp4', 'audio/mpeg', 'audio/amr', 'audio/ogg', 'audio/opus'];
   return !supported.includes(clean);
 }

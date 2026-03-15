@@ -41,9 +41,8 @@ export function AudioRecorder({ onSendAudio }: AudioRecorderProps) {
 
       mediaRecorder.onstop = () => {
         const rawMime = recordingMimeTypeRef.current || mediaRecorder.mimeType || 'audio/webm';
-        // ⚡ Normalizar MIME: se gravou como ogg;codecs=opus, usar audio/ogg puro
-        // Se webm mas suportava ogg, forçar audio/ogg (conteúdo é compatível)
-        const normalizedMime = rawMime.includes('ogg') ? 'audio/ogg' : rawMime.split(';')[0].trim();
+        // ⚡ Preservar MIME real reportado pelo MediaRecorder (sem mascarar container)
+        const normalizedMime = rawMime.split(';')[0].trim() || 'audio/webm';
         const blob = new Blob(chunksRef.current, { type: normalizedMime });
         setAudioBlob(blob);
         stream.getTracks().forEach(track => track.stop());
