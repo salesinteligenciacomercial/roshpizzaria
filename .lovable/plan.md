@@ -1,102 +1,54 @@
-## Plano de Integração: Nvoip VoIP no Call Center do CRM
-
-### Resumo
-
-Integrar a API da Nvoip ([https://api.nvoip.com.br/v2](https://api.nvoip.com.br/v2)) ao módulo de Call Center existente para substituir as chamadas simuladas por ligações telefônicas reais. O CRM já possui toda a UI e lógica de estado — precisamos conectar ao backend da Nvoip.
-
----
-
-### O que a API da Nvoip oferece
 
 
-| Funcionalidade   | Endpoint                   | Uso no CRM                      |
-| ---------------- | -------------------------- | ------------------------------- |
-| Realizar chamada | `POST /v2/calls/`          | Discar para leads               |
-| Consultar status | `GET /v2/calls?callId=X`   | Polling do estado em tempo real |
-| Encerrar chamada | `GET /v2/endcall?callId=X` | Desligar ligação                |
-| Histórico        | `GET /v2/calls/history`    | Sincronizar dados               |
-| Autenticação     | `POST /v2/oauth/token`     | Token OAuth (24h validade)      |
+## Problema
 
+Quando a URA (fluxo de automação) transfere para um departamento/responsável via nó "Rotear Departamento", o `executeRouteDepartment` **deleta** o `conversation_flow_state`. Quando o lead envia uma nova mensagem, o webhook não encontra estado ativo, então verifica fluxos com gatilho `nova_mensagem` e **reinicia o fluxo do zero** -- repetindo o menu.
 
-**Estados retornados pela Nvoip:** `calling_origin`, `calling_destination`, `established`, `noanswer`, `busy`, `finished`, `failed`
+## Solução
 
----
+Duas mudanças coordenadas:
 
-### O que você precisa fornecer
+### 1. Backend: `webhook-conversas/index.ts` -- Bloquear fluxo quando há atribuição ativa
 
-Antes de implementar, preciso de **3 credenciais** do seu painel Nvoip:
+Antes de iniciar um novo fluxo (bloco "else" na linha ~1825), verificar se existe um registro em `conversation_assignments` para esse número/empresa. Se existir, significa que a conversa foi transferida e está sob responsabilidade de um atendente -- o fluxo **não** deve ser reiniciado.
 
-1. **NumberSIP** (ramal/usuário SIP) — usado como `caller` nas chamadas 
-2. **User Token** — para gerar o OAuth access_token
-3. **Napikey** — chave de API alternativa
-
-Essas credenciais serão armazenadas de forma segura como secrets do backend.
-
-&nbsp;
-
-credencias:   
-  
-Napikey: SkRBQU1VWllERFJrbTJGSW1YTUNpWWNiTGpBRmlSMU8=   
-  
-User Token: 84682144-1804-11f1-a3b7-027e3c96bf59  
-  
-usuario sip: 137715001
-
----
-
-### Arquitetura da Integração
-
-```text
-┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Frontend   │────▶│  Edge Function   │────▶│  API Nvoip      │
-│  (CRM UI)   │     │  nvoip-call      │     │  api.nvoip.com  │
-│             │◀────│                  │◀────│                 │
-└─────────────┘     └──────────────────┘     └─────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │  Tabela     │
-                    │  nvoip_config│
-                    │  call_history│
-                    └─────────────┘
+```
+-- Pseudocódigo da verificação:
+SELECT id FROM conversation_assignments
+WHERE telefone_formatado = numeroLimpo
+  AND company_id = companyId
+  AND assigned_user_id IS NOT NULL
 ```
 
----
+Se encontrar, pular a inicialização de fluxo e seguir para a lógica de IA (que já respeita `active_attendances`).
 
-### Implementação (4 etapas)
+### 2. Frontend: `Conversas.tsx` -- Limpar atribuição ao finalizar
 
-#### 1. Secrets e Configuração
+Nas funções `finalizarAtendimento` e `finalizarAtendimentoSilent`, após marcar as mensagens como "Resolvida", **deletar** o registro de `conversation_assignments` para aquele telefone/empresa. Isso "desbloqueia" o fluxo para ser acionado novamente na próxima mensagem do contato.
 
-- Armazenar `NVOIP_NAPIKEY` e `NVOIP_USER_TOKEN` como secrets
-- Criar tabela `nvoip_config` para armazenar NumberSIP por empresa (multi-tenant)
+```
+-- Ao finalizar:
+DELETE FROM conversation_assignments
+WHERE telefone_formatado = telefoneFormatado
+  AND company_id = companyId
+```
 
-#### 2. Edge Function `nvoip-call`
+### Resumo do fluxo corrigido
 
-Uma única edge function com 4 ações:
+```text
+Lead envia msg → webhook
+  ├─ Tem flow_state ativo? → Continua fluxo (menu interativo)
+  ├─ Não tem flow_state, mas tem conversation_assignment? → BLOQUEIA fluxo (transferido)
+  └─ Sem state nem assignment → Inicia novo fluxo/IA normalmente
 
-- `**make-call**`: Autentica via OAuth → `POST /v2/calls/` com caller/called → retorna `callId`
-- `**check-call**`: `GET /v2/calls?callId=X` → retorna estado atual e duração
-- `**end-call**`: `GET /v2/endcall?callId=X` → encerra chamada
-- `**get-token**`: Gerencia cache do access_token (24h validade)
+Atendente finaliza → Remove conversation_assignment
+  └─ Próxima msg do lead → Fluxo pode iniciar novamente
+```
 
-#### 3. Atualizar `useCallCenter.ts`
+### Arquivos alterados
 
-- Substituir `simulateCallProgression()` por polling real via edge function
-- A cada 2 segundos, consultar status da chamada na Nvoip
-- Mapear estados Nvoip → estados do CRM:
-  - `calling_origin` → `iniciando`
-  - `calling_destination` → `chamando`/`tocando`
-  - `established` → `conectado`
-  - `noanswer`/`busy`/`failed` → `falha`
-  - `finished` → `finalizado`
-- Salvar `linkAudio` (gravação) no `call_history`
+| Arquivo | Alteração |
+|---|---|
+| `supabase/functions/webhook-conversas/index.ts` | Adicionar check de `conversation_assignments` antes de iniciar novo fluxo |
+| `src/pages/Conversas.tsx` | Deletar `conversation_assignments` em `finalizarAtendimento` e `finalizarAtendimentoSilent` |
 
-#### 4. Tabela `call_history` — adicionar coluna
-
-- `nvoip_call_id` (text) — ID da chamada na Nvoip
-- `recording_url` (text) — link da gravação de áudio
-
----
-
-### Próximo passo
-
-Preciso que você me forneça as credenciais da Nvoip (NumberSIP, User Token, Napikey) para que eu possa armazená-las como secrets e iniciar a implementação.
