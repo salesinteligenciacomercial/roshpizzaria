@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Plus, Download } from "lucide-react";
+import { Plus, Download, FileText, UserPlus } from "lucide-react";
 import { ProspeccaoKPIs } from "@/components/prospeccao/ProspeccaoKPIs";
 import { ProspeccaoTable } from "@/components/prospeccao/ProspeccaoTable";
 import { ProspeccaoCharts } from "@/components/prospeccao/ProspeccaoCharts";
@@ -11,20 +11,33 @@ import { FollowUpTable } from "@/components/prospeccao/FollowUpTable";
 import { FollowUpKPIs } from "@/components/prospeccao/FollowUpKPIs";
 import { FollowUpFormDialog } from "@/components/prospeccao/FollowUpFormDialog";
 import { BenchmarkPanel } from "@/components/prospeccao/BenchmarkPanel";
+import { InteractionLogDialog } from "@/components/prospeccao/InteractionLogDialog";
+import { InteractionTimeline } from "@/components/prospeccao/InteractionTimeline";
+import { ScriptLibrary } from "@/components/prospeccao/ScriptLibrary";
 import { useProspeccaoData } from "@/hooks/useProspeccaoData";
 import { useFollowUpData } from "@/hooks/useFollowUpData";
+import { useInteractions } from "@/hooks/useInteractions";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 export default function Prospeccao() {
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<"organic" | "paid" | "followup">("organic");
+  const [subTab, setSubTab] = useState<"registros" | "interacoes">("registros");
   const [period, setPeriod] = useState("30");
   const [showForm, setShowForm] = useState(false);
   const [showFollowUpForm, setShowFollowUpForm] = useState(false);
+  const [showInteractionForm, setShowInteractionForm] = useState(false);
+  const [showScripts, setShowScripts] = useState(false);
 
   const channelType = activeTab === "followup" ? "organic" : activeTab;
   const { data, isLoading, refetch } = useProspeccaoData(channelType as "organic" | "paid", parseInt(period));
   const { data: followUpData, isLoading: followUpLoading, refetch: followUpRefetch } = useFollowUpData(parseInt(period));
+
+  const interactionLogType = activeTab === "followup" ? "followup" : "prospecting";
+  const { data: interactions, isLoading: interactionsLoading, refetch: interactionsRefetch } = useInteractions(
+    interactionLogType as "prospecting" | "followup",
+    parseInt(period)
+  );
 
   const handleExportCSV = () => {
     if (activeTab === "followup") {
@@ -79,6 +92,15 @@ export default function Prospeccao() {
     }
   };
 
+  const handleRefreshAll = () => {
+    if (activeTab === "followup") {
+      followUpRefetch();
+    } else {
+      refetch();
+    }
+    interactionsRefetch();
+  };
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -86,7 +108,7 @@ export default function Prospeccao() {
           <h1 className="text-2xl font-bold text-foreground">Acompanhamento de Prospecção</h1>
           <p className="text-sm text-muted-foreground">Acompanhe o funil de prospecção, tráfego pago e follow-up</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-[140px]">
               <SelectValue />
@@ -99,8 +121,14 @@ export default function Prospeccao() {
               <SelectItem value="90">90 dias</SelectItem>
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" onClick={() => setShowScripts(true)}>
+            <FileText className="h-4 w-4 mr-1" /> Scripts
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExportCSV}>
             <Download className="h-4 w-4 mr-1" /> CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowInteractionForm(true)}>
+            <UserPlus className="h-4 w-4 mr-1" /> Interação
           </Button>
           <Button size="sm" onClick={handleRegister}>
             <Plus className="h-4 w-4 mr-1" /> Registrar
@@ -110,29 +138,59 @@ export default function Prospeccao() {
 
       <div className={`flex gap-6 ${isMobile ? "flex-col" : ""}`}>
         <div className="flex-1 min-w-0">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+          <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as any); setSubTab("registros"); }}>
             <TabsList>
               <TabsTrigger value="organic">Orgânico</TabsTrigger>
               <TabsTrigger value="paid">Tráfego Pago</TabsTrigger>
               <TabsTrigger value="followup">Follow-Up</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="organic" className="space-y-6 mt-4">
-              <ProspeccaoKPIs data={data || []} channelType="organic" isLoading={isLoading} />
-              <ProspeccaoCharts data={data || []} channelType="organic" />
-              <ProspeccaoTable data={data || []} channelType="organic" isLoading={isLoading} onRefresh={refetch} />
-            </TabsContent>
+            {/* Sub-tab toggle */}
+            <div className="flex gap-1 mt-3 mb-4">
+              <Button
+                variant={subTab === "registros" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setSubTab("registros")}
+              >
+                Registros
+              </Button>
+              <Button
+                variant={subTab === "interacoes" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setSubTab("interacoes")}
+              >
+                Interações ({interactions?.length || 0})
+              </Button>
+            </div>
 
-            <TabsContent value="paid" className="space-y-6 mt-4">
-              <ProspeccaoKPIs data={data || []} channelType="paid" isLoading={isLoading} />
-              <ProspeccaoCharts data={data || []} channelType="paid" />
-              <ProspeccaoTable data={data || []} channelType="paid" isLoading={isLoading} onRefresh={refetch} />
-            </TabsContent>
+            {subTab === "interacoes" ? (
+              <div className="space-y-6">
+                <InteractionTimeline
+                  data={interactions || []}
+                  isLoading={interactionsLoading}
+                  onRefresh={interactionsRefetch}
+                />
+              </div>
+            ) : (
+              <>
+                <TabsContent value="organic" className="space-y-6 mt-0">
+                  <ProspeccaoKPIs data={data || []} channelType="organic" isLoading={isLoading} />
+                  <ProspeccaoCharts data={data || []} channelType="organic" />
+                  <ProspeccaoTable data={data || []} channelType="organic" isLoading={isLoading} onRefresh={refetch} />
+                </TabsContent>
 
-            <TabsContent value="followup" className="space-y-6 mt-4">
-              <FollowUpKPIs data={followUpData || []} isLoading={followUpLoading} />
-              <FollowUpTable data={followUpData || []} isLoading={followUpLoading} onRefresh={followUpRefetch} />
-            </TabsContent>
+                <TabsContent value="paid" className="space-y-6 mt-0">
+                  <ProspeccaoKPIs data={data || []} channelType="paid" isLoading={isLoading} />
+                  <ProspeccaoCharts data={data || []} channelType="paid" />
+                  <ProspeccaoTable data={data || []} channelType="paid" isLoading={isLoading} onRefresh={refetch} />
+                </TabsContent>
+
+                <TabsContent value="followup" className="space-y-6 mt-0">
+                  <FollowUpKPIs data={followUpData || []} isLoading={followUpLoading} />
+                  <FollowUpTable data={followUpData || []} isLoading={followUpLoading} onRefresh={followUpRefetch} />
+                </TabsContent>
+              </>
+            )}
           </Tabs>
         </div>
 
@@ -152,6 +210,18 @@ export default function Prospeccao() {
         open={showFollowUpForm}
         onOpenChange={setShowFollowUpForm}
         onSuccess={followUpRefetch}
+      />
+
+      <InteractionLogDialog
+        open={showInteractionForm}
+        onOpenChange={setShowInteractionForm}
+        logType={interactionLogType as "prospecting" | "followup"}
+        onSuccess={handleRefreshAll}
+      />
+
+      <ScriptLibrary
+        open={showScripts}
+        onOpenChange={setShowScripts}
       />
     </div>
   );

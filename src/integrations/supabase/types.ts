@@ -4550,6 +4550,122 @@ export type Database = {
           },
         ]
       }
+      prospecting_interactions: {
+        Row: {
+          channel: string | null
+          company_id: string
+          created_at: string | null
+          daily_log_id: string | null
+          gross_value: number | null
+          id: string
+          interaction_date: string
+          interaction_summary: string | null
+          lead_id: string | null
+          lead_name: string | null
+          lead_phone: string | null
+          log_type: string
+          next_action: string | null
+          next_action_date: string | null
+          outcome: string
+          script_used: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          channel?: string | null
+          company_id: string
+          created_at?: string | null
+          daily_log_id?: string | null
+          gross_value?: number | null
+          id?: string
+          interaction_date?: string
+          interaction_summary?: string | null
+          lead_id?: string | null
+          lead_name?: string | null
+          lead_phone?: string | null
+          log_type?: string
+          next_action?: string | null
+          next_action_date?: string | null
+          outcome?: string
+          script_used?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          channel?: string | null
+          company_id?: string
+          created_at?: string | null
+          daily_log_id?: string | null
+          gross_value?: number | null
+          id?: string
+          interaction_date?: string
+          interaction_summary?: string | null
+          lead_id?: string | null
+          lead_name?: string | null
+          lead_phone?: string | null
+          log_type?: string
+          next_action?: string | null
+          next_action_date?: string | null
+          outcome?: string
+          script_used?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospecting_interactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospecting_interactions_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prospecting_scripts: {
+        Row: {
+          category: string | null
+          company_id: string
+          content: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+        }
+        Insert: {
+          category?: string | null
+          company_id: string
+          content: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+        }
+        Update: {
+          category?: string | null
+          company_id?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospecting_scripts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quick_message_categories: {
         Row: {
           company_id: string
