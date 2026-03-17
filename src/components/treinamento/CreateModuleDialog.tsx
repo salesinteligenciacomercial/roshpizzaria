@@ -36,7 +36,7 @@ const moduleAccessOptions = [
   { key: 'conversas', label: 'Conversas' },
   { key: 'agenda', label: 'Agenda' },
   { key: 'tarefas', label: 'Tarefas' },
-  { key: 'chat-equipe', label: 'Chat Equipe' },
+  { key: 'chat-equipe', label: 'Bate-papo Interno' },
   { key: 'reunioes', label: 'Reuniões' },
   { key: 'discador', label: 'Discador' },
   { key: 'processos', label: 'Processos Comerciais' },

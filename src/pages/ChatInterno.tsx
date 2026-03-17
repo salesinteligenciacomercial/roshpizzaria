@@ -350,7 +350,7 @@ export default function ChatInterno() {
         {/* Header */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold text-foreground">Chat Equipe</h2>
+            <h2 className="text-lg font-bold text-foreground">Bate-papo Interno</h2>
             <div className="flex gap-1">
               <Button size="icon" variant="ghost" onClick={() => setShowStartCallDialog(true)} title="Nova Chamada">
                 <Phone className="h-4 w-4" />

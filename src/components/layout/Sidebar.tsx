@@ -53,7 +53,7 @@ const navigation = [{
   icon: Bot,
   menuKey: "automacao"
 }, {
-  name: "Chat Equipe",
+  name: "Bate-papo Interno",
   href: "/chat-equipe",
   icon: MessagesSquare,
   menuKey: "chat-equipe",
