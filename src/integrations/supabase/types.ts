@@ -4442,6 +4442,7 @@ export type Database = {
           meetings_scheduled: number | null
           notes: string | null
           opportunities: number | null
+          responses: number | null
           sales_closed: number | null
           source: string | null
           updated_at: string | null
@@ -4459,6 +4460,7 @@ export type Database = {
           meetings_scheduled?: number | null
           notes?: string | null
           opportunities?: number | null
+          responses?: number | null
           sales_closed?: number | null
           source?: string | null
           updated_at?: string | null
@@ -4476,6 +4478,7 @@ export type Database = {
           meetings_scheduled?: number | null
           notes?: string | null
           opportunities?: number | null
+          responses?: number | null
           sales_closed?: number | null
           source?: string | null
           updated_at?: string | null
