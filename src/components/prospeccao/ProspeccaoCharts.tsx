@@ -10,11 +10,11 @@ interface Props {
 export function ProspeccaoCharts({ data, channelType }: Props) {
   if (data.length === 0) return null;
 
-  // Aggregate by date
-  const byDate = data.reduce<Record<string, { date: string; leads: number; opportunities: number; meetings: number; sales: number; gross: number; adSpend: number }>>((acc, r) => {
+  const byDate = data.reduce<Record<string, { date: string; leads: number; responses: number; opportunities: number; meetings: number; sales: number; gross: number; adSpend: number }>>((acc, r) => {
     const d = r.log_date;
-    if (!acc[d]) acc[d] = { date: d, leads: 0, opportunities: 0, meetings: 0, sales: 0, gross: 0, adSpend: 0 };
+    if (!acc[d]) acc[d] = { date: d, leads: 0, responses: 0, opportunities: 0, meetings: 0, sales: 0, gross: 0, adSpend: 0 };
     acc[d].leads += r.leads_prospected;
+    acc[d].responses += r.responses;
     acc[d].opportunities += r.opportunities;
     acc[d].meetings += r.meetings_scheduled;
     acc[d].sales += r.sales_closed;
@@ -45,8 +45,10 @@ export function ProspeccaoCharts({ data, channelType }: Props) {
               <Tooltip />
               <Legend />
               <Bar dataKey="leads" name="Leads" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="responses" name="Respostas" fill="hsl(190 80% 50%)" radius={[4, 4, 0, 0]} />
               <Bar dataKey="opportunities" name="Oportunidades" fill="hsl(var(--chart-2, 142 71% 45%))" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="sales" name="Vendas" fill="hsl(var(--chart-3, 262 83% 58%))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="meetings" name="Reuniões" fill="hsl(262 83% 58%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="sales" name="Vendas" fill="hsl(var(--chart-3, 142 71% 45%))" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>

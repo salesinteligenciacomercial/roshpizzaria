@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ export function ProspeccaoFormDialog({ open, onOpenChange, channelType, onSucces
     log_date: new Date().toISOString().slice(0, 10),
     source: "",
     leads_prospected: 0,
+    responses: 0,
     opportunities: 0,
     meetings_scheduled: 0,
     sales_closed: 0,
@@ -66,6 +67,7 @@ export function ProspeccaoFormDialog({ open, onOpenChange, channelType, onSucces
         channel_type: channelType,
         source: form.source || null,
         leads_prospected: form.leads_prospected,
+        responses: form.responses,
         opportunities: form.opportunities,
         meetings_scheduled: form.meetings_scheduled,
         sales_closed: form.sales_closed,
@@ -83,6 +85,7 @@ export function ProspeccaoFormDialog({ open, onOpenChange, channelType, onSucces
         log_date: new Date().toISOString().slice(0, 10),
         source: "",
         leads_prospected: 0,
+        responses: 0,
         opportunities: 0,
         meetings_scheduled: 0,
         sales_closed: 0,
@@ -135,25 +138,31 @@ export function ProspeccaoFormDialog({ open, onOpenChange, channelType, onSucces
               <Input type="number" min={0} value={form.leads_prospected} onChange={(e) => setForm({ ...form, leads_prospected: parseInt(e.target.value) || 0 })} />
             </div>
             <div>
-              <Label>Oportunidades</Label>
-              <Input type="number" min={0} value={form.opportunities} onChange={(e) => setForm({ ...form, opportunities: parseInt(e.target.value) || 0 })} />
+              <Label>Respostas</Label>
+              <Input type="number" min={0} value={form.responses} onChange={(e) => setForm({ ...form, responses: parseInt(e.target.value) || 0 })} />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <Label>Oportunidades</Label>
+              <Input type="number" min={0} value={form.opportunities} onChange={(e) => setForm({ ...form, opportunities: parseInt(e.target.value) || 0 })} />
+            </div>
+            <div>
               <Label>Reuniões Agendadas</Label>
               <Input type="number" min={0} value={form.meetings_scheduled} onChange={(e) => setForm({ ...form, meetings_scheduled: parseInt(e.target.value) || 0 })} />
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Vendas Fechadas</Label>
               <Input type="number" min={0} value={form.sales_closed} onChange={(e) => setForm({ ...form, sales_closed: parseInt(e.target.value) || 0 })} />
             </div>
-          </div>
-
-          <div>
-            <Label>Valor Bruto (R$)</Label>
-            <Input type="number" min={0} step="0.01" value={form.gross_value} onChange={(e) => setForm({ ...form, gross_value: parseFloat(e.target.value) || 0 })} />
+            <div>
+              <Label>Valor Bruto (R$)</Label>
+              <Input type="number" min={0} step="0.01" value={form.gross_value} onChange={(e) => setForm({ ...form, gross_value: parseFloat(e.target.value) || 0 })} />
+            </div>
           </div>
 
           <div>

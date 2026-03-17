@@ -11,6 +11,7 @@ export interface ProspeccaoLog {
   channel_type: string;
   source: string | null;
   leads_prospected: number;
+  responses: number;
   opportunities: number;
   meetings_scheduled: number;
   sales_closed: number;
@@ -62,6 +63,7 @@ export function useProspeccaoData(channelType: "organic" | "paid", days: number)
 
       return (logs || []).map(l => ({
         ...l,
+        responses: l.responses ?? 0,
         user_name: userMap[l.user_id] || "Desconhecido",
       })) as ProspeccaoLog[];
     },

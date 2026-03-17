@@ -35,6 +35,8 @@ export function ProspeccaoTable({ data, channelType, isLoading, onRefresh }: Pro
     return <Card><CardContent className="p-6"><Skeleton className="h-48" /></CardContent></Card>;
   }
 
+  const isPaid = channelType === "paid";
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -47,26 +49,29 @@ export function ProspeccaoTable({ data, channelType, isLoading, onRefresh }: Pro
               <TableHead>Data</TableHead>
               <TableHead>Responsável</TableHead>
               <TableHead>Fonte</TableHead>
-              {channelType === "paid" && <TableHead className="text-right">Gasto</TableHead>}
+              {isPaid && <TableHead className="text-right">Gasto</TableHead>}
               <TableHead className="text-right">Leads</TableHead>
-              {channelType === "paid" && <TableHead className="text-right">CPL</TableHead>}
-              <TableHead className="text-right">% Conv.</TableHead>
+              {isPaid && <TableHead className="text-right">CPL</TableHead>}
+              <TableHead className="text-right text-amber-500">%</TableHead>
+              <TableHead className="text-right">Resposta</TableHead>
+              <TableHead className="text-right text-amber-500">%</TableHead>
               <TableHead className="text-right">Oport.</TableHead>
-              {channelType === "paid" && <TableHead className="text-right">CPO</TableHead>}
-              <TableHead className="text-right">Reuniões</TableHead>
-              <TableHead className="text-right">% Fech.</TableHead>
+              {isPaid && <TableHead className="text-right">CPO</TableHead>}
+              <TableHead className="text-right text-amber-500">%</TableHead>
+              <TableHead className="text-right">Reunião</TableHead>
+              <TableHead className="text-right text-amber-500">%</TableHead>
               <TableHead className="text-right">Vendas</TableHead>
-              {channelType === "paid" && <TableHead className="text-right">CPV</TableHead>}
+              {isPaid && <TableHead className="text-right">CPV</TableHead>}
               <TableHead className="text-right">Ticket</TableHead>
               <TableHead className="text-right">Bruto</TableHead>
-              {channelType === "paid" && <TableHead className="text-right">ROI</TableHead>}
+              {isPaid && <TableHead className="text-right">ROI</TableHead>}
               <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
             {data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={channelType === "paid" ? 16 : 11} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={isPaid ? 20 : 15} className="text-center text-muted-foreground py-8">
                   Nenhum registro encontrado. Clique em "Registrar" para adicionar.
                 </TableCell>
               </TableRow>
@@ -79,19 +84,22 @@ export function ProspeccaoTable({ data, channelType, isLoading, onRefresh }: Pro
                     <TableCell className="whitespace-nowrap">{new Date(r.log_date + "T12:00:00").toLocaleDateString("pt-BR")}</TableCell>
                     <TableCell>{r.user_name}</TableCell>
                     <TableCell className="capitalize">{(r.source || "—").replace(/_/g, " ")}</TableCell>
-                    {channelType === "paid" && <TableCell className="text-right">R$ {fmt(Number(r.ad_spend))}</TableCell>}
+                    {isPaid && <TableCell className="text-right">R$ {fmt(Number(r.ad_spend))}</TableCell>}
                     <TableCell className="text-right font-medium">{r.leads_prospected}</TableCell>
-                    {channelType === "paid" && <TableCell className="text-right">{div(Number(r.ad_spend), r.leads_prospected)}</TableCell>}
-                    <TableCell className="text-right">{pct(r.opportunities, r.leads_prospected)}</TableCell>
+                    {isPaid && <TableCell className="text-right">{div(Number(r.ad_spend), r.leads_prospected)}</TableCell>}
+                    <TableCell className="text-right text-amber-500 font-medium">{pct(r.responses, r.leads_prospected)}</TableCell>
+                    <TableCell className="text-right font-medium">{r.responses}</TableCell>
+                    <TableCell className="text-right text-amber-500 font-medium">{pct(r.opportunities, r.responses)}</TableCell>
                     <TableCell className="text-right font-medium">{r.opportunities}</TableCell>
-                    {channelType === "paid" && <TableCell className="text-right">{div(Number(r.ad_spend), r.opportunities)}</TableCell>}
-                    <TableCell className="text-right">{r.meetings_scheduled}</TableCell>
-                    <TableCell className="text-right">{pct(r.sales_closed, r.opportunities)}</TableCell>
+                    {isPaid && <TableCell className="text-right">{div(Number(r.ad_spend), r.opportunities)}</TableCell>}
+                    <TableCell className="text-right text-amber-500 font-medium">{pct(r.meetings_scheduled, r.opportunities)}</TableCell>
+                    <TableCell className="text-right font-medium">{r.meetings_scheduled}</TableCell>
+                    <TableCell className="text-right text-amber-500 font-medium">{pct(r.sales_closed, r.meetings_scheduled)}</TableCell>
                     <TableCell className="text-right font-medium">{r.sales_closed}</TableCell>
-                    {channelType === "paid" && <TableCell className="text-right">{div(Number(r.ad_spend), r.sales_closed)}</TableCell>}
+                    {isPaid && <TableCell className="text-right">{div(Number(r.ad_spend), r.sales_closed)}</TableCell>}
                     <TableCell className="text-right">R$ {fmt(ticket)}</TableCell>
                     <TableCell className="text-right font-bold">R$ {fmt(Number(r.gross_value))}</TableCell>
-                    {channelType === "paid" && (
+                    {isPaid && (
                       <TableCell className={`text-right font-bold ${roi > 0 ? "text-green-500" : roi < 0 ? "text-red-500" : ""}`}>
                         {r.ad_spend > 0 ? `${roi.toFixed(1)}%` : "—"}
                       </TableCell>
