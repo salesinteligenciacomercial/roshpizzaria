@@ -86,7 +86,7 @@ function sanitizeTemplateComponents(components?: any[]): any[] | undefined {
   if (!components || components.length === 0) return undefined;
   
   const validTypes = ['header', 'body', 'button'];
-  const validButtonSubTypes = ['quick_reply', 'url', 'copy_code'];
+  const validButtonSubTypes = ['quick_reply', 'url', 'copy_code', 'flow'];
   
   const sanitized = components.filter((comp: any) => {
     if (!comp || !comp.type) return false;
