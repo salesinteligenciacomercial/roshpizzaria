@@ -1207,7 +1207,8 @@ serve(async (req) => {
           formattedNumber,
           validatedData.template_name,
           validatedData.template_language || 'pt_BR',
-          validatedData.template_components
+          validatedData.template_components,
+          connection.meta_business_account_id
         );
         
         // Fallback para Evolution se Meta falhar e provider for "both"
