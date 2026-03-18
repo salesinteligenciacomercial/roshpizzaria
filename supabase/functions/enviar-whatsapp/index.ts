@@ -122,6 +122,46 @@ function sanitizeTemplateComponents(components?: any[]): any[] | undefined {
   return sanitized.length > 0 ? sanitized : undefined;
 }
 
+// Fetch template structure from Meta API to auto-build required button components
+async function fetchTemplateButtons(
+  wabaId: string,
+  accessToken: string,
+  templateName: string
+): Promise<any[] | null> {
+  try {
+    const url = `${META_API_BASE_URL}/${META_API_VERSION}/${wabaId}/message_templates?name=${templateName}&limit=1`;
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      console.warn("⚠️ Não foi possível buscar template da Meta:", response.status);
+      return null;
+    }
+    const data = await response.json();
+    const template = data.data?.[0];
+    if (!template?.components) return null;
+
+    const buttonsComp = template.components.find((c: any) => c.type === "BUTTONS");
+    if (!buttonsComp?.buttons?.length) return null;
+
+    const buttonComponents: any[] = [];
+    buttonsComp.buttons.forEach((btn: any, index: number) => {
+      if (btn.type === "QUICK_REPLY") {
+        buttonComponents.push({
+          type: "button",
+          sub_type: "quick_reply",
+          index: String(index),
+          parameters: [{ type: "payload", payload: btn.text || `btn_${index}` }],
+        });
+      }
+    });
+    return buttonComponents.length > 0 ? buttonComponents : null;
+  } catch (e) {
+    console.warn("⚠️ Erro ao buscar template buttons:", e);
+    return null;
+  }
+}
+
 // Send template message via Meta API
 async function sendMetaTemplateMessage(
   phoneNumberId: string,
@@ -129,20 +169,32 @@ async function sendMetaTemplateMessage(
   to: string,
   templateName: string,
   language: string = 'pt_BR',
-  components?: any[]
+  components?: any[],
+  wabaId?: string
 ): Promise<{ success: boolean; provider: string; data?: any; error?: string }> {
   try {
     const url = `${META_API_BASE_URL}/${META_API_VERSION}/${phoneNumberId}/messages`;
     
     // Sanitize components to prevent Meta API errors
-    const sanitizedComponents = sanitizeTemplateComponents(components);
+    let sanitizedComponents = sanitizeTemplateComponents(components);
+    
+    // If no button components provided, try to auto-fetch from template structure
+    const hasButtonComponents = sanitizedComponents?.some((c: any) => c.type === 'button');
+    if (!hasButtonComponents && wabaId) {
+      console.log("🔍 Verificando se template tem botões quick_reply...");
+      const autoButtons = await fetchTemplateButtons(wabaId, accessToken, templateName);
+      if (autoButtons) {
+        console.log(`✅ Auto-gerados ${autoButtons.length} componentes de botão`);
+        sanitizedComponents = [...(sanitizedComponents || []), ...autoButtons];
+      }
+    }
     
     const templatePayload: any = {
       name: templateName,
       language: { code: language },
     };
     
-    if (sanitizedComponents) {
+    if (sanitizedComponents && sanitizedComponents.length > 0) {
       templatePayload.components = sanitizedComponents;
     }
 
