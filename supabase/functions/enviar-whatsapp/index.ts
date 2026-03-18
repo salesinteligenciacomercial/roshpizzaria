@@ -1320,7 +1320,8 @@ serve(async (req) => {
             formattedNumber,
             validatedData.template_name,
             validatedData.template_language || 'pt_BR',
-            validatedData.template_components
+            validatedData.template_components,
+            connection.meta_business_account_id
           );
         } else if (hasMetaCredentials && validatedData.mediaBase64) {
           // Importante: quando provider é 'both' e Evolution está desconectada,
