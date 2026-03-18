@@ -139,10 +139,16 @@ async function fetchTemplateButtons(
     }
     const data = await response.json();
     const template = data.data?.[0];
+    console.log("📋 Template encontrado:", template?.name, "- Componentes:", JSON.stringify(template?.components?.map((c: any) => c.type)));
     if (!template?.components) return null;
 
     const buttonsComp = template.components.find((c: any) => c.type === "BUTTONS");
-    if (!buttonsComp?.buttons?.length) return null;
+    if (!buttonsComp?.buttons?.length) {
+      console.log("ℹ️ Template não possui botões");
+      return null;
+    }
+
+    console.log("🔘 Botões encontrados:", JSON.stringify(buttonsComp.buttons.map((b: any) => ({ type: b.type, text: b.text }))));
 
     const buttonComponents: any[] = [];
     buttonsComp.buttons.forEach((btn: any, index: number) => {
@@ -153,8 +159,23 @@ async function fetchTemplateButtons(
           index: String(index),
           parameters: [{ type: "payload", payload: btn.text || `btn_${index}` }],
         });
+      } else if (btn.type === "FLOW") {
+        buttonComponents.push({
+          type: "button",
+          sub_type: "flow",
+          index: String(index),
+          parameters: [],
+        });
+      } else if (btn.type === "URL" && btn.url?.includes("{{")) {
+        buttonComponents.push({
+          type: "button",
+          sub_type: "url",
+          index: String(index),
+          parameters: [{ type: "text", text: "" }],
+        });
       }
     });
+    console.log("✅ Componentes de botão gerados:", buttonComponents.length);
     return buttonComponents.length > 0 ? buttonComponents : null;
   } catch (e) {
     console.warn("⚠️ Erro ao buscar template buttons:", e);
