@@ -90,6 +90,69 @@ export function DisparoEmMassa() {
     filterLeads();
   }, [leads, searchTerm, selectedStatus, selectedTag, selectedSegmentacao]);
 
+  // Check for active campaigns on mount
+  useEffect(() => {
+    if (!companyId) return;
+    const checkActive = async () => {
+      const { data } = await supabase
+        .from('disparo_campaigns')
+        .select('id, status, sent_count, total_leads, error_count, is_paused')
+        .eq('company_id', companyId)
+        .in('status', ['sending', 'pending'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (data && data.length > 0) {
+        const c = data[0];
+        setActiveCampaignId(c.id);
+        setSending(true);
+        setProgress({ sent: c.sent_count, total: c.total_leads, errors: c.error_count, paused: c.is_paused });
+      }
+    };
+    checkActive();
+  }, [companyId]);
+
+  // Realtime subscription for campaign progress
+  useEffect(() => {
+    if (!activeCampaignId) return;
+    const channel = supabase
+      .channel(`campaign-${activeCampaignId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'disparo_campaigns',
+        filter: `id=eq.${activeCampaignId}`,
+      }, (payload: any) => {
+        const row = payload.new;
+        if (row.status === 'completed' || row.status === 'cancelled') {
+          setSending(false);
+          setProgress(null);
+          setActiveCampaignId(null);
+          if (row.status === 'completed') {
+            if (row.error_count === 0) {
+              toast.success(`${row.sent_count} mensagens enviadas com sucesso!`);
+            } else {
+              toast.warning(`${row.sent_count} enviadas, ${row.error_count} com erro`);
+            }
+          } else {
+            toast.info('Campanha cancelada');
+          }
+          setSelectedLeads(new Set());
+          setMessage("");
+          setMediaFile(null);
+          setMediaPreview(null);
+          setMessageType("text");
+          setCampanhaNome("");
+        } else {
+          setProgress({ sent: row.sent_count, total: row.total_leads, errors: row.error_count, paused: row.is_paused });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeCampaignId]);
+
   const loadCompanyIdAndLeads = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
