@@ -1842,6 +1842,95 @@ export type Database = {
           },
         ]
       }
+      disparo_campaigns: {
+        Row: {
+          campaign_name: string
+          company_id: string
+          completed_at: string | null
+          created_at: string
+          delay_between_messages: number
+          error_count: number
+          error_details: Json | null
+          id: string
+          is_paused: boolean
+          leads_data: Json
+          media_storage_url: string | null
+          message_content: string | null
+          message_type: string
+          pause_after_messages: number
+          pause_duration: number
+          sent_count: number
+          started_at: string | null
+          status: string
+          template_components: Json | null
+          template_language: string | null
+          template_media_url: string | null
+          template_name: string | null
+          total_leads: number
+          updated_at: string
+        }
+        Insert: {
+          campaign_name: string
+          company_id: string
+          completed_at?: string | null
+          created_at?: string
+          delay_between_messages?: number
+          error_count?: number
+          error_details?: Json | null
+          id: string
+          is_paused?: boolean
+          leads_data?: Json
+          media_storage_url?: string | null
+          message_content?: string | null
+          message_type?: string
+          pause_after_messages?: number
+          pause_duration?: number
+          sent_count?: number
+          started_at?: string | null
+          status?: string
+          template_components?: Json | null
+          template_language?: string | null
+          template_media_url?: string | null
+          template_name?: string | null
+          total_leads?: number
+          updated_at?: string
+        }
+        Update: {
+          campaign_name?: string
+          company_id?: string
+          completed_at?: string | null
+          created_at?: string
+          delay_between_messages?: number
+          error_count?: number
+          error_details?: Json | null
+          id?: string
+          is_paused?: boolean
+          leads_data?: Json
+          media_storage_url?: string | null
+          message_content?: string | null
+          message_type?: string
+          pause_after_messages?: number
+          pause_duration?: number
+          sent_count?: number
+          started_at?: string | null
+          status?: string
+          template_components?: Json | null
+          template_language?: string | null
+          template_media_url?: string | null
+          template_name?: string | null
+          total_leads?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disparo_campaigns_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       etapas: {
         Row: {
           atualizado_em: string | null

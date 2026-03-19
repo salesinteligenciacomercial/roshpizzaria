@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,7 +65,7 @@ export function DisparoEmMassa() {
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [availableSegmentacoes, setAvailableSegmentacoes] = useState<string[]>([]);
   const [progress, setProgress] = useState<{ sent: number; total: number; errors: number; paused?: boolean } | null>(null);
-  
+  const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
   // Configurações de mídia e timing
   const [messageType, setMessageType] = useState<"text" | "image" | "video" | "template">("text");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
@@ -89,6 +89,69 @@ export function DisparoEmMassa() {
   useEffect(() => {
     filterLeads();
   }, [leads, searchTerm, selectedStatus, selectedTag, selectedSegmentacao]);
+
+  // Check for active campaigns on mount
+  useEffect(() => {
+    if (!companyId) return;
+    const checkActive = async () => {
+      const { data } = await supabase
+        .from('disparo_campaigns')
+        .select('id, status, sent_count, total_leads, error_count, is_paused')
+        .eq('company_id', companyId)
+        .in('status', ['sending', 'pending'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (data && data.length > 0) {
+        const c = data[0];
+        setActiveCampaignId(c.id);
+        setSending(true);
+        setProgress({ sent: c.sent_count, total: c.total_leads, errors: c.error_count, paused: c.is_paused });
+      }
+    };
+    checkActive();
+  }, [companyId]);
+
+  // Realtime subscription for campaign progress
+  useEffect(() => {
+    if (!activeCampaignId) return;
+    const channel = supabase
+      .channel(`campaign-${activeCampaignId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'disparo_campaigns',
+        filter: `id=eq.${activeCampaignId}`,
+      }, (payload: any) => {
+        const row = payload.new;
+        if (row.status === 'completed' || row.status === 'cancelled') {
+          setSending(false);
+          setProgress(null);
+          setActiveCampaignId(null);
+          if (row.status === 'completed') {
+            if (row.error_count === 0) {
+              toast.success(`${row.sent_count} mensagens enviadas com sucesso!`);
+            } else {
+              toast.warning(`${row.sent_count} enviadas, ${row.error_count} com erro`);
+            }
+          } else {
+            toast.info('Campanha cancelada');
+          }
+          setSelectedLeads(new Set());
+          setMessage("");
+          setMediaFile(null);
+          setMediaPreview(null);
+          setMessageType("text");
+          setCampanhaNome("");
+        } else {
+          setProgress({ sent: row.sent_count, total: row.total_leads, errors: row.error_count, paused: row.is_paused });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeCampaignId]);
 
   const loadCompanyIdAndLeads = async () => {
     try {
@@ -327,17 +390,12 @@ export function DisparoEmMassa() {
     setSending(true);
     setProgress({ sent: 0, total: leadsToSend.length, errors: 0, paused: false });
 
-    let successCount = 0;
-    let errorCount = 0;
-    let mediaData: { base64: string; mimeType: string; fileName: string } | null = null;
-    let mediaStorageUrl: string | null = null;
-    const campanhaId = `campanha_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const campaignId = `campanha_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Converter mídia para base64 (para envio WhatsApp) e upload para Storage (para salvar no banco)
+    // Upload media if needed
+    let mediaStorageUrl: string | null = null;
     if (mediaFile) {
       try {
-        mediaData = await convertFileToBase64(mediaFile);
-        // Upload para Storage para salvar URL no banco (não Base64)
         mediaStorageUrl = await uploadMediaToStorage(mediaFile, companyId);
       } catch (error) {
         toast.error("Erro ao processar arquivo de mídia");
@@ -347,164 +405,60 @@ export function DisparoEmMassa() {
       }
     }
 
-    for (let i = 0; i < leadsToSend.length; i++) {
-      const lead = leadsToSend[i];
-      const phone = lead.telefone || lead.phone;
-
-      if (!phone) {
-        errorCount++;
-        setProgress({ sent: i + 1, total: leadsToSend.length, errors: errorCount, paused: false });
-        continue;
-      }
-
-      try {
-        // Formatar telefone
-        const phoneValidation = robustFormatPhoneNumber(phone);
-        if (!phoneValidation.isValid) {
-          console.error(`Telefone inválido para lead ${lead.id}: ${phone}`);
-          errorCount++;
-          setProgress({ sent: i + 1, total: leadsToSend.length, errors: errorCount, paused: false });
-          continue;
-        }
-
-        const formattedPhone = phoneValidation.formatted;
-        
-        // ⚡ CORREÇÃO CRÍTICA: Normalizar telefone para garantir consistência no agrupamento
-        // O telefone_formatado deve ser apenas números (sem espaços, sem +) e sempre com prefixo 55
-        let telefoneNormalizado = formattedPhone.replace(/[^0-9]/g, '');
-        // Garantir que tenha prefixo 55 se não tiver (para consistência com realtime)
-        if (!telefoneNormalizado.startsWith('55') && telefoneNormalizado.length >= 10) {
-          telefoneNormalizado = `55${telefoneNormalizado}`;
-        }
-
-        // Preparar payload de envio
-        const payload: any = {
-          numero: formattedPhone,
-          company_id: companyId,
-        };
-
-        if (messageType === "text") {
-          payload.mensagem = message;
-          payload.tipo_mensagem = "text";
-        } else if (messageType === "template" && selectedTemplate) {
-          // Envio de template via Meta API
-          payload.template_name = selectedTemplate.name;
-          payload.template_language = selectedTemplate.language;
-          payload.template_components = buildTemplateComponents(selectedTemplate, lead);
-          payload.tipo_mensagem = "template";
-          payload.mensagem = `[Template: ${selectedTemplate.name}]`;
-        } else if (messageType === "image" && mediaData) {
-          payload.caption = message || "";
-          payload.mensagem = message || "";
-          payload.tipo_mensagem = "image";
-          payload.mediaBase64 = mediaData.base64;
-          payload.mimeType = mediaData.mimeType;
-          payload.fileName = mediaData.fileName;
-        } else if (messageType === "video" && mediaData) {
-          payload.caption = message || "";
-          payload.mensagem = message || "";
-          payload.tipo_mensagem = "video";
-          payload.mediaBase64 = mediaData.base64;
-          payload.mimeType = mediaData.mimeType;
-          payload.fileName = mediaData.fileName;
-        }
-
-        // Enviar via função Edge
-        const { data, error } = await supabase.functions.invoke("enviar-whatsapp", {
-          body: payload,
-        });
-
-        if (error) {
-          console.error(`Erro ao enviar para ${lead.name}:`, error);
-          errorCount++;
-        } else {
-          successCount++;
-
-          // Salvar no banco de dados - importante para aparecer no CRM
-          // Usar telefone normalizado (apenas números) para garantir agrupamento correto
-          // Gerar conteúdo da mensagem baseado no tipo
-          let mensagemConteudo = message;
-          if (messageType === "template" && selectedTemplate) {
-            // Construir texto do template para salvar
-            const templateText = buildTemplateTextContent(selectedTemplate, lead);
-            mensagemConteudo = templateText || `[Template: ${selectedTemplate.name}]`;
-          } else if (messageType === "image" && !message) {
-            mensagemConteudo = "[Imagem]";
-          } else if (messageType === "video" && !message) {
-            mensagemConteudo = "[Vídeo]";
-          }
-          
-          const conversaData: any = {
-            numero: telefoneNormalizado, // Número normalizado (apenas dígitos)
-            telefone_formatado: telefoneNormalizado, // Mesmo formato para agrupamento consistente
-            mensagem: mensagemConteudo,
-            origem: "WhatsApp",
-            status: "Enviada",
-            tipo_mensagem: messageType,
-            nome_contato: lead.name || "Lead",
-            company_id: companyId,
-            lead_id: lead.id, // Vincular ao lead
-            campanha_nome: campanhaNome.trim(), // Nome da campanha
-            campanha_id: campanhaId, // ID único da campanha
-            fromme: true, // Marcar como mensagem enviada pelo usuário
-            delivered: true, // Marcar como entregue
-            is_group: false, // Garantir que não é grupo
-          };
-
-          // ⚡ CORREÇÃO: Usar URL do Storage em vez de Base64
-          if (mediaStorageUrl && messageType !== "text") {
-            conversaData.midia_url = mediaStorageUrl;
-            conversaData.arquivo_nome = mediaData?.fileName;
-          }
-
-          const { error: insertError, data: insertedData } = await supabase.from("conversas").insert([conversaData]).select();
-          
-          if (insertError) {
-            console.error(`❌ Erro ao salvar conversa no banco para ${lead.name}:`, insertError);
-            console.error("Dados que tentaram ser salvos:", conversaData);
-          } else {
-            console.log(`✅ Conversa salva no banco para ${lead.name} (${telefoneNormalizado})`);
-            console.log("Dados salvos:", insertedData?.[0]);
-          }
-        }
-
-        setProgress({ sent: i + 1, total: leadsToSend.length, errors: errorCount, paused: false });
-
-        // Pausa automática após X mensagens
-        if (pauseAfterMessages > 0 && (i + 1) % pauseAfterMessages === 0 && i < leadsToSend.length - 1) {
-          setProgress({ sent: i + 1, total: leadsToSend.length, errors: errorCount, paused: true });
-          toast.info(`Pausa automática: ${pauseDuration} segundos após ${i + 1} mensagens enviadas`);
-          await new Promise((resolve) => setTimeout(resolve, pauseDuration * 1000));
-          setProgress({ sent: i + 1, total: leadsToSend.length, errors: errorCount, paused: false });
-        }
-
-        // Delay configurável entre mensagens
-        if (i < leadsToSend.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, delayBetweenMessages * 1000));
-        }
-      } catch (error: any) {
-        console.error(`Erro ao processar lead ${lead.id}:`, error);
-        errorCount++;
-        setProgress({ sent: i + 1, total: leadsToSend.length, errors: errorCount, paused: false });
-      }
+    // Build template components if needed
+    let templateComps = null;
+    if (messageType === "template" && selectedTemplate) {
+      // Use first lead as reference for component structure
+      templateComps = buildTemplateComponents(selectedTemplate, leadsToSend[0]);
     }
 
-    setSending(false);
-    setProgress(null);
+    // Create campaign record in database
+    const { error: insertError } = await supabase.from('disparo_campaigns').insert({
+      id: campaignId,
+      company_id: companyId,
+      campaign_name: campanhaNome.trim(),
+      status: 'pending',
+      total_leads: leadsToSend.length,
+      message_type: messageType,
+      message_content: message || null,
+      template_name: selectedTemplate?.name || null,
+      template_language: selectedTemplate?.language || null,
+      template_components: templateComps,
+      template_media_url: templateMediaUrl || null,
+      media_storage_url: mediaStorageUrl,
+      delay_between_messages: delayBetweenMessages,
+      pause_after_messages: pauseAfterMessages,
+      pause_duration: pauseDuration,
+      leads_data: leadsToSend.map(l => ({
+        id: l.id,
+        name: l.name,
+        telefone: l.telefone,
+        phone: l.phone,
+        email: l.email,
+      })),
+    });
 
-    if (errorCount === 0) {
-      toast.success(`${successCount} mensagens enviadas com sucesso!`);
-    } else {
-      toast.warning(`${successCount} enviadas, ${errorCount} com erro`);
+    if (insertError) {
+      console.error('Erro ao criar campanha:', insertError);
+      toast.error("Erro ao iniciar campanha");
+      setSending(false);
+      setProgress(null);
+      return;
     }
 
-    // Limpar seleção e mensagem
-    setSelectedLeads(new Set());
-    setMessage("");
-    setMediaFile(null);
-    setMediaPreview(null);
-    setMessageType("text");
-    setCampanhaNome("");
+    setActiveCampaignId(campaignId);
+
+    // Fire and forget - edge function processes in background
+    supabase.functions.invoke('disparo-em-massa', {
+      body: { campaign_id: campaignId },
+    }).then(({ error }) => {
+      if (error) {
+        console.error('Erro ao chamar disparo-em-massa:', error);
+        toast.error("Erro ao processar disparo. Verifique o progresso.");
+      }
+    });
+
+    toast.success("Disparo iniciado! Você pode sair desta página — o envio continuará no servidor.");
   };
 
   const selectedCount = selectedLeads.size;
