@@ -198,15 +198,7 @@ import { useEffect, useState } from "react";
                   </Button>
                 ))}
                 {protocolNumber && (
-                  <div className="flex items-center gap-0.5">
-                    <ProtocolBadge protocolNumber={protocolNumber} status={protocolStatus} />
-                    <ProtocolWelcomeSettings 
-                      protocolNumber={protocolNumber}
-                      contactPhone={contactPhone}
-                      contactName={contactName}
-                      companyId={companyId}
-                    />
-                  </div>
+                  <ProtocolBadge protocolNumber={protocolNumber} status={protocolStatus} />
                 )}
                 {getSyncStatusBadge()}
               </div>
@@ -237,9 +229,25 @@ import { useEffect, useState } from "react";
                        )}
                      </Button>
                    </TooltipTrigger>
-                   <TooltipContent>Puxar Histórico</TooltipContent>
-                 </Tooltip>
-               )}
+                    <TooltipContent>Puxar Histórico</TooltipContent>
+                  </Tooltip>
+                )}
+                {/* Botão Enviar Protocolo */}
+                {protocolNumber && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div>
+                        <ProtocolWelcomeSettings 
+                          protocolNumber={protocolNumber}
+                          contactPhone={contactPhone}
+                          contactName={contactName}
+                          companyId={companyId}
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Enviar Protocolo</TooltipContent>
+                  </Tooltip>
+                )}
                {/* Botão IA - Dropdown */}
                {onChangeAIMode && (
                  <AIModeSelectorDropdown
