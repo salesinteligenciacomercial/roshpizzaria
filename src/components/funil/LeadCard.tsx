@@ -664,6 +664,8 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
         }
       }}
       className={`group relative p-4 mb-3 cursor-grab active:cursor-grabbing border-0 shadow-card hover:shadow-lg transition-all duration-300 bg-card overflow-hidden min-h-[120px] touch-none ${
+        conversaOpen ? 'lead-card-conversa-active' : ''
+      } ${
         isDragging ? 'shadow-2xl scale-105 z-50 ring-2 ring-primary/50 bg-gradient-to-br from-card to-primary/5' : ''
       }`}
     >
@@ -1059,7 +1061,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
           </TooltipProvider>
 
           {/* Botões de ação à direita */}
-          <div className="flex items-center gap-0.5 flex-shrink-0">
+          <div data-lead-card-actions="true" className="flex items-center gap-0.5 flex-shrink-0">
             {/* Botão Ver Conversas */}
             {lead.telefone && (
               <TooltipProvider>

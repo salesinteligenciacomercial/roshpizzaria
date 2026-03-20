@@ -1205,7 +1205,12 @@ export function ConversaPopup({
     }
   };
 
-  const formattedPhone = leadPhone ? safeFormatPhoneNumber(leadPhone) || "N/A" : "N/A";            
+  const formattedPhone = leadPhone ? safeFormatPhoneNumber(leadPhone) || "N/A" : "N/A";
+
+  useEffect(() => {
+    document.body.classList.toggle("lead-conversa-popup-open", open);
+    return () => document.body.classList.remove("lead-conversa-popup-open");
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

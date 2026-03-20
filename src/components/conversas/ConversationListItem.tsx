@@ -275,7 +275,7 @@ function ConversationListItemComponent({
             position: 'absolute',
             top: '8px',
             right: '8px',
-            zIndex: 99999,
+            zIndex: 30,
             display: 'flex',
             opacity: 1,
             visibility: 'visible',
