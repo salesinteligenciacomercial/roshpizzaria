@@ -364,7 +364,10 @@ export function WhatsAppQRCode() {
   };
 
   const testConnection = async (connection: any) => {
-    if (!connection.evolution_api_url) {
+    const isMeta = connection.api_provider === 'meta' || connection.api_provider === 'both';
+    
+    // Para Meta API, não precisa de evolution_api_url
+    if (!isMeta && !connection.evolution_api_url) {
       toast.error("URL da Evolution API não configurada");
       return;
     }
@@ -376,13 +379,18 @@ export function WhatsAppQRCode() {
 
       if (error) throw error;
 
+      const providerLabel = data?.provider === 'meta' ? 'Meta API Oficial' : 'Evolution API';
+
       if (data?.isConnected) {
-        toast.success(`✅ ${connection.instance_name} conectada!`);
-        appendLog(connection.id, 'Teste: conectada');
+        const extraInfo = data?.verified_name ? ` (${data.verified_name})` : '';
+        toast.success(`✅ ${connection.instance_name} conectada via ${providerLabel}${extraInfo}`);
+        appendLog(connection.id, `Teste: conectada via ${providerLabel}${extraInfo}`);
       } else {
-        toast.warning(`⚠️ ${connection.instance_name} não conectada (${data?.state})`);
-        appendLog(connection.id, `Teste: ${data?.state}`);
+        const reason = data?.reason ? ` - ${data.reason}` : '';
+        toast.warning(`⚠️ ${connection.instance_name} não conectada (${data?.state})${reason}`);
+        appendLog(connection.id, `Teste: ${data?.state} via ${providerLabel}${reason}`);
       }
+      loadConnections(); // Refresh to pick up any status updates from the check
     } catch (error: any) {
       toast.error(`❌ Erro: ${error.message}`);
       appendLog(connection.id, `Erro no teste: ${error.message}`);
