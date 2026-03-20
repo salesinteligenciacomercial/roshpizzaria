@@ -1856,6 +1856,13 @@ function Conversas() {
             const idsArray = Array.from(notifiedMessagesRef.current);
             notifiedMessagesRef.current = new Set(idsArray.slice(-100));
           }
+          
+          // 📋 AUTO-PROTOCOLO: Criar protocolo automaticamente ao receber mensagem do contato
+          const telefoneProtocol = novaMensagem.telefone_formatado || (novaMensagem.numero || '').replace(/[^0-9]/g, '');
+          if (telefoneProtocol && userCompanyIdRef.current) {
+            createProtocol(telefoneProtocol, { startedBy: 'contato' }).catch(() => {});
+          }
+          
           console.log('🔔 [REALTIME] Disparando notificação para mensagem nova:', novaMensagem.id);
           const audio = new Audio('/notification.mp3');
           audio.play().catch(() => {});
