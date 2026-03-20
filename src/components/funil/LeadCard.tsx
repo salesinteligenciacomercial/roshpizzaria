@@ -833,7 +833,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                             <span className="truncate">{tag}</span>
                           </Badge>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="z-[9999]">
+                        <TooltipContent side="top">
                           <p className="font-medium">{tag}</p>
                         </TooltipContent>
                       </Tooltip>
