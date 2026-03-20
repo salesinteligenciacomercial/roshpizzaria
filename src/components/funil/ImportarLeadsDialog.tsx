@@ -398,36 +398,8 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
         return;
       }
 
-      // Buscar primeiro funil do usuário
-      const { data: funis } = await supabase
-        .from("funis")
-        .select("id")
-        .eq("company_id", userRole.company_id)
-        .limit(1);
-
-      if (!funis || funis.length === 0) {
-        toast.error("Crie um funil antes de importar leads");
-        setLoading(false);
-        return;
-      }
-
-      const funilId = funis[0].id;
-
-      // Buscar primeira etapa do funil
-      const { data: etapas } = await supabase
-        .from("etapas")
-        .select("id")
-        .eq("funil_id", funilId)
-        .order("posicao", { ascending: true })
-        .limit(1);
-
-      if (!etapas || etapas.length === 0) {
-        toast.error("Crie etapas no funil antes de importar leads");
-        setLoading(false);
-        return;
-      }
-
-      const etapaId = etapas[0].id;
+      // Contatos importados NÃO devem ser adicionados ao funil de vendas
+      // Ficam apenas no módulo Contatos do CRM
 
       // Buscar todos os usuários da empresa para validar responsáveis
       const { data: companyUsers } = await supabase
