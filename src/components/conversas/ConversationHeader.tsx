@@ -198,15 +198,7 @@ import { useEffect, useState } from "react";
                   </Button>
                 ))}
                 {protocolNumber && (
-                  <div className="flex items-center gap-0.5">
-                    <ProtocolBadge protocolNumber={protocolNumber} status={protocolStatus} />
-                    <ProtocolWelcomeSettings 
-                      protocolNumber={protocolNumber}
-                      contactPhone={contactPhone}
-                      contactName={contactName}
-                      companyId={companyId}
-                    />
-                  </div>
+                  <ProtocolBadge protocolNumber={protocolNumber} status={protocolStatus} />
                 )}
                 {getSyncStatusBadge()}
               </div>
