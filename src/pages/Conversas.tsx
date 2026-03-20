@@ -2957,12 +2957,8 @@ function Conversas() {
   const loadSupabaseConversations = async (append: boolean = false) => {
     if (loadingConversations) return;
 
-    // ⚡ OTIMIZAÇÃO: Se já temos conversas do cache, não bloquear a exibição
-    // Apenas setar loading se não temos conversas ainda
-    const hasCachedConversations = conversations.length > 0;
-    if (!hasCachedConversations) {
-      setLoadingConversations(true);
-    }
+    // ⚡ OTIMIZAÇÃO: NUNCA bloquear a UI com loading spinner
+    // Conversas existentes (cache ou já carregadas) são exibidas imediatamente
     try {
       const startTime = performance.now();
 
