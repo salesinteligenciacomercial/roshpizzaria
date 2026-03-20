@@ -565,9 +565,24 @@ div[class*="overflow"]::-webkit-scrollbar {
   pointer-events: auto !important;
 }
 
-/* Quando o popup de conversa do funil estiver aberto, esconder ações dos outros cards */
+/* Quando o popup de conversa do funil estiver aberto, esconder ações e cards do fundo */
 body.lead-conversa-popup-open [data-lead-card-actions="true"] {
   opacity: 0 !important;
   visibility: hidden !important;
   pointer-events: none !important;
+}
+
+body.lead-conversa-popup-open .lead-card-conversa-active {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+body.lead-conversa-popup-open [class*="group relative p-4 mb-3"],
+body.lead-conversa-popup-open .shadow-card {
+  pointer-events: none !important;
+}
+
+body.lead-conversa-popup-open .lead-card-conversa-active,
+body.lead-conversa-popup-open .lead-card-conversa-active * {
+  pointer-events: auto !important;
 }
