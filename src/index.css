@@ -564,3 +564,10 @@ div[class*="overflow"]::-webkit-scrollbar {
   background-color: rgba(0, 0, 0, 0.85) !important;
   pointer-events: auto !important;
 }
+
+/* Quando o popup de conversa do funil estiver aberto, esconder ações dos outros cards */
+body.lead-conversa-popup-open [data-lead-card-actions="true"] {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

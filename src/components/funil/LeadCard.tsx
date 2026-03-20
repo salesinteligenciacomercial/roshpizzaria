@@ -1059,7 +1059,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
           </TooltipProvider>
 
           {/* Botões de ação à direita */}
-          <div className="flex items-center gap-0.5 flex-shrink-0">
+          <div data-lead-card-actions="true" className="flex items-center gap-0.5 flex-shrink-0">
             {/* Botão Ver Conversas */}
             {lead.telefone && (
               <TooltipProvider>
