@@ -55,8 +55,23 @@ export const useAttendanceProtocol = (companyId: string | null) => {
       const result = data?.[0];
       if (result) {
         console.log(`📋 [PROTOCOL] Protocolo: ${result.protocol_number}`);
-        // Fetch full protocol data
-        await loadActiveProtocol(telefoneFormatado);
+        // Update active protocol state immediately
+        setActiveProtocol({
+          id: result.id,
+          protocol_number: result.protocol_number,
+          company_id: companyId,
+          telefone_formatado: telefoneFormatado,
+          lead_id: options?.leadId || null,
+          channel: options?.channel || 'whatsapp',
+          started_by: options?.startedBy || 'humano',
+          attending_user_id: options?.attendingUserId || null,
+          attending_user_name: options?.attendingUserName || null,
+          status: 'aberto',
+          started_at: new Date().toISOString(),
+          finished_at: null,
+          summary: null,
+          created_at: new Date().toISOString(),
+        });
         return result.protocol_number;
       }
       return null;

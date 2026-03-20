@@ -1856,6 +1856,13 @@ function Conversas() {
             const idsArray = Array.from(notifiedMessagesRef.current);
             notifiedMessagesRef.current = new Set(idsArray.slice(-100));
           }
+          
+          // 📋 AUTO-PROTOCOLO: Criar protocolo automaticamente ao receber mensagem do contato
+          const telefoneProtocol = novaMensagem.telefone_formatado || (novaMensagem.numero || '').replace(/[^0-9]/g, '');
+          if (telefoneProtocol && userCompanyIdRef.current) {
+            createProtocol(telefoneProtocol, { startedBy: 'contato' }).catch(() => {});
+          }
+          
           console.log('🔔 [REALTIME] Disparando notificação para mensagem nova:', novaMensagem.id);
           const audio = new Audio('/notification.mp3');
           audio.play().catch(() => {});
@@ -2077,6 +2084,11 @@ function Conversas() {
   useEffect(() => {
     if (selectedConv && userCompanyId) {
       verificarLeadVinculado(selectedConv);
+      // 📋 Carregar protocolo ativo ao selecionar conversa
+      const telefone = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
+      if (telefone) {
+        loadActiveProtocol(telefone);
+      }
     } else {
       setLeadVinculado(null);
       setMostrarBotaoCriarLead(false);
