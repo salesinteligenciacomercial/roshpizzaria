@@ -54,7 +54,8 @@ export function ProtocolWelcomeSettings({ protocolNumber, contactPhone, contactN
 
     setSending(true);
     try {
-      const { error } = await supabase.functions.invoke('enviar-whatsapp', {
+      console.log('📤 [PROTOCOL-WELCOME] Enviando:', { companyId, contactPhone, messageLength: message.length });
+      const { data, error } = await supabase.functions.invoke('enviar-whatsapp', {
         body: {
           company_id: companyId,
           numero: contactPhone,
@@ -63,6 +64,7 @@ export function ProtocolWelcomeSettings({ protocolNumber, contactPhone, contactN
         },
       });
 
+      console.log('📤 [PROTOCOL-WELCOME] Resposta:', { data, error });
       if (error) throw error;
 
       // Persist in conversas
