@@ -813,7 +813,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                             <span className="text-xs text-foreground truncate max-w-[60px]">{resp.nome.split(' ')[0]}</span>
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="z-[9999]">
+                        <TooltipContent side="top">
                           <p className="font-medium">{resp.nome}</p>
                         </TooltipContent>
                       </Tooltip>
