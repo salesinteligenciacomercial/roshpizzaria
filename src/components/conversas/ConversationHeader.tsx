@@ -233,21 +233,19 @@ import { useEffect, useState } from "react";
                   </Tooltip>
                 )}
                 {/* Botão Enviar Protocolo */}
-                {protocolNumber && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div>
-                        <ProtocolWelcomeSettings 
-                          protocolNumber={protocolNumber}
-                          contactPhone={contactPhone}
-                          contactName={contactName}
-                          companyId={companyId}
-                        />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>Enviar Protocolo</TooltipContent>
-                  </Tooltip>
-                )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div>
+                      <ProtocolWelcomeSettings 
+                        protocolNumber={protocolNumber}
+                        contactPhone={contactPhone}
+                        contactName={contactName}
+                        companyId={companyId}
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Enviar Protocolo</TooltipContent>
+                </Tooltip>
                {/* Botão IA - Dropdown */}
                {onChangeAIMode && (
                  <AIModeSelectorDropdown
