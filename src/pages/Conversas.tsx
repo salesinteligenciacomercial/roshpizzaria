@@ -1311,7 +1311,6 @@ function Conversas() {
     if (!userCompanyId) return;
     try {
       console.log('📦 [LOAD-ALL] Iniciando carregamento otimizado de todas as conversas...');
-      setLoadingConversations(true);
       const allConversations = await loadAllUniqueConversations(userCompanyId);
       if (allConversations.length > 0) {
         console.log(`✅ [LOAD-ALL] ${allConversations.length} conversas únicas carregadas`);
