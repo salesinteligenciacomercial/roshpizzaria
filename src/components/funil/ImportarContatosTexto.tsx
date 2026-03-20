@@ -188,28 +188,8 @@ export function ImportarContatosTexto({ onLeadsImported, onClose }: ImportarCont
         return;
       }
 
-      const { data: funis } = await supabase
-        .from("funis")
-        .select("id")
-        .eq("company_id", userRole.company_id)
-        .limit(1);
-
-      if (!funis?.length) {
-        toast.error("Crie um funil antes de importar leads.");
-        return;
-      }
-
-      const { data: etapas } = await supabase
-        .from("etapas")
-        .select("id")
-        .eq("funil_id", funis[0].id)
-        .order("posicao", { ascending: true })
-        .limit(1);
-
-      if (!etapas?.length) {
-        toast.error("Crie etapas no funil antes de importar leads.");
-        return;
-      }
+      // Contatos importados NÃO devem ser adicionados ao funil de vendas
+      // Ficam apenas no módulo Contatos do CRM
 
       // Check duplicates
       const { data: existingLeads } = await supabase
@@ -247,8 +227,6 @@ export function ImportarContatosTexto({ onLeadsImported, onClose }: ImportarCont
         newLeads.push({
           owner_id: user.id,
           company_id: userRole.company_id,
-          funil_id: funis[0].id,
-          etapa_id: etapas[0].id,
           status: 'novo',
           stage: 'prospeccao',
           value: 0,
