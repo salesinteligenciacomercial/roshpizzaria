@@ -229,9 +229,25 @@ import { useEffect, useState } from "react";
                        )}
                      </Button>
                    </TooltipTrigger>
-                   <TooltipContent>Puxar Histórico</TooltipContent>
-                 </Tooltip>
-               )}
+                    <TooltipContent>Puxar Histórico</TooltipContent>
+                  </Tooltip>
+                )}
+                {/* Botão Enviar Protocolo */}
+                {protocolNumber && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div>
+                        <ProtocolWelcomeSettings 
+                          protocolNumber={protocolNumber}
+                          contactPhone={contactPhone}
+                          contactName={contactName}
+                          companyId={companyId}
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Enviar Protocolo</TooltipContent>
+                  </Tooltip>
+                )}
                {/* Botão IA - Dropdown */}
                {onChangeAIMode && (
                  <AIModeSelectorDropdown
