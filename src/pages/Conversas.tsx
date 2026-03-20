@@ -2077,6 +2077,11 @@ function Conversas() {
   useEffect(() => {
     if (selectedConv && userCompanyId) {
       verificarLeadVinculado(selectedConv);
+      // 📋 Carregar protocolo ativo ao selecionar conversa
+      const telefone = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
+      if (telefone) {
+        loadActiveProtocol(telefone);
+      }
     } else {
       setLeadVinculado(null);
       setMostrarBotaoCriarLead(false);
