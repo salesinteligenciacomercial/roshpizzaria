@@ -97,8 +97,8 @@ export function ProtocolWelcomeSettings({ protocolNumber, contactPhone, contactN
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7" title="Configurar e enviar mensagem de protocolo">
-          <Settings2 className="h-3.5 w-3.5" />
+        <Button variant="outline" size="icon" className="h-8 w-8" title="Enviar mensagem de protocolo">
+          <Settings2 className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
