@@ -1,48 +1,36 @@
 
 
-# Correção: Disparo em Massa Congela Após 1 Mensagem
+# Corrigir exibição do Protocolo de Atendimento
 
-## Problema Identificado
+## Problema identificado
 
-Dois problemas críticos:
+O protocolo **é criado** quando o atendente envia uma mensagem (`handleSendMessage`), mas **nunca é carregado** quando uma conversa é selecionada. A função `loadActiveProtocol` existe no hook mas não é chamada em nenhum lugar do código. Por isso o badge do protocolo nunca aparece.
 
-1. **Edge Function não está registrada** no `config.toml` — nunca foi deployada, então a chamada falha silenciosamente
-2. **Timeout da Edge Function** — Supabase Edge Functions têm limite de ~60-150s de execução. Com 50 leads e delay de 7s entre mensagens, seriam ~350s — a função morre antes de terminar
+Além disso, o protocolo só é criado quando o atendente humano responde manualmente. Não há geração automática ao receber uma mensagem nova do cliente.
 
-Por isso: envia 1 mensagem, a função é terminada pelo timeout, e o progresso congela em "1 de 50".
+## Como vai funcionar após a correção
 
-## Solução: Processamento em Lotes com Auto-Reinvocação
-
-A Edge Function será reescrita para processar **um lote pequeno** de leads (ex: 5 por vez) e depois **se reinvocar automaticamente** para o próximo lote, evitando o timeout.
-
-```text
-Chamada 1 → processa leads 0-4 → salva progresso → chama a si mesma
-Chamada 2 → processa leads 5-9 → salva progresso → chama a si mesma
-...
-Chamada N → processa últimos leads → marca como completed
-```
+1. **Ao selecionar uma conversa**: O sistema carrega automaticamente o protocolo ativo (se existir) e exibe no cabeçalho
+2. **Ao receber uma nova mensagem de um contato**: Um protocolo é criado automaticamente (sem precisar de URA, bot ou IA ativados)
+3. **Ao responder manualmente**: Continua criando protocolo se não existir um aberto (comportamento atual)
+4. **O badge aparece no cabeçalho** com o número do protocolo em tempo real
 
 ## Alterações
 
-### 1. Registrar no `config.toml`
-Adicionar entrada `[functions.disparo-em-massa]` com `verify_jwt = false` (pois precisa se auto-invocar sem JWT do usuário, e a autenticação é feita via campaign_id)
+### 1. `src/pages/Conversas.tsx`
+- Adicionar chamada a `loadActiveProtocol` quando `selectedConv` muda (no useEffect de seleção de conversa)
+- Adicionar chamada a `createProtocol` quando uma nova mensagem é recebida do contato (no handler de realtime/webhook), gerando protocolo automaticamente sem depender de URA/bot/IA
+- Recarregar o protocolo ativo após criar um novo protocolo no `handleSendMessage`
 
-### 2. Reescrever `supabase/functions/disparo-em-massa/index.ts`
-- Processar no máximo **5 leads por invocação** (bem dentro do timeout)
-- Após processar o lote, atualizar `sent_count` no banco
-- Se ainda houver leads restantes, fazer `fetch()` para si mesma com o mesmo `campaign_id`
-- A função lê `sent_count` do banco para saber de onde continuar (já existe no código atual via `startIndex = sentCount`)
-- Retornar resposta imediatamente ao cliente na primeira chamada
+### 2. `src/hooks/useAttendanceProtocol.ts`
+- Ajustar `createProtocol` para retornar os dados completos e atualizar `activeProtocol` no state imediatamente após criação, sem precisar de chamada extra a `loadActiveProtocol`
 
-### 3. Ajustar `DisparoEmMassa.tsx`
-- Nenhuma mudança significativa necessária — o Realtime subscription já monitora o progresso
-- Apenas garantir que o `invoke` não espere a resposta completa (já usa fire-and-forget)
+## Resultado esperado
 
-## Detalhes Técnicos
+O protocolo será gerado e exibido automaticamente em qualquer cenário:
+- Cliente envia mensagem -> protocolo criado e visível
+- Atendente abre conversa -> protocolo existente carregado e visível
+- Atendente responde -> protocolo criado (se não existir) e visível
 
-**Lote por invocação**: 5 leads (com delay de 7s = ~35s por lote, bem dentro do limite)
-
-**Auto-reinvocação**: Usa `fetch()` direto para a URL da própria função com `Authorization: Bearer SERVICE_ROLE_KEY`, sem aguardar resposta (fire-and-forget)
-
-**Segurança**: A função valida que o `campaign_id` existe e pertence a uma campanha válida antes de processar
+Não é necessário ativar URA, bot ou IA para gerar protocolos.
 
