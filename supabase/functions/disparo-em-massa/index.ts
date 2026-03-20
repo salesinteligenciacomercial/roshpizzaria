@@ -7,6 +7,9 @@ const corsHeaders = {
 };
 
 const BATCH_SIZE = 5;
+const DEFAULT_DELAY_SECONDS = 7;
+const SAFE_EXECUTION_WINDOW_SECONDS = 45;
+const MIN_DELAY_SECONDS = 1;
 
 function formatPhoneNumber(phone: string): string {
   let cleaned = phone.replace(/[^0-9]/g, '');
@@ -18,6 +21,46 @@ function formatPhoneNumber(phone: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getBatchSize(delayBetweenMessages: number | null | undefined): number {
+  const delaySeconds = Math.max(MIN_DELAY_SECONDS, Number(delayBetweenMessages) || DEFAULT_DELAY_SECONDS);
+  const safeBatchSize = Math.floor(SAFE_EXECUTION_WINDOW_SECONDS / delaySeconds) + 1;
+
+  return Math.max(1, Math.min(BATCH_SIZE, safeBatchSize));
+}
+
+function scheduleNextBatch(selfUrl: string, serviceRoleKey: string, campaignId: string) {
+  const nextBatchPromise = fetch(selfUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${serviceRoleKey}`,
+      'apikey': serviceRoleKey,
+    },
+    body: JSON.stringify({ campaign_id: campaignId }),
+  }).then(async (response) => {
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Erro ao auto-invocar próximo lote (${response.status}): ${errorText}`);
+      return;
+    }
+
+    console.log(`✅ Próximo lote da campanha ${campaignId} agendado`);
+  }).catch((err) => {
+    console.error('❌ Erro ao auto-invocar próximo lote:', err.message);
+  });
+
+  const edgeRuntime = (globalThis as typeof globalThis & {
+    EdgeRuntime?: { waitUntil?: (promise: Promise<unknown>) => void };
+  }).EdgeRuntime;
+
+  if (edgeRuntime?.waitUntil) {
+    edgeRuntime.waitUntil(nextBatchPromise);
+    return;
+  }
+
+  void nextBatchPromise;
 }
 
 serve(async (req) => {
@@ -75,9 +118,10 @@ serve(async (req) => {
     let errorCount = campaign.error_count || 0;
     const errorDetails: any[] = campaign.error_details || [];
     const startIndex = sentCount + errorCount; // Resume from where we left off
-    const endIndex = Math.min(startIndex + BATCH_SIZE, leads.length);
+    const batchSize = getBatchSize(campaign.delay_between_messages);
+    const endIndex = Math.min(startIndex + batchSize, leads.length);
 
-    console.log(`🚀 Batch: processando leads ${startIndex}-${endIndex - 1} de ${leads.length} (campanha: ${campaign.campaign_name})`);
+    console.log(`🚀 Batch: processando leads ${startIndex}-${endIndex - 1} de ${leads.length} (campanha: ${campaign.campaign_name}, lote: ${batchSize}, delay: ${campaign.delay_between_messages || DEFAULT_DELAY_SECONDS}s)`);
 
     for (let i = startIndex; i < endIndex; i++) {
       // Check cancellation
@@ -191,7 +235,7 @@ serve(async (req) => {
 
       // Delay between messages (only if not last in batch)
       if (i < endIndex - 1) {
-        await sleep((campaign.delay_between_messages || 7) * 1000);
+        await sleep((campaign.delay_between_messages || DEFAULT_DELAY_SECONDS) * 1000);
       }
     }
 
@@ -225,16 +269,7 @@ serve(async (req) => {
       const selfUrl = `${supabaseUrl}/functions/v1/disparo-em-massa`;
       console.log(`🔄 Invocando próximo lote a partir do index ${totalProcessed}...`);
 
-      fetch(selfUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseServiceKey}`,
-        },
-        body: JSON.stringify({ campaign_id }),
-      }).catch(err => {
-        console.error('❌ Erro ao auto-invocar próximo lote:', err.message);
-      });
+      scheduleNextBatch(selfUrl, supabaseServiceKey, campaign_id);
 
     } else {
       // All done - mark completed
