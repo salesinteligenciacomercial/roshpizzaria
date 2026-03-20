@@ -76,14 +76,15 @@ interface MessageItemProps {
   onImageClick?: (url: string, name: string) => void;
   onPdfClick?: (url: string, name: string) => void;
   isTranscribing?: boolean;
-  transcriptionStatus?: "pending" | "processing" | "completed" | "error"; // MELHORIA: Status da transcrição
-  onRetryTranscribe?: () => void; // MELHORIA: Função para reenviar transcrição
+  transcriptionStatus?: "pending" | "processing" | "completed" | "error";
+  onRetryTranscribe?: () => void;
   onReply: (messageId: string) => void;
   onEdit: (messageId: string, newContent: string) => void;
   onDelete: (messageId: string, forEveryone: boolean) => void;
   onReact: (messageId: string, emoji: string) => void | Promise<void>;
   onForward?: (messageId: string, content: string, messageType: string, mediaUrl?: string, fileName?: string) => void;
   onOpenContactConversation?: (name: string, phone: string) => void;
+  hideFloatingActions?: boolean;
 }
 
 function MessageItemComponent({
@@ -102,6 +103,7 @@ function MessageItemComponent({
   onReact,
   onForward,
   onOpenContactConversation,
+  hideFloatingActions = false,
 }: MessageItemProps) {
   const [showActions, setShowActions] = useState(false);
   const [dragStart, setDragStart] = useState<number | null>(null);
@@ -291,22 +293,23 @@ function MessageItemComponent({
             </div>
           )}
           
-          {/* Botão de 3 pontinhos - sempre visível ao passar mouse */}
-          <div className={`absolute -top-1 ${message.sender === "user" ? "-left-9" : "-right-9"} opacity-0 group-hover:opacity-100 transition-opacity`}>
-            <MessageActions
-              messageId={message.id}
-              content={message.content}
-              sender={message.sender}
-              messageType={message.type}
-              mediaUrl={mediaUrl || message.mediaUrl}
-              fileName={message.fileName}
-              onReply={onReply}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onReact={onReact}
-              onForward={onForward}
-            />
-          </div>
+          {!hideFloatingActions && (
+            <div className={`absolute -top-1 ${message.sender === "user" ? "-left-9" : "-right-9"} opacity-0 group-hover:opacity-100 transition-opacity`}>
+              <MessageActions
+                messageId={message.id}
+                content={message.content}
+                sender={message.sender}
+                messageType={message.type}
+                mediaUrl={mediaUrl || message.mediaUrl}
+                fileName={message.fileName}
+                onReply={onReply}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onReact={onReact}
+                onForward={onForward}
+              />
+            </div>
+          )}
           {/* Text Message com Link Preview */}
           {message.type === "text" && (
             <div className="max-w-full">
