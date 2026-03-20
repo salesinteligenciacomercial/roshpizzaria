@@ -370,6 +370,14 @@ function Conversas() {
     isCurrentUserAttending, // 🆕 NOVO: Verificar se usuário atual está atendendo
   } = useActiveAttendance(userCompanyId);
 
+  // 📋 PROTOCOLO DE ATENDIMENTO
+  const {
+    activeProtocol,
+    createProtocol,
+    loadActiveProtocol,
+    finalizeProtocol,
+  } = useAttendanceProtocol(userCompanyId);
+
   // ⚡ DESATIVADO: Carregamento de avatares movido para lazy loading
   // Para evitar loops e melhorar performance
   // Avatares são carregados quando a conversa é aberta
