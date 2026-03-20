@@ -5,6 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Phone, Video, Info, User, MessageSquare, Instagram, Facebook, FileText, DollarSign, RefreshCw, CheckCircle2, AlertCircle, Loader2, Check, Plus, RotateCcw, ArrowRightLeft, Bot, ArrowLeft } from "lucide-react";
 import { AIModeSelectorDropdown, type AIMode } from "./AIModeSelectorDropdown";
+import { ProtocolBadge } from "./ProtocolBadge";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Dialog, DialogContent, DialogHeader as UIDialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,8 +39,10 @@ import { useEffect, useState } from "react";
    onRestoreConversation?: () => void;
    restoringConversation?: boolean;
    restoreProgress?: { step: number; label: string } | null;
-   onBack?: () => void;
-   showBackButton?: boolean;
+    onBack?: () => void;
+    showBackButton?: boolean;
+    protocolNumber?: string | null;
+    protocolStatus?: string;
  }
 
   export function ConversationHeader({
@@ -67,8 +70,10 @@ import { useEffect, useState } from "react";
    onRestoreConversation,
    restoringConversation = false,
    restoreProgress = null,
-   onBack,
-   showBackButton = false,
+    onBack,
+    showBackButton = false,
+    protocolNumber = null,
+    protocolStatus = 'aberto',
   }: ConversationHeaderProps) {
    const isMobile = useIsMobile();
    const [finalizeOpen, setFinalizeOpen] = useState(false);
@@ -187,6 +192,9 @@ import { useEffect, useState } from "react";
                     <span className="hidden sm:inline">Criar Lead</span>
                   </Button>
                 ))}
+                {protocolNumber && (
+                  <ProtocolBadge protocolNumber={protocolNumber} status={protocolStatus} />
+                )}
                 {getSyncStatusBadge()}
               </div>
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

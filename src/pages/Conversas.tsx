@@ -55,6 +55,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useTagsManager } from "@/hooks/useTagsManager";
 import { useConversationSearch, loadAllUniqueConversations } from "@/hooks/useConversationSearch";
 import { useActiveAttendance, TEMPO_ATENDIMENTO_ATIVO } from "@/hooks/useActiveAttendance";
+import { useAttendanceProtocol } from "@/hooks/useAttendanceProtocol";
 import * as evolutionAPI from "@/services/evolutionApi";
 import { ConversasAdvancedFilter, AdvancedFilters, defaultFilters } from "@/components/conversas/ConversasAdvancedFilter";
 import { ConversaTemplateSender } from "@/components/conversas/ConversaTemplateSender";
@@ -368,6 +369,14 @@ function Conversas() {
     activeAttendances,
     isCurrentUserAttending, // 🆕 NOVO: Verificar se usuário atual está atendendo
   } = useActiveAttendance(userCompanyId);
+
+  // 📋 PROTOCOLO DE ATENDIMENTO
+  const {
+    activeProtocol,
+    createProtocol,
+    loadActiveProtocol,
+    finalizeProtocol,
+  } = useAttendanceProtocol(userCompanyId);
 
   // ⚡ DESATIVADO: Carregamento de avatares movido para lazy loading
   // Para evitar loops e melhorar performance
@@ -5464,7 +5473,9 @@ function Conversas() {
     const telefoneFormatado = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
     try {
       await startOrRefreshAttendance(telefoneFormatado);
-      console.log('✅ [ATTENDANCE] Atendimento registrado para:', telefoneFormatado);
+      // 📋 Criar protocolo de atendimento automaticamente
+      await createProtocol(telefoneFormatado, { startedBy: 'humano' });
+      console.log('✅ [ATTENDANCE] Atendimento e protocolo registrados para:', telefoneFormatado);
     } catch (err) {
       console.error('❌ [ATTENDANCE] Erro ao registrar atendimento:', err);
     }
@@ -9046,7 +9057,7 @@ function Conversas() {
         {selectedConv ? <>
             {/* Header - FIXO NO TOPO */}
             <div className="flex-shrink-0 bg-background border-b z-10" style={{ minHeight: '56px', maxHeight: '84px' }}>
-              <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onFinalizeAtendimentoSilent={finalizarAtendimentoSilent} onTransferAtendimento={() => setTransferDialogOpen(true)} onChangeAIMode={(mode) => setConversationAIMode(selectedConv.id, mode)} currentAIMode={(aiMode[selectedConv.id] as any) || 'off'} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} restoreProgress={restoreProgress} showBackButton={isMobile} onBack={() => setSelectedConv(null)} />
+              <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onFinalizeAtendimentoSilent={finalizarAtendimentoSilent} onTransferAtendimento={() => setTransferDialogOpen(true)} onChangeAIMode={(mode) => setConversationAIMode(selectedConv.id, mode)} currentAIMode={(aiMode[selectedConv.id] as any) || 'off'} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} restoreProgress={restoreProgress} showBackButton={isMobile} onBack={() => setSelectedConv(null)} protocolNumber={activeProtocol?.protocol_number} protocolStatus={activeProtocol?.status} />
             </div>
             
             {/* Dialog de Transferir Atendimento */}
