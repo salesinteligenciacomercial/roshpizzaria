@@ -563,3 +563,10 @@ div[class*="overflow"]::-webkit-scrollbar {
   visibility: visible !important;
   display: block !important;
 }
+
+/* ConversaPopup overlay - z-index elevado para cobrir botões do kanban */
+[data-radix-dialog-overlay] {
+  z-index: 200 !important;
+  background-color: rgba(0, 0, 0, 0.85) !important;
+  pointer-events: auto !important;
+}
