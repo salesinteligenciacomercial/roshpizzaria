@@ -88,7 +88,7 @@ export const useAttendanceProtocol = (companyId: string | null) => {
     }
   }, [companyId]);
 
-  // Create or get existing open protocol
+  // Create or get existing open protocol for a contact
   const createProtocol = useCallback(async (
     telefoneFormatado: string,
     options?: {
@@ -99,42 +99,47 @@ export const useAttendanceProtocol = (companyId: string | null) => {
       leadId?: string;
       contactName?: string;
       sendWelcome?: boolean;
+      forceNew?: boolean;
     }
   ): Promise<CreateProtocolResult> => {
     if (!companyId) return { protocolNumber: null, isNew: false };
 
     try {
-      // First check if there's already an open protocol
-      const { data: existing } = await supabase
-        .from('attendance_protocols')
-        .select('id, protocol_number')
-        .eq('company_id', companyId)
-        .eq('telefone_formatado', telefoneFormatado)
-        .in('status', ['aberto', 'em_atendimento'])
-        .limit(1)
-        .maybeSingle();
+      // Unless forceNew, check if there's already an open protocol for THIS contact
+      if (!options?.forceNew) {
+        const { data: existing } = await supabase
+          .from('attendance_protocols')
+          .select('id, protocol_number')
+          .eq('company_id', companyId)
+          .eq('telefone_formatado', telefoneFormatado)
+          .in('status', ['aberto', 'em_atendimento'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      if (existing) {
-        // Protocol already exists, just update state
-        setActiveProtocol(prev => prev?.id === existing.id ? prev : {
-          id: existing.id,
-          protocol_number: existing.protocol_number,
-          company_id: companyId,
-          telefone_formatado: telefoneFormatado,
-          lead_id: options?.leadId || null,
-          channel: options?.channel || 'whatsapp',
-          started_by: options?.startedBy || 'humano',
-          attending_user_id: options?.attendingUserId || null,
-          attending_user_name: options?.attendingUserName || null,
-          status: 'aberto',
-          started_at: new Date().toISOString(),
-          finished_at: null,
-          summary: null,
-          created_at: new Date().toISOString(),
-        });
-        return { protocolNumber: existing.protocol_number, isNew: false };
+        if (existing) {
+          // Protocol already exists for THIS contact, reuse it
+          setActiveProtocol(prev => prev?.id === existing.id ? prev : {
+            id: existing.id,
+            protocol_number: existing.protocol_number,
+            company_id: companyId,
+            telefone_formatado: telefoneFormatado,
+            lead_id: options?.leadId || null,
+            channel: options?.channel || 'whatsapp',
+            started_by: options?.startedBy || 'humano',
+            attending_user_id: options?.attendingUserId || null,
+            attending_user_name: options?.attendingUserName || null,
+            status: 'aberto',
+            started_at: new Date().toISOString(),
+            finished_at: null,
+            summary: null,
+            created_at: new Date().toISOString(),
+          });
+          return { protocolNumber: existing.protocol_number, isNew: false };
+        }
       }
 
+      // Always create a NEW protocol with a unique number
       const { data, error } = await supabase.rpc('create_attendance_protocol', {
         p_company_id: companyId,
         p_telefone_formatado: telefoneFormatado,
@@ -152,7 +157,7 @@ export const useAttendanceProtocol = (companyId: string | null) => {
 
       const result = data?.[0];
       if (result) {
-        console.log(`📋 [PROTOCOL] Novo protocolo criado: ${result.protocol_number}`);
+        console.log(`📋 [PROTOCOL] Novo protocolo criado: ${result.protocol_number} para ${telefoneFormatado}`);
         setActiveProtocol({
           id: result.id,
           protocol_number: result.protocol_number,
