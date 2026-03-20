@@ -70,8 +70,10 @@ import { useEffect, useState } from "react";
    onRestoreConversation,
    restoringConversation = false,
    restoreProgress = null,
-   onBack,
-   showBackButton = false,
+    onBack,
+    showBackButton = false,
+    protocolNumber = null,
+    protocolStatus = 'aberto',
   }: ConversationHeaderProps) {
    const isMobile = useIsMobile();
    const [finalizeOpen, setFinalizeOpen] = useState(false);
