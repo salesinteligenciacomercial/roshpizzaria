@@ -1097,7 +1097,7 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                 </DropdownMenuTrigger>
                 <DropdownMenuContent 
                   align="end" 
-                  className="max-h-60 overflow-y-auto z-[9999] bg-popover"
+                  className="max-h-60 overflow-y-auto bg-popover"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
