@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Phone, Video, Info, User, MessageSquare, Instagram, Facebook, FileText, DollarSign, RefreshCw, CheckCircle2, AlertCircle, Loader2, Check, Plus, RotateCcw, ArrowRightLeft, Bot, ArrowLeft } from "lucide-react";
 import { AIModeSelectorDropdown, type AIMode } from "./AIModeSelectorDropdown";
 import { ProtocolBadge } from "./ProtocolBadge";
+import { ProtocolWelcomeSettings } from "./ProtocolWelcomeSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Dialog, DialogContent, DialogHeader as UIDialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -193,7 +194,10 @@ import { useEffect, useState } from "react";
                   </Button>
                 ))}
                 {protocolNumber && (
-                  <ProtocolBadge protocolNumber={protocolNumber} status={protocolStatus} />
+                  <div className="flex items-center gap-0.5">
+                    <ProtocolBadge protocolNumber={protocolNumber} status={protocolStatus} />
+                    <ProtocolWelcomeSettings />
+                  </div>
                 )}
                 {getSyncStatusBadge()}
               </div>

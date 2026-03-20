@@ -1860,7 +1860,11 @@ function Conversas() {
           // 📋 AUTO-PROTOCOLO: Criar protocolo automaticamente ao receber mensagem do contato
           const telefoneProtocol = novaMensagem.telefone_formatado || (novaMensagem.numero || '').replace(/[^0-9]/g, '');
           if (telefoneProtocol && userCompanyIdRef.current) {
-            createProtocol(telefoneProtocol, { startedBy: 'contato' }).catch(() => {});
+            createProtocol(telefoneProtocol, { 
+              startedBy: 'contato',
+              contactName: novaMensagem.nome_contato || undefined,
+              sendWelcome: true,
+            }).catch(() => {});
           }
           
           console.log('🔔 [REALTIME] Disparando notificação para mensagem nova:', novaMensagem.id);
@@ -5481,7 +5485,11 @@ function Conversas() {
     try {
       await startOrRefreshAttendance(telefoneFormatado);
       // 📋 Criar protocolo de atendimento automaticamente
-      await createProtocol(telefoneFormatado, { startedBy: 'humano' });
+      await createProtocol(telefoneFormatado, { 
+        startedBy: 'humano',
+        contactName: selectedConv.contactName || undefined,
+        sendWelcome: true,
+      });
       console.log('✅ [ATTENDANCE] Atendimento e protocolo registrados para:', telefoneFormatado);
     } catch (err) {
       console.error('❌ [ATTENDANCE] Erro ao registrar atendimento:', err);

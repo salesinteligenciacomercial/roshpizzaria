@@ -1,6 +1,24 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
+const DEFAULT_PROTOCOL_WELCOME = `Olá, {nome}! 👋\n\nSeu protocolo de atendimento é *{protocolo}*.\nGuarde este número para futuras referências.\n\nComo posso te ajudar?`;
+
+export const getProtocolWelcomeTemplate = (): string => {
+  return localStorage.getItem('continuum_protocol_welcome_template') || DEFAULT_PROTOCOL_WELCOME;
+};
+
+export const setProtocolWelcomeTemplate = (template: string) => {
+  localStorage.setItem('continuum_protocol_welcome_template', template);
+};
+
+export const isProtocolWelcomeEnabled = (): boolean => {
+  return localStorage.getItem('continuum_protocol_welcome_enabled') !== 'false';
+};
+
+export const setProtocolWelcomeEnabled = (enabled: boolean) => {
+  localStorage.setItem('continuum_protocol_welcome_enabled', enabled ? 'true' : 'false');
+};
+
 export interface AttendanceProtocol {
   id: string;
   protocol_number: string;
@@ -18,10 +36,57 @@ export interface AttendanceProtocol {
   created_at: string;
 }
 
+export interface CreateProtocolResult {
+  protocolNumber: string | null;
+  isNew: boolean;
+}
+
 export const useAttendanceProtocol = (companyId: string | null) => {
   const [activeProtocol, setActiveProtocol] = useState<AttendanceProtocol | null>(null);
   const [protocolHistory, setProtocolHistory] = useState<AttendanceProtocol[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Send welcome message with protocol number
+  const sendProtocolWelcomeMessage = useCallback(async (
+    telefoneFormatado: string,
+    protocolNumber: string,
+    contactName?: string,
+  ) => {
+    if (!companyId || !isProtocolWelcomeEnabled()) return;
+
+    const template = getProtocolWelcomeTemplate();
+    const message = template
+      .replace(/{protocolo}/g, protocolNumber)
+      .replace(/{nome}/g, contactName || 'cliente');
+
+    try {
+      console.log('📋 [PROTOCOL-WELCOME] Enviando mensagem de boas-vindas:', protocolNumber);
+      await supabase.functions.invoke('enviar-whatsapp', {
+        body: {
+          company_id: companyId,
+          numero: telefoneFormatado,
+          mensagem: message,
+          tipo_mensagem: 'text',
+        },
+      });
+
+      // Persist in conversas table
+      await supabase.from('conversas').insert({
+        company_id: companyId,
+        numero: telefoneFormatado,
+        telefone_formatado: telefoneFormatado,
+        mensagem: message,
+        fromme: true,
+        status: 'sent',
+        origem: 'manual',
+        sent_by: 'system_protocol',
+        tipo_mensagem: 'text',
+      });
+      console.log('✅ [PROTOCOL-WELCOME] Mensagem enviada com sucesso');
+    } catch (err) {
+      console.error('❌ [PROTOCOL-WELCOME] Erro ao enviar:', err);
+    }
+  }, [companyId]);
 
   // Create or get existing open protocol
   const createProtocol = useCallback(async (
@@ -32,11 +97,44 @@ export const useAttendanceProtocol = (companyId: string | null) => {
       attendingUserId?: string;
       attendingUserName?: string;
       leadId?: string;
+      contactName?: string;
+      sendWelcome?: boolean;
     }
-  ): Promise<string | null> => {
-    if (!companyId) return null;
+  ): Promise<CreateProtocolResult> => {
+    if (!companyId) return { protocolNumber: null, isNew: false };
 
     try {
+      // First check if there's already an open protocol
+      const { data: existing } = await supabase
+        .from('attendance_protocols')
+        .select('id, protocol_number')
+        .eq('company_id', companyId)
+        .eq('telefone_formatado', telefoneFormatado)
+        .in('status', ['aberto', 'em_atendimento'])
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) {
+        // Protocol already exists, just update state
+        setActiveProtocol(prev => prev?.id === existing.id ? prev : {
+          id: existing.id,
+          protocol_number: existing.protocol_number,
+          company_id: companyId,
+          telefone_formatado: telefoneFormatado,
+          lead_id: options?.leadId || null,
+          channel: options?.channel || 'whatsapp',
+          started_by: options?.startedBy || 'humano',
+          attending_user_id: options?.attendingUserId || null,
+          attending_user_name: options?.attendingUserName || null,
+          status: 'aberto',
+          started_at: new Date().toISOString(),
+          finished_at: null,
+          summary: null,
+          created_at: new Date().toISOString(),
+        });
+        return { protocolNumber: existing.protocol_number, isNew: false };
+      }
+
       const { data, error } = await supabase.rpc('create_attendance_protocol', {
         p_company_id: companyId,
         p_telefone_formatado: telefoneFormatado,
@@ -49,13 +147,12 @@ export const useAttendanceProtocol = (companyId: string | null) => {
 
       if (error) {
         console.error('❌ [PROTOCOL] Erro ao criar protocolo:', error);
-        return null;
+        return { protocolNumber: null, isNew: false };
       }
 
       const result = data?.[0];
       if (result) {
-        console.log(`📋 [PROTOCOL] Protocolo: ${result.protocol_number}`);
-        // Update active protocol state immediately
+        console.log(`📋 [PROTOCOL] Novo protocolo criado: ${result.protocol_number}`);
         setActiveProtocol({
           id: result.id,
           protocol_number: result.protocol_number,
@@ -72,14 +169,20 @@ export const useAttendanceProtocol = (companyId: string | null) => {
           summary: null,
           created_at: new Date().toISOString(),
         });
-        return result.protocol_number;
+
+        // Send welcome message for newly created protocols
+        if (options?.sendWelcome !== false) {
+          sendProtocolWelcomeMessage(telefoneFormatado, result.protocol_number, options?.contactName);
+        }
+
+        return { protocolNumber: result.protocol_number, isNew: true };
       }
-      return null;
+      return { protocolNumber: null, isNew: false };
     } catch (error) {
       console.error('❌ [PROTOCOL] Erro:', error);
-      return null;
+      return { protocolNumber: null, isNew: false };
     }
-  }, [companyId]);
+  }, [companyId, sendProtocolWelcomeMessage]);
 
   // Load active protocol for a contact
   const loadActiveProtocol = useCallback(async (telefoneFormatado: string) => {
