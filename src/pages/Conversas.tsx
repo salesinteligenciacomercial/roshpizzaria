@@ -55,6 +55,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useTagsManager } from "@/hooks/useTagsManager";
 import { useConversationSearch, loadAllUniqueConversations } from "@/hooks/useConversationSearch";
 import { useActiveAttendance, TEMPO_ATENDIMENTO_ATIVO } from "@/hooks/useActiveAttendance";
+import { useAttendanceProtocol } from "@/hooks/useAttendanceProtocol";
 import * as evolutionAPI from "@/services/evolutionApi";
 import { ConversasAdvancedFilter, AdvancedFilters, defaultFilters } from "@/components/conversas/ConversasAdvancedFilter";
 import { ConversaTemplateSender } from "@/components/conversas/ConversaTemplateSender";
