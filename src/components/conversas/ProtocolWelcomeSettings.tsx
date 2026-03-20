@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Settings2 } from "lucide-react";
+import { Settings2, Send, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   getProtocolWelcomeTemplate,
@@ -12,12 +12,21 @@ import {
   isProtocolWelcomeEnabled,
   setProtocolWelcomeEnabled,
 } from "@/hooks/useAttendanceProtocol";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-export function ProtocolWelcomeSettings() {
+interface ProtocolWelcomeSettingsProps {
+  protocolNumber?: string | null;
+  contactPhone?: string;
+  contactName?: string;
+  companyId?: string | null;
+}
+
+export function ProtocolWelcomeSettings({ protocolNumber, contactPhone, contactName, companyId }: ProtocolWelcomeSettingsProps) {
   const [open, setOpen] = useState(false);
   const [template, setTemplate] = useState("");
   const [enabled, setEnabled] = useState(true);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -33,10 +42,60 @@ export function ProtocolWelcomeSettings() {
     setOpen(false);
   };
 
+  const handleSendNow = async () => {
+    if (!protocolNumber || !contactPhone || !companyId) {
+      toast.error("Dados insuficientes para enviar a mensagem.");
+      return;
+    }
+
+    const message = template
+      .replace(/{protocolo}/g, protocolNumber)
+      .replace(/{nome}/g, contactName || 'cliente');
+
+    setSending(true);
+    try {
+      const { error } = await supabase.functions.invoke('enviar-whatsapp', {
+        body: {
+          company_id: companyId,
+          numero: contactPhone,
+          mensagem: message,
+          tipo_mensagem: 'text',
+        },
+      });
+
+      if (error) throw error;
+
+      // Persist in conversas
+      await supabase.from('conversas').insert({
+        company_id: companyId,
+        numero: contactPhone,
+        telefone_formatado: contactPhone,
+        mensagem: message,
+        fromme: true,
+        status: 'sent',
+        origem: 'manual',
+        sent_by: 'system_protocol',
+        tipo_mensagem: 'text',
+      });
+
+      toast.success("Mensagem do protocolo enviada!");
+      setOpen(false);
+    } catch (err) {
+      console.error('❌ [PROTOCOL-WELCOME] Erro ao enviar:', err);
+      toast.error("Erro ao enviar mensagem do protocolo.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const previewMessage = protocolNumber
+    ? template.replace(/{protocolo}/g, protocolNumber).replace(/{nome}/g, contactName || 'cliente')
+    : null;
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7" title="Configurar mensagem de protocolo">
+        <Button variant="ghost" size="icon" className="h-7 w-7" title="Configurar e enviar mensagem de protocolo">
           <Settings2 className="h-3.5 w-3.5" />
         </Button>
       </DialogTrigger>
@@ -62,7 +121,6 @@ export function ProtocolWelcomeSettings() {
               rows={6}
               value={template}
               onChange={(e) => setTemplate(e.target.value)}
-              disabled={!enabled}
               placeholder="Digite o modelo da mensagem..."
             />
             <div className="flex flex-wrap gap-1.5">
@@ -70,13 +128,33 @@ export function ProtocolWelcomeSettings() {
               <Badge variant="secondary" className="text-[10px] font-mono">{"{nome}"}</Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              Use as variáveis acima para personalizar a mensagem. Elas serão substituídas pelo número do protocolo e nome do contato.
+              Use as variáveis acima para personalizar a mensagem.
             </p>
           </div>
 
+          {/* Preview */}
+          {previewMessage && (
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Pré-visualização</Label>
+              <div className="rounded-md border border-border bg-muted/50 p-3 text-sm whitespace-pre-wrap">
+                {previewMessage}
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2 justify-end">
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>Salvar</Button>
+            <Button variant="secondary" onClick={handleSave}>Salvar</Button>
+            {protocolNumber && contactPhone && (
+              <Button onClick={handleSendNow} disabled={sending}>
+                {sending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                ) : (
+                  <Send className="h-4 w-4 mr-1.5" />
+                )}
+                Enviar agora
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>

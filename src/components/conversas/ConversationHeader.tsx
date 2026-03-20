@@ -42,8 +42,10 @@ import { useEffect, useState } from "react";
    restoreProgress?: { step: number; label: string } | null;
     onBack?: () => void;
     showBackButton?: boolean;
-    protocolNumber?: string | null;
-    protocolStatus?: string;
+     protocolNumber?: string | null;
+     protocolStatus?: string;
+     contactPhone?: string;
+     companyId?: string | null;
  }
 
   export function ConversationHeader({
@@ -73,8 +75,10 @@ import { useEffect, useState } from "react";
    restoreProgress = null,
     onBack,
     showBackButton = false,
-    protocolNumber = null,
-    protocolStatus = 'aberto',
+     protocolNumber = null,
+     protocolStatus = 'aberto',
+     contactPhone,
+     companyId,
   }: ConversationHeaderProps) {
    const isMobile = useIsMobile();
    const [finalizeOpen, setFinalizeOpen] = useState(false);
@@ -196,7 +200,12 @@ import { useEffect, useState } from "react";
                 {protocolNumber && (
                   <div className="flex items-center gap-0.5">
                     <ProtocolBadge protocolNumber={protocolNumber} status={protocolStatus} />
-                    <ProtocolWelcomeSettings />
+                    <ProtocolWelcomeSettings 
+                      protocolNumber={protocolNumber}
+                      contactPhone={contactPhone}
+                      contactName={contactName}
+                      companyId={companyId}
+                    />
                   </div>
                 )}
                 {getSyncStatusBadge()}
