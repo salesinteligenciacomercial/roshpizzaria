@@ -463,8 +463,6 @@ export function ImportarLeadsDialog({ onLeadsImported }: ImportarLeadsDialogProp
             const lead: any = {
               owner_id: user.id,
               company_id: userRole.company_id,
-              funil_id: funilId,
-              etapa_id: etapaId,
               status: 'novo',
               stage: 'prospeccao',
               value: 0,
