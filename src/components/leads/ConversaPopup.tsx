@@ -1323,6 +1323,7 @@ export function ConversaPopup({
                       onEdit={() => {}}
                       onDelete={() => {}}
                       onReact={() => {}}
+                      hideFloatingActions
                     />
                   ))
                 )}

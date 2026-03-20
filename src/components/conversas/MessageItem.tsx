@@ -293,22 +293,23 @@ function MessageItemComponent({
             </div>
           )}
           
-          {/* Botão de 3 pontinhos - sempre visível ao passar mouse */}
-          <div className={`absolute -top-1 ${message.sender === "user" ? "-left-9" : "-right-9"} opacity-0 group-hover:opacity-100 transition-opacity`}>
-            <MessageActions
-              messageId={message.id}
-              content={message.content}
-              sender={message.sender}
-              messageType={message.type}
-              mediaUrl={mediaUrl || message.mediaUrl}
-              fileName={message.fileName}
-              onReply={onReply}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onReact={onReact}
-              onForward={onForward}
-            />
-          </div>
+          {!hideFloatingActions && (
+            <div className={`absolute -top-1 ${message.sender === "user" ? "-left-9" : "-right-9"} opacity-0 group-hover:opacity-100 transition-opacity`}>
+              <MessageActions
+                messageId={message.id}
+                content={message.content}
+                sender={message.sender}
+                messageType={message.type}
+                mediaUrl={mediaUrl || message.mediaUrl}
+                fileName={message.fileName}
+                onReply={onReply}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onReact={onReact}
+                onForward={onForward}
+              />
+            </div>
+          )}
           {/* Text Message com Link Preview */}
           {message.type === "text" && (
             <div className="max-w-full">
