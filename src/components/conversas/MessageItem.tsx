@@ -103,6 +103,7 @@ function MessageItemComponent({
   onReact,
   onForward,
   onOpenContactConversation,
+  hideFloatingActions = false,
 }: MessageItemProps) {
   const [showActions, setShowActions] = useState(false);
   const [dragStart, setDragStart] = useState<number | null>(null);
