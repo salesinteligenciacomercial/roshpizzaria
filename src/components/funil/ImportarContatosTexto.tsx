@@ -227,8 +227,6 @@ export function ImportarContatosTexto({ onLeadsImported, onClose }: ImportarCont
         newLeads.push({
           owner_id: user.id,
           company_id: userRole.company_id,
-          funil_id: funis[0].id,
-          etapa_id: etapas[0].id,
           status: 'novo',
           stage: 'prospeccao',
           value: 0,
