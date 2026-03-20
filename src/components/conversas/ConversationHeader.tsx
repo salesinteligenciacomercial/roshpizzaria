@@ -39,8 +39,10 @@ import { useEffect, useState } from "react";
    onRestoreConversation?: () => void;
    restoringConversation?: boolean;
    restoreProgress?: { step: number; label: string } | null;
-   onBack?: () => void;
-   showBackButton?: boolean;
+    onBack?: () => void;
+    showBackButton?: boolean;
+    protocolNumber?: string | null;
+    protocolStatus?: string;
  }
 
   export function ConversationHeader({
