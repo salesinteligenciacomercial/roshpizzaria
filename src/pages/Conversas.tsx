@@ -5485,7 +5485,11 @@ function Conversas() {
     try {
       await startOrRefreshAttendance(telefoneFormatado);
       // 📋 Criar protocolo de atendimento automaticamente
-      await createProtocol(telefoneFormatado, { startedBy: 'humano' });
+      await createProtocol(telefoneFormatado, { 
+        startedBy: 'humano',
+        contactName: selectedConv.name || undefined,
+        sendWelcome: true,
+      });
       console.log('✅ [ATTENDANCE] Atendimento e protocolo registrados para:', telefoneFormatado);
     } catch (err) {
       console.error('❌ [ATTENDANCE] Erro ao registrar atendimento:', err);
