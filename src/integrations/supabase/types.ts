@@ -282,6 +282,75 @@ export type Database = {
           },
         ]
       }
+      attendance_protocols: {
+        Row: {
+          attending_user_id: string | null
+          attending_user_name: string | null
+          channel: string
+          company_id: string
+          created_at: string
+          finished_at: string | null
+          id: string
+          lead_id: string | null
+          protocol_number: string
+          started_at: string
+          started_by: string
+          status: string
+          summary: string | null
+          telefone_formatado: string
+          updated_at: string
+        }
+        Insert: {
+          attending_user_id?: string | null
+          attending_user_name?: string | null
+          channel?: string
+          company_id: string
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          lead_id?: string | null
+          protocol_number: string
+          started_at?: string
+          started_by?: string
+          status?: string
+          summary?: string | null
+          telefone_formatado: string
+          updated_at?: string
+        }
+        Update: {
+          attending_user_id?: string | null
+          attending_user_name?: string | null
+          channel?: string
+          company_id?: string
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          lead_id?: string | null
+          protocol_number?: string
+          started_at?: string
+          started_by?: string
+          status?: string
+          summary?: string | null
+          telefone_formatado?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_protocols_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_protocols_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_flow_logs: {
         Row: {
           company_id: string
@@ -6202,8 +6271,27 @@ export type Database = {
         Args: { p_company_id: string; p_end_date: string; p_start_date: string }
         Returns: Json
       }
+      create_attendance_protocol: {
+        Args: {
+          p_attending_user_id?: string
+          p_attending_user_name?: string
+          p_channel?: string
+          p_company_id: string
+          p_lead_id?: string
+          p_started_by?: string
+          p_telefone_formatado: string
+        }
+        Returns: {
+          id: string
+          protocol_number: string
+        }[]
+      }
       elevate_self_to_super_admin: { Args: never; Returns: Json }
       formatar_telefone: { Args: { telefone: string }; Returns: string }
+      generate_protocol_number: {
+        Args: { p_company_id: string }
+        Returns: string
+      }
       get_monthly_cost_comparison: {
         Args: { p_master_company_id: string; p_months?: number }
         Returns: {
