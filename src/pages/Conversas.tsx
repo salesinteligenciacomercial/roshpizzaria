@@ -1311,7 +1311,6 @@ function Conversas() {
     if (!userCompanyId) return;
     try {
       console.log('📦 [LOAD-ALL] Iniciando carregamento otimizado de todas as conversas...');
-      setLoadingConversations(true);
       const allConversations = await loadAllUniqueConversations(userCompanyId);
       if (allConversations.length > 0) {
         console.log(`✅ [LOAD-ALL] ${allConversations.length} conversas únicas carregadas`);
@@ -2957,12 +2956,8 @@ function Conversas() {
   const loadSupabaseConversations = async (append: boolean = false) => {
     if (loadingConversations) return;
 
-    // ⚡ OTIMIZAÇÃO: Se já temos conversas do cache, não bloquear a exibição
-    // Apenas setar loading se não temos conversas ainda
-    const hasCachedConversations = conversations.length > 0;
-    if (!hasCachedConversations) {
-      setLoadingConversations(true);
-    }
+    // ⚡ OTIMIZAÇÃO: NUNCA bloquear a UI com loading spinner
+    // Conversas existentes (cache ou já carregadas) são exibidas imediatamente
     try {
       const startTime = performance.now();
 
@@ -8888,10 +8883,10 @@ function Conversas() {
         {/* Conversations List */}
         <ScrollArea className="flex-1">
           {/* ✅ MELHORADO: Estados de loading e busca */}
-          {loadingConversations && conversations.length === 0 ? (
+          {conversations.length === 0 && !loadingConversations && !isSearching && debouncedSearchTerm.trim().length < 2 ? (
             <div className="flex flex-col items-center justify-center h-64 gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Carregando conversas...</p>
+              <MessageSquare className="h-12 w-12 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">Nenhuma conversa encontrada</p>
             </div>
           ) : isSearching ? (
             <div className="flex flex-col items-center justify-center h-64 gap-3">
