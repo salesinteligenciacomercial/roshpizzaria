@@ -8884,10 +8884,10 @@ function Conversas() {
         {/* Conversations List */}
         <ScrollArea className="flex-1">
           {/* ✅ MELHORADO: Estados de loading e busca */}
-          {loadingConversations && conversations.length === 0 ? (
+          {conversations.length === 0 && !loadingConversations && !isSearching && debouncedSearchTerm.trim().length < 2 ? (
             <div className="flex flex-col items-center justify-center h-64 gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Carregando conversas...</p>
+              <MessageSquare className="h-12 w-12 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">Nenhuma conversa encontrada</p>
             </div>
           ) : isSearching ? (
             <div className="flex flex-col items-center justify-center h-64 gap-3">
