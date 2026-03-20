@@ -5473,7 +5473,9 @@ function Conversas() {
     const telefoneFormatado = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
     try {
       await startOrRefreshAttendance(telefoneFormatado);
-      console.log('✅ [ATTENDANCE] Atendimento registrado para:', telefoneFormatado);
+      // 📋 Criar protocolo de atendimento automaticamente
+      await createProtocol(telefoneFormatado, { startedBy: 'humano' });
+      console.log('✅ [ATTENDANCE] Atendimento e protocolo registrados para:', telefoneFormatado);
     } catch (err) {
       console.error('❌ [ATTENDANCE] Erro ao registrar atendimento:', err);
     }
