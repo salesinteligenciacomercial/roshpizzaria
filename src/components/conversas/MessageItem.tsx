@@ -76,14 +76,15 @@ interface MessageItemProps {
   onImageClick?: (url: string, name: string) => void;
   onPdfClick?: (url: string, name: string) => void;
   isTranscribing?: boolean;
-  transcriptionStatus?: "pending" | "processing" | "completed" | "error"; // MELHORIA: Status da transcrição
-  onRetryTranscribe?: () => void; // MELHORIA: Função para reenviar transcrição
+  transcriptionStatus?: "pending" | "processing" | "completed" | "error";
+  onRetryTranscribe?: () => void;
   onReply: (messageId: string) => void;
   onEdit: (messageId: string, newContent: string) => void;
   onDelete: (messageId: string, forEveryone: boolean) => void;
   onReact: (messageId: string, emoji: string) => void | Promise<void>;
   onForward?: (messageId: string, content: string, messageType: string, mediaUrl?: string, fileName?: string) => void;
   onOpenContactConversation?: (name: string, phone: string) => void;
+  hideFloatingActions?: boolean;
 }
 
 function MessageItemComponent({
