@@ -1860,7 +1860,11 @@ function Conversas() {
           // 📋 AUTO-PROTOCOLO: Criar protocolo automaticamente ao receber mensagem do contato
           const telefoneProtocol = novaMensagem.telefone_formatado || (novaMensagem.numero || '').replace(/[^0-9]/g, '');
           if (telefoneProtocol && userCompanyIdRef.current) {
-            createProtocol(telefoneProtocol, { startedBy: 'contato' }).catch(() => {});
+            createProtocol(telefoneProtocol, { 
+              startedBy: 'contato',
+              contactName: novaMensagem.nome_contato || undefined,
+              sendWelcome: true,
+            }).catch(() => {});
           }
           
           console.log('🔔 [REALTIME] Disparando notificação para mensagem nova:', novaMensagem.id);
