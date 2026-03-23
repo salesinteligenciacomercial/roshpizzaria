@@ -110,6 +110,7 @@ export default function KanbanPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(true);
+  const [tarefaDialogData, setTarefaDialogData] = useState<{ open: boolean; leadId: string; leadName: string; etapaDestino: string }>({ open: false, leadId: "", leadName: "", etapaDestino: "" });
   
   // 🎯 Configurar sensores para melhor detecção de drag
   const pointerSensor = useSensor(PointerSensor, {
