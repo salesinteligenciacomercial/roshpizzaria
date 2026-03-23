@@ -9713,6 +9713,16 @@ function Conversas() {
                               />
                             </div>
                             )}
+
+                            {/* ✅ Painel de Processos Jurídicos - Apenas segmento advocacia */}
+                            {(isMasterAccount || isSegmentoJuridico(companySegmento)) && (
+                            <div className="mt-3">
+                              <ProcessosJuridicosPanel
+                                leadId={leadVinculado.id}
+                                companyId={userCompanyId || ""}
+                              />
+                            </div>
+                            )}
                           </> : <div className="space-y-2">
                             <Badge variant="outline" className="w-full justify-center gap-2 py-2 bg-amber-500/10 text-amber-600 border-amber-500/20">
                               <AlertCircle className="h-3 w-3" />
