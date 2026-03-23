@@ -1228,6 +1228,14 @@ export default function KanbanPage() {
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      <CriarTarefaAoMoverDialog
+        open={tarefaDialogData.open}
+        onOpenChange={(open) => setTarefaDialogData(prev => ({ ...prev, open }))}
+        leadId={tarefaDialogData.leadId}
+        leadName={tarefaDialogData.leadName}
+        etapaDestino={tarefaDialogData.etapaDestino}
+      />
     </div>
   );
 }
