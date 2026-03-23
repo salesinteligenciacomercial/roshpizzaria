@@ -35,6 +35,12 @@ export function ProtocolWelcomeSettings({ protocolNumber, contactPhone, contactN
     }
   }, [open]);
 
+  const handleToggleEnabled = (value: boolean) => {
+    setEnabled(value);
+    setProtocolWelcomeEnabled(value);
+    toast.success(value ? "Mensagem de protocolo ativada!" : "Mensagem de protocolo desativada!");
+  };
+
   const handleSave = () => {
     setProtocolWelcomeTemplate(template);
     setProtocolWelcomeEnabled(enabled);
