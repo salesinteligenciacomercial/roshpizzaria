@@ -15,6 +15,8 @@ import { ptBR } from "date-fns/locale";
 interface ProcessosJuridicosPanelProps {
   leadId: string;
   companyId: string;
+  telefoneContato?: string;
+  nomeContato?: string;
 }
 
 interface LegalProcess {
@@ -59,7 +61,7 @@ const TIPO_LABELS: Record<string, string> = {
   administrativo: "Administrativo",
 };
 
-export function ProcessosJuridicosPanel({ leadId, companyId }: ProcessosJuridicosPanelProps) {
+export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, nomeContato }: ProcessosJuridicosPanelProps) {
   const [processes, setProcesses] = useState<LegalProcess[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -87,6 +89,143 @@ export function ProcessosJuridicosPanel({ leadId, companyId }: ProcessosJuridico
     setProcesses((data as LegalProcess[]) || []);
   };
 
+  const criarCompromissoAgenda = async (processId: string, dataAudiencia: string, userId: string) => {
+    const dataHora = new Date(dataAudiencia);
+    const dataHoraFim = new Date(dataHora.getTime() + 2 * 60 * 60 * 1000); // 2h de duração
+
+    const tipoLabel = TIPO_LABELS[form.tipo] || form.tipo;
+    const titulo = `⚖️ Audiência - ${tipoLabel} - ${form.numero_processo}`;
+
+    const { data: compromisso, error } = await supabase.from("compromissos").insert({
+      lead_id: leadId,
+      usuario_responsavel_id: userId,
+      owner_id: userId,
+      company_id: companyId,
+      data_hora_inicio: dataHora.toISOString(),
+      data_hora_fim: dataHoraFim.toISOString(),
+      tipo_servico: "Audiência",
+      titulo: titulo,
+      observacoes: `Processo: ${form.numero_processo}\nTipo: ${tipoLabel}\nVara: ${form.vara || "N/A"}\nComarca: ${form.comarca || "N/A"}\nParte Contrária: ${form.parte_contraria || "N/A"}`,
+      status: "agendado",
+      legal_process_id: processId,
+    }).select().single();
+
+    if (error) {
+      console.error("Erro ao criar compromisso:", error);
+      toast.warning("Processo criado, mas houve erro ao agendar na agenda");
+      return null;
+    }
+
+    return compromisso;
+  };
+
+  const enviarConfirmacaoWhatsApp = async (dataAudiencia: string) => {
+    if (!telefoneContato) return;
+
+    const dataFormatada = format(new Date(dataAudiencia), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+    const tipoLabel = TIPO_LABELS[form.tipo] || form.tipo;
+
+    const mensagem = `⚖️ *Confirmação de Audiência*\n\n` +
+      `Olá${nomeContato ? `, ${nomeContato}` : ""}!\n\n` +
+      `Informamos que sua audiência está agendada:\n\n` +
+      `📋 *Processo:* ${form.numero_processo}\n` +
+      `📌 *Tipo:* ${tipoLabel}\n` +
+      `🏛️ *Vara:* ${form.vara || "A definir"}\n` +
+      `📍 *Comarca:* ${form.comarca || "A definir"}\n` +
+      `📅 *Data:* ${dataFormatada}\n` +
+      (form.parte_contraria ? `👤 *Parte Contrária:* ${form.parte_contraria}\n` : "") +
+      `\nPor favor, confirme sua presença. Qualquer dúvida, estamos à disposição.`;
+
+    try {
+      const { error } = await supabase.functions.invoke("enviar-whatsapp", {
+        body: {
+          company_id: companyId,
+          numero: telefoneContato,
+          mensagem: mensagem,
+        },
+      });
+
+      if (error) {
+        console.error("Erro ao enviar confirmação WhatsApp:", error);
+        toast.warning("Processo criado, mas houve erro ao enviar confirmação via WhatsApp");
+      } else {
+        toast.success("Confirmação de audiência enviada via WhatsApp!");
+      }
+    } catch (err) {
+      console.error("Erro ao enviar WhatsApp:", err);
+    }
+  };
+
+  const criarLembretesAudiencia = async (compromissoId: string, dataAudiencia: string) => {
+    if (!telefoneContato) return;
+
+    const dataHora = new Date(dataAudiencia);
+    const tipoLabel = TIPO_LABELS[form.tipo] || form.tipo;
+
+    // Lembrete 1 dia antes
+    const data1DiaAntes = new Date(dataHora);
+    data1DiaAntes.setDate(data1DiaAntes.getDate() - 1);
+
+    // Lembrete 3 dias antes
+    const data3DiasAntes = new Date(dataHora);
+    data3DiasAntes.setDate(data3DiasAntes.getDate() - 3);
+
+    const lembretes = [];
+
+    // Só criar lembretes se a data ainda for futura
+    const agora = new Date();
+
+    if (data3DiasAntes > agora) {
+      lembretes.push({
+        compromisso_id: compromissoId,
+        canal: "whatsapp",
+        horas_antecedencia: 72,
+        data_envio: data3DiasAntes.toISOString(),
+        data_hora_envio: data3DiasAntes.toISOString(),
+        proxima_data_envio: data3DiasAntes.toISOString(),
+        mensagem: `⚖️ *Lembrete de Audiência (3 dias)*\n\nOlá${nomeContato ? `, ${nomeContato}` : ""}!\n\nLembramos que sua audiência do processo *${form.numero_processo}* (${tipoLabel}) está marcada para *${format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}*.\n\n🏛️ Vara: ${form.vara || "A definir"}\n📍 Comarca: ${form.comarca || "A definir"}\n\nPrepare-se com antecedência!`,
+        status_envio: "pendente",
+        destinatario: "lead",
+        telefone_responsavel: telefoneContato,
+        company_id: companyId,
+        ativo: true,
+        tipo_lembrete: "antecipado",
+        dias_antecedencia: 3,
+        sequencia_envio: 1,
+      });
+    }
+
+    if (data1DiaAntes > agora) {
+      lembretes.push({
+        compromisso_id: compromissoId,
+        canal: "whatsapp",
+        horas_antecedencia: 24,
+        data_envio: data1DiaAntes.toISOString(),
+        data_hora_envio: data1DiaAntes.toISOString(),
+        proxima_data_envio: data1DiaAntes.toISOString(),
+        mensagem: `⚖️ *Lembrete de Audiência (amanhã)*\n\nOlá${nomeContato ? `, ${nomeContato}` : ""}!\n\n⚠️ *Sua audiência é AMANHÃ!*\n\n📋 Processo: *${form.numero_processo}*\n📌 Tipo: ${tipoLabel}\n📅 Data: *${format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}*\n🏛️ Vara: ${form.vara || "A definir"}\n📍 Comarca: ${form.comarca || "A definir"}\n\nNão se esqueça de comparecer!`,
+        status_envio: "pendente",
+        destinatario: "lead",
+        telefone_responsavel: telefoneContato,
+        company_id: companyId,
+        ativo: true,
+        tipo_lembrete: "antecipado",
+        dias_antecedencia: 1,
+        sequencia_envio: 2,
+      });
+    }
+
+    if (lembretes.length > 0) {
+      const { error } = await supabase.from("lembretes").insert(lembretes);
+      if (error) {
+        console.error("Erro ao criar lembretes:", error);
+        toast.warning("Audiência agendada, mas houve erro ao criar lembretes automáticos");
+      } else {
+        toast.success(`${lembretes.length} lembrete(s) automático(s) criado(s)!`);
+      }
+    }
+  };
+
   const handleCreate = async () => {
     if (!form.numero_processo.trim()) {
       toast.error("Informe o número do processo");
@@ -94,7 +233,10 @@ export function ProcessosJuridicosPanel({ leadId, companyId }: ProcessosJuridico
     }
     setLoading(true);
     try {
-      const { error } = await supabase.from("legal_processes").insert({
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
+      const { data: processData, error } = await supabase.from("legal_processes").insert({
         company_id: companyId,
         lead_id: leadId,
         numero_processo: form.numero_processo,
@@ -104,9 +246,24 @@ export function ProcessosJuridicosPanel({ leadId, companyId }: ProcessosJuridico
         parte_contraria: form.parte_contraria || null,
         valor_causa: form.valor_causa ? Number(form.valor_causa) : 0,
         data_audiencia: form.data_audiencia || null,
-      });
+      }).select().single();
       if (error) throw error;
+
       toast.success("Processo cadastrado!");
+
+      // Se tem data de audiência, criar compromisso + enviar confirmação + lembretes
+      if (form.data_audiencia && processData) {
+        const compromisso = await criarCompromissoAgenda(processData.id, form.data_audiencia, user.id);
+
+        // Enviar confirmação WhatsApp
+        await enviarConfirmacaoWhatsApp(form.data_audiencia);
+
+        // Criar lembretes automáticos
+        if (compromisso) {
+          await criarLembretesAudiencia(compromisso.id, form.data_audiencia);
+        }
+      }
+
       setDialogOpen(false);
       setForm({ numero_processo: "", tipo: "civil", vara: "", comarca: "", parte_contraria: "", valor_causa: "", data_audiencia: "" });
       fetchProcesses();
@@ -217,6 +374,17 @@ export function ProcessosJuridicosPanel({ leadId, companyId }: ProcessosJuridico
                 <Input type="datetime-local" value={form.data_audiencia} onChange={e => setForm({ ...form, data_audiencia: e.target.value })} />
               </div>
             </div>
+            {form.data_audiencia && (
+              <div className="p-2 rounded-lg border border-amber-500/30 bg-amber-500/5 text-xs space-y-1">
+                <p className="font-medium text-amber-700">📅 Ao cadastrar com data de audiência:</p>
+                <ul className="text-amber-600 space-y-0.5 ml-3 list-disc">
+                  <li>Compromisso será criado automaticamente na Agenda</li>
+                  {telefoneContato && <li>Confirmação será enviada via WhatsApp</li>}
+                  {telefoneContato && <li>Lembretes automáticos (3 dias e 1 dia antes)</li>}
+                  {!telefoneContato && <li className="text-muted-foreground">Sem telefone — confirmação e lembretes não serão enviados</li>}
+                </ul>
+              </div>
+            )}
             <Button className="w-full" onClick={handleCreate} disabled={loading}>
               {loading ? "Salvando..." : "Cadastrar Processo"}
             </Button>
