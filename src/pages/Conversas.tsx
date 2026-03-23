@@ -41,7 +41,8 @@ import { LeadAttachments } from "@/components/leads/LeadAttachments";
 import { ProdutoSelectorDialog } from "@/components/conversas/ProdutoSelectorDialog";
 import { VendasLeadPanel } from "@/components/conversas/VendasLeadPanel";
 import { PropostasBancariasPanel } from "@/components/conversas/PropostasBancariasPanel";
-import { isSegmentoFinanceiro } from "@/lib/segmentos";
+import { ProcessosJuridicosPanel } from "@/components/conversas/ProcessosJuridicosPanel";
+import { isSegmentoFinanceiro, isSegmentoJuridico } from "@/lib/segmentos";
 import { LembretesAntecipados, LembreteAntecipado } from "@/components/conversas/LembretesAntecipados";
 import { ProductivityPanel } from "@/components/conversas/ProductivityPanel";
 import { formatPhoneNumber, safeFormatPhoneNumber, normalizePhoneForComparison } from "@/utils/phoneFormatter";
@@ -9709,6 +9710,16 @@ function Conversas() {
                                     }
                                   }
                                 }}
+                              />
+                            </div>
+                            )}
+
+                            {/* ✅ Painel de Processos Jurídicos - Apenas segmento advocacia */}
+                            {(isMasterAccount || isSegmentoJuridico(companySegmento)) && (
+                            <div className="mt-3">
+                              <ProcessosJuridicosPanel
+                                leadId={leadVinculado.id}
+                                companyId={userCompanyId || ""}
                               />
                             </div>
                             )}

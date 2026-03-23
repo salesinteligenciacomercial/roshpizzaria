@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { BarChart3, TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity, Trophy, XCircle, Download, Share2, Filter, Settings, Eye, PieChart, Clock, Zap, RefreshCw, CalendarDays, UserCheck, AlertTriangle, ArrowUpRight, ArrowDownRight, Megaphone, ExternalLink, Package, Cake, Gift, PartyPopper, Building2 } from "lucide-react";
+import { BarChart3, TrendingUp, Users, DollarSign, Target, MessageSquare, Calendar, CheckCircle, Bot, Activity, Trophy, XCircle, Download, Share2, Filter, Settings, Eye, PieChart, Clock, Zap, RefreshCw, CalendarDays, UserCheck, AlertTriangle, ArrowUpRight, ArrowDownRight, Megaphone, ExternalLink, Package, Cake, Gift, PartyPopper, Building2, Scale } from "lucide-react";
 import CampaignAnalytics from "@/components/analytics/CampaignAnalytics";
 import LeadsDrilldownModal, { DrilldownFilterType } from "@/components/analytics/LeadsDrilldownModal";
 import { PipelineFinanceiro } from "@/components/analytics/PipelineFinanceiro";
@@ -12,7 +12,8 @@ import { LossReasonsReport } from "@/components/analytics/LossReasonsReport";
 import ProductsAnalytics from "@/components/analytics/ProductsAnalytics";
 import { CustomerLTVAnalytics } from "@/components/analytics/CustomerLTVAnalytics";
 import PropostasAnalytics from "@/components/analytics/PropostasAnalytics";
-import { isSegmentoFinanceiro } from "@/lib/segmentos";
+import JuridicoAnalytics from "@/components/analytics/JuridicoAnalytics";
+import { isSegmentoFinanceiro, isSegmentoJuridico } from "@/lib/segmentos";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -1167,7 +1168,7 @@ export default function Analytics() {
       </Card>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className={`grid w-full h-auto p-1 ${(isMasterAccount || isSegmentoFinanceiro(companySegmento)) ? 'grid-cols-6' : 'grid-cols-5'}`}>
+        <TabsList className={`grid w-full h-auto p-1`} style={{ gridTemplateColumns: `repeat(${5 + (isMasterAccount || isSegmentoFinanceiro(companySegmento) ? 1 : 0) + (isMasterAccount || isSegmentoJuridico(companySegmento) ? 1 : 0)}, minmax(0, 1fr))` }}>
           <TabsTrigger value="overview" className="gap-2 py-3">
             <Eye className="h-4 w-4" />
             <span className="hidden sm:inline">Visão Geral</span>
@@ -1180,6 +1181,12 @@ export default function Analytics() {
             <TabsTrigger value="propostas" className="gap-2 py-3">
               <Building2 className="h-4 w-4" />
               <span className="hidden sm:inline">Propostas</span>
+            </TabsTrigger>
+          )}
+          {(isMasterAccount || isSegmentoJuridico(companySegmento)) && (
+            <TabsTrigger value="juridico" className="gap-2 py-3">
+              <Scale className="h-4 w-4" />
+              <span className="hidden sm:inline">Jurídico</span>
             </TabsTrigger>
           )}
           <TabsTrigger value="campaigns" className="gap-2 py-3">
@@ -1661,7 +1668,13 @@ export default function Analytics() {
           </TabsContent>
         )}
 
-        {/* Campanhas de Tráfego Pago */}
+        {/* Processos Jurídicos - Apenas para segmento advocacia */}
+        {(isMasterAccount || isSegmentoJuridico(companySegmento)) && (
+          <TabsContent value="juridico" className="space-y-6">
+            <JuridicoAnalytics userCompanyId={userCompanyId} />
+          </TabsContent>
+        )}
+
         <TabsContent value="campaigns" className="space-y-6">
           <CampaignAnalytics userCompanyId={userCompanyId} globalFilters={globalFilters} />
         </TabsContent>
