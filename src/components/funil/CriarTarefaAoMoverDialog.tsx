@@ -55,13 +55,13 @@ export function CriarTarefaAoMoverDialog({
         return;
       }
 
-      const { data: profile } = await supabase
-        .from("profiles")
+      const { data: userRole } = await supabase
+        .from("user_roles")
         .select("company_id")
-        .eq("id", user.id)
+        .eq("user_id", user.id)
         .single();
 
-      if (!profile?.company_id) {
+      if (!userRole?.company_id) {
         toast.error("Empresa não encontrada");
         return;
       }
