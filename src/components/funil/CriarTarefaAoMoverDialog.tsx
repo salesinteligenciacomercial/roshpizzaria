@@ -74,7 +74,7 @@ export function CriarTarefaAoMoverDialog({
         status: "pendente",
         lead_id: leadId,
         owner_id: user.id,
-        company_id: profile.company_id,
+        company_id: userRole.company_id,
         assigned_to: user.id,
       });
 
