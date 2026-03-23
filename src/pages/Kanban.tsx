@@ -696,6 +696,14 @@ export default function KanbanPage() {
         description: `${lead.name} foi movido com sucesso`
       });
 
+      // 🎯 Abrir popup para criar tarefa de acompanhamento
+      setTarefaDialogData({
+        open: true,
+        leadId: leadId,
+        leadName: lead.name || lead.nome,
+        etapaDestino: etapaDestino.nome,
+      });
+
       // 🌍 Emitir evento global para sincronização com outros módulos
       emitGlobalEvent({
         type: 'funnel-stage-changed',
