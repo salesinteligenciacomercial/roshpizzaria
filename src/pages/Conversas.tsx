@@ -9720,6 +9720,8 @@ function Conversas() {
                               <ProcessosJuridicosPanel
                                 leadId={leadVinculado.id}
                                 companyId={userCompanyId || ""}
+                                telefoneContato={leadVinculado.phone || leadVinculado.telefone || ""}
+                                nomeContato={leadVinculado.name || leadVinculado.nome || ""}
                               />
                             </div>
                             )}
