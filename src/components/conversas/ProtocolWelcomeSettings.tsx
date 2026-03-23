@@ -119,7 +119,7 @@ export function ProtocolWelcomeSettings({ protocolNumber, contactPhone, contactN
             <Switch
               id="protocol-welcome-enabled"
               checked={enabled}
-              onCheckedChange={setEnabled}
+              onCheckedChange={handleToggleEnabled}
             />
           </div>
 
