@@ -31,6 +31,15 @@ export const SEGMENTOS_FINANCEIROS = [
   "promotora_credito",
 ];
 
+// Segmentos que têm acesso ao módulo Jurídico
+export const SEGMENTOS_JURIDICOS = [
+  "advocacia",
+];
+
 export function isSegmentoFinanceiro(segmento?: string | null): boolean {
   return !!segmento && SEGMENTOS_FINANCEIROS.includes(segmento);
+}
+
+export function isSegmentoJuridico(segmento?: string | null): boolean {
+  return !!segmento && SEGMENTOS_JURIDICOS.includes(segmento);
 }

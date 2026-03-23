@@ -1203,6 +1203,7 @@ export type Database = {
           duracao: number | null
           id: string
           lead_id: string | null
+          legal_process_id: string | null
           lembrete_enviado: boolean | null
           observacoes: string | null
           owner_id: string
@@ -1226,6 +1227,7 @@ export type Database = {
           duracao?: number | null
           id?: string
           lead_id?: string | null
+          legal_process_id?: string | null
           lembrete_enviado?: boolean | null
           observacoes?: string | null
           owner_id: string
@@ -1249,6 +1251,7 @@ export type Database = {
           duracao?: number | null
           id?: string
           lead_id?: string | null
+          legal_process_id?: string | null
           lembrete_enviado?: boolean | null
           observacoes?: string | null
           owner_id?: string
@@ -1288,6 +1291,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compromissos_legal_process_id_fkey"
+            columns: ["legal_process_id"]
+            isOneToOne: false
+            referencedRelation: "legal_processes"
             referencedColumns: ["id"]
           },
           {
@@ -3596,6 +3606,146 @@ export type Database = {
           },
         ]
       }
+      legal_process_events: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          data_evento: string
+          descricao: string | null
+          id: string
+          process_id: string
+          tipo_evento: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          data_evento?: string
+          descricao?: string | null
+          id?: string
+          process_id: string
+          tipo_evento?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          data_evento?: string
+          descricao?: string | null
+          id?: string
+          process_id?: string
+          tipo_evento?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_process_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_process_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_process_events_process_id_fkey"
+            columns: ["process_id"]
+            isOneToOne: false
+            referencedRelation: "legal_processes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_processes: {
+        Row: {
+          comarca: string | null
+          company_id: string
+          created_at: string
+          data_audiencia: string | null
+          data_distribuicao: string | null
+          descricao: string | null
+          id: string
+          lead_id: string | null
+          numero_processo: string | null
+          parte_contraria: string | null
+          prioridade: string | null
+          responsavel_id: string | null
+          status: string
+          tipo: string
+          updated_at: string
+          valor_causa: number | null
+          valor_honorarios: number | null
+          vara: string | null
+        }
+        Insert: {
+          comarca?: string | null
+          company_id: string
+          created_at?: string
+          data_audiencia?: string | null
+          data_distribuicao?: string | null
+          descricao?: string | null
+          id?: string
+          lead_id?: string | null
+          numero_processo?: string | null
+          parte_contraria?: string | null
+          prioridade?: string | null
+          responsavel_id?: string | null
+          status?: string
+          tipo?: string
+          updated_at?: string
+          valor_causa?: number | null
+          valor_honorarios?: number | null
+          vara?: string | null
+        }
+        Update: {
+          comarca?: string | null
+          company_id?: string
+          created_at?: string
+          data_audiencia?: string | null
+          data_distribuicao?: string | null
+          descricao?: string | null
+          id?: string
+          lead_id?: string | null
+          numero_processo?: string | null
+          parte_contraria?: string | null
+          prioridade?: string | null
+          responsavel_id?: string | null
+          status?: string
+          tipo?: string
+          updated_at?: string
+          valor_causa?: number | null
+          valor_honorarios?: number | null
+          vara?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_processes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_processes_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_processes_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lembretes: {
         Row: {
           ativo: boolean | null
@@ -5329,6 +5479,7 @@ export type Database = {
           due_date: string | null
           id: string
           lead_id: string | null
+          legal_process_id: string | null
           owner_id: string
           priority: string
           professional_id: string | null
@@ -5356,6 +5507,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           lead_id?: string | null
+          legal_process_id?: string | null
           owner_id: string
           priority?: string
           professional_id?: string | null
@@ -5383,6 +5535,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           lead_id?: string | null
+          legal_process_id?: string | null
           owner_id?: string
           priority?: string
           professional_id?: string | null
@@ -5437,6 +5590,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_legal_process_id_fkey"
+            columns: ["legal_process_id"]
+            isOneToOne: false
+            referencedRelation: "legal_processes"
             referencedColumns: ["id"]
           },
           {
