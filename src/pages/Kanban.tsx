@@ -14,6 +14,7 @@ import { NovoFunilDialog } from "@/components/funil/NovoFunilDialog";
 import { EditarFunilDialog } from "@/components/funil/EditarFunilDialog";
 import { AdicionarEtapaDialog } from "@/components/funil/AdicionarEtapaDialog";
 import { toast } from "sonner";
+import { CriarTarefaAoMoverDialog } from "@/components/funil/CriarTarefaAoMoverDialog";
 import { useGlobalSync } from "@/hooks/useGlobalSync";
 import { useWorkflowAutomation } from "@/hooks/useWorkflowAutomation";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -109,6 +110,7 @@ export default function KanbanPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(true);
+  const [tarefaDialogData, setTarefaDialogData] = useState<{ open: boolean; leadId: string; leadName: string; etapaDestino: string }>({ open: false, leadId: "", leadName: "", etapaDestino: "" });
   
   // 🎯 Configurar sensores para melhor detecção de drag
   const pointerSensor = useSensor(PointerSensor, {
@@ -694,6 +696,14 @@ export default function KanbanPage() {
         description: `${lead.name} foi movido com sucesso`
       });
 
+      // 🎯 Abrir popup para criar tarefa de acompanhamento
+      setTarefaDialogData({
+        open: true,
+        leadId: leadId,
+        leadName: lead.name || lead.nome,
+        etapaDestino: etapaDestino.nome,
+      });
+
       // 🌍 Emitir evento global para sincronização com outros módulos
       emitGlobalEvent({
         type: 'funnel-stage-changed',
@@ -1218,6 +1228,14 @@ export default function KanbanPage() {
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      <CriarTarefaAoMoverDialog
+        open={tarefaDialogData.open}
+        onOpenChange={(open) => setTarefaDialogData(prev => ({ ...prev, open }))}
+        leadId={tarefaDialogData.leadId}
+        leadName={tarefaDialogData.leadName}
+        etapaDestino={tarefaDialogData.etapaDestino}
+      />
     </div>
   );
 }
