@@ -35,6 +35,12 @@ export function ProtocolWelcomeSettings({ protocolNumber, contactPhone, contactN
     }
   }, [open]);
 
+  const handleToggleEnabled = (value: boolean) => {
+    setEnabled(value);
+    setProtocolWelcomeEnabled(value);
+    toast.success(value ? "Mensagem de protocolo ativada!" : "Mensagem de protocolo desativada!");
+  };
+
   const handleSave = () => {
     setProtocolWelcomeTemplate(template);
     setProtocolWelcomeEnabled(enabled);
@@ -113,7 +119,7 @@ export function ProtocolWelcomeSettings({ protocolNumber, contactPhone, contactN
             <Switch
               id="protocol-welcome-enabled"
               checked={enabled}
-              onCheckedChange={setEnabled}
+              onCheckedChange={handleToggleEnabled}
             />
           </div>
 
@@ -147,7 +153,7 @@ export function ProtocolWelcomeSettings({ protocolNumber, contactPhone, contactN
           <div className="flex gap-2 justify-end">
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
             <Button variant="secondary" onClick={handleSave}>Salvar</Button>
-            {protocolNumber && contactPhone && (
+            {protocolNumber && contactPhone && enabled && (
               <Button onClick={handleSendNow} disabled={sending}>
                 {sending ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
