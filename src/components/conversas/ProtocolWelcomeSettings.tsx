@@ -25,25 +25,25 @@ interface ProtocolWelcomeSettingsProps {
 export function ProtocolWelcomeSettings({ protocolNumber, contactPhone, contactName, companyId }: ProtocolWelcomeSettingsProps) {
   const [open, setOpen] = useState(false);
   const [template, setTemplate] = useState("");
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(false);
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setTemplate(getProtocolWelcomeTemplate());
-      setEnabled(isProtocolWelcomeEnabled());
+      setTemplate(getProtocolWelcomeTemplate(companyId));
+      setEnabled(isProtocolWelcomeEnabled(companyId));
     }
-  }, [open]);
+  }, [open, companyId]);
 
   const handleToggleEnabled = (value: boolean) => {
     setEnabled(value);
-    setProtocolWelcomeEnabled(value);
+    setProtocolWelcomeEnabled(value, companyId);
     toast.success(value ? "Mensagem de protocolo ativada!" : "Mensagem de protocolo desativada!");
   };
 
   const handleSave = () => {
-    setProtocolWelcomeTemplate(template);
-    setProtocolWelcomeEnabled(enabled);
+    setProtocolWelcomeTemplate(template, companyId);
+    setProtocolWelcomeEnabled(enabled, companyId);
     toast.success("Configurações do protocolo salvas!");
     setOpen(false);
   };

@@ -193,7 +193,7 @@ export const useAttendanceProtocol = (companyId: string | null) => {
         });
 
         // Send welcome message for newly created protocols (only if enabled)
-        const shouldSendWelcome = options?.sendWelcome !== false && isProtocolWelcomeEnabled();
+        const shouldSendWelcome = options?.sendWelcome !== false && isProtocolWelcomeEnabled(companyId);
         if (shouldSendWelcome) {
           sendProtocolWelcomeMessage(telefoneFormatado, result.protocol_number, options?.contactName);
         }
