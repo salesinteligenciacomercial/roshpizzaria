@@ -1864,7 +1864,6 @@ function Conversas() {
             createProtocol(telefoneProtocol, { 
               startedBy: 'contato',
               contactName: novaMensagem.nome_contato || undefined,
-              sendWelcome: true,
             }).catch(() => {});
           }
           
