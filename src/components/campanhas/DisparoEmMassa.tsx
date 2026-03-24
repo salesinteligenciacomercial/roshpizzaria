@@ -1017,6 +1017,16 @@ export function DisparoEmMassa() {
                     />
                   </div>
                 </div>
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleCancelCampaign}
+                  >
+                    <StopCircle className="h-4 w-4 mr-2" />
+                    Cancelar Disparo
+                  </Button>
+                </div>
               </AlertDescription>
             </Alert>
           )}
