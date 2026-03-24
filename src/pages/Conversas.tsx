@@ -1864,7 +1864,6 @@ function Conversas() {
             createProtocol(telefoneProtocol, { 
               startedBy: 'contato',
               contactName: novaMensagem.nome_contato || undefined,
-              sendWelcome: true,
             }).catch(() => {});
           }
           
@@ -5489,7 +5488,6 @@ function Conversas() {
       await createProtocol(telefoneFormatado, { 
         startedBy: 'humano',
         contactName: selectedConv.contactName || undefined,
-        sendWelcome: true,
       });
       console.log('✅ [ATTENDANCE] Atendimento e protocolo registrados para:', telefoneFormatado);
     } catch (err) {

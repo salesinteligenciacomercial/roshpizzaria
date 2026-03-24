@@ -175,8 +175,9 @@ export const useAttendanceProtocol = (companyId: string | null) => {
           created_at: new Date().toISOString(),
         });
 
-        // Send welcome message for newly created protocols
-        if (options?.sendWelcome !== false) {
+        // Send welcome message for newly created protocols (only if enabled)
+        const shouldSendWelcome = options?.sendWelcome !== false && isProtocolWelcomeEnabled();
+        if (shouldSendWelcome) {
           sendProtocolWelcomeMessage(telefoneFormatado, result.protocol_number, options?.contactName);
         }
 
