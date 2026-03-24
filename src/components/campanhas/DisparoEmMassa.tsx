@@ -181,18 +181,34 @@ export function DisparoEmMassa() {
   const loadLeads = async (companyId: string) => {
     setLoading(true);
     try {
-      let query = supabase
-        .from("leads")
-        .select("id, name, telefone, phone, email, status, tags, segmentacao")
-        .eq("company_id", companyId)
-        .not("telefone", "is", null)
-        .or("telefone.not.is.null,phone.not.is.null");
+      let allLeads: any[] = [];
+      let hasMore = true;
+      let page = 0;
+      const PAGE_SIZE = 1000;
 
-      const { data, error } = await query;
+      while (hasMore) {
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
 
-      if (error) throw error;
+        const { data: batch, error } = await supabase
+          .from("leads")
+          .select("id, name, telefone, phone, email, status, tags, segmentacao")
+          .eq("company_id", companyId)
+          .or("telefone.not.is.null,phone.not.is.null")
+          .range(from, to);
 
-      const leadsWithPhone = (data || []).filter(
+        if (error) throw error;
+
+        if (batch && batch.length > 0) {
+          allLeads = [...allLeads, ...batch];
+          hasMore = batch.length === PAGE_SIZE;
+          page++;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      const leadsWithPhone = allLeads.filter(
         (lead) => lead.telefone || lead.phone
       ) as Lead[];
 
