@@ -69,9 +69,9 @@ export const useAttendanceProtocol = (companyId: string | null) => {
     protocolNumber: string,
     contactName?: string,
   ) => {
-    if (!companyId || !isProtocolWelcomeEnabled()) return;
+    if (!companyId || !isProtocolWelcomeEnabled(companyId)) return;
 
-    const template = getProtocolWelcomeTemplate();
+    const template = getProtocolWelcomeTemplate(companyId);
     const message = template
       .replace(/{protocolo}/g, protocolNumber)
       .replace(/{nome}/g, contactName || 'cliente');
