@@ -127,11 +127,44 @@ export function TagsManager({ onTagSelected, selectedTag }: TagsManagerProps) {
   const loadTagStats = async () => {
     setLoading(true);
     try {
-      const { data: leads, error } = await supabase
-        .from("leads")
-        .select("id, name, tags");
+      // Get company_id first
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
 
-      if (error) throw error;
+      const { data: userRole } = await supabase
+        .from("user_roles")
+        .select("company_id")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      const companyId = userRole?.company_id;
+      if (!companyId) return;
+
+      // Fetch ALL leads using pagination to avoid the 1000-row limit
+      let allLeads: Array<{ id: string; name: string; tags: string[] | null }> = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data: batch, error } = await supabase
+          .from("leads")
+          .select("id, name, tags")
+          .eq("company_id", companyId)
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (error) throw error;
+
+        if (batch && batch.length > 0) {
+          allLeads = allLeads.concat(batch);
+          hasMore = batch.length === pageSize;
+          page++;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      const leads = allLeads;
 
       const tagsMap = new Map<string, { count: number; leads: Array<{ id: string; name: string }> }>();
       let leadsWithoutTags = 0;
