@@ -471,7 +471,7 @@ export function DisparoEmMassa() {
         .eq('id', activeCampaignId);
       if (error) throw error;
       toast.success('Disparo cancelado com sucesso!');
-      setIsSending(false);
+      setSending(false);
       setActiveCampaignId(null);
     } catch (err: any) {
       console.error('Erro ao cancelar campanha:', err);
