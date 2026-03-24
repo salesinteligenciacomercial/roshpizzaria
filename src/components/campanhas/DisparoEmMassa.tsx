@@ -462,6 +462,21 @@ export function DisparoEmMassa() {
     toast.success("Disparo iniciado! Você pode sair desta página — o envio continuará no servidor.");
   };
 
+  const handleCancelCampaign = async () => {
+    if (!activeCampaignId) return;
+    try {
+      const { error } = await supabase
+        .from('disparo_campaigns')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('id', activeCampaignId);
+      if (error) throw error;
+      toast.info('Solicitação de cancelamento enviada. O disparo será interrompido.');
+    } catch (err: any) {
+      console.error('Erro ao cancelar campanha:', err);
+      toast.error('Erro ao cancelar campanha');
+    }
+  };
+
   const selectedCount = selectedLeads.size;
   const totalFiltered = filteredLeads.length;
 
