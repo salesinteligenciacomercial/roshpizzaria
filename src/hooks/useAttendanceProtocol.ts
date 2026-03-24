@@ -3,20 +3,37 @@ import { supabase } from '@/integrations/supabase/client';
 
 const DEFAULT_PROTOCOL_WELCOME = `Olá, {nome}! 👋\n\nSeu protocolo de atendimento é *{protocolo}*.\nGuarde este número para futuras referências.\n\nComo posso te ajudar?`;
 
-export const getProtocolWelcomeTemplate = (): string => {
-  return localStorage.getItem('continuum_protocol_welcome_template') || DEFAULT_PROTOCOL_WELCOME;
+const getProtocolStorageKey = (
+  companyId: string | null | undefined,
+  type: 'template' | 'enabled'
+) => {
+  const scope = companyId || 'global';
+  return `continuum_protocol_welcome_${type}_${scope}`;
 };
 
-export const setProtocolWelcomeTemplate = (template: string) => {
-  localStorage.setItem('continuum_protocol_welcome_template', template);
+export const getProtocolWelcomeTemplate = (companyId?: string | null): string => {
+  if (typeof window === 'undefined') return DEFAULT_PROTOCOL_WELCOME;
+
+  return (
+    localStorage.getItem(getProtocolStorageKey(companyId, 'template')) ||
+    localStorage.getItem('continuum_protocol_welcome_template') ||
+    DEFAULT_PROTOCOL_WELCOME
+  );
 };
 
-export const isProtocolWelcomeEnabled = (): boolean => {
-  return localStorage.getItem('continuum_protocol_welcome_enabled') !== 'false';
+export const setProtocolWelcomeTemplate = (template: string, companyId?: string | null) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(getProtocolStorageKey(companyId, 'template'), template);
 };
 
-export const setProtocolWelcomeEnabled = (enabled: boolean) => {
-  localStorage.setItem('continuum_protocol_welcome_enabled', enabled ? 'true' : 'false');
+export const isProtocolWelcomeEnabled = (companyId?: string | null): boolean => {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(getProtocolStorageKey(companyId, 'enabled')) === 'true';
+};
+
+export const setProtocolWelcomeEnabled = (enabled: boolean, companyId?: string | null) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(getProtocolStorageKey(companyId, 'enabled'), enabled ? 'true' : 'false');
 };
 
 export interface AttendanceProtocol {
