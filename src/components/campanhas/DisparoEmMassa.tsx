@@ -30,7 +30,8 @@ import {
   Upload,
   Clock,
   Pause,
-  LayoutTemplate
+  LayoutTemplate,
+  StopCircle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -459,6 +460,21 @@ export function DisparoEmMassa() {
     });
 
     toast.success("Disparo iniciado! Você pode sair desta página — o envio continuará no servidor.");
+  };
+
+  const handleCancelCampaign = async () => {
+    if (!activeCampaignId) return;
+    try {
+      const { error } = await supabase
+        .from('disparo_campaigns')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('id', activeCampaignId);
+      if (error) throw error;
+      toast.info('Solicitação de cancelamento enviada. O disparo será interrompido.');
+    } catch (err: any) {
+      console.error('Erro ao cancelar campanha:', err);
+      toast.error('Erro ao cancelar campanha');
+    }
   };
 
   const selectedCount = selectedLeads.size;
@@ -1000,6 +1016,16 @@ export function DisparoEmMassa() {
                       }}
                     />
                   </div>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleCancelCampaign}
+                  >
+                    <StopCircle className="h-4 w-4 mr-2" />
+                    Cancelar Disparo
+                  </Button>
                 </div>
               </AlertDescription>
             </Alert>
