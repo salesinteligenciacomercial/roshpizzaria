@@ -295,7 +295,8 @@ export function DisparoEmMassa() {
   };
 
   const getSelectedLeadsData = () => {
-    return filteredLeads.filter((lead) => selectedLeads.has(lead.id));
+    // Use 'leads' (full list) instead of 'filteredLeads' to avoid stale closure issues
+    return leads.filter((lead) => selectedLeads.has(lead.id));
   };
 
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
