@@ -5488,7 +5488,6 @@ function Conversas() {
       await createProtocol(telefoneFormatado, { 
         startedBy: 'humano',
         contactName: selectedConv.contactName || undefined,
-        sendWelcome: true,
       });
       console.log('✅ [ATTENDANCE] Atendimento e protocolo registrados para:', telefoneFormatado);
     } catch (err) {
