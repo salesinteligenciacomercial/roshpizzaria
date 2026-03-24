@@ -470,7 +470,9 @@ export function DisparoEmMassa() {
         .update({ status: 'cancelled', updated_at: new Date().toISOString() })
         .eq('id', activeCampaignId);
       if (error) throw error;
-      toast.info('Solicitação de cancelamento enviada. O disparo será interrompido.');
+      toast.success('Disparo cancelado com sucesso!');
+      setIsSending(false);
+      setActiveCampaignId(null);
     } catch (err: any) {
       console.error('Erro ao cancelar campanha:', err);
       toast.error('Erro ao cancelar campanha');
