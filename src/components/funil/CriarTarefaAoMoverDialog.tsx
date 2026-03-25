@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CheckSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+
+interface Board {
+  id: string;
+  nome: string;
+}
+
+interface Column {
+  id: string;
+  nome: string;
+  board_id: string;
+}
 
 interface CriarTarefaAoMoverDialogProps {
   open: boolean;
@@ -40,6 +51,59 @@ export function CriarTarefaAoMoverDialog({
     return d.toISOString().split("T")[0];
   });
   const [loading, setLoading] = useState(false);
+
+  // Board & Column state
+  const [boards, setBoards] = useState<Board[]>([]);
+  const [columns, setColumns] = useState<Column[]>([]);
+  const [selectedBoardId, setSelectedBoardId] = useState("");
+  const [selectedColumnId, setSelectedColumnId] = useState("");
+
+  // Reset fields when dialog opens
+  useEffect(() => {
+    if (open) {
+      setTitle(`Acompanhar ${leadName} - ${etapaDestino}`);
+      setDescription("");
+      setPriority("media");
+      setSelectedBoardId("");
+      setSelectedColumnId("");
+      setColumns([]);
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      setDueDate(d.toISOString().split("T")[0]);
+      loadBoards();
+    }
+  }, [open, leadName, etapaDestino]);
+
+  const loadBoards = async () => {
+    try {
+      const { data } = await supabase
+        .from("task_boards")
+        .select("id, nome")
+        .order("criado_em");
+      setBoards(data || []);
+    } catch (err) {
+      console.error("Erro ao carregar quadros:", err);
+    }
+  };
+
+  const loadColumns = async (boardId: string) => {
+    try {
+      const { data } = await supabase
+        .from("task_columns")
+        .select("id, nome, board_id")
+        .eq("board_id", boardId)
+        .order("posicao");
+      setColumns(data || []);
+      setSelectedColumnId("");
+    } catch (err) {
+      console.error("Erro ao carregar colunas:", err);
+    }
+  };
+
+  const handleBoardChange = (boardId: string) => {
+    setSelectedBoardId(boardId);
+    loadColumns(boardId);
+  };
 
   const handleCreate = async () => {
     if (!title.trim()) {
@@ -76,6 +140,8 @@ export function CriarTarefaAoMoverDialog({
         owner_id: user.id,
         company_id: userRole.company_id,
         assigned_to: user.id,
+        board_id: selectedBoardId || null,
+        column_id: selectedColumnId || null,
       });
 
       if (error) throw error;
@@ -106,6 +172,42 @@ export function CriarTarefaAoMoverDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* Quadro */}
+          <div className="space-y-2">
+            <Label>Quadro</Label>
+            <Select value={selectedBoardId} onValueChange={handleBoardChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o quadro" />
+              </SelectTrigger>
+              <SelectContent>
+                {boards.map((board) => (
+                  <SelectItem key={board.id} value={board.id}>
+                    {board.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Coluna/Etapa do quadro */}
+          {selectedBoardId && columns.length > 0 && (
+            <div className="space-y-2">
+              <Label>Coluna</Label>
+              <Select value={selectedColumnId} onValueChange={setSelectedColumnId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a coluna" />
+                </SelectTrigger>
+                <SelectContent>
+                  {columns.map((col) => (
+                    <SelectItem key={col.id} value={col.id}>
+                      {col.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>Título da tarefa</Label>
             <Input
@@ -158,7 +260,7 @@ export function CriarTarefaAoMoverDialog({
             onClick={() => onOpenChange(false)}
             disabled={loading}
           >
-            Não, obrigado
+            Cancelar
           </Button>
           <Button onClick={handleCreate} disabled={loading}>
             {loading ? "Criando..." : "Criar Tarefa"}
