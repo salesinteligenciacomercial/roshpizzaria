@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Scale, Plus, ChevronDown, Gavel, Calendar, DollarSign } from "lucide-react";
+import { Scale, Plus, ChevronDown, Gavel, Calendar, DollarSign, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -61,20 +61,24 @@ const TIPO_LABELS: Record<string, string> = {
   administrativo: "Administrativo",
 };
 
+const EMPTY_FORM = {
+  numero_processo: "",
+  tipo: "civil",
+  status: "em_andamento",
+  vara: "",
+  comarca: "",
+  parte_contraria: "",
+  valor_causa: "",
+  data_audiencia: "",
+};
+
 export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, nomeContato }: ProcessosJuridicosPanelProps) {
   const [processes, setProcesses] = useState<LegalProcess[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({
-    numero_processo: "",
-    tipo: "civil",
-    vara: "",
-    comarca: "",
-    parte_contraria: "",
-    valor_causa: "",
-    data_audiencia: "",
-  });
+  const [editingProcess, setEditingProcess] = useState<LegalProcess | null>(null);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
 
   useEffect(() => {
     if (leadId) fetchProcesses();
@@ -89,9 +93,30 @@ export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, no
     setProcesses((data as LegalProcess[]) || []);
   };
 
+  const openCreateDialog = () => {
+    setEditingProcess(null);
+    setForm({ ...EMPTY_FORM });
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (p: LegalProcess) => {
+    setEditingProcess(p);
+    setForm({
+      numero_processo: p.numero_processo || "",
+      tipo: p.tipo,
+      status: p.status,
+      vara: p.vara || "",
+      comarca: p.comarca || "",
+      parte_contraria: p.parte_contraria || "",
+      valor_causa: p.valor_causa ? String(p.valor_causa) : "",
+      data_audiencia: p.data_audiencia ? p.data_audiencia.slice(0, 16) : "",
+    });
+    setDialogOpen(true);
+  };
+
   const criarCompromissoAgenda = async (processId: string, dataAudiencia: string, userId: string) => {
     const dataHora = new Date(dataAudiencia);
-    const dataHoraFim = new Date(dataHora.getTime() + 2 * 60 * 60 * 1000); // 2h de duração
+    const dataHoraFim = new Date(dataHora.getTime() + 2 * 60 * 60 * 1000);
 
     const tipoLabel = TIPO_LABELS[form.tipo] || form.tipo;
     const titulo = `⚖️ Audiência - ${tipoLabel} - ${form.numero_processo}`;
@@ -112,10 +137,9 @@ export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, no
 
     if (error) {
       console.error("Erro ao criar compromisso:", error);
-      toast.warning("Processo criado, mas houve erro ao agendar na agenda");
+      toast.warning("Processo salvo, mas houve erro ao agendar na agenda");
       return null;
     }
-
     return compromisso;
   };
 
@@ -138,16 +162,11 @@ export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, no
 
     try {
       const { error } = await supabase.functions.invoke("enviar-whatsapp", {
-        body: {
-          company_id: companyId,
-          numero: telefoneContato,
-          mensagem: mensagem,
-        },
+        body: { company_id: companyId, numero: telefoneContato, mensagem },
       });
-
       if (error) {
         console.error("Erro ao enviar confirmação WhatsApp:", error);
-        toast.warning("Processo criado, mas houve erro ao enviar confirmação via WhatsApp");
+        toast.warning("Processo salvo, mas houve erro ao enviar confirmação via WhatsApp");
       } else {
         toast.success("Confirmação de audiência enviada via WhatsApp!");
       }
@@ -161,57 +180,33 @@ export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, no
 
     const dataHora = new Date(dataAudiencia);
     const tipoLabel = TIPO_LABELS[form.tipo] || form.tipo;
-
-    // Lembrete 1 dia antes
     const data1DiaAntes = new Date(dataHora);
     data1DiaAntes.setDate(data1DiaAntes.getDate() - 1);
-
-    // Lembrete 3 dias antes
     const data3DiasAntes = new Date(dataHora);
     data3DiasAntes.setDate(data3DiasAntes.getDate() - 3);
 
     const lembretes = [];
-
-    // Só criar lembretes se a data ainda for futura
     const agora = new Date();
 
     if (data3DiasAntes > agora) {
       lembretes.push({
-        compromisso_id: compromissoId,
-        canal: "whatsapp",
-        horas_antecedencia: 72,
-        data_envio: data3DiasAntes.toISOString(),
-        data_hora_envio: data3DiasAntes.toISOString(),
+        compromisso_id: compromissoId, canal: "whatsapp", horas_antecedencia: 72,
+        data_envio: data3DiasAntes.toISOString(), data_hora_envio: data3DiasAntes.toISOString(),
         proxima_data_envio: data3DiasAntes.toISOString(),
         mensagem: `⚖️ *Lembrete de Audiência (3 dias)*\n\nOlá${nomeContato ? `, ${nomeContato}` : ""}!\n\nLembramos que sua audiência do processo *${form.numero_processo}* (${tipoLabel}) está marcada para *${format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}*.\n\n🏛️ Vara: ${form.vara || "A definir"}\n📍 Comarca: ${form.comarca || "A definir"}\n\nPrepare-se com antecedência!`,
-        status_envio: "pendente",
-        destinatario: "lead",
-        telefone_responsavel: telefoneContato,
-        company_id: companyId,
-        ativo: true,
-        tipo_lembrete: "antecipado",
-        dias_antecedencia: 3,
-        sequencia_envio: 1,
+        status_envio: "pendente", destinatario: "lead", telefone_responsavel: telefoneContato,
+        company_id: companyId, ativo: true, tipo_lembrete: "antecipado", dias_antecedencia: 3, sequencia_envio: 1,
       });
     }
 
     if (data1DiaAntes > agora) {
       lembretes.push({
-        compromisso_id: compromissoId,
-        canal: "whatsapp",
-        horas_antecedencia: 24,
-        data_envio: data1DiaAntes.toISOString(),
-        data_hora_envio: data1DiaAntes.toISOString(),
+        compromisso_id: compromissoId, canal: "whatsapp", horas_antecedencia: 24,
+        data_envio: data1DiaAntes.toISOString(), data_hora_envio: data1DiaAntes.toISOString(),
         proxima_data_envio: data1DiaAntes.toISOString(),
         mensagem: `⚖️ *Lembrete de Audiência (amanhã)*\n\nOlá${nomeContato ? `, ${nomeContato}` : ""}!\n\n⚠️ *Sua audiência é AMANHÃ!*\n\n📋 Processo: *${form.numero_processo}*\n📌 Tipo: ${tipoLabel}\n📅 Data: *${format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}*\n🏛️ Vara: ${form.vara || "A definir"}\n📍 Comarca: ${form.comarca || "A definir"}\n\nNão se esqueça de comparecer!`,
-        status_envio: "pendente",
-        destinatario: "lead",
-        telefone_responsavel: telefoneContato,
-        company_id: companyId,
-        ativo: true,
-        tipo_lembrete: "antecipado",
-        dias_antecedencia: 1,
-        sequencia_envio: 2,
+        status_envio: "pendente", destinatario: "lead", telefone_responsavel: telefoneContato,
+        company_id: companyId, ativo: true, tipo_lembrete: "antecipado", dias_antecedencia: 1, sequencia_envio: 2,
       });
     }
 
@@ -226,7 +221,7 @@ export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, no
     }
   };
 
-  const handleCreate = async () => {
+  const handleSave = async () => {
     if (!form.numero_processo.trim()) {
       toast.error("Informe o número do processo");
       return;
@@ -236,39 +231,69 @@ export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, no
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado");
 
-      const { data: processData, error } = await supabase.from("legal_processes").insert({
-        company_id: companyId,
-        lead_id: leadId,
-        numero_processo: form.numero_processo,
-        tipo: form.tipo,
-        vara: form.vara || null,
-        comarca: form.comarca || null,
-        parte_contraria: form.parte_contraria || null,
-        valor_causa: form.valor_causa ? Number(form.valor_causa) : 0,
-        data_audiencia: form.data_audiencia || null,
-      }).select().single();
-      if (error) throw error;
+      if (editingProcess) {
+        // UPDATE
+        const oldAudiencia = editingProcess.data_audiencia;
+        const newAudiencia = form.data_audiencia || null;
 
-      toast.success("Processo cadastrado!");
+        const { error } = await supabase
+          .from("legal_processes")
+          .update({
+            numero_processo: form.numero_processo,
+            tipo: form.tipo,
+            status: form.status,
+            vara: form.vara || null,
+            comarca: form.comarca || null,
+            parte_contraria: form.parte_contraria || null,
+            valor_causa: form.valor_causa ? Number(form.valor_causa) : 0,
+            data_audiencia: newAudiencia,
+          })
+          .eq("id", editingProcess.id);
 
-      // Se tem data de audiência, criar compromisso + enviar confirmação + lembretes
-      if (form.data_audiencia && processData) {
-        const compromisso = await criarCompromissoAgenda(processData.id, form.data_audiencia, user.id);
+        if (error) throw error;
 
-        // Enviar confirmação WhatsApp
-        await enviarConfirmacaoWhatsApp(form.data_audiencia);
+        toast.success("Processo atualizado!");
 
-        // Criar lembretes automáticos
-        if (compromisso) {
-          await criarLembretesAudiencia(compromisso.id, form.data_audiencia);
+        // Se audiência mudou e há nova data, criar compromisso
+        if (newAudiencia && newAudiencia !== oldAudiencia) {
+          const compromisso = await criarCompromissoAgenda(editingProcess.id, newAudiencia, user.id);
+          await enviarConfirmacaoWhatsApp(newAudiencia);
+          if (compromisso) {
+            await criarLembretesAudiencia(compromisso.id, newAudiencia);
+          }
+        }
+      } else {
+        // CREATE
+        const { data: processData, error } = await supabase.from("legal_processes").insert({
+          company_id: companyId,
+          lead_id: leadId,
+          numero_processo: form.numero_processo,
+          tipo: form.tipo,
+          vara: form.vara || null,
+          comarca: form.comarca || null,
+          parte_contraria: form.parte_contraria || null,
+          valor_causa: form.valor_causa ? Number(form.valor_causa) : 0,
+          data_audiencia: form.data_audiencia || null,
+        }).select().single();
+        if (error) throw error;
+
+        toast.success("Processo cadastrado!");
+
+        if (form.data_audiencia && processData) {
+          const compromisso = await criarCompromissoAgenda(processData.id, form.data_audiencia, user.id);
+          await enviarConfirmacaoWhatsApp(form.data_audiencia);
+          if (compromisso) {
+            await criarLembretesAudiencia(compromisso.id, form.data_audiencia);
+          }
         }
       }
 
       setDialogOpen(false);
-      setForm({ numero_processo: "", tipo: "civil", vara: "", comarca: "", parte_contraria: "", valor_causa: "", data_audiencia: "" });
+      setEditingProcess(null);
+      setForm({ ...EMPTY_FORM });
       fetchProcesses();
     } catch {
-      toast.error("Erro ao cadastrar processo");
+      toast.error(editingProcess ? "Erro ao atualizar processo" : "Erro ao cadastrar processo");
     } finally {
       setLoading(false);
     }
@@ -292,12 +317,19 @@ export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, no
             <p className="text-xs text-muted-foreground text-center py-2">Nenhum processo vinculado</p>
           ) : (
             processes.map(p => (
-              <div key={p.id} className="p-2 rounded-lg border bg-card text-xs space-y-1">
+              <div
+                key={p.id}
+                className="p-2 rounded-lg border bg-card text-xs space-y-1 cursor-pointer hover:border-primary/40 transition group relative"
+                onClick={() => openEditDialog(p)}
+              >
                 <div className="flex items-center justify-between">
                   <span className="font-medium">{p.numero_processo || "Sem número"}</span>
-                  <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[p.status] || ""}`}>
-                    {STATUS_LABELS[p.status] || p.status}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[p.status] || ""}`}>
+                      {STATUS_LABELS[p.status] || p.status}
+                    </Badge>
+                    <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Gavel className="h-3 w-3" />
@@ -319,19 +351,19 @@ export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, no
               </div>
             ))
           )}
-          <Button size="sm" variant="outline" className="w-full" onClick={() => setDialogOpen(true)}>
+          <Button size="sm" variant="outline" className="w-full" onClick={openCreateDialog}>
             <Plus className="h-3 w-3 mr-1" />
             Novo Processo
           </Button>
         </CollapsibleContent>
       </Collapsible>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingProcess(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Scale className="h-5 w-5" />
-              Novo Processo Jurídico
+              {editingProcess ? "Editar Processo Jurídico" : "Novo Processo Jurídico"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
@@ -339,6 +371,20 @@ export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, no
               <Label>Nº do Processo (CNJ) *</Label>
               <Input value={form.numero_processo} onChange={e => setForm({ ...form, numero_processo: e.target.value })} placeholder="0000000-00.0000.0.00.0000" />
             </div>
+
+            {/* Status - visível sempre, editável */}
+            <div>
+              <Label>Status</Label>
+              <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(STATUS_LABELS).map(([v, l]) => (
+                    <SelectItem key={v} value={v}>{l}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div>
               <Label>Tipo</Label>
               <Select value={form.tipo} onValueChange={v => setForm({ ...form, tipo: v })}>
@@ -374,7 +420,7 @@ export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, no
                 <Input type="datetime-local" value={form.data_audiencia} onChange={e => setForm({ ...form, data_audiencia: e.target.value })} />
               </div>
             </div>
-            {form.data_audiencia && (
+            {form.data_audiencia && !editingProcess && (
               <div className="p-2 rounded-lg border border-amber-500/30 bg-amber-500/5 text-xs space-y-1">
                 <p className="font-medium text-amber-700">📅 Ao cadastrar com data de audiência:</p>
                 <ul className="text-amber-600 space-y-0.5 ml-3 list-disc">
@@ -385,8 +431,18 @@ export function ProcessosJuridicosPanel({ leadId, companyId, telefoneContato, no
                 </ul>
               </div>
             )}
-            <Button className="w-full" onClick={handleCreate} disabled={loading}>
-              {loading ? "Salvando..." : "Cadastrar Processo"}
+            {form.data_audiencia && editingProcess && form.data_audiencia !== (editingProcess.data_audiencia?.slice(0, 16) || "") && (
+              <div className="p-2 rounded-lg border border-amber-500/30 bg-amber-500/5 text-xs space-y-1">
+                <p className="font-medium text-amber-700">📅 Nova data de audiência detectada:</p>
+                <ul className="text-amber-600 space-y-0.5 ml-3 list-disc">
+                  <li>Novo compromisso será criado na Agenda</li>
+                  {telefoneContato && <li>Confirmação será enviada via WhatsApp</li>}
+                  {telefoneContato && <li>Novos lembretes automáticos serão criados</li>}
+                </ul>
+              </div>
+            )}
+            <Button className="w-full" onClick={handleSave} disabled={loading}>
+              {loading ? "Salvando..." : editingProcess ? "Salvar Alterações" : "Cadastrar Processo"}
             </Button>
           </div>
         </DialogContent>
