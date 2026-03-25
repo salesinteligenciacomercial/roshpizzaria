@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { Scale, Gavel, Clock, DollarSign, TrendingUp, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import { Bar, Doughnut } from "react-chartjs-2";
+import JuridicoKanban from "./JuridicoKanban";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
