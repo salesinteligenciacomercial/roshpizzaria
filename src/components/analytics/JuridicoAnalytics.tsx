@@ -229,6 +229,9 @@ export default function JuridicoAnalytics({ userCompanyId }: { userCompanyId: st
         </Card>
       </div>
 
+      {/* Kanban de Processos */}
+      <JuridicoKanban userCompanyId={userCompanyId} />
+
       {/* Próximas Audiências */}
       <Card>
         <CardHeader>
