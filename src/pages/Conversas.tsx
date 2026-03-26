@@ -5480,6 +5480,8 @@ function Conversas() {
     sendingMessageRef.current = true;
     setIsSendingMessage(true);
     
+    // ⚡ CORREÇÃO CRÍTICA: try-finally wrapping TODA a função para garantir reset do lock
+    try {
     // 🆕 NOVO: Registrar atendimento ativo quando usuário responde
     const telefoneFormatado = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
     try {
@@ -5544,7 +5546,7 @@ function Conversas() {
       } catch (error: any) {
         console.error('❌ [VALIDAÇÃO] Erro ao validar número:', error);
         toast.error('Número de telefone inválido. Selecione outra conversa ou atualize a página.');
-        return;
+        return; // ⚡ finally block will reset the lock
       }
     } else {
       console.log('📸 [VALIDAÇÃO] Instagram - pulando validação de telefone');
@@ -5559,10 +5561,10 @@ function Conversas() {
 
     // Atualizar status no banco de dados para sincronização em tempo real
     try {
-      const telefoneFormatado = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
+      const telefoneFormatado2 = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
       await supabase.from('conversas').update({
         status: 'Enviada'
-      }).eq('telefone_formatado', telefoneFormatado).eq('company_id', userCompanyId);
+      }).eq('telefone_formatado', telefoneFormatado2).eq('company_id', userCompanyId);
       console.log('✅ Status atualizado no banco após enviar mensagem');
     } catch (error) {
       console.error('❌ Erro ao sincronizar status:', error);
@@ -5803,7 +5805,9 @@ function Conversas() {
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
       toast.error('Erro ao processar envio');
+    }
     } finally {
+      // ⚡ CORREÇÃO CRÍTICA: Garantir que o lock SEMPRE é liberado
       sendingMessageRef.current = false;
       setIsSendingMessage(false);
     }
