@@ -696,7 +696,7 @@ function Conversas() {
     data?: any;
     provider?: string;
   }> => {
-    const maxRetries = 3;
+    const maxRetries = 1; // ⚡ CORREÇÃO: Reduzido de 3 para 1 - evitar espera longa
     console.log('🔄 [SEND-WHATSAPP-RETRY] Iniciando envio (tentativa 1):', {
       company_id: body.company_id,
       numero: body.numero,
