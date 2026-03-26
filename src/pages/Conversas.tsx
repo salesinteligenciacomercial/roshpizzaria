@@ -5477,300 +5477,143 @@ function Conversas() {
     let messageContent = content || messageInput.trim();
     if (!messageContent || !selectedConv) return;
     if (sendingMessageRef.current) return;
+
     sendingMessageRef.current = true;
     setIsSendingMessage(true);
-    
-    // ⚡ CORREÇÃO CRÍTICA: try-finally wrapping TODA a função para garantir reset do lock
-    try {
-    // 🆕 NOVO: Registrar atendimento ativo quando usuário responde
-    const telefoneFormatado = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
-    try {
-      await startOrRefreshAttendance(telefoneFormatado);
-      // 📋 Criar protocolo de atendimento automaticamente
-      await createProtocol(telefoneFormatado, { 
-        startedBy: 'humano',
-        contactName: selectedConv.contactName || undefined,
-      });
-      console.log('✅ [ATTENDANCE] Atendimento e protocolo registrados para:', telefoneFormatado);
-    } catch (err) {
-      console.error('❌ [ATTENDANCE] Erro ao registrar atendimento:', err);
-    }
-    
-    // 🔤 CORREÇÃO AUTOMÁTICA: Aplicar correção se habilitada e for mensagem de texto
-    if (autoCorrectEnabled && type === "text" && messageContent.length >= 5 && !content) {
-      try {
-        setIsCorrectingText(true);
-        console.log('🔤 [CORREÇÃO] Iniciando correção automática do texto...');
-        
-        const { data, error } = await supabase.functions.invoke('corrigir-texto', {
-          body: { texto: messageContent }
-        });
-        
-        if (!error && data?.textoCorrigido) {
-          if (data.corrigido) {
-            console.log('✅ [CORREÇÃO] Texto corrigido:', data.textoCorrigido.substring(0, 50) + '...');
-          }
-          messageContent = data.textoCorrigido;
-        } else {
-          console.warn('⚠️ [CORREÇÃO] Erro ou sem resposta, usando texto original');
-        }
-      } catch (err) {
-        console.error('❌ [CORREÇÃO] Erro ao corrigir texto:', err);
-        // Continua com texto original em caso de erro
-      } finally {
-      setIsCorrectingText(false);
-      }
-    }
-    
-    // ✍️ ASSINATURA: Adicionar assinatura se habilitada (apenas para texto)
-    // Formato: "*Atendente - Nome do Usuário*" com asteriscos para negrito no WhatsApp
-    if (includeSignature && type === "text" && userName) {
-      messageContent = `*Atendente - ${userName}*\n\n${messageContent}`;
-      console.log('✍️ [ASSINATURA] Assinatura adicionada no topo: *Atendente -', userName, '*');
-    }
-    
-    console.log('📤 [ENVIO] Iniciando envio de mensagem:', {
-      conteudo: messageContent.substring(0, 50),
-      tipo: type,
-      conversaId: selectedConv.id,
-      timestamp: new Date().toISOString()
-    });
 
-    // Validar e formatar número - usar phoneNumber prioritariamente
-    // ⚡ CORREÇÃO: Pular validação de telefone para Instagram (usa IDs numéricos longos)
-    if (selectedConv.channel !== 'instagram') {
-      try {
-        const phoneToValidate = selectedConv.phoneNumber || selectedConv.id;
-        const formattedPhone = formatPhoneNumber(phoneToValidate);
-        console.log('✅ [VALIDAÇÃO] Número validado:', formattedPhone);
-      } catch (error: any) {
-        console.error('❌ [VALIDAÇÃO] Erro ao validar número:', error);
-        toast.error('Número de telefone inválido. Selecione outra conversa ou atualize a página.');
-        return; // ⚡ finally block will reset the lock
-      }
-    } else {
-      console.log('📸 [VALIDAÇÃO] Instagram - pulando validação de telefone');
-    }
-
-    // ⚡ CORREÇÃO CRÍTICA: NÃO adicionar mensagem localmente (evita duplicação)
-    // O realtime vai adicionar automaticamente após salvar no banco
-    console.log('📝 [ENVIO] Preparando mensagem para envio (sem update otimista)');
-
-    // Limpar input imediatamente para feedback visual
-    setMessageInput("");
-
-    // Atualizar status no banco de dados para sincronização em tempo real
-    try {
-      const telefoneFormatado2 = (selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '');
-      await supabase.from('conversas').update({
-        status: 'Enviada'
-      }).eq('telefone_formatado', telefoneFormatado2).eq('company_id', userCompanyId);
-      console.log('✅ Status atualizado no banco após enviar mensagem');
-    } catch (error) {
-      console.error('❌ Erro ao sincronizar status:', error);
-    }
-
-    // Preparar dados para envio via WhatsApp
-    const mensagemParaEnviar = replyingTo && selectedConv.messages.find(m => m.id === replyingTo) ? {
-      mensagem: messageContent,
-      quoted: {
-        key: {
-          id: replyingTo
-        },
-        message: {
-          conversation: selectedConv.messages.find(m => m.id === replyingTo)?.content || ''
-        }
-      }
-    } : {
-      mensagem: messageContent
+    const conversationSnapshot = {
+      id: selectedConv.id,
+      phoneNumber: selectedConv.phoneNumber,
+      contactName: selectedConv.contactName,
+      channel: selectedConv.channel,
+      origemApi: selectedConv.origemApi,
+      messages: selectedConv.messages,
     };
+    const currentReplyingTo = replyingTo;
 
-    // ⚡ CORREÇÃO CRÍTICA: Salvar mensagem no banco PRIMEIRO (antes de enviar)
-    // Isso garante que a mensagem apareça no CRM mesmo se o envio falhar
-    console.log('💾 [ENVIO] Salvando mensagem no banco PRIMEIRO...');
-    const isInstagramConv = selectedConv.channel === 'instagram';
-    // ⚡ CORREÇÃO: Para Instagram, usar ID numérico puro (sem ig_ e sem 55 prefix)
-    const rawPhoneOrId = selectedConv.phoneNumber || selectedConv.id;
-    const instagramId = rawPhoneOrId.replace(/^ig_/, '').replace(/[^0-9]/g, '');
-    const numeroNormalizado = isInstagramConv ? instagramId : normalizePhoneForWA(rawPhoneOrId);
-    let mensagemSalva = false;
-    let insertedMsgId: string | null = null;
     try {
-      const {
-        data: {
-          user
-        }
-      } = await supabase.auth.getUser();
-      if (user) {
-        // Buscar nome do usuário atual para salvar como sent_by
-        const {
-          data: userProfile
-        } = await supabase.from('profiles').select('full_name, email').eq('id', user.id).single();
-        const sentByName = userProfile?.full_name || userProfile?.email || 'Equipe';
-        console.log('👤 [ENVIO] Nome do usuário que envia:', sentByName);
-        const {
-          data: userRole
-        } = await supabase.from('user_roles').select('company_id').eq('user_id', user.id).single();
-        if (userRole?.company_id) {
-          const repliedMessage = replyingTo ? selectedConv.messages.find(m => m.id === replyingTo)?.content : null;
-          // ✅ CORREÇÃO: Para Instagram, usar ID numérico (consistente com webhook)
-          const numeroOriginal = isInstagramConv ? instagramId : (selectedConv.phoneNumber || selectedConv.id);
-          const {
-            data: insertedMsg,
-            error: dbError
-          } = await supabase.from('conversas').insert([{
-            numero: numeroOriginal,
-            telefone_formatado: numeroNormalizado,
-            mensagem: messageContent,
-            origem: selectedConv.channel === 'instagram' ? 'Instagram' : 'WhatsApp',
-            origem_api: selectedConv.channel === 'instagram' ? 'meta' : (selectedConv.origemApi || undefined),
-            status: 'Enviada',
-            tipo_mensagem: type,
-            nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
-            company_id: userRole.company_id,
-            owner_id: user.id,
-            sent_by: sentByName,
-            fromme: true,
-            replied_to_message: repliedMessage || null,
-            delivered: true,
-            read: false
-          }]).select('id').single();
-          if (!dbError && insertedMsg) {
-            mensagemSalva = true;
-            insertedMsgId = insertedMsg.id;
-            console.log('✅ [ENVIO] Mensagem salva no banco com sucesso (antes do envio), id:', insertedMsgId);
-          } else {
-            console.error('❌ [ENVIO] Erro ao salvar mensagem no banco:', dbError);
-          }
-        }
-      }
-    } catch (saveError) {
-      console.error('❌ [ENVIO] Erro ao salvar mensagem no banco:', saveError);
-    }
+      const telefoneFormatado = (conversationSnapshot.phoneNumber || conversationSnapshot.id).replace(/[^0-9]/g, '');
 
-    // Enviar mensagem via API correta (Instagram ou WhatsApp)
-    try {
-      const isInstagramChannel = selectedConv.channel === 'instagram';
-      console.log('📤 [ENVIO] Preparando envio via', isInstagramChannel ? 'Instagram' : 'WhatsApp', ':', {
-        numeroNormalizado,
-        mensagem: messageContent.substring(0, 50),
-        tipo: type,
-        userCompanyId,
-        canal: selectedConv.channel,
-        telefoneOriginal: selectedConv.phoneNumber || selectedConv.id
-      });
-
-      let data: any = null;
-      let error: any = null;
-
-      if (isInstagramChannel) {
-        // 📸 INSTAGRAM: Enviar via edge function dedicada
-        console.log('📸 [ENVIO-INSTAGRAM] Enviando via Instagram API...');
-        const recipientId = instagramId;
-        const companyId = await getCompanyId();
-        
-        const res = await supabase.functions.invoke('enviar-instagram', {
-          body: {
-            recipient_id: recipientId,
-            mensagem: messageContent,
-            company_id: companyId,
-          }
-        });
-        data = res.data;
-        error = res.error || (res.data && !res.data.success ? { message: res.data.error || 'Erro ao enviar' } : null);
-      } else {
-        // 📱 WHATSAPP: Enviar via Evolution/Meta API
-        const forceProvider = selectedConv.origemApi;
-        console.log('🎯 [ENVIO] Canal de origem:', forceProvider || 'não definido (usar padrão)');
-        
-        const result = await enviarWhatsApp({
-          numero: numeroNormalizado,
-          ...mensagemParaEnviar,
-          quotedMessageId: replyingTo || undefined,
-          tipo_mensagem: type,
-          force_provider: forceProvider
-        });
-        data = result.data;
-        error = result.error;
-      }
-      console.log('📥 [ENVIO] Resposta do enviarWhatsApp:', {
-        data,
-        error
-      });
-      // ⚡ CORREÇÃO: Mensagem já foi salva antes do envio, não salvar novamente aqui
-      // Salvar whatsapp_message_id retornado pela API para permitir edição futura
-      const whatsappMsgId = (data as any)?.message_id || (data as any)?.data?.messages?.[0]?.id || (data as any)?.data?.key?.id;
-      if (whatsappMsgId && insertedMsgId) {
-        console.log('📝 [ENVIO] Salvando whatsapp_message_id:', whatsappMsgId, 'para msg:', insertedMsgId);
-        supabase.from('conversas')
-          .update({ whatsapp_message_id: whatsappMsgId })
-          .eq('id', insertedMsgId)
-          .then(({ error: updateErr }) => {
-            if (updateErr) console.error('❌ Erro ao salvar whatsapp_message_id:', updateErr);
-            else console.log('✅ whatsapp_message_id salvo com sucesso');
-          });
-      }
-
-      if (error) {
-        const canalNome = selectedConv.channel === 'instagram' ? 'Instagram' : 'WhatsApp';
-        console.error(`❌ [ENVIO] Erro ao enviar mensagem via ${canalNome}:`, error);
-
-        // Se a mensagem foi salva, apenas avisar sobre o envio
-        if (mensagemSalva) {
-          toast.warning(`Mensagem salva, mas pode não ter sido enviada. Verifique a conexão ${canalNome}.`);
-        } else {
-          toast.error(`Erro ao enviar mensagem: ${error.message || 'Erro desconhecido'}`);
-        }
-
-        // Recarregar conversas para mostrar a mensagem salva
-        if (mensagemSalva) {
-          setTimeout(async () => {
-            console.log('🔄 [ENVIO] Recarregando conversas após salvar mensagem...');
-            await loadSupabaseConversations();
-          }, 500);
-        }
-        return;
-      }
-      console.log('✅ [ENVIO] Resposta API:', data);
-
-      // Não mostrar notificação ao enviar - apenas logs
-      const canalEnvio = selectedConv.channel === 'instagram' ? 'Instagram' : 'WhatsApp';
-      console.log(`✅ [ENVIO] Mensagem enviada para ${canalEnvio} com sucesso`);
-
-      // ⚡ CORREÇÃO: Se a mensagem já foi salva antes, não salvar novamente
-      if (!mensagemSalva) {
-        console.log('⚠️ [ENVIO] Mensagem não foi salva antes, salvando agora...');
-        // Se por algum motivo não foi salva antes, salvar agora
+      void (async () => {
         try {
-          const {
-            data: {
-              user
+          await startOrRefreshAttendance(telefoneFormatado);
+          await createProtocol(telefoneFormatado, {
+            startedBy: 'humano',
+            contactName: conversationSnapshot.contactName || undefined,
+          });
+          console.log('✅ [ATTENDANCE] Atendimento e protocolo registrados para:', telefoneFormatado);
+        } catch (err) {
+          console.error('❌ [ATTENDANCE] Erro ao registrar atendimento:', err);
+        }
+      })();
+
+      if (autoCorrectEnabled && type === "text" && messageContent.length >= 5 && !content) {
+        try {
+          setIsCorrectingText(true);
+          console.log('🔤 [CORREÇÃO] Iniciando correção automática do texto...');
+
+          const { data, error } = await supabase.functions.invoke('corrigir-texto', {
+            body: { texto: messageContent }
+          });
+
+          if (!error && data?.textoCorrigido) {
+            if (data.corrigido) {
+              console.log('✅ [CORREÇÃO] Texto corrigido:', data.textoCorrigido.substring(0, 50) + '...');
             }
-          } = await supabase.auth.getUser();
-          if (user) {
-            // Buscar nome do usuário para salvar no sent_by
-            const {
-              data: userProfile
-            } = await supabase.from('profiles').select('full_name, email').eq('id', user.id).single();
-            const sentByName = userProfile?.full_name || userProfile?.email || 'Equipe';
-            const {
-              data: userRole
-            } = await supabase.from('user_roles').select('company_id').eq('user_id', user.id).single();
-            if (userRole?.company_id) {
-              const repliedMessage = replyingTo ? selectedConv.messages.find(m => m.id === replyingTo)?.content : null;
-              // ✅ CORREÇÃO: Para Instagram, usar ID numérico (consistente com webhook)
-              const numeroOriginal = isInstagramConv ? instagramId : (selectedConv.phoneNumber || selectedConv.id);
-              const {
-                error: dbError
-              } = await supabase.from('conversas').insert([{
+            messageContent = data.textoCorrigido;
+          } else {
+            console.warn('⚠️ [CORREÇÃO] Erro ou sem resposta, usando texto original');
+          }
+        } catch (err) {
+          console.error('❌ [CORREÇÃO] Erro ao corrigir texto:', err);
+        } finally {
+          setIsCorrectingText(false);
+        }
+      }
+
+      if (includeSignature && type === "text" && userName) {
+        messageContent = `*Atendente - ${userName}*\n\n${messageContent}`;
+        console.log('✍️ [ASSINATURA] Assinatura adicionada no topo: *Atendente -', userName, '*');
+      }
+
+      console.log('📤 [ENVIO] Iniciando envio de mensagem:', {
+        conteudo: messageContent.substring(0, 50),
+        tipo: type,
+        conversaId: conversationSnapshot.id,
+        timestamp: new Date().toISOString()
+      });
+
+      if (conversationSnapshot.channel !== 'instagram') {
+        try {
+          const phoneToValidate = conversationSnapshot.phoneNumber || conversationSnapshot.id;
+          const formattedPhone = formatPhoneNumber(phoneToValidate);
+          console.log('✅ [VALIDAÇÃO] Número validado:', formattedPhone);
+        } catch (error: any) {
+          console.error('❌ [VALIDAÇÃO] Erro ao validar número:', error);
+          toast.error('Número de telefone inválido. Selecione outra conversa ou atualize a página.');
+          return;
+        }
+      } else {
+        console.log('📸 [VALIDAÇÃO] Instagram - pulando validação de telefone');
+      }
+
+      setMessageInput("");
+
+      void supabase
+        .from('conversas')
+        .update({ status: 'Enviada' })
+        .eq('telefone_formatado', telefoneFormatado)
+        .eq('company_id', userCompanyId)
+        .then(({ error }) => {
+          if (error) console.error('❌ Erro ao sincronizar status:', error);
+        });
+
+      const mensagemParaEnviar = currentReplyingTo && conversationSnapshot.messages.find(m => m.id === currentReplyingTo) ? {
+        mensagem: messageContent,
+        quoted: {
+          key: { id: currentReplyingTo },
+          message: {
+            conversation: conversationSnapshot.messages.find(m => m.id === currentReplyingTo)?.content || ''
+          }
+        }
+      } : {
+        mensagem: messageContent
+      };
+
+      const isInstagramConv = conversationSnapshot.channel === 'instagram';
+      const rawPhoneOrId = conversationSnapshot.phoneNumber || conversationSnapshot.id;
+      const instagramId = rawPhoneOrId.replace(/^ig_/, '').replace(/[^0-9]/g, '');
+      const numeroNormalizado = isInstagramConv ? instagramId : normalizePhoneForWA(rawPhoneOrId);
+      let mensagemSalva = false;
+      let insertedMsgId: string | null = null;
+
+      try {
+        const {
+          data: { user }
+        } = await supabase.auth.getUser();
+
+        if (user) {
+          const [{ data: userProfile }, { data: userRole }] = await Promise.all([
+            supabase.from('profiles').select('full_name, email').eq('id', user.id).single(),
+            supabase.from('user_roles').select('company_id').eq('user_id', user.id).single(),
+          ]);
+
+          const sentByName = userProfile?.full_name || userProfile?.email || 'Equipe';
+          const repliedMessage = currentReplyingTo ? conversationSnapshot.messages.find(m => m.id === currentReplyingTo)?.content : null;
+          const numeroOriginal = isInstagramConv ? instagramId : (conversationSnapshot.phoneNumber || conversationSnapshot.id);
+
+          if (userRole?.company_id) {
+            const { data: insertedMsg, error: dbError } = await supabase
+              .from('conversas')
+              .insert([{
                 numero: numeroOriginal,
                 telefone_formatado: numeroNormalizado,
                 mensagem: messageContent,
-                origem: selectedConv.channel === 'instagram' ? 'Instagram' : 'WhatsApp',
-                origem_api: selectedConv.channel === 'instagram' ? 'meta' : (selectedConv.origemApi || undefined),
+                origem: conversationSnapshot.channel === 'instagram' ? 'Instagram' : 'WhatsApp',
+                origem_api: conversationSnapshot.channel === 'instagram' ? 'meta' : (conversationSnapshot.origemApi || undefined),
                 status: 'Enviada',
                 tipo_mensagem: type,
-                nome_contato: selectedConv.contactName?.replace(/^ig_/, '') || selectedConv.contactName,
+                nome_contato: conversationSnapshot.contactName?.replace(/^ig_/, '') || conversationSnapshot.contactName,
                 company_id: userRole.company_id,
                 owner_id: user.id,
                 sent_by: sentByName,
@@ -5778,36 +5621,129 @@ function Conversas() {
                 replied_to_message: repliedMessage || null,
                 delivered: true,
                 read: false
-              }]);
-              if (!dbError) {
-                mensagemSalva = true;
-                console.log('✅ [ENVIO] Mensagem salva no banco após envio bem-sucedido');
+              }])
+              .select('id')
+              .single();
+
+            if (!dbError && insertedMsg) {
+              mensagemSalva = true;
+              insertedMsgId = insertedMsg.id;
+              console.log('✅ [ENVIO] Mensagem salva no banco com sucesso (UI liberada antes da entrega), id:', insertedMsgId);
+            } else {
+              console.error('❌ [ENVIO] Erro ao salvar mensagem no banco:', dbError);
+            }
+          }
+        }
+      } catch (saveError) {
+        console.error('❌ [ENVIO] Erro ao salvar mensagem no banco:', saveError);
+      }
+
+      if (currentReplyingTo) {
+        setReplyingTo(null);
+      }
+
+      void (async () => {
+        try {
+          let data: any = null;
+          let error: any = null;
+
+          if (conversationSnapshot.channel === 'instagram') {
+            console.log('📸 [ENVIO-INSTAGRAM] Enviando via Instagram API...');
+            const companyId = await getCompanyId();
+            const res = await supabase.functions.invoke('enviar-instagram', {
+              body: {
+                recipient_id: instagramId,
+                mensagem: messageContent,
+                company_id: companyId,
+              }
+            });
+            data = res.data;
+            error = res.error || (res.data && !res.data.success ? { message: res.data.error || 'Erro ao enviar' } : null);
+          } else {
+            const result = await enviarWhatsApp({
+              numero: numeroNormalizado,
+              ...mensagemParaEnviar,
+              quotedMessageId: currentReplyingTo || undefined,
+              tipo_mensagem: type,
+              force_provider: conversationSnapshot.origemApi,
+            });
+            data = result.data;
+            error = result.error;
+          }
+
+          const whatsappMsgId = (data as any)?.message_id || (data as any)?.data?.messages?.[0]?.id || (data as any)?.data?.key?.id;
+          if (whatsappMsgId && insertedMsgId) {
+            const { error: updateErr } = await supabase
+              .from('conversas')
+              .update({ whatsapp_message_id: whatsappMsgId })
+              .eq('id', insertedMsgId);
+
+            if (updateErr) console.error('❌ Erro ao salvar whatsapp_message_id:', updateErr);
+          }
+
+          if (error) {
+            const canalNome = conversationSnapshot.channel === 'instagram' ? 'Instagram' : 'WhatsApp';
+            console.error(`❌ [ENVIO] Erro ao enviar mensagem via ${canalNome}:`, error);
+            if (mensagemSalva) {
+              toast.warning(`Mensagem salva, mas pode não ter sido enviada. Verifique a conexão ${canalNome}.`);
+              setTimeout(() => {
+                void loadSupabaseConversations();
+              }, 500);
+            } else {
+              toast.error(`Erro ao enviar mensagem: ${error.message || 'Erro desconhecido'}`);
+            }
+            return;
+          }
+
+          if (!mensagemSalva) {
+            console.log('⚠️ [ENVIO] Mensagem não foi salva antes, salvando agora...');
+            const {
+              data: { user }
+            } = await supabase.auth.getUser();
+
+            if (user) {
+              const [{ data: userProfile }, { data: userRole }] = await Promise.all([
+                supabase.from('profiles').select('full_name, email').eq('id', user.id).single(),
+                supabase.from('user_roles').select('company_id').eq('user_id', user.id).single(),
+              ]);
+
+              if (userRole?.company_id) {
+                const repliedMessage = currentReplyingTo ? conversationSnapshot.messages.find(m => m.id === currentReplyingTo)?.content : null;
+                const sentByName = userProfile?.full_name || userProfile?.email || 'Equipe';
+                const numeroOriginal = isInstagramConv ? instagramId : (conversationSnapshot.phoneNumber || conversationSnapshot.id);
+
+                await supabase.from('conversas').insert([{
+                  numero: numeroOriginal,
+                  telefone_formatado: numeroNormalizado,
+                  mensagem: messageContent,
+                  origem: conversationSnapshot.channel === 'instagram' ? 'Instagram' : 'WhatsApp',
+                  origem_api: conversationSnapshot.channel === 'instagram' ? 'meta' : (conversationSnapshot.origemApi || undefined),
+                  status: 'Enviada',
+                  tipo_mensagem: type,
+                  nome_contato: conversationSnapshot.contactName?.replace(/^ig_/, '') || conversationSnapshot.contactName,
+                  company_id: userRole.company_id,
+                  owner_id: user.id,
+                  sent_by: sentByName,
+                  fromme: true,
+                  replied_to_message: repliedMessage || null,
+                  delivered: true,
+                  read: false
+                }]);
               }
             }
           }
-        } catch (saveError) {
-          console.error('❌ [ENVIO] Erro ao salvar mensagem após envio:', saveError);
+
+          if (mensagemSalva) {
+            setTimeout(() => {
+              void loadSupabaseConversations();
+            }, 500);
+          }
+        } catch (backgroundError) {
+          console.error('❌ [ENVIO] Erro em background ao concluir envio:', backgroundError);
+          toast.error('A mensagem foi registrada, mas houve erro ao concluir o envio.');
         }
-      }
-
-      // Recarregar conversas para garantir que a mensagem apareça
-      if (mensagemSalva) {
-        setTimeout(async () => {
-          console.log('🔄 [ENVIO] Recarregando conversas após envio bem-sucedido...');
-          await loadSupabaseConversations();
-        }, 500);
-      }
-
-      // CORREÇÃO: Limpar replyingTo após envio bem-sucedido
-      if (replyingTo) {
-        setReplyingTo(null);
-      }
-    } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
-      toast.error('Erro ao processar envio');
-    }
+      })();
     } finally {
-      // ⚡ CORREÇÃO CRÍTICA: Garantir que o lock SEMPRE é liberado
       sendingMessageRef.current = false;
       setIsSendingMessage(false);
     }
