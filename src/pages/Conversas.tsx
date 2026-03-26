@@ -715,7 +715,7 @@ function Conversas() {
 
         // ⚡ CORREÇÃO: Adicionar timeout explícito para evitar travamento
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Timeout após 30 segundos')), 30000);
+          setTimeout(() => reject(new Error('Timeout após 15 segundos')), 15000);
         });
         const functionPromise = supabase.functions.invoke('enviar-whatsapp', {
           body
