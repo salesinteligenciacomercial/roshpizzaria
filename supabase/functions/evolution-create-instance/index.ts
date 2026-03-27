@@ -173,20 +173,44 @@ serve(async (req) => {
         supabase, companyId, null, EVOLUTION_API_URL, EVOLUTION_API_KEY
       );
       const baseUrl = resolved.url;
-      const apiKey = resolved.key;
 
-      if (!baseUrl || !apiKey) {
+      if (!baseUrl) {
         return new Response(
-          JSON.stringify({ error: 'URL ou API Key da Evolution não configurados. Verifique as configurações.' }),
+          JSON.stringify({ error: 'URL da Evolution API não configurada. Verifique as configurações.' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
       console.log('🔧 [EVOLUTION] Criando instância:', instanceName, '| Host:', baseUrl.replace(/https?:\/\//, '').split('/')[0]);
 
-      // 1. Create instance on Evolution API
+      // Collect ALL unique API keys to try (from same host + global)
+      const keysToTry: string[] = [];
+      // 1. Resolved key first
+      if (resolved.key) keysToTry.push(resolved.key);
+      // 2. Global key
+      if (EVOLUTION_API_KEY && !keysToTry.includes(EVOLUTION_API_KEY)) keysToTry.push(EVOLUTION_API_KEY);
+      // 3. All other keys from connections on the same host
+      const normalizedBase = baseUrl.replace(/\/+$/, '').toLowerCase();
+      const { data: allConns } = await supabase
+        .from('whatsapp_connections')
+        .select('evolution_api_key, evolution_api_url')
+        .not('evolution_api_key', 'is', null)
+        .not('evolution_api_url', 'is', null);
+      if (allConns) {
+        for (const conn of allConns) {
+          const connUrl = (conn.evolution_api_url || '').replace(/\/+$/, '').toLowerCase();
+          if (connUrl === normalizedBase && conn.evolution_api_key && !keysToTry.includes(conn.evolution_api_key)) {
+            keysToTry.push(conn.evolution_api_key);
+          }
+        }
+      }
+
+      console.log(`🔑 [EVOLUTION] ${keysToTry.length} keys disponíveis para tentar`);
+
+      // 1. Create instance on Evolution API - try each key until one works
       let createData: any;
-      let usedKey = apiKey;
+      let usedKey = '';
+      let createSuccess = false;
       const createPayload = JSON.stringify({
         instanceName: instanceName,
         qrcode: true,
@@ -194,36 +218,52 @@ serve(async (req) => {
       });
 
       try {
-        let createRes = await fetchWithTimeout(`${baseUrl}/instance/create`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': usedKey },
-          body: createPayload,
-        }, 20000);
-
-        createData = await createRes.json();
-        console.log('📡 [EVOLUTION] Resposta create:', JSON.stringify(createData));
-
-        // If 401, retry with global key (instance keys may not have create permission)
-        if (createRes.status === 401 && usedKey !== EVOLUTION_API_KEY && EVOLUTION_API_KEY) {
-          console.log('🔄 [EVOLUTION] Key resolvida deu 401, tentando com key global...');
-          usedKey = EVOLUTION_API_KEY;
-          createRes = await fetchWithTimeout(`${baseUrl}/instance/create`, {
+        for (const tryKey of keysToTry) {
+          console.log(`🔑 [EVOLUTION] Tentando key: ${tryKey.substring(0, 8)}...`);
+          const createRes = await fetchWithTimeout(`${baseUrl}/instance/create`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': usedKey },
+            headers: { 'Content-Type': 'application/json', 'apikey': tryKey },
             body: createPayload,
           }, 20000);
+
           createData = await createRes.json();
-          console.log('📡 [EVOLUTION] Resposta create (global key):', JSON.stringify(createData));
+          console.log('📡 [EVOLUTION] Resposta create:', JSON.stringify(createData));
+
+          if (createRes.ok) {
+            usedKey = tryKey;
+            createSuccess = true;
+            console.log('✅ [EVOLUTION] Instância criada com sucesso!');
+            break;
+          }
+
+          // Instance already exists - also treat as success
+          if (createData?.response?.message?.includes?.('already') || createRes.status === 403) {
+            usedKey = tryKey;
+            createSuccess = true;
+            console.log('⚠️ [EVOLUTION] Instância já existe, tentando conectar...');
+            break;
+          }
+
+          // 401 = wrong key, try next
+          if (createRes.status === 401) {
+            console.log('🔄 [EVOLUTION] Key deu 401, tentando próxima...');
+            continue;
+          }
+
+          // Other error - stop trying
+          console.error('❌ [EVOLUTION] Erro não-auth:', createRes.status, JSON.stringify(createData));
+          return new Response(JSON.stringify({ error: 'Erro ao criar instância na Evolution API', details: createData }), {
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
         }
 
-        if (!createRes.ok) {
-          if (createData?.response?.message?.includes?.('already') || createRes.status === 403) {
-            console.log('⚠️ [EVOLUTION] Instância já existe, tentando conectar...');
-          } else {
-            return new Response(JSON.stringify({ error: 'Erro ao criar instância na Evolution API', details: createData }), {
-              status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
-          }
+        if (!createSuccess) {
+          console.error('❌ [EVOLUTION] Todas as keys falharam com 401');
+          return new Response(JSON.stringify({ 
+            error: 'Nenhuma API Key tem permissão para criar instâncias neste servidor. Verifique a API Key global da Evolution API nas configurações.'
+          }), {
+            status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
         }
       } catch (err: any) {
         console.error('❌ [EVOLUTION] Erro ao criar instância:', err.message);
@@ -245,7 +285,7 @@ serve(async (req) => {
       try {
         await fetchWithTimeout(`${baseUrl}/webhook/set/${instanceName}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
+          headers: { 'Content-Type': 'application/json', 'apikey': usedKey },
           body: JSON.stringify({
             webhook: {
               url: webhookUrl,
@@ -298,7 +338,7 @@ serve(async (req) => {
           company_id: companyId,
           instance_name: instanceName,
           evolution_api_url: baseUrl,
-          evolution_api_key: apiKey,
+          evolution_api_key: usedKey,
           status: 'connecting',
           qr_code_expires_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
         }, { onConflict: 'instance_name' })
