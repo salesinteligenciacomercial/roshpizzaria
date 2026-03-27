@@ -285,7 +285,7 @@ serve(async (req) => {
       try {
         await fetchWithTimeout(`${baseUrl}/webhook/set/${instanceName}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
+          headers: { 'Content-Type': 'application/json', 'apikey': usedKey },
           body: JSON.stringify({
             webhook: {
               url: webhookUrl,
