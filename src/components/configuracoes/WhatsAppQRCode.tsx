@@ -10,6 +10,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+// Normalize QR code data to a displayable image src
+function normalizeQrCode(qrData: string): string {
+  if (!qrData) return '';
+  // Already a data URI
+  if (qrData.startsWith('data:')) return qrData;
+  // Raw base64 - assume PNG
+  if (qrData.length > 100) return `data:image/png;base64,${qrData}`;
+  return qrData;
+}
 
 export function WhatsAppQRCode() {
   const [loading, setLoading] = useState(false);
