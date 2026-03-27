@@ -10,6 +10,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+// Normalize QR code data to a displayable image src
+function normalizeQrCode(qrData: string): string {
+  if (!qrData) return '';
+  // Already a data URI
+  if (qrData.startsWith('data:')) return qrData;
+  // Raw base64 - assume PNG
+  if (qrData.length > 100) return `data:image/png;base64,${qrData}`;
+  return qrData;
+}
 
 export function WhatsAppQRCode() {
   const [loading, setLoading] = useState(false);
@@ -259,7 +268,13 @@ export function WhatsAppQRCode() {
 
         if (error) {
           console.error('❌ Erro na edge function:', error);
-          throw new Error(error.message || 'Erro ao criar instância');
+          // Try to extract meaningful error from response
+          let errorMsg = 'Erro ao criar instância';
+          try {
+            const parsed = typeof error === 'string' ? JSON.parse(error) : error;
+            errorMsg = parsed?.error || parsed?.message || error.message || errorMsg;
+          } catch { errorMsg = error.message || errorMsg; }
+          throw new Error(errorMsg);
         }
 
         if (!data?.success) {
@@ -268,13 +283,12 @@ export function WhatsAppQRCode() {
 
         console.log('✅ Instância criada:', data);
 
-        // Show QR code
+        // Show QR code - normalize format
         if (data.qrcode) {
-          // qrcode can be base64 with or without data URI prefix
-          const qrSrc = data.qrcode.startsWith('data:') 
-            ? data.qrcode 
-            : `data:image/png;base64,${data.qrcode}`;
-          setQrCode(qrSrc);
+          setQrCode(normalizeQrCode(data.qrcode));
+        } else if (data.pairingCode) {
+          // No image QR, but we have pairing code
+          toast.info(`Código de pareamento: ${data.pairingCode}`);
         } else {
           toast.warning("QR Code não retornado. Tente atualizar.");
         }
@@ -312,11 +326,13 @@ export function WhatsAppQRCode() {
 
       if (error) throw new Error(error.message);
 
+      if (data?.success === false) {
+        toast.warning(data.error || "QR Code não disponível");
+        return;
+      }
+
       if (data?.qrcode) {
-        const qrSrc = data.qrcode.startsWith('data:') 
-          ? data.qrcode 
-          : `data:image/png;base64,${data.qrcode}`;
-        setQrCode(qrSrc);
+        setQrCode(normalizeQrCode(data.qrcode));
         toast.success("QR Code atualizado!");
 
         // Restart polling
