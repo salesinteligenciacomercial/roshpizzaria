@@ -1,141 +1,83 @@
 
+Objetivo: corrigir o fluxo de gerar QR Code no módulo Configurações > Canais para que a instância seja criada no servidor correto e o QR exibido seja sempre válido para leitura no WhatsApp.
 
-# Plano: Funcionalidades Jurídicas para Segmento Advocacia
+O que encontrei
+- O frontend usa `src/components/configuracoes/WhatsAppQRCode.tsx` para chamar a função `evolution-create-instance`.
+- A função `supabase/functions/evolution-create-instance/index.ts` cria a instância usando apenas os secrets globais `EVOLUTION_API_URL` e `EVOLUTION_API_KEY`.
+- Nos logs, a tentativa mais recente de criar a instância `TESTE` chegou a iniciar, mas houve timeout em um host diferente do que o sistema usa nas conexões já salvas.
+- No banco, conexões existentes usam principalmente `https://waze-evolution-api.0ntuaf.easypanel.host`, enquanto o fluxo de criação está tentando usar outro host de secret. Isso explica “não gera”.
+- Além disso, o frontend assume que qualquer retorno `data.qrcode` é sempre imagem PNG em base64 e força `data:image/png;base64,...`. Se a Evolution devolver QR em outro formato (ex.: string, data URI diferente, SVG/base64, ou payload textual), a UI pode mostrar um QR inválido. Isso explica “quando gera não é um QR válido”.
 
-## Visão Geral
+Plano de correção
+1. Fortalecer a função `evolution-create-instance`
+- Resolver URL/API key por ordem de prioridade:
+  - dados já existentes da empresa/instância no banco, quando houver
+  - fallback para secrets globais
+- Normalizar a URL da Evolution antes de chamar a API, reaproveitando a mesma ideia de sanitização já usada em `enviar-whatsapp`.
+- Adicionar timeout controlado e mensagens de erro mais claras para diferenciar:
+  - servidor offline
+  - host incorreto
+  - resposta sem QR
+  - instância já existente sem QR renovado
 
-Criar um conjunto de funcionalidades exclusivas para empresas do segmento "advocacia", seguindo o mesmo padrão já implementado para segmentos financeiros (`isSegmentoFinanceiro`). O sistema exibirá campos e painéis específicos para gestão de processos jurídicos (comerciais e trabalhistas) nos módulos Relatórios, Bate-Papo, Funil de Vendas, Tarefas e Agenda.
+2. Corrigir a extração do QR na função
+- Ler múltiplos formatos possíveis de retorno da Evolution:
+  - `qrcode.base64`
+  - `base64`
+  - `qrcode`
+  - `code`
+  - `pairingCode`
+- Se a API retornar um QR textual/em formato alternativo, transformar isso em um formato que a UI consiga renderizar corretamente, em vez de presumir PNG.
+- Salvar `qr_code` e `qr_code_expires_at` na tabela `whatsapp_connections` para manter consistência e permitir reaproveitamento do QR válido.
 
----
+3. Corrigir a renderização no frontend
+- Criar uma pequena camada de normalização em `WhatsAppQRCode.tsx` para identificar:
+  - data URI pronta
+  - base64 de imagem
+  - conteúdo textual de QR/pairing code
+- Renderizar imagem quando vier imagem válida.
+- Renderizar código alternativo/pairing code quando não vier imagem, com instrução clara para o usuário.
+- Usar o `qr_code` salvo no banco ao recarregar a tela, evitando perder o QR enquanto a instância ainda está em `connecting`.
 
-## Etapa 1: Infraestrutura de Segmento Jurídico
+4. Ajustar o fluxo de refresh
+- Fazer `refresh_qr` usar sempre a URL/API key da própria instância salva no banco.
+- Se a instância já existir mas não houver QR no retorno, tentar novamente via endpoint de conexão e persistir o novo QR.
+- Se a API responder sem QR e sem pairing code, retornar erro explícito em vez de “sucesso vazio”.
 
-**Arquivo: `src/lib/segmentos.ts`**
-- Adicionar constante `SEGMENTOS_JURIDICOS = ["advocacia"]`
-- Criar função `isSegmentoJuridico(segmento)` (espelhando `isSegmentoFinanceiro`)
+5. Melhorar observabilidade e UX
+- Exibir mensagens mais específicas no toast:
+  - “Servidor de conexão indisponível”
+  - “Instância criada, mas a API não retornou QR”
+  - “QR expirado, gere um novo”
+- Registrar nos logs da função qual host foi usado e qual formato de QR foi recebido, sem expor segredo.
+- Manter o polling de status, mas sem depender dele para exibir o QR inicial.
 
----
+Arquivos a ajustar
+- `supabase/functions/evolution-create-instance/index.ts`
+- `src/components/configuracoes/WhatsAppQRCode.tsx`
 
-## Etapa 2: Tabela de Processos Jurídicos (Database)
+Impacto esperado
+- O botão “Gerar QR Code” vai criar a instância no servidor correto.
+- O QR exibido deixará de ser inválido por erro de interpretação do formato.
+- O usuário conseguirá escanear o código sem precisar configurar manualmente.
+- Quando a API não devolver um QR utilizável, a tela mostrará erro real em vez de um QR quebrado.
 
-Criar tabela `legal_processes` com campos essenciais:
+Detalhes técnicos
+```text
+Problema principal
+Frontend -> evolution-create-instance
+              -> usa secret global com host A
+Banco/conexões existentes -> usam host B
+Resultado -> timeout ou QR inconsistente
 
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| id | uuid PK | ID |
-| company_id | uuid FK | Empresa |
-| lead_id | uuid FK (nullable) | Cliente/Lead vinculado |
-| numero_processo | text | Número do processo (CNJ) |
-| tipo | enum | `comercial`, `trabalhista`, `civil`, `tributario`, `criminal`, `administrativo` |
-| vara | text | Vara/Tribunal |
-| comarca | text | Comarca |
-| status | enum | `em_andamento`, `aguardando_audiencia`, `aguardando_pericia`, `suspenso`, `arquivado`, `ganho`, `perdido` |
-| valor_causa | numeric | Valor da causa |
-| valor_honorarios | numeric | Valor dos honorários |
-| data_distribuicao | date | Data de distribuição |
-| data_audiencia | timestamptz | Próxima audiência |
-| parte_contraria | text | Parte contrária |
-| descricao | text | Resumo do processo |
-| prioridade | text | `baixa`, `media`, `alta`, `urgente` |
-| responsavel_id | uuid | Advogado responsável |
-| created_at / updated_at | timestamptz | Timestamps |
+Problema secundário
+API retorna QR em formato variável
+Frontend força "data:image/png;base64,..."
+Resultado -> imagem inválida / QR ilegível
+```
 
-**RLS**: Acesso baseado em `company_id` do usuário autenticado (mesmo padrão das outras tabelas).
-
-Criar tabela auxiliar `legal_process_events` para movimentações:
-
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| id | uuid PK | ID |
-| process_id | uuid FK | Processo vinculado |
-| company_id | uuid FK | Empresa |
-| tipo_evento | text | `audiencia`, `petição`, `despacho`, `sentença`, `acordo`, `recurso`, `pericia`, `outro` |
-| descricao | text | Descrição do evento |
-| data_evento | date | Data |
-| created_by | uuid | Quem registrou |
-| created_at | timestamptz | Timestamp |
-
----
-
-## Etapa 3: Módulo Relatórios (Analytics)
-
-**Arquivo: `src/pages/Analytics.tsx`**
-- Adicionar nova aba "Jurídico" (visível apenas quando `isSegmentoJuridico(companySegmento) || isMasterAccount`)
-- Ajustar grid de tabs dinamicamente (como já feito para Propostas)
-
-**Novo componente: `src/components/analytics/JuridicoAnalytics.tsx`**
-- Cards de resumo: Total de processos ativos, por tipo (comercial/trabalhista), valor total em causa, próximas audiências
-- Gráfico de processos por status
-- Gráfico de processos por tipo
-- Lista de processos com audiências próximas (próximos 30 dias)
-- Taxa de êxito (ganhos vs perdidos)
-
----
-
-## Etapa 4: Módulo Bate-Papo (Conversas)
-
-**Arquivo: `src/pages/Conversas.tsx`**
-- Adicionar painel lateral "Processos Jurídicos" (similar ao `PropostasBancariasPanel`)
-- Visível apenas para segmento advocacia
-- Mostra processos vinculados ao lead/contato da conversa ativa
-- Permite criar novo processo diretamente do chat
-
-**Novo componente: `src/components/conversas/ProcessosJuridicosPanel.tsx`**
-- Lista processos do lead selecionado
-- Botão "Novo Processo" para vincular
-- Status visual com badges coloridas
-
----
-
-## Etapa 5: Módulo Funil de Vendas (Kanban)
-
-**Arquivo: `src/components/funil/LeadCard.tsx`**
-- Para segmento advocacia, exibir badge com quantidade de processos vinculados ao lead
-- Ícone de balança (Scale) quando tem processos ativos
-- Tooltip com resumo: "3 processos ativos | Próxima audiência: 25/03"
-
-Será necessário um hook `useCompanySegmento()` para que o LeadCard saiba o segmento sem prop drilling excessivo.
-
----
-
-## Etapa 6: Módulo Tarefas
-
-- Ao criar tarefa, se segmento é advocacia, exibir campo opcional "Processo Vinculado" (select com processos ativos)
-- Badge na tarefa indicando processo vinculado
-- Requer coluna `legal_process_id` (nullable) na tabela de tarefas
-
----
-
-## Etapa 7: Módulo Agenda
-
-- Ao criar compromisso, se segmento é advocacia, exibir campo opcional "Processo Vinculado"
-- Tipo de compromisso adicional: "Audiência", "Perícia", "Prazo Processual"
-- Sincronizar datas de audiência da tabela `legal_processes` como eventos automáticos na agenda
-- Requer coluna `legal_process_id` (nullable) na tabela de agenda
-
----
-
-## Etapa 8: Hook Compartilhado
-
-**Novo: `src/hooks/useCompanySegmento.ts`**
-- Retorna `{ segmento, isJuridico, isFinanceiro, isMasterAccount, loading }`
-- Centraliza a lógica que hoje é duplicada em Analytics e Conversas
-
----
-
-## Resumo de Arquivos
-
-| Ação | Arquivo |
-|------|---------|
-| Editar | `src/lib/segmentos.ts` |
-| Criar | `src/hooks/useCompanySegmento.ts` |
-| Criar | Migration SQL (tabelas `legal_processes`, `legal_process_events`) |
-| Criar | `src/components/analytics/JuridicoAnalytics.tsx` |
-| Editar | `src/pages/Analytics.tsx` |
-| Criar | `src/components/conversas/ProcessosJuridicosPanel.tsx` |
-| Editar | `src/pages/Conversas.tsx` |
-| Editar | `src/components/funil/LeadCard.tsx` |
-| Editar | Componentes de Tarefas (campo processo vinculado) |
-| Editar | Componentes de Agenda (campo processo vinculado + tipos audiência) |
-| Migration | Adicionar `legal_process_id` às tabelas de tarefas e agenda |
-
+Validação após implementar
+- Testar geração com uma nova instância no modo “Escanear QR Code”.
+- Confirmar que o QR abre/renderiza corretamente e pode ser escaneado.
+- Confirmar que, ao atualizar o QR, o novo código também continua válido.
+- Confirmar que a conexão muda para `connected` sem precisar recarregar a página.
