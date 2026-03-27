@@ -270,7 +270,7 @@ serve(async (req) => {
         try {
           const connectRes = await fetchWithTimeout(`${baseUrl}/instance/connect/${instanceName}`, {
             method: 'GET',
-            headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
+            headers: { 'Content-Type': 'application/json', 'apikey': usedKey },
           }, 15000);
           const connectData = await connectRes.json();
           console.log('📡 [EVOLUTION] Resposta connect:', JSON.stringify(connectData));
