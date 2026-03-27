@@ -186,19 +186,35 @@ serve(async (req) => {
 
       // 1. Create instance on Evolution API
       let createData: any;
+      let usedKey = apiKey;
+      const createPayload = JSON.stringify({
+        instanceName: instanceName,
+        qrcode: true,
+        integration: 'WHATSAPP-BAILEYS',
+      });
+
       try {
-        const createRes = await fetchWithTimeout(`${baseUrl}/instance/create`, {
+        let createRes = await fetchWithTimeout(`${baseUrl}/instance/create`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
-          body: JSON.stringify({
-            instanceName: instanceName,
-            qrcode: true,
-            integration: 'WHATSAPP-BAILEYS',
-          }),
+          headers: { 'Content-Type': 'application/json', 'apikey': usedKey },
+          body: createPayload,
         }, 20000);
 
         createData = await createRes.json();
         console.log('📡 [EVOLUTION] Resposta create:', JSON.stringify(createData));
+
+        // If 401, retry with global key (instance keys may not have create permission)
+        if (createRes.status === 401 && usedKey !== EVOLUTION_API_KEY && EVOLUTION_API_KEY) {
+          console.log('🔄 [EVOLUTION] Key resolvida deu 401, tentando com key global...');
+          usedKey = EVOLUTION_API_KEY;
+          createRes = await fetchWithTimeout(`${baseUrl}/instance/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': usedKey },
+            body: createPayload,
+          }, 20000);
+          createData = await createRes.json();
+          console.log('📡 [EVOLUTION] Resposta create (global key):', JSON.stringify(createData));
+        }
 
         if (!createRes.ok) {
           if (createData?.response?.message?.includes?.('already') || createRes.status === 403) {
