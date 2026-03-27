@@ -168,10 +168,13 @@ serve(async (req) => {
         });
       }
 
-      // Resolve correct URL/key from DB or global secrets
-      const { url: baseUrl, key: apiKey } = await resolveEvolutionCredentials(
+      // Resolve correct URL from DB (but use global API key for creation - instance keys can't create)
+      const { url: resolvedUrl } = await resolveEvolutionCredentials(
         supabase, companyId, null, EVOLUTION_API_URL, EVOLUTION_API_KEY
       );
+      const baseUrl = resolvedUrl || EVOLUTION_API_URL.replace(/\/+$/, '');
+      // For creating instances, always use the GLOBAL API key (master key)
+      const apiKey = EVOLUTION_API_KEY;
 
       if (!baseUrl || !apiKey) {
         return new Response(
@@ -180,7 +183,7 @@ serve(async (req) => {
         );
       }
 
-      console.log('🔧 [EVOLUTION] Criando instância:', instanceName, '| Host:', baseUrl.replace(/https?:\/\//, '').split('/')[0]);
+      console.log('🔧 [EVOLUTION] Criando instância:', instanceName, '| Host:', baseUrl.replace(/https?:\/\//, '').split('/')[0], '| Usando API key global');
 
       // 1. Create instance on Evolution API
       let createData: any;
