@@ -1098,6 +1098,38 @@ export type Database = {
           },
         ]
       }
+      company_tags: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          tag_name: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          tag_name: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          tag_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_tags_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       company_usage_metrics: {
         Row: {
           automation_executions: number | null
