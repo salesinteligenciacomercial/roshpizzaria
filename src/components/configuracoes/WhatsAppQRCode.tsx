@@ -317,11 +317,13 @@ export function WhatsAppQRCode() {
 
       if (error) throw new Error(error.message);
 
+      if (data?.success === false) {
+        toast.warning(data.error || "QR Code não disponível");
+        return;
+      }
+
       if (data?.qrcode) {
-        const qrSrc = data.qrcode.startsWith('data:') 
-          ? data.qrcode 
-          : `data:image/png;base64,${data.qrcode}`;
-        setQrCode(qrSrc);
+        setQrCode(normalizeQrCode(data.qrcode));
         toast.success("QR Code atualizado!");
 
         // Restart polling
