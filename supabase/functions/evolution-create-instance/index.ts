@@ -338,7 +338,7 @@ serve(async (req) => {
           company_id: companyId,
           instance_name: instanceName,
           evolution_api_url: baseUrl,
-          evolution_api_key: apiKey,
+          evolution_api_key: usedKey,
           status: 'connecting',
           qr_code_expires_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
         }, { onConflict: 'instance_name' })
