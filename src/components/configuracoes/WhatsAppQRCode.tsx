@@ -268,11 +268,15 @@ export function WhatsAppQRCode() {
 
         if (error) {
           console.error('❌ Erro na edge function:', error);
-          // Try to extract meaningful error from response
           let errorMsg = 'Erro ao criar instância';
+          // FunctionsHttpError: read body from context
           try {
-            const parsed = typeof error === 'string' ? JSON.parse(error) : error;
-            errorMsg = parsed?.error || parsed?.message || error.message || errorMsg;
+            if (error?.context?.json) {
+              const body = await error.context.json();
+              errorMsg = body?.error || errorMsg;
+            } else {
+              errorMsg = error.message || errorMsg;
+            }
           } catch { errorMsg = error.message || errorMsg; }
           throw new Error(errorMsg);
         }

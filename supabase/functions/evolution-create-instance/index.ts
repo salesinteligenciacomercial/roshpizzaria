@@ -168,10 +168,12 @@ serve(async (req) => {
         });
       }
 
-      // Resolve correct URL/key from DB or global secrets
-      const { url: baseUrl, key: apiKey } = await resolveEvolutionCredentials(
+      // Resolve correct URL and key from DB (related company connections)
+      const resolved = await resolveEvolutionCredentials(
         supabase, companyId, null, EVOLUTION_API_URL, EVOLUTION_API_KEY
       );
+      const baseUrl = resolved.url;
+      const apiKey = resolved.key;
 
       if (!baseUrl || !apiKey) {
         return new Response(
@@ -184,19 +186,35 @@ serve(async (req) => {
 
       // 1. Create instance on Evolution API
       let createData: any;
+      let usedKey = apiKey;
+      const createPayload = JSON.stringify({
+        instanceName: instanceName,
+        qrcode: true,
+        integration: 'WHATSAPP-BAILEYS',
+      });
+
       try {
-        const createRes = await fetchWithTimeout(`${baseUrl}/instance/create`, {
+        let createRes = await fetchWithTimeout(`${baseUrl}/instance/create`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
-          body: JSON.stringify({
-            instanceName: instanceName,
-            qrcode: true,
-            integration: 'WHATSAPP-BAILEYS',
-          }),
+          headers: { 'Content-Type': 'application/json', 'apikey': usedKey },
+          body: createPayload,
         }, 20000);
 
         createData = await createRes.json();
         console.log('📡 [EVOLUTION] Resposta create:', JSON.stringify(createData));
+
+        // If 401, retry with global key (instance keys may not have create permission)
+        if (createRes.status === 401 && usedKey !== EVOLUTION_API_KEY && EVOLUTION_API_KEY) {
+          console.log('🔄 [EVOLUTION] Key resolvida deu 401, tentando com key global...');
+          usedKey = EVOLUTION_API_KEY;
+          createRes = await fetchWithTimeout(`${baseUrl}/instance/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': usedKey },
+            body: createPayload,
+          }, 20000);
+          createData = await createRes.json();
+          console.log('📡 [EVOLUTION] Resposta create (global key):', JSON.stringify(createData));
+        }
 
         if (!createRes.ok) {
           if (createData?.response?.message?.includes?.('already') || createRes.status === 403) {
@@ -252,7 +270,7 @@ serve(async (req) => {
         try {
           const connectRes = await fetchWithTimeout(`${baseUrl}/instance/connect/${instanceName}`, {
             method: 'GET',
-            headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
+            headers: { 'Content-Type': 'application/json', 'apikey': usedKey },
           }, 15000);
           const connectData = await connectRes.json();
           console.log('📡 [EVOLUTION] Resposta connect:', JSON.stringify(connectData));
