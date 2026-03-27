@@ -23,28 +23,6 @@ export function useTagsManager(): TagsManagerHook {
     listeners.forEach(listener => listener());
   }, []);
 
-  const getCompanyKey = (companyId: string) => `crm_custom_tags_${companyId}`;
-
-  const loadCustomTags = (companyId: string): string[] => {
-    try {
-      if (typeof window === "undefined") return [];
-      const raw = window.localStorage.getItem(getCompanyKey(companyId));
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
-    } catch {
-      return [];
-    }
-  };
-
-  const saveCustomTags = (companyId: string, tags: string[]) => {
-    try {
-      if (typeof window === "undefined") return;
-      window.localStorage.setItem(getCompanyKey(companyId), JSON.stringify(tags));
-    } catch {
-      // ignore
-    }
-  };
-
   const refreshTags = useCallback(async () => {
     setLoading(true);
     try {
@@ -59,6 +37,7 @@ export function useTagsManager(): TagsManagerHook {
 
       if (!userRole?.company_id) return;
 
+      // Load tags from leads
       const { data: leadsData } = await supabase
         .from("leads")
         .select("tags")
@@ -70,16 +49,19 @@ export function useTagsManager(): TagsManagerHook {
         lead.tags?.forEach((tag: string) => tagsSet.add(tag));
       });
 
-      // Merge standalone tags (created via Gerenciar Tags) from localStorage
-      const standalone = loadCustomTags(userRole.company_id);
-      standalone.forEach((t) => tagsSet.add(t));
+      // Load standalone tags from company_tags table (persistent)
+      const { data: companyTags } = await supabase
+        .from("company_tags")
+        .select("tag_name")
+        .eq("company_id", userRole.company_id);
+
+      companyTags?.forEach(row => tagsSet.add(row.tag_name));
 
       const sortedTags = Array.from(tagsSet).sort();
       globalTags = sortedTags;
       setAllTags(sortedTags);
       notifyListeners();
     } catch (error: any) {
-      // Silently ignore AbortError from auth lock contention
       if (error?.name === 'AbortError' || error?.message?.includes('Lock broken')) {
         console.debug("Tags: auth lock contention, will retry on next cycle");
         return;
@@ -106,11 +88,15 @@ export function useTagsManager(): TagsManagerHook {
       const companyId = userRole?.company_id;
       if (!companyId) return;
 
-      const current = loadCustomTags(companyId);
-      if (!current.map(t => t.toLowerCase()).includes(trimmed.toLowerCase())) {
-        const next = [...current, trimmed].sort();
-        saveCustomTags(companyId, next);
-      }
+      // Insert into company_tags table (upsert to avoid duplicates)
+      const { error } = await supabase
+        .from("company_tags")
+        .upsert(
+          { company_id: companyId, tag_name: trimmed, created_by: session.user.id },
+          { onConflict: "company_id,tag_name" }
+        );
+
+      if (error) throw error;
 
       await refreshTags();
     } catch (error) {
@@ -135,9 +121,14 @@ export function useTagsManager(): TagsManagerHook {
       const companyId = userRole?.company_id;
       if (!companyId) return;
 
-      const current = loadCustomTags(companyId);
-      const next = current.filter(t => t.toLowerCase() !== trimmed.toLowerCase());
-      saveCustomTags(companyId, next);
+      // Delete from company_tags table
+      const { error } = await supabase
+        .from("company_tags")
+        .delete()
+        .eq("company_id", companyId)
+        .eq("tag_name", trimmed);
+
+      if (error) throw error;
 
       await refreshTags();
     } catch (error) {
@@ -171,8 +162,15 @@ export function useTagsManager(): TagsManagerHook {
         })
         .eq("id", leadId);
 
-      // Register in tag history
+      // Also ensure tag exists in company_tags for persistence
       if (lead.company_id) {
+        await supabase
+          .from("company_tags")
+          .upsert(
+            { company_id: lead.company_id, tag_name: tag, created_by: session?.user?.id || null },
+            { onConflict: "company_id,tag_name" }
+          );
+
         await supabase
           .from("lead_tag_history")
           .insert({
@@ -214,7 +212,6 @@ export function useTagsManager(): TagsManagerHook {
         })
         .eq("id", leadId);
 
-      // Register in tag history
       if (lead.company_id) {
         await supabase
           .from("lead_tag_history")
@@ -249,7 +246,6 @@ export function useTagsManager(): TagsManagerHook {
     }
   }, []);
 
-  // Subscribe to changes
   useEffect(() => {
     refreshTags();
 
@@ -259,7 +255,6 @@ export function useTagsManager(): TagsManagerHook {
 
     listeners.add(updateLocalTags);
 
-    // Listen to realtime changes on leads table
     const channel = supabase
       .channel('tags-sync')
       .on(
@@ -268,6 +263,17 @@ export function useTagsManager(): TagsManagerHook {
           event: '*',
           schema: 'public',
           table: 'leads'
+        },
+        () => {
+          refreshTags();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'company_tags'
         },
         () => {
           refreshTags();
