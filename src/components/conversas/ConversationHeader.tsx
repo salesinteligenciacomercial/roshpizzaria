@@ -537,6 +537,27 @@ import { useEffect, useState } from "react";
            <Progress value={restoreProgress.step} className="h-1.5" />
          </div>
        )}
+      {/* Avatar Preview Dialog */}
+      {avatarUrl && avatarUrl.trim() !== '' && (
+        <Dialog open={showAvatarPreview} onOpenChange={setShowAvatarPreview}>
+          <DialogContent className="max-w-md w-[90vw] p-0 overflow-hidden bg-background rounded-xl">
+            <VisuallyHidden>
+              <DialogTitle>Foto de perfil - {contactName}</DialogTitle>
+            </VisuallyHidden>
+            <div className="p-4 border-b">
+              <p className="text-sm font-medium text-foreground">{contactName}</p>
+              <p className="text-xs text-muted-foreground capitalize">{channel}</p>
+            </div>
+            <div className="flex items-center justify-center p-4 bg-muted/30">
+              <img
+                src={avatarUrl}
+                alt={contactName}
+                className="max-w-full max-h-[60vh] object-contain rounded-lg"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
   }
