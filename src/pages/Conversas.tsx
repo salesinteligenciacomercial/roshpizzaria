@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle, Eye, ChevronDown, Mail, Building2, Globe, Pencil, MapPin, Key, Shield, Package, PenLine, BarChart3 } from "lucide-react";
+import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle, Eye, ChevronDown, Mail, Building2, Globe, Pencil, MapPin, Key, Shield, Package, PenLine, BarChart3, Music } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FinalizarNegociacaoDialog } from "@/components/leads/FinalizarNegociacaoDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -5894,7 +5894,7 @@ function Conversas() {
     }
   };
   const sendQuickMessage = async (message: QuickMessage) => {
-    if (message.type === "image" || message.type === "video") {
+    if (message.type === "image" || message.type === "video" || message.type === "audio" || message.type === "document") {
       // Enviar mídia
       if (!message.mediaUrl) {
         toast.error("Mídia não encontrada na mensagem rápida");
@@ -5902,7 +5902,7 @@ function Conversas() {
       }
       try {
         // Detectar mimeType da data URL (formato: data:image/jpeg;base64,...)
-        let mimeType = message.mimeType || 'image/jpeg';
+        let mimeType = message.mimeType || (message.type === 'audio' ? 'audio/mpeg' : message.type === 'document' ? 'application/pdf' : 'image/jpeg');
         let base64Data = message.mediaUrl;
         if (message.mediaUrl.includes('data:') && message.mediaUrl.includes(';base64,')) {
           const mimeMatch = message.mediaUrl.match(/data:([^;]+);base64,/);
@@ -5930,7 +5930,8 @@ function Conversas() {
         });
 
         // Gerar nome de arquivo baseado no tipo
-        const extension = mimeType.split('/')[1] || (message.type === 'video' ? 'mp4' : 'jpg');
+        const extMap: Record<string, string> = { image: 'jpg', video: 'mp4', audio: 'mp3', document: 'pdf' };
+        const extension = mimeType.split('/')[1] || extMap[message.type] || 'bin';
         const fileName = message.fileName || `quick_media_${Date.now()}.${extension}`;
         const file = new File([blob], fileName, {
           type: mimeType
@@ -9277,10 +9278,20 @@ function Conversas() {
                                                         <ImageIcon className="h-4 w-4" />
                                                         <span>[Imagem]</span>
                                                         {qm.mediaUrl && <img src={qm.mediaUrl} alt="Preview" className="h-12 w-12 object-cover rounded border" />}
+                                                      </> : qm.type === "audio" ? <>
+                                                        <Music className="h-4 w-4" />
+                                                        <span>[Áudio]</span>
+                                                        {qm.mediaUrl && <audio src={qm.mediaUrl} controls className="h-8 max-w-[200px]" />}
+                                                      </> : qm.type === "document" ? <>
+                                                        <FileText className="h-4 w-4 text-red-500" />
+                                                        <span>[Documento PDF]</span>
                                                       </> : <>
                                                         <Video className="h-4 w-4" />
                                                         <span>[Vídeo]</span>
                                                       </>}
+                                                    {qm.content && qm.content !== "[Imagem]" && qm.content !== "[Vídeo]" && qm.content !== "[Áudio]" && qm.content !== "[Documento]" && (
+                                                      <span className="text-xs italic">"{qm.content}"</span>
+                                                    )}
                                                   </div>}
                                               </div>
                                               <div className="flex items-center gap-1 flex-shrink-0">
