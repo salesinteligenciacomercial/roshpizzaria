@@ -5778,7 +5778,7 @@ function Conversas() {
       toast.error("Digite a mensagem de texto");
       return;
     }
-    if ((newQuickMessageType === "image" || newQuickMessageType === "video") && !newQuickMediaFile) {
+    if ((newQuickMessageType === "image" || newQuickMessageType === "video" || newQuickMessageType === "audio" || newQuickMessageType === "document") && !newQuickMediaFile) {
       toast.error("Selecione um arquivo de mídia");
       return;
     }
