@@ -5810,7 +5810,7 @@ function Conversas() {
         company_id: companyData,
         owner_id: user.id,
         title: newQuickTitle,
-        content: newQuickContent || (newQuickMessageType === "image" ? "[Imagem]" : newQuickMessageType === "video" ? "[Vídeo]" : ""),
+        content: newQuickContent || (newQuickMessageType === "image" ? "[Imagem]" : newQuickMessageType === "video" ? "[Vídeo]" : newQuickMessageType === "audio" ? "[Áudio]" : newQuickMessageType === "document" ? "[Documento]" : ""),
         category_id: newQuickCategory,
         message_type: newQuickMessageType,
         media_url: mediaUrl || null
