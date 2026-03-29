@@ -10028,8 +10028,13 @@ function Conversas() {
                                           <Textarea value={newQuickContent} onChange={e => setNewQuickContent(e.target.value)} placeholder="Digite a mensagem..." rows={3} />
                                         </div> : <>
                                           <div className="space-y-2">
-                                            <Label>Arquivo de {newQuickMessageType === "image" ? "Imagem" : "Vídeo"} *</Label>
-                                            <Input type="file" accept={newQuickMessageType === "image" ? "image/*" : "video/*"} onChange={e => {
+                                            <Label>Arquivo de {newQuickMessageType === "image" ? "Imagem" : newQuickMessageType === "video" ? "Vídeo" : newQuickMessageType === "audio" ? "Áudio" : "Documento"} *</Label>
+                                            <Input type="file" accept={
+                                              newQuickMessageType === "image" ? "image/*" : 
+                                              newQuickMessageType === "video" ? "video/*" : 
+                                              newQuickMessageType === "audio" ? "audio/*,.ogg,.opus,.mp3,.m4a,.wav" : 
+                                              ".pdf,application/pdf"
+                                            } onChange={e => {
                                       const file = e.target.files?.[0];
                                       if (file) {
                                         setNewQuickMediaFile(file);
@@ -10045,9 +10050,12 @@ function Conversas() {
                                               <Label>Preview:</Label>
                                               {newQuickMessageType === "image" ? <img src={newQuickMediaPreview} alt="Preview" className="max-w-full h-auto rounded border" style={{
                                       maxHeight: '200px'
-                                    }} /> : <video src={newQuickMediaPreview} controls className="max-w-full rounded border" style={{
+                                    }} /> : newQuickMessageType === "video" ? <video src={newQuickMediaPreview} controls className="max-w-full rounded border" style={{
                                       maxHeight: '200px'
-                                    }} />}
+                                    }} /> : newQuickMessageType === "audio" ? <audio src={newQuickMediaPreview} controls className="w-full" /> : <div className="flex items-center gap-2 p-3 bg-muted rounded border">
+                                                <FileText className="h-8 w-8 text-red-500" />
+                                                <span className="text-sm">{newQuickMediaFile?.name || "Documento PDF"}</span>
+                                              </div>}
                                             </div>}
                                           <div className="space-y-2">
                                             <Label>Legenda (opcional)</Label>
