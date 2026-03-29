@@ -45,6 +45,7 @@ import { ProcessosJuridicosPanel } from "@/components/conversas/ProcessosJuridic
 import { isSegmentoFinanceiro, isSegmentoJuridico } from "@/lib/segmentos";
 import { LembretesAntecipados, LembreteAntecipado } from "@/components/conversas/LembretesAntecipados";
 import { ProductivityPanel } from "@/components/conversas/ProductivityPanel";
+import { PastedImagePreview } from "@/components/conversas/PastedImagePreview";
 import { formatPhoneNumber, safeFormatPhoneNumber, normalizePhoneForComparison } from "@/utils/phoneFormatter";
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { getMediaUrl, MediaExpiredError } from "@/utils/mediaLoader";
@@ -412,6 +413,7 @@ function Conversas() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [pastedImageFile, setPastedImageFile] = useState<File | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>('idle');
   const [leadVinculado, setLeadVinculado] = useState<any>(null);
   const [leadExtraInfo, setLeadExtraInfo] = useState<{ etapaNome?: string; funilNome?: string; responsavelNome?: string }>({});
@@ -9146,7 +9148,18 @@ function Conversas() {
               )}
               
               {/* Messages Area + Input */}
-              <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
+              <div className="flex-1 flex flex-col overflow-hidden relative" style={{ minHeight: 0 }}>
+                {/* Pasted Image Preview Overlay */}
+                {pastedImageFile && (
+                  <PastedImagePreview
+                    imageFile={pastedImageFile}
+                    onSend={async (file, caption) => {
+                      await handleSendMedia(file, caption, 'image');
+                      setPastedImageFile(null);
+                    }}
+                    onCancel={() => setPastedImageFile(null)}
+                  />
+                )}
                 {/* Messages - ÚNICA ÁREA COM SCROLL */}
                 <div id="messages-scroll-container" className="flex-1 overflow-y-auto p-2 md:p-3 bg-[#e5ddd5] messages-scroll-area" style={{
                   backgroundImage: "url('data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d9d9d9' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')",
@@ -9232,7 +9245,7 @@ function Conversas() {
                       e.preventDefault();
                       const blob = items[i].getAsFile();
                       if (blob) {
-                        await handleSendMedia(blob, '', 'image');
+                        setPastedImageFile(blob);
                       }
                       break;
                     }
