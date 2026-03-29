@@ -5894,7 +5894,7 @@ function Conversas() {
     }
   };
   const sendQuickMessage = async (message: QuickMessage) => {
-    if (message.type === "image" || message.type === "video") {
+    if (message.type === "image" || message.type === "video" || message.type === "audio" || message.type === "document") {
       // Enviar mídia
       if (!message.mediaUrl) {
         toast.error("Mídia não encontrada na mensagem rápida");
@@ -5902,7 +5902,7 @@ function Conversas() {
       }
       try {
         // Detectar mimeType da data URL (formato: data:image/jpeg;base64,...)
-        let mimeType = message.mimeType || 'image/jpeg';
+        let mimeType = message.mimeType || (message.type === 'audio' ? 'audio/mpeg' : message.type === 'document' ? 'application/pdf' : 'image/jpeg');
         let base64Data = message.mediaUrl;
         if (message.mediaUrl.includes('data:') && message.mediaUrl.includes(';base64,')) {
           const mimeMatch = message.mediaUrl.match(/data:([^;]+);base64,/);
@@ -5930,7 +5930,8 @@ function Conversas() {
         });
 
         // Gerar nome de arquivo baseado no tipo
-        const extension = mimeType.split('/')[1] || (message.type === 'video' ? 'mp4' : 'jpg');
+        const extMap: Record<string, string> = { image: 'jpg', video: 'mp4', audio: 'mp3', document: 'pdf' };
+        const extension = mimeType.split('/')[1] || extMap[message.type] || 'bin';
         const fileName = message.fileName || `quick_media_${Date.now()}.${extension}`;
         const file = new File([blob], fileName, {
           type: mimeType
