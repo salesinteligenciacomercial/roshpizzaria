@@ -521,7 +521,6 @@ export default function ChatInterno() {
           </ScrollArea>
         )}
       </div>
-      </div>
 
       {/* Área de Chat */}
       <div 
