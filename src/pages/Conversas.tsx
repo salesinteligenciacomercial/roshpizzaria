@@ -9491,16 +9491,15 @@ function Conversas() {
                                                 if (Array.isArray(parsed)) {
                                                   return parsed.map((item: any) => {
                                                     if (typeof item === 'string') return item;
-                                                    if (item.content || item.text || item.note) return item.content || item.text || item.note;
-                                                    if (item.user_name && item.created_at) {
-                                                      const date = new Date(item.created_at).toLocaleDateString('pt-BR');
-                                                      return `${item.user_name} (${date}): ${item.content || item.text || item.note || ''}`.trim();
-                                                    }
-                                                    return JSON.stringify(item);
+                                                    const text = item.comment || item.content || item.text || item.note || '';
+                                                    const userName = item.user_name || '';
+                                                    const date = item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : '';
+                                                    if (userName && date && text) return `${userName} (${date}): ${text}`;
+                                                    return text || JSON.stringify(item);
                                                   }).filter(Boolean).join('\n');
                                                 }
                                                 if (typeof parsed === 'object') {
-                                                  return parsed.content || parsed.text || parsed.note || raw;
+                                                  return parsed.comment || parsed.content || parsed.text || parsed.note || raw;
                                                 }
                                               } catch {
                                                 // Not valid JSON, show as-is
