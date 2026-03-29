@@ -843,5 +843,5 @@ export default function ChatInterno() {
       )}
 
       {activeCall && currentUserId && <VideoCallModalV2 open={true} onClose={() => setActiveCall(null)} meetingId={activeCall.meetingId} localUserId={currentUserId} remoteUserId={activeCall.remoteUserId} remoteUserName={activeCall.remoteUserName} callType={activeCall.callType} isCaller={activeCall.isCaller} onCallEnded={handleCallEnded} />}
-    </>;
+    </div></>;
 }
