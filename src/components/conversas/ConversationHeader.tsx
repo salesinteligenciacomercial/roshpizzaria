@@ -143,17 +143,8 @@ import { useEffect, useState } from "react";
      }
    };
 
-  // Check if we have lead info to show
-  const hasLeadInfo = leadVinculado && (
-    (tags && tags.length > 0) || 
-    valor || 
-    responsavel || 
-    funnelStage || 
-    leadVinculado.etapa_nome || 
-    leadVinculado.funil_nome ||
-    (leadVinculado.value && leadVinculado.value > 0) ||
-    leadVinculado.responsavel_nome
-  );
+  // Always show lead info bar when a lead is linked
+  const hasLeadInfo = !!leadVinculado;
 
   return (
     <div className="w-full bg-background border-b border-border shadow-sm" style={{ overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
