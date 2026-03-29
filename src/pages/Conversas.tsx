@@ -1564,7 +1564,60 @@ function Conversas() {
     }
   }, [userCompanyId]);
 
-  // ⚡ SINCRONIZAÇÃO INSTANTÂNEA: Atualizar conversas do cache imediatamente (0 segundos)
+  // ⚡ Enriquecer leadVinculado com nomes de etapa, funil e responsável
+  useEffect(() => {
+    if (!leadVinculado) {
+      setLeadExtraInfo({});
+      return;
+    }
+    const fetchExtraInfo = async () => {
+      const info: typeof leadExtraInfo = {};
+      try {
+        // Buscar nome da etapa
+        if (leadVinculado.etapa_id) {
+          const { data: etapa } = await supabase
+            .from('etapas')
+            .select('nome, funil_id')
+            .eq('id', leadVinculado.etapa_id)
+            .maybeSingle();
+          if (etapa) {
+            info.etapaNome = etapa.nome;
+            // Buscar nome do funil
+            if (etapa.funil_id) {
+              const { data: funil } = await supabase
+                .from('funis')
+                .select('nome')
+                .eq('id', etapa.funil_id)
+                .maybeSingle();
+              if (funil) info.funilNome = funil.nome;
+            }
+          }
+        } else if (leadVinculado.funil_id) {
+          const { data: funil } = await supabase
+            .from('funis')
+            .select('nome')
+            .eq('id', leadVinculado.funil_id)
+            .maybeSingle();
+          if (funil) info.funilNome = funil.nome;
+        }
+        // Buscar nome do responsável
+        if (leadVinculado.responsavel_id) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', leadVinculado.responsavel_id)
+            .maybeSingle();
+          if (profile) info.responsavelNome = profile.full_name;
+        }
+      } catch (err) {
+        console.warn('Erro ao buscar info extra do lead:', err);
+      }
+      setLeadExtraInfo(info);
+    };
+    fetchExtraInfo();
+  }, [leadVinculado?.id, leadVinculado?.etapa_id, leadVinculado?.funil_id, leadVinculado?.responsavel_id]);
+
+
   useEffect(() => {
     if (cachedConversations.length > 0) {
       console.log(`⚡ [INSTANT] ${cachedConversations.length} conversas carregadas instantaneamente do cache`);
