@@ -9481,7 +9481,33 @@ function Conversas() {
                                         <FileText className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-0.5" />
                                         <div>
                                           <span className="text-muted-foreground">Anotações:</span>
-                                          <p className="text-xs mt-1 text-foreground whitespace-pre-wrap">{leadVinculado.notes}</p>
+                                          <p className="text-xs mt-1 text-foreground whitespace-pre-wrap">{(() => {
+                                            const raw = leadVinculado.notes;
+                                            if (!raw) return '';
+                                            // If it looks like JSON, try to extract readable text
+                                            if (raw.trim().startsWith('[') || raw.trim().startsWith('{')) {
+                                              try {
+                                                const parsed = JSON.parse(raw);
+                                                if (Array.isArray(parsed)) {
+                                                  return parsed.map((item: any) => {
+                                                    if (typeof item === 'string') return item;
+                                                    if (item.content || item.text || item.note) return item.content || item.text || item.note;
+                                                    if (item.user_name && item.created_at) {
+                                                      const date = new Date(item.created_at).toLocaleDateString('pt-BR');
+                                                      return `${item.user_name} (${date}): ${item.content || item.text || item.note || ''}`.trim();
+                                                    }
+                                                    return JSON.stringify(item);
+                                                  }).filter(Boolean).join('\n');
+                                                }
+                                                if (typeof parsed === 'object') {
+                                                  return parsed.content || parsed.text || parsed.note || raw;
+                                                }
+                                              } catch {
+                                                // Not valid JSON, show as-is
+                                              }
+                                            }
+                                            return raw;
+                                          })()}</p>
                                         </div>
                                       </div>
                                     </div>
