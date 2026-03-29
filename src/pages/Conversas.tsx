@@ -9011,7 +9011,7 @@ function Conversas() {
       }}>
         {selectedConv ? <>
             {/* Header - FIXO NO TOPO */}
-            <div className="flex-shrink-0 bg-background border-b z-10" style={{ minHeight: '56px', maxHeight: '84px' }}>
+            <div className="flex-shrink-0 bg-background border-b z-10">
               <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onFinalizeAtendimentoSilent={finalizarAtendimentoSilent} onTransferAtendimento={() => setTransferDialogOpen(true)} onChangeAIMode={(mode) => setConversationAIMode(selectedConv.id, mode)} currentAIMode={(aiMode[selectedConv.id] as any) || 'off'} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} restoreProgress={restoreProgress} showBackButton={isMobile} onBack={() => setSelectedConv(null)} protocolNumber={activeProtocol?.protocol_number} protocolStatus={activeProtocol?.status} contactPhone={(selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '')} companyId={userCompanyId} />
             </div>
             
