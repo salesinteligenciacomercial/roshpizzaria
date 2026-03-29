@@ -143,8 +143,20 @@ import { useEffect, useState } from "react";
      }
    };
 
+  // Check if we have lead info to show
+  const hasLeadInfo = leadVinculado && (
+    (tags && tags.length > 0) || 
+    valor || 
+    responsavel || 
+    funnelStage || 
+    leadVinculado.etapa_nome || 
+    leadVinculado.funil_nome ||
+    (leadVinculado.value && leadVinculado.value > 0) ||
+    leadVinculado.responsavel_nome
+  );
+
   return (
-    <div className="w-full bg-background border-b border-border shadow-sm" style={{ maxHeight: restoreProgress ? '84px' : '60px', overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
+    <div className="w-full bg-background border-b border-border shadow-sm" style={{ overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
        {/* Header compacto - tudo em uma linha */}
        <div className="px-2 py-1.5 flex items-center justify-between gap-2" style={{ height: '56px' }}>
          <div className="flex items-center gap-2 min-w-0 flex-1">
