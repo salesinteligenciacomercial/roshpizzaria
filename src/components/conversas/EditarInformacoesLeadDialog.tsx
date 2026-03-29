@@ -165,7 +165,21 @@ export function EditarInformacoesLeadDialog({
             valor: leadData.value?.toString() || "",
             company: leadData.company || "",
             source: leadData.source || "",
-            notes: leadData.notes || "",
+            notes: (() => {
+              const raw = leadData.notes || "";
+              if (!raw || (!raw.trim().startsWith('[') && !raw.trim().startsWith('{'))) return raw;
+              try {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                  return parsed.map((item: any) => {
+                    if (typeof item === 'string') return item;
+                    return item.content || item.text || item.note || '';
+                  }).filter(Boolean).join('\n');
+                }
+                if (typeof parsed === 'object') return parsed.content || parsed.text || parsed.note || raw;
+              } catch { /* not JSON */ }
+              return raw;
+            })(),
             funil_id: leadData.funil_id || (funisData && funisData.length > 0 ? funisData[0].id : ""),
             etapa_id: leadData.etapa_id || "",
             tags: Array.isArray(leadData.tags) ? leadData.tags : [],
