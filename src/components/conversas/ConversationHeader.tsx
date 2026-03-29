@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Phone, Video, Info, User, MessageSquare, Instagram, Facebook, FileText, DollarSign, RefreshCw, CheckCircle2, AlertCircle, Loader2, Check, Plus, RotateCcw, ArrowRightLeft, Bot, ArrowLeft } from "lucide-react";
+import { Phone, Video, Info, User, MessageSquare, Instagram, Facebook, FileText, DollarSign, RefreshCw, CheckCircle2, AlertCircle, Loader2, Check, Plus, RotateCcw, ArrowRightLeft, Bot, ArrowLeft, Tag, TrendingUp, UserCog } from "lucide-react";
 import { AIModeSelectorDropdown, type AIMode } from "./AIModeSelectorDropdown";
 import { ProtocolBadge } from "./ProtocolBadge";
 import { ProtocolWelcomeSettings } from "./ProtocolWelcomeSettings";
@@ -143,8 +143,20 @@ import { useEffect, useState } from "react";
      }
    };
 
+  // Check if we have lead info to show
+  const hasLeadInfo = leadVinculado && (
+    (tags && tags.length > 0) || 
+    valor || 
+    responsavel || 
+    funnelStage || 
+    leadVinculado.etapa_nome || 
+    leadVinculado.funil_nome ||
+    (leadVinculado.value && leadVinculado.value > 0) ||
+    leadVinculado.responsavel_nome
+  );
+
   return (
-    <div className="w-full bg-background border-b border-border shadow-sm" style={{ maxHeight: restoreProgress ? '84px' : '60px', overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
+    <div className="w-full bg-background border-b border-border shadow-sm" style={{ overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
        {/* Header compacto - tudo em uma linha */}
        <div className="px-2 py-1.5 flex items-center justify-between gap-2" style={{ height: '56px' }}>
          <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -466,6 +478,58 @@ import { useEffect, useState } from "react";
             </div>
        </div>
 
+       {/* ✅ Barra fixa de informações do Lead - sempre visível */}
+       {hasLeadInfo && (
+         <div className="px-3 py-1.5 bg-muted/30 border-t border-border/50 flex items-center gap-3 flex-wrap overflow-hidden" style={{ maxHeight: '36px' }}>
+           {/* Valor */}
+           {(valor || (leadVinculado?.value && leadVinculado.value > 0)) && (
+             <div className="flex items-center gap-1 flex-shrink-0">
+               <DollarSign className="h-3 w-3 text-green-600" />
+               <span className="text-xs font-semibold text-green-600">
+                 {valor || `R$ ${Number(leadVinculado.value).toLocaleString('pt-BR')}`}
+               </span>
+             </div>
+           )}
+
+           {/* Funil/Etapa */}
+           {(funnelStage || leadVinculado?.etapa_nome) && (
+             <div className="flex items-center gap-1 flex-shrink-0">
+               <TrendingUp className="h-3 w-3 text-blue-500" />
+               <span className="text-xs font-medium text-blue-600">
+                 {funnelStage || leadVinculado.etapa_nome}
+               </span>
+             </div>
+           )}
+
+           {/* Responsável */}
+           {(responsavel || leadVinculado?.responsavel_nome) && (
+             <div className="flex items-center gap-1 flex-shrink-0">
+               <UserCog className="h-3 w-3 text-muted-foreground" />
+               <span className="text-xs text-muted-foreground">
+                 {responsavel || leadVinculado.responsavel_nome}
+               </span>
+             </div>
+           )}
+
+           {/* Tags */}
+           {tags && tags.length > 0 && (
+             <div className="flex items-center gap-1 flex-shrink-0 overflow-hidden">
+               <Tag className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+               <div className="flex gap-1 overflow-hidden">
+                 {tags.slice(0, 3).map((tag, i) => (
+                   <Badge key={i} variant="secondary" className="text-[10px] py-0 px-1.5 h-4 flex-shrink-0">
+                     {tag}
+                   </Badge>
+                 ))}
+                 {tags.length > 3 && (
+                   <span className="text-[10px] text-muted-foreground flex-shrink-0">+{tags.length - 3}</span>
+                 )}
+               </div>
+             </div>
+           )}
+         </div>
+       )}
+
        {/* Barra de progresso - aparece durante o Puxar Histórico */}
        {restoreProgress && (
          <div className="px-3 pb-2 pt-0.5 space-y-1">
@@ -476,8 +540,6 @@ import { useEffect, useState } from "react";
            <Progress value={restoreProgress.step} className="h-1.5" />
          </div>
        )}
-
-       {/* Botão criar lead - movido para dentro da mesma linha */}
     </div>
   );
   }

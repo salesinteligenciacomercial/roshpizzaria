@@ -414,6 +414,7 @@ function Conversas() {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>('idle');
   const [leadVinculado, setLeadVinculado] = useState<any>(null);
+  const [leadExtraInfo, setLeadExtraInfo] = useState<{ etapaNome?: string; funilNome?: string; responsavelNome?: string }>({});
   const [mostrarBotaoCriarLead, setMostrarBotaoCriarLead] = useState(false);
   const [leadsVinculados, setLeadsVinculados] = useState<Record<string, string>>({}); // conversationId -> leadId
   const [onlineStatus, setOnlineStatus] = useState<Record<string, 'online' | 'offline' | 'unknown'>>({}); // telefone -> status
@@ -1563,7 +1564,60 @@ function Conversas() {
     }
   }, [userCompanyId]);
 
-  // ⚡ SINCRONIZAÇÃO INSTANTÂNEA: Atualizar conversas do cache imediatamente (0 segundos)
+  // ⚡ Enriquecer leadVinculado com nomes de etapa, funil e responsável
+  useEffect(() => {
+    if (!leadVinculado) {
+      setLeadExtraInfo({});
+      return;
+    }
+    const fetchExtraInfo = async () => {
+      const info: typeof leadExtraInfo = {};
+      try {
+        // Buscar nome da etapa
+        if (leadVinculado.etapa_id) {
+          const { data: etapa } = await supabase
+            .from('etapas')
+            .select('nome, funil_id')
+            .eq('id', leadVinculado.etapa_id)
+            .maybeSingle();
+          if (etapa) {
+            info.etapaNome = etapa.nome;
+            // Buscar nome do funil
+            if (etapa.funil_id) {
+              const { data: funil } = await supabase
+                .from('funis')
+                .select('nome')
+                .eq('id', etapa.funil_id)
+                .maybeSingle();
+              if (funil) info.funilNome = funil.nome;
+            }
+          }
+        } else if (leadVinculado.funil_id) {
+          const { data: funil } = await supabase
+            .from('funis')
+            .select('nome')
+            .eq('id', leadVinculado.funil_id)
+            .maybeSingle();
+          if (funil) info.funilNome = funil.nome;
+        }
+        // Buscar nome do responsável
+        if (leadVinculado.responsavel_id) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', leadVinculado.responsavel_id)
+            .maybeSingle();
+          if (profile) info.responsavelNome = profile.full_name;
+        }
+      } catch (err) {
+        console.warn('Erro ao buscar info extra do lead:', err);
+      }
+      setLeadExtraInfo(info);
+    };
+    fetchExtraInfo();
+  }, [leadVinculado?.id, leadVinculado?.etapa_id, leadVinculado?.funil_id, leadVinculado?.responsavel_id]);
+
+
   useEffect(() => {
     if (cachedConversations.length > 0) {
       console.log(`⚡ [INSTANT] ${cachedConversations.length} conversas carregadas instantaneamente do cache`);
@@ -9011,8 +9065,8 @@ function Conversas() {
       }}>
         {selectedConv ? <>
             {/* Header - FIXO NO TOPO */}
-            <div className="flex-shrink-0 bg-background border-b z-10" style={{ minHeight: '56px', maxHeight: '84px' }}>
-              <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor} responsavel={selectedConv.responsavel} tags={selectedConv.tags} funnelStage={selectedConv.funnelStage} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onFinalizeAtendimentoSilent={finalizarAtendimentoSilent} onTransferAtendimento={() => setTransferDialogOpen(true)} onChangeAIMode={(mode) => setConversationAIMode(selectedConv.id, mode)} currentAIMode={(aiMode[selectedConv.id] as any) || 'off'} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} restoreProgress={restoreProgress} showBackButton={isMobile} onBack={() => setSelectedConv(null)} protocolNumber={activeProtocol?.protocol_number} protocolStatus={activeProtocol?.status} contactPhone={(selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '')} companyId={userCompanyId} />
+            <div className="flex-shrink-0 bg-background border-b z-10">
+              <ConversationHeader contactName={selectedConv.contactName} channel={selectedConv.channel} avatarUrl={selectedConv.avatarUrl} produto={selectedConv.produto} valor={selectedConv.valor || (leadVinculado?.value && leadVinculado.value > 0 ? `R$ ${Number(leadVinculado.value).toLocaleString('pt-BR')}` : undefined)} responsavel={selectedConv.responsavel || leadExtraInfo.responsavelNome} tags={selectedConv.tags || leadVinculado?.tags} funnelStage={selectedConv.funnelStage || (leadExtraInfo.etapaNome ? (leadExtraInfo.funilNome ? `${leadExtraInfo.funilNome} → ${leadExtraInfo.etapaNome}` : leadExtraInfo.etapaNome) : undefined)} showInfoPanel={showInfoPanel} onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)} syncStatus={syncStatus} leadVinculado={leadVinculado} mostrarBotaoCriarLead={mostrarBotaoCriarLead} onCriarLead={criarLeadManualmente} onFinalizeAtendimento={finalizarAtendimento} onFinalizeAtendimentoSilent={finalizarAtendimentoSilent} onTransferAtendimento={() => setTransferDialogOpen(true)} onChangeAIMode={(mode) => setConversationAIMode(selectedConv.id, mode)} currentAIMode={(aiMode[selectedConv.id] as any) || 'off'} onlineStatus={onlineStatus[selectedConv.id] || 'unknown'} isContactInactive={isContactInactive} onRestoreConversation={handleRestoreConversation} restoringConversation={restoringConversation} restoreProgress={restoreProgress} showBackButton={isMobile} onBack={() => setSelectedConv(null)} protocolNumber={activeProtocol?.protocol_number} protocolStatus={activeProtocol?.status} contactPhone={(selectedConv.phoneNumber || selectedConv.id).replace(/[^0-9]/g, '')} companyId={userCompanyId} />
             </div>
             
             {/* Dialog de Transferir Atendimento */}
