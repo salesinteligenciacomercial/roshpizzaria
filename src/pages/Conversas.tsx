@@ -9234,7 +9234,7 @@ function Conversas() {
                       e.preventDefault();
                       const blob = items[i].getAsFile();
                       if (blob) {
-                        await handleSendMedia(blob, '', 'image');
+                        setPastedImageFile(blob);
                       }
                       break;
                     }
