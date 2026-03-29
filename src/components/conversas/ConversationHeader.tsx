@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -83,6 +84,7 @@ import { useEffect, useState } from "react";
    const isMobile = useIsMobile();
    const [finalizeOpen, setFinalizeOpen] = useState(false);
    const [finalizeMessage, setFinalizeMessage] = useState("");
+   const [showAvatarPreview, setShowAvatarPreview] = useState(false);
 
     useEffect(() => {
       const saved = localStorage.getItem("continuum_finalize_template");
@@ -165,7 +167,10 @@ import { useEffect, useState } from "react";
             )}
             {/* Avatar do Lead */}
             <div className="relative flex-shrink-0">
-              <Avatar className="h-10 w-10 border-2 border-primary/20">
+              <Avatar
+                className="h-10 w-10 border-2 border-primary/20 cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => avatarUrl && avatarUrl.trim() !== '' && setShowAvatarPreview(true)}
+              >
                 {avatarUrl && avatarUrl.trim() !== '' ? (
                   <AvatarImage src={avatarUrl} alt={contactName} />
                 ) : null}
@@ -531,6 +536,27 @@ import { useEffect, useState } from "react";
            <Progress value={restoreProgress.step} className="h-1.5" />
          </div>
        )}
+      {/* Avatar Preview Dialog */}
+      {avatarUrl && avatarUrl.trim() !== '' && (
+        <Dialog open={showAvatarPreview} onOpenChange={setShowAvatarPreview}>
+          <DialogContent className="max-w-md w-[90vw] p-0 overflow-hidden bg-background rounded-xl">
+            <VisuallyHidden>
+              <DialogTitle>Foto de perfil - {contactName}</DialogTitle>
+            </VisuallyHidden>
+            <div className="p-4 border-b">
+              <p className="text-sm font-medium text-foreground">{contactName}</p>
+              <p className="text-xs text-muted-foreground capitalize">{channel}</p>
+            </div>
+            <div className="flex items-center justify-center p-4 bg-muted/30">
+              <img
+                src={avatarUrl}
+                alt={contactName}
+                className="max-w-full max-h-[60vh] object-contain rounded-lg"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
   }
