@@ -85,6 +85,7 @@ import { useEffect, useState } from "react";
    const isMobile = useIsMobile();
    const [finalizeOpen, setFinalizeOpen] = useState(false);
    const [finalizeMessage, setFinalizeMessage] = useState("");
+   const [showAvatarPreview, setShowAvatarPreview] = useState(false);
 
     useEffect(() => {
       const saved = localStorage.getItem("continuum_finalize_template");
