@@ -10002,7 +10002,7 @@ function Conversas() {
                                       </div>
                                       <div className="space-y-2">
                                         <Label>Tipo de Mensagem *</Label>
-                                        <Select value={newQuickMessageType} onValueChange={(value: "text" | "image" | "video") => {
+                                        <Select value={newQuickMessageType} onValueChange={(value: "text" | "image" | "video" | "audio" | "document") => {
                                     setNewQuickMessageType(value);
                                     setNewQuickMediaFile(null);
                                     setNewQuickMediaPreview(null);
@@ -10014,6 +10014,8 @@ function Conversas() {
                                             <SelectItem value="text">Texto</SelectItem>
                                             <SelectItem value="image">Imagem</SelectItem>
                                             <SelectItem value="video">Vídeo</SelectItem>
+                                            <SelectItem value="audio">Áudio</SelectItem>
+                                            <SelectItem value="document">Documento (PDF)</SelectItem>
                                           </SelectContent>
                                         </Select>
                                       </div>
