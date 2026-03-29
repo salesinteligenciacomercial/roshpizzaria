@@ -9278,10 +9278,20 @@ function Conversas() {
                                                         <ImageIcon className="h-4 w-4" />
                                                         <span>[Imagem]</span>
                                                         {qm.mediaUrl && <img src={qm.mediaUrl} alt="Preview" className="h-12 w-12 object-cover rounded border" />}
+                                                      </> : qm.type === "audio" ? <>
+                                                        <Music className="h-4 w-4" />
+                                                        <span>[Áudio]</span>
+                                                        {qm.mediaUrl && <audio src={qm.mediaUrl} controls className="h-8 max-w-[200px]" />}
+                                                      </> : qm.type === "document" ? <>
+                                                        <FileText className="h-4 w-4 text-red-500" />
+                                                        <span>[Documento PDF]</span>
                                                       </> : <>
                                                         <Video className="h-4 w-4" />
                                                         <span>[Vídeo]</span>
                                                       </>}
+                                                    {qm.content && qm.content !== "[Imagem]" && qm.content !== "[Vídeo]" && qm.content !== "[Áudio]" && qm.content !== "[Documento]" && (
+                                                      <span className="text-xs italic">"{qm.content}"</span>
+                                                    )}
                                                   </div>}
                                               </div>
                                               <div className="flex items-center gap-1 flex-shrink-0">
