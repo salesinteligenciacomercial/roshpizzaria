@@ -165,7 +165,10 @@ import { useEffect, useState } from "react";
             )}
             {/* Avatar do Lead */}
             <div className="relative flex-shrink-0">
-              <Avatar className="h-10 w-10 border-2 border-primary/20">
+              <Avatar
+                className="h-10 w-10 border-2 border-primary/20 cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => avatarUrl && avatarUrl.trim() !== '' && setShowAvatarPreview(true)}
+              >
                 {avatarUrl && avatarUrl.trim() !== '' ? (
                   <AvatarImage src={avatarUrl} alt={contactName} />
                 ) : null}
