@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { X, Send, Crop, RotateCcw } from "lucide-react";
+import { X, Send, Crop, RotateCcw, Check } from "lucide-react";
 
 interface PastedImagePreviewProps {
   imageFile: File;
@@ -9,21 +9,21 @@ interface PastedImagePreviewProps {
   onCancel: () => void;
 }
 
-export function PastedImagePreview({ imageFile, onSend, onCancel }: PastedImagePreviewProps) {
+export function PastedImagePreview({ imageFile: originalFile, onSend, onCancel }: PastedImagePreviewProps) {
   const [caption, setCaption] = useState("");
+  const [currentFile, setCurrentFile] = useState<File>(originalFile);
   const [imageUrl, setImageUrl] = useState<string>("");
   const [isCropping, setIsCropping] = useState(false);
   const [cropStart, setCropStart] = useState<{ x: number; y: number } | null>(null);
   const [cropEnd, setCropEnd] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const url = URL.createObjectURL(imageFile);
+    const url = URL.createObjectURL(currentFile);
     setImageUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [imageFile]);
+  }, [currentFile]);
 
   const getRelativePos = (e: React.MouseEvent) => {
     const rect = imgRef.current?.getBoundingClientRect();
@@ -75,7 +75,6 @@ export function PastedImagePreview({ imageFile, onSend, onCancel }: PastedImageP
     if (w < 10 || h < 10) {
       setCropStart(null);
       setCropEnd(null);
-      setIsCropping(false);
       return;
     }
 
@@ -91,22 +90,19 @@ export function PastedImagePreview({ imageFile, onSend, onCancel }: PastedImageP
     );
     if (!blob) return;
 
-    const croppedFile = new File([blob], imageFile.name || "screenshot.png", { type: "image/png" });
+    const croppedFile = new File([blob], currentFile.name || "screenshot.png", { type: "image/png" });
+    setCurrentFile(croppedFile);
     setCropStart(null);
     setCropEnd(null);
     setIsCropping(false);
-    onSend(croppedFile, caption);
-  }, [cropStart, cropEnd, imageFile, caption, onSend]);
+  }, [cropStart, cropEnd, currentFile]);
 
   const handleSend = () => {
-    if (isCropping && cropStart && cropEnd) {
-      applyCrop();
-    } else {
-      onSend(imageFile, caption);
-    }
+    onSend(currentFile, caption);
   };
 
   const cropRect = getCropRect();
+  const hasCropSelection = !!(cropStart && cropEnd && cropRect && cropRect.width > 1 && cropRect.height > 1);
 
   return (
     <div className="absolute inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col">
@@ -127,9 +123,36 @@ export function PastedImagePreview({ imageFile, onSend, onCancel }: PastedImageP
             <Crop className="h-4 w-4" />
             Recortar
           </Button>
-          {isCropping && cropStart && cropEnd && (
-            <Button variant="outline" size="sm" onClick={() => { setCropStart(null); setCropEnd(null); }} className="gap-1">
+          {hasCropSelection && (
+            <>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={applyCrop}
+                className="gap-1 bg-green-600 hover:bg-green-700 text-white"
+              >
+                <Check className="h-4 w-4" />
+                OK
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => { setCropStart(null); setCropEnd(null); }} className="gap-1">
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+          {currentFile !== originalFile && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCurrentFile(originalFile);
+                setCropStart(null);
+                setCropEnd(null);
+                setIsCropping(false);
+              }}
+              className="gap-1"
+            >
               <RotateCcw className="h-4 w-4" />
+              Original
             </Button>
           )}
           <Button variant="ghost" size="icon" onClick={onCancel} className="h-8 w-8">
@@ -140,7 +163,6 @@ export function PastedImagePreview({ imageFile, onSend, onCancel }: PastedImageP
 
       {/* Image area */}
       <div
-        ref={containerRef}
         className="flex-1 flex items-center justify-center p-4 overflow-hidden relative select-none"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -156,12 +178,9 @@ export function PastedImagePreview({ imageFile, onSend, onCancel }: PastedImageP
             className="max-w-full max-h-[60vh] object-contain rounded-lg"
             draggable={false}
           />
-          {/* Crop overlay */}
           {isCropping && cropRect && cropRect.width > 0 && (
             <>
-              {/* Dim area outside crop */}
               <div className="absolute inset-0 bg-black/50 rounded-lg" style={{ clipPath: `polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% ${cropRect.top}%, ${cropRect.left}% ${cropRect.top}%, ${cropRect.left}% ${cropRect.top + cropRect.height}%, ${cropRect.left + cropRect.width}% ${cropRect.top + cropRect.height}%, ${cropRect.left + cropRect.width}% ${cropRect.top}%, 0% ${cropRect.top}%)` }} />
-              {/* Crop border */}
               <div
                 className="absolute border-2 border-primary rounded"
                 style={{
@@ -191,7 +210,7 @@ export function PastedImagePreview({ imageFile, onSend, onCancel }: PastedImageP
             }
           }}
         />
-        <Button onClick={handleSend} size="icon" className="shrink-0">
+        <Button onClick={handleSend} size="icon" className="shrink-0" disabled={isCropping && hasCropSelection}>
           <Send className="h-4 w-4" />
         </Button>
       </div>
