@@ -24,6 +24,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { LeadAttachments } from "@/components/leads/LeadAttachments";
+import { throttledProfilePicture } from "@/utils/profilePictureThrottle";
 
 /**
  * ✅ BACKUP ATUALIZADO - 2024-11-01
