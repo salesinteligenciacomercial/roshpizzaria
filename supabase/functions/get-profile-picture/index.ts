@@ -62,6 +62,11 @@ async function getEvolutionProfilePicture(
   phoneNumber: string,
   isGroup: boolean
 ): Promise<string | null> {
+  // Circuit breaker - se Evolution está down, retornar null imediatamente
+  if (isCircuitBreakerOpen()) {
+    console.log('🔴 [CIRCUIT-BREAKER] Bloqueado - Evolution API down');
+    return null;
+  }
   try {
     const url = `${apiUrl}/chat/fetchProfilePictureUrl/${instanceName}`;
     const cleanNumber = String(phoneNumber).replace(/\D/g, '');
