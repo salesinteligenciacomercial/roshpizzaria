@@ -919,8 +919,8 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
                 </Tooltip>
               </TooltipProvider>
             )}
+import { throttledProfilePicture } from "@/utils/profilePictureThrottle";
 
-            
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
