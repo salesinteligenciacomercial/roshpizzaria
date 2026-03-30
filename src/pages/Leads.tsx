@@ -794,12 +794,12 @@ export default function Leads() {
       const telefoneNormalizado = telefone.replace(/\D/g, "");
       const companyId = lead.company_id || companyIdRef.current;
       const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000));
-      const fetchPromise = supabase.functions.invoke('get-profile-picture', {
+      const fetchPromise = throttledProfilePicture(() => supabase.functions.invoke('get-profile-picture', {
         body: {
           number: telefoneNormalizado,
           company_id: companyId
         }
-      });
+      }));
       const {
         data,
         error

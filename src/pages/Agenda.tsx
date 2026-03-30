@@ -546,12 +546,12 @@ export default function Agenda() {
 
       // Buscar foto com timeout de 5s
       const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000));
-      const fetchPromise = supabase.functions.invoke('get-profile-picture', {
+      const fetchPromise = throttledProfilePicture(() => supabase.functions.invoke('get-profile-picture', {
         body: {
           number: telefoneNormalizado,
           company_id: companyIdRef.current
         }
-      });
+      }));
       const {
         data,
         error
