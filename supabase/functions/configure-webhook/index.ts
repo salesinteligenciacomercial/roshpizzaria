@@ -6,6 +6,27 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+async function parseResponseSafely(response: Response) {
+  const text = await response.text();
+
+  try {
+    return { data: text ? JSON.parse(text) : null, text };
+  } catch {
+    return { data: { raw: text.substring(0, 500) }, text };
+  }
+}
+
+async function callEvolution(baseUrl: string, instanceName: string, apiKey: string, path: string, method: 'GET' | 'POST' | 'PUT', body?: unknown) {
+  const response = await fetch(`${baseUrl}${path}/${instanceName}`, {
+    method,
+    headers: { 'apikey': apiKey, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const parsed = await parseResponseSafely(response);
+  return { response, ...parsed };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -17,15 +38,15 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { instanceName, companyId } = await req.json();
+    const { instanceName } = await req.json();
 
     if (!instanceName) {
       return new Response(JSON.stringify({ error: 'instanceName é obrigatório' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // Get connection info
     const { data: conn, error: connErr } = await supabase
       .from('whatsapp_connections')
       .select('evolution_api_url, evolution_api_key, instance_name')
@@ -34,124 +55,85 @@ serve(async (req) => {
 
     if (connErr || !conn) {
       return new Response(JSON.stringify({ error: 'Conexão não encontrada', details: connErr }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    const baseUrl = conn.evolution_api_url.replace(/\/+$/, '');
-    const apiKey = conn.evolution_api_key;
+    const baseUrl = (conn.evolution_api_url || Deno.env.get('EVOLUTION_API_URL') || '').replace(/\/+$/, '');
+    const configuredApiKey = conn.evolution_api_key || '';
+    const globalApiKey = Deno.env.get('EVOLUTION_API_KEY') || '';
+    const apiKeys = [configuredApiKey, globalApiKey].filter((value, index, list) => !!value && list.indexOf(value) === index);
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const webhookUrl = `${supabaseUrl}/functions/v1/webhook-conversas?instance=${instanceName}`;
+
+    if (!baseUrl || apiKeys.length === 0) {
+      return new Response(JSON.stringify({ error: 'Evolution API não configurada corretamente' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
     console.log('🔗 [CONFIGURE-WEBHOOK] Base URL:', baseUrl);
     console.log('🔗 [CONFIGURE-WEBHOOK] Webhook URL:', webhookUrl);
 
-    // Step 1: Check current webhook config
     let currentWebhook = null;
-    try {
-      const findRes = await fetch(`${baseUrl}/webhook/find/${instanceName}`, {
-        method: 'GET',
-        headers: { 'apikey': apiKey, 'Content-Type': 'application/json' },
-      });
-      currentWebhook = await findRes.json();
-      console.log('📡 [CONFIGURE-WEBHOOK] Webhook atual:', JSON.stringify(currentWebhook));
-    } catch (e) {
-      console.warn('⚠️ Não foi possível verificar webhook atual:', e);
+    let activeApiKey = apiKeys[0];
+
+    for (const candidateKey of apiKeys) {
+      const currentAttempt = await callEvolution(baseUrl, instanceName, candidateKey, '/webhook/find', 'GET');
+      currentWebhook = currentAttempt.data;
+
+      if (currentAttempt.response.ok || currentAttempt.response.status !== 401) {
+        activeApiKey = candidateKey;
+        break;
+      }
     }
 
-    // Step 2: Set webhook with all required events
     const webhookPayload = {
       webhook: {
         url: webhookUrl,
         webhookByEvents: false,
         webhookBase64: true,
-        events: [
-          'MESSAGES_UPSERT',
-          'MESSAGES_UPDATE', 
-          'CONNECTION_UPDATE',
-          'CONTACTS_UPSERT',
-        ],
+        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE', 'CONTACTS_UPSERT'],
         enabled: true,
       }
     };
 
     console.log('📤 [CONFIGURE-WEBHOOK] Enviando config:', JSON.stringify(webhookPayload));
 
-    const setRes = await fetch(`${baseUrl}/webhook/set/${instanceName}`, {
-      method: 'POST',
-      headers: { 'apikey': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify(webhookPayload),
-    });
+    let setAttempt = await callEvolution(baseUrl, instanceName, activeApiKey, '/webhook/set', 'POST', webhookPayload);
 
-    const setData = await setRes.json();
-    console.log('📡 [CONFIGURE-WEBHOOK] Resposta set:', JSON.stringify(setData));
-
-    if (!setRes.ok) {
-      // Try alternative endpoint format (v2)
+    if (!setAttempt.response.ok) {
       console.log('🔄 [CONFIGURE-WEBHOOK] Tentando formato alternativo...');
-      
-      const altPayload = {
-        webhook: {
-          url: webhookUrl,
-          webhookByEvents: false,
-          webhookBase64: true,
-          events: [
-            'MESSAGES_UPSERT',
-            'MESSAGES_UPDATE',
-            'CONNECTION_UPDATE',
-            'CONTACTS_UPSERT',
-          ],
-          enabled: true,
-        }
-      };
-
-      const altRes = await fetch(`${baseUrl}/webhook/set/${instanceName}`, {
-        method: 'PUT',
-        headers: { 'apikey': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify(altPayload),
-      });
-
-      const altData = await altRes.json();
-      console.log('📡 [CONFIGURE-WEBHOOK] Resposta alternativa:', JSON.stringify(altData));
-
-      return new Response(JSON.stringify({
-        success: altRes.ok,
-        currentWebhook,
-        setResult: setData,
-        altResult: altData,
-        webhookUrl,
-      }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      setAttempt = await callEvolution(baseUrl, instanceName, activeApiKey, '/webhook/set', 'PUT', webhookPayload);
     }
 
-    // Step 3: Verify by reading back
     let verifyWebhook = null;
     try {
-      const verifyRes = await fetch(`${baseUrl}/webhook/find/${instanceName}`, {
-        method: 'GET',
-        headers: { 'apikey': apiKey, 'Content-Type': 'application/json' },
-      });
-      verifyWebhook = await verifyRes.json();
-      console.log('✅ [CONFIGURE-WEBHOOK] Verificação:', JSON.stringify(verifyWebhook));
-    } catch (e) {
-      console.warn('⚠️ Erro na verificação:', e);
+      const verifyAttempt = await callEvolution(baseUrl, instanceName, activeApiKey, '/webhook/find', 'GET');
+      verifyWebhook = verifyAttempt.data;
+    } catch (error) {
+      console.warn('⚠️ [CONFIGURE-WEBHOOK] Erro na verificação:', error);
     }
 
     return new Response(JSON.stringify({
-      success: true,
+      success: setAttempt.response.ok,
       currentWebhook,
-      setResult: setData,
+      setResult: setAttempt.data,
       verifyWebhook,
       webhookUrl,
+      usedGlobalApiKeyFallback: activeApiKey === globalApiKey && globalApiKey !== configuredApiKey,
+      status: setAttempt.response.status,
     }), {
-      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      status: setAttempt.response.ok ? 200 : 502,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
-
   } catch (error) {
     console.error('❌ [CONFIGURE-WEBHOOK] Erro:', error);
     return new Response(JSON.stringify({ error: String(error) }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 });
