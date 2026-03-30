@@ -92,8 +92,14 @@ async function getEvolutionProfilePicture(
         clearTimeout(timeout);
 
         const responseText = await response.text();
-        console.log(`📸 [EVOLUTION] Tentativa ${numberToTry} - Status: ${response.status} - Resposta: ${responseText.substring(0, 300)}`);
         
+        // Se servidor retorna 502/503, ativar circuit breaker e parar
+        if (response.status === 502 || response.status === 503) {
+          tripCircuitBreaker();
+          return null;
+        }
+        
+        console.log(`📸 [EVOLUTION] Tentativa ${numberToTry} - Status: ${response.status}`);
         if (response.ok || response.status === 200) {
           try {
             const data = JSON.parse(responseText);
