@@ -1396,41 +1396,9 @@ function Conversas() {
           return merged;
         });
 
-        // ⚡ LAZY LOADING: Carregar avatares em batches de 5 com throttling
-        const conversasComPlaceholder = allConversations.filter(conv => !conv.avatarUrl || conv.avatarUrl.includes('ui-avatars.com'));
-        if (conversasComPlaceholder.length > 0) {
-          console.log(`📸 [LOAD-ALL] Carregando ${conversasComPlaceholder.length} avatares em background (batches de 5)...`);
-
-          const BATCH_SIZE = 5;
-          const BATCH_DELAY = 500;
-          
-          const loadBatch = async (batch: typeof conversasComPlaceholder) => {
-            await Promise.all(batch.map(async conv => {
-              if (conv.phoneNumber) {
-                try {
-                  const profilePicUrl = await getProfilePictureWithFallback(conv.phoneNumber, userCompanyId, conv.contactName, conv.channel);
-                  if (profilePicUrl && !profilePicUrl.includes('ui-avatars.com')) {
-                    setConversations(prev => prev.map(c => c.phoneNumber === conv.phoneNumber || c.id === conv.id ? {
-                      ...c,
-                      avatarUrl: profilePicUrl
-                    } : c));
-                  }
-                } catch { /* silenciar */ }
-              }
-            }));
-          };
-
-          // Processar em batches com delay
-          (async () => {
-            for (let i = 0; i < conversasComPlaceholder.length; i += BATCH_SIZE) {
-              const batch = conversasComPlaceholder.slice(i, i + BATCH_SIZE);
-              await loadBatch(batch);
-              if (i + BATCH_SIZE < conversasComPlaceholder.length) {
-                await new Promise(r => setTimeout(r, BATCH_DELAY));
-              }
-            }
-          })().catch(() => {});
-        }
+        // ⚡ DESATIVADO: Carregamento em massa de avatares removido para liberar capacidade das edge functions
+        // Avatares agora são carregados sob demanda ao clicar em uma conversa
+        console.log('📸 [LOAD-ALL] Carregamento de avatares em massa DESATIVADO - sob demanda ao clicar');
       }
     } catch (error) {
       console.error('❌ [LOAD-ALL] Erro ao carregar conversas:', error);
