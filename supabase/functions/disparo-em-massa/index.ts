@@ -10,6 +10,7 @@ const DEFAULT_DELAY_SECONDS = 7;
 const MIN_DELAY_SECONDS = 1;
 const MAX_DELAY_SECONDS = 300;
 const MAX_WAIT_PER_INVOCATION_SECONDS = 60;
+const SEND_TIMEOUT_MS = 20000;
 
 function formatPhoneNumber(phone: string): string {
   let cleaned = phone.replace(/[^0-9]/g, '');
@@ -29,6 +30,42 @@ function getSafeQueueWaitSeconds(waitSeconds: number | null | undefined): number
   const parsed = Number(waitSeconds);
   if (!Number.isFinite(parsed) || parsed <= 0) return 0;
   return Math.max(0, Math.floor(parsed));
+}
+
+async function sendWhatsAppWithTimeout(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  payload: Record<string, unknown>,
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/enviar-whatsapp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceRoleKey}`,
+        'apikey': serviceRoleKey,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Falha no enviar-whatsapp (${response.status}): ${errorText}`);
+    }
+
+    return await response.json().catch(() => ({}));
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`Timeout no enviar-whatsapp após ${Math.round(SEND_TIMEOUT_MS / 1000)}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function scheduleNextBatch(selfUrl: string, serviceRoleKey: string, campaignId: string, waitSeconds: number) {
@@ -206,13 +243,7 @@ serve(async (req) => {
             }
           }
 
-          const { error: sendError } = await supabase.functions.invoke('enviar-whatsapp', {
-            body: payload,
-          });
-
-          if (sendError) {
-            throw new Error(sendError.message || 'Erro no envio');
-          }
+          await sendWhatsAppWithTimeout(supabaseUrl, supabaseServiceKey, payload);
 
           sentCount++;
 
