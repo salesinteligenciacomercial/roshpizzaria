@@ -9,6 +9,7 @@ const corsHeaders = {
 const DEFAULT_DELAY_SECONDS = 7;
 const MIN_DELAY_SECONDS = 1;
 const MAX_DELAY_SECONDS = 300;
+const MAX_WAIT_PER_INVOCATION_SECONDS = 60;
 
 function formatPhoneNumber(phone: string): string {
   let cleaned = phone.replace(/[^0-9]/g, '');
@@ -24,12 +25,14 @@ function getSafeDelaySeconds(delayBetweenMessages: number | null | undefined): n
   return Math.max(MIN_DELAY_SECONDS, Math.min(MAX_DELAY_SECONDS, Math.floor(parsed)));
 }
 
-function scheduleNextBatch(selfUrl: string, serviceRoleKey: string, campaignId: string, delayMs: number) {
-  const nextBatchPromise = (async () => {
-    if (delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
+function getSafeQueueWaitSeconds(waitSeconds: number | null | undefined): number {
+  const parsed = Number(waitSeconds);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return Math.max(0, Math.floor(parsed));
+}
 
+function scheduleNextBatch(selfUrl: string, serviceRoleKey: string, campaignId: string, waitSeconds: number) {
+  const nextBatchPromise = (async () => {
     const response = await fetch(selfUrl, {
       method: 'POST',
       headers: {
@@ -37,7 +40,7 @@ function scheduleNextBatch(selfUrl: string, serviceRoleKey: string, campaignId: 
         'Authorization': `Bearer ${serviceRoleKey}`,
         'apikey': serviceRoleKey,
       },
-      body: JSON.stringify({ campaign_id: campaignId }),
+      body: JSON.stringify({ campaign_id: campaignId, wait_seconds: waitSeconds }),
     });
 
     if (!response.ok) {
@@ -46,7 +49,7 @@ function scheduleNextBatch(selfUrl: string, serviceRoleKey: string, campaignId: 
       return;
     }
 
-    console.log(`✅ Próximo lote da campanha ${campaignId} agendado (delay ${Math.round(delayMs / 1000)}s)`);
+    console.log(`✅ Próximo lote da campanha ${campaignId} agendado (espera ${waitSeconds}s)`);
   })().catch((err) => {
     console.error('❌ Erro ao auto-invocar próximo lote:', err.message);
   });
@@ -74,13 +77,35 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { campaign_id } = body;
+    const { campaign_id, wait_seconds } = body;
+    const selfUrl = `${supabaseUrl}/functions/v1/disparo-em-massa`;
 
     if (!campaign_id) {
       return new Response(JSON.stringify({ error: 'campaign_id is required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    const requestedWaitSeconds = getSafeQueueWaitSeconds(wait_seconds);
+    if (requestedWaitSeconds > 0) {
+      const waitChunkSeconds = Math.min(requestedWaitSeconds, MAX_WAIT_PER_INVOCATION_SECONDS);
+      console.log(`⏳ Aguardando ${waitChunkSeconds}s antes de processar campanha ${campaign_id}`);
+      await new Promise((resolve) => setTimeout(resolve, waitChunkSeconds * 1000));
+
+      const remainingWaitSeconds = requestedWaitSeconds - waitChunkSeconds;
+      if (remainingWaitSeconds > 0) {
+        console.log(`⏱️ Espera longa detectada, reagendando restante (${remainingWaitSeconds}s)`);
+        scheduleNextBatch(selfUrl, supabaseServiceKey, campaign_id, remainingWaitSeconds);
+
+        return new Response(JSON.stringify({
+          success: true,
+          waiting: true,
+          remaining_wait_seconds: remainingWaitSeconds,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // Fetch campaign
@@ -256,10 +281,9 @@ serve(async (req) => {
         updated_at: new Date().toISOString(),
       }).eq('id', campaign_id);
 
-      const selfUrl = `${supabaseUrl}/functions/v1/disparo-em-massa`;
       console.log(`🔄 Invocando próximo lote a partir do index ${totalProcessed} em ${nextDelaySeconds}s...`);
 
-      scheduleNextBatch(selfUrl, supabaseServiceKey, campaign_id, nextDelaySeconds * 1000);
+      scheduleNextBatch(selfUrl, supabaseServiceKey, campaign_id, nextDelaySeconds);
 
     } else {
       // All done - mark completed
