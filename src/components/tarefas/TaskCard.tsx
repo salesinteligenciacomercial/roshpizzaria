@@ -308,13 +308,12 @@ export const TaskCard = React.memo(function TaskCard({ task, onDelete, onUpdate,
                     setTimeout(() => reject(new Error('Timeout')), 5000)
                   );
                   
-                  // Envolver a chamada da Edge Function em try/catch e .catch() para garantir que nenhum erro seja propagado
-                  const fetchPromise = supabase.functions.invoke('get-profile-picture', {
-                    body: { number: numero, company_id: companyId }
-                  }).catch((err) => {
-                    // Capturar qualquer erro da Edge Function e retornar objeto com erro
-                    return { data: null, error: err };
-                  });
+                  // Usar throttle global para limitar chamadas
+                  const fetchPromise = throttledProfilePicture(() =>
+                    supabase.functions.invoke('get-profile-picture', {
+                      body: { number: numero, company_id: companyId }
+                    })
+                  );
                   
                   try {
                     const result = await Promise.race([
