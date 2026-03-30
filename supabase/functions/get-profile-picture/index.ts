@@ -52,11 +52,15 @@ async function getEvolutionProfilePicture(
 
     for (const numberToTry of numberVariations) {
       try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
           body: JSON.stringify({ number: numberToTry }),
+          signal: controller.signal,
         });
+        clearTimeout(timeout);
 
         const responseText = await response.text();
         console.log(`📸 [EVOLUTION] Tentativa ${numberToTry} - Status: ${response.status} - Resposta: ${responseText.substring(0, 300)}`);

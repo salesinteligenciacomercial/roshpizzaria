@@ -191,11 +191,13 @@ export const LeadCard = memo(function LeadCard({ lead, onDelete, onLeadMoved, is
           return;
         }
         const companyId = await getCompanyId();
-        const { data, error } = await supabase.functions.invoke('get-profile-picture', {
-          body: { number: numero, company_id: companyId }
-        });
-        if (!error && data?.profilePictureUrl) {
-          setAvatarUrl(data.profilePictureUrl);
+        const result = await throttledProfilePicture(() => 
+          supabase.functions.invoke('get-profile-picture', {
+            body: { number: numero, company_id: companyId }
+          })
+        );
+        if (result && !result.error && result.data?.profilePictureUrl) {
+          setAvatarUrl(result.data.profilePictureUrl);
         } else {
           setAvatarUrl(`https://ui-avatars.com/api/?name=${encodeURIComponent(lead.nome)}&background=10b981&color=fff&bold=true&size=128`);
         }
