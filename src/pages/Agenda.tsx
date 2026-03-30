@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { throttledProfilePicture } from "@/utils/profilePictureThrottle";
 import { Calendar as CalendarIcon, Plus, Clock, User, Filter, Settings, Bell, CheckCircle2, XCircle, AlertCircle, Trash2, Search, CalendarDays, Copy, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -545,12 +546,12 @@ export default function Agenda() {
 
       // Buscar foto com timeout de 5s
       const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000));
-      const fetchPromise = supabase.functions.invoke('get-profile-picture', {
+      const fetchPromise = throttledProfilePicture(() => supabase.functions.invoke('get-profile-picture', {
         body: {
           number: telefoneNormalizado,
           company_id: companyIdRef.current
         }
-      });
+      }));
       const {
         data,
         error

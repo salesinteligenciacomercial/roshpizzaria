@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2, Download, CheckSquare, Square, Trash2, Edit, GitBranch, X, DollarSign, Trophy, XCircle, Filter } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { throttledProfilePicture } from "@/utils/profilePictureThrottle";
 import { useToast } from "@/hooks/use-toast";
 import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
 import { LeadQuickActions } from "@/components/leads/LeadQuickActions";
@@ -793,12 +794,12 @@ export default function Leads() {
       const telefoneNormalizado = telefone.replace(/\D/g, "");
       const companyId = lead.company_id || companyIdRef.current;
       const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000));
-      const fetchPromise = supabase.functions.invoke('get-profile-picture', {
+      const fetchPromise = throttledProfilePicture(() => supabase.functions.invoke('get-profile-picture', {
         body: {
           number: telefoneNormalizado,
           company_id: companyId
         }
-      });
+      }));
       const {
         data,
         error

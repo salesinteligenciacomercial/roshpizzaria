@@ -10,7 +10,7 @@ const corsHeaders = {
 // Cache em memória para evitar chamadas repetidas
 const profilePictureCache = new Map<string, { url: string | null; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos para resultados com foto
-const NULL_CACHE_TTL = 30 * 60 * 1000; // 30 minutos para resultados sem foto
+const NULL_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 horas para resultados sem foto
 
 // Verificar se URL do WhatsApp expirou (pps.whatsapp.net URLs têm parâmetro oe= com timestamp hex)
 function isWhatsAppUrlExpired(url: string): boolean {
@@ -48,20 +48,19 @@ async function getEvolutionProfilePicture(
           cleanNumber,
           `55${cleanNumber.replace(/^55/, '')}`,
           cleanNumber.replace(/^55/, ''),
-          cleanNumber.slice(-11),
-          cleanNumber.slice(-10),
-          cleanNumber.slice(-9),
-          `55${cleanNumber.slice(-11)}`,
-          `55${cleanNumber.slice(-10)}`,
         ].filter((v, i, arr) => v.length >= 8 && arr.indexOf(v) === i);
 
     for (const numberToTry of numberVariations) {
       try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
           body: JSON.stringify({ number: numberToTry }),
+          signal: controller.signal,
         });
+        clearTimeout(timeout);
 
         const responseText = await response.text();
         console.log(`📸 [EVOLUTION] Tentativa ${numberToTry} - Status: ${response.status} - Resposta: ${responseText.substring(0, 300)}`);
