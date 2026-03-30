@@ -655,13 +655,14 @@ async function sendEvolutionMessage(
     let evolutionUrl: string;
     let bodyPayload: any;
     const targetNumber = isGroup ? target : target.replace(/[^0-9]/g, '');
+    const globalEvolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
+    const canRetryWithGlobalKey = _retryAttempt === 0 && !!globalEvolutionKey && globalEvolutionKey !== apiKey;
 
-    // Verificar se é mídia (base64, URL) ou texto
     if (validatedData.mediaBase64) {
       let mediaType = validatedData.tipo_mensagem || 'document';
       if (mediaType === 'texto') mediaType = 'text';
       if (mediaType === 'pdf') mediaType = 'document';
-      
+
       if (mediaType === 'audio') {
         evolutionUrl = `${baseUrl}/message/sendWhatsAppAudio/${instanceName}`;
         bodyPayload = {
@@ -671,7 +672,7 @@ async function sendEvolutionMessage(
         };
       } else {
         evolutionUrl = `${baseUrl}/message/sendMedia/${instanceName}`;
-        
+
         let mimeType = validatedData.mimeType;
         if (!mimeType) {
           const fileName = validatedData.fileName?.toLowerCase() || '';
@@ -685,7 +686,7 @@ async function sendEvolutionMessage(
             mimeType = fileName.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream';
           }
         }
-        
+
         bodyPayload = {
           number: targetNumber,
           mediatype: mediaType,
@@ -700,7 +701,7 @@ async function sendEvolutionMessage(
       let mediaType = validatedData.tipo_mensagem || 'image';
       if (mediaType === 'texto') mediaType = 'text';
       if (mediaType === 'pdf') mediaType = 'document';
-      
+
       bodyPayload = {
         number: targetNumber,
         mediatype: mediaType,
@@ -717,7 +718,7 @@ async function sendEvolutionMessage(
     }
 
     console.log("📤 Evolution API - Enviando para:", evolutionUrl);
-    
+
     const response = await fetch(evolutionUrl, {
       method: "POST",
       headers: {
@@ -727,15 +728,19 @@ async function sendEvolutionMessage(
       body: JSON.stringify(bodyPayload),
     });
 
-    // Safe JSON parsing - Evolution API sometimes returns HTML instead of JSON
-    let data: any;
     const responseText = await response.text();
+    let data: any = null;
+
     try {
-      data = JSON.parse(responseText);
+      data = responseText ? JSON.parse(responseText) : null;
     } catch (_parseError) {
       console.error("❌ Evolution API retornou resposta não-JSON:", responseText.substring(0, 200));
-      
-      // Tentar reconectar se for primeiro attempt
+
+      if (response.status === 401 && canRetryWithGlobalKey) {
+        console.warn("🔑 Chave da conexão falhou com 401; tentando chave global da Evolution...");
+        return sendEvolutionMessage(baseUrl, instanceName, globalEvolutionKey, target, isGroup, validatedData, 1);
+      }
+
       if (_retryAttempt === 0) {
         console.log("🔄 Servidor instável - tentando reconectar...");
         const reconnected = await tryReconnectInstance(baseUrl, instanceName, apiKey);
@@ -743,33 +748,36 @@ async function sendEvolutionMessage(
           return sendEvolutionMessage(baseUrl, instanceName, apiKey, target, isGroup, validatedData, 1);
         }
       }
-      
-      return { 
-        success: false, 
-        provider: 'evolution', 
-        error: 'Servidor Evolution API instável. Tentamos reconectar automaticamente.' 
+
+      return {
+        success: false,
+        provider: 'evolution',
+        error: 'Servidor Evolution API instável. Tentamos reconectar automaticamente.'
       };
     }
-    
+
     if (!response.ok) {
       console.error("Evolution API Error:", data);
-      const errorMsg = data.response?.message?.[0] || data?.message || JSON.stringify(data);
-      
-      // Detect "Connection Closed" or session errors = instance disconnected
-      const isDisconnected = errorMsg.includes('Connection Closed') || 
+      const errorMsg = data?.response?.message?.[0] || data?.response?.message || data?.message || JSON.stringify(data);
+
+      if (response.status === 401 && canRetryWithGlobalKey) {
+        console.warn("🔑 Evolution retornou 401 com a chave da conexão; tentando chave global...");
+        return sendEvolutionMessage(baseUrl, instanceName, globalEvolutionKey, target, isGroup, validatedData, 1);
+      }
+
+      const isDisconnected = errorMsg.includes('Connection Closed') ||
                              errorMsg.includes('Internal Server Error') ||
-                             errorMsg.includes('onWhatsApp') || 
+                             errorMsg.includes('onWhatsApp') ||
                              errorMsg.includes('Cannot read properties of undefined') ||
                              errorMsg.includes('not connected');
-      
+
       if (isDisconnected) {
         console.warn("⚠️ Instância WhatsApp com erro de conexão:", errorMsg);
-        
-        // 🔄 AUTO-RECONEXÃO: Tentar reconectar e reenviar (máximo 1 retry)
+
         if (_retryAttempt === 0) {
           console.log("🔄 Tentando auto-reconexão antes de desistir...");
           const reconnected = await tryReconnectInstance(baseUrl, instanceName, apiKey);
-          
+
           if (reconnected) {
             console.log("✅ Reconexão bem-sucedida! Reenviando mensagem...");
             return sendEvolutionMessage(baseUrl, instanceName, apiKey, target, isGroup, validatedData, 1);
@@ -777,14 +785,14 @@ async function sendEvolutionMessage(
             console.warn("❌ Auto-reconexão falhou. A instância pode precisar de QR Code.");
           }
         }
-        
-        return { 
-          success: false, 
-          provider: 'evolution', 
-          error: 'Instância desconectada. Tentamos reconectar automaticamente mas falhou. Reconecte via QR Code nas Configurações.' 
+
+        return {
+          success: false,
+          provider: 'evolution',
+          error: 'Instância desconectada. Tentamos reconectar automaticamente mas falhou. Reconecte via QR Code nas Configurações.'
         };
       }
-      
+
       return { success: false, provider: 'evolution', error: errorMsg };
     }
 
@@ -793,16 +801,15 @@ async function sendEvolutionMessage(
   } catch (error) {
     const errorStr = String(error);
     console.error('Evolution API Exception:', errorStr);
-    
-    // Detect connection errors
+
     if (errorStr.includes('Connection closed') || errorStr.includes('connection reset') || errorStr.includes('ECONNREFUSED')) {
-      return { 
-        success: false, 
-        provider: 'evolution', 
-        error: 'Servidor Evolution API não está respondendo. Verifique se o servidor está online.' 
+      return {
+        success: false,
+        provider: 'evolution',
+        error: 'Servidor Evolution API não está respondendo. Verifique se o servidor está online.'
       };
     }
-    
+
     return { success: false, provider: 'evolution', error: errorStr };
   }
 }
