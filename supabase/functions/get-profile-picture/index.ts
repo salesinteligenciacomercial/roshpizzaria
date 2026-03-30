@@ -12,6 +12,30 @@ const profilePictureCache = new Map<string, { url: string | null; timestamp: num
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos para resultados com foto
 const NULL_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 horas para resultados sem foto
 
+// ========== CIRCUIT BREAKER ==========
+// Se a Evolution API estiver down (502/503), parar TODAS as chamadas por 5 min
+let circuitBreakerOpen = false;
+let circuitBreakerOpenedAt = 0;
+const CIRCUIT_BREAKER_TTL = 5 * 60 * 1000; // 5 minutos
+
+function isCircuitBreakerOpen(): boolean {
+  if (!circuitBreakerOpen) return false;
+  if (Date.now() - circuitBreakerOpenedAt > CIRCUIT_BREAKER_TTL) {
+    console.log('🔌 [CIRCUIT-BREAKER] Resetando - tentando novamente');
+    circuitBreakerOpen = false;
+    return false;
+  }
+  return true;
+}
+
+function tripCircuitBreaker() {
+  if (!circuitBreakerOpen) {
+    console.log('🔴 [CIRCUIT-BREAKER] Evolution API DOWN - bloqueando chamadas por 5 min');
+    circuitBreakerOpen = true;
+    circuitBreakerOpenedAt = Date.now();
+  }
+}
+
 // Verificar se URL do WhatsApp expirou (pps.whatsapp.net URLs têm parâmetro oe= com timestamp hex)
 function isWhatsAppUrlExpired(url: string): boolean {
   if (!url || !url.includes('pps.whatsapp.net')) return false;
