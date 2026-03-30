@@ -48,11 +48,6 @@ async function getEvolutionProfilePicture(
           cleanNumber,
           `55${cleanNumber.replace(/^55/, '')}`,
           cleanNumber.replace(/^55/, ''),
-          cleanNumber.slice(-11),
-          cleanNumber.slice(-10),
-          cleanNumber.slice(-9),
-          `55${cleanNumber.slice(-11)}`,
-          `55${cleanNumber.slice(-10)}`,
         ].filter((v, i, arr) => v.length >= 8 && arr.indexOf(v) === i);
 
     for (const numberToTry of numberVariations) {
