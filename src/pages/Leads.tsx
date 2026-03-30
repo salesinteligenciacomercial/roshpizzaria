@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Plus, Upload, Search, Tag, MessageSquare, Phone, Mail, User, Building2, Download, CheckSquare, Square, Trash2, Edit, GitBranch, X, DollarSign, Trophy, XCircle, Filter } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { throttledProfilePicture } from "@/utils/profilePictureThrottle";
 import { useToast } from "@/hooks/use-toast";
 import { LeadActionsDialog } from "@/components/leads/LeadActionsDialog";
 import { LeadQuickActions } from "@/components/leads/LeadQuickActions";
