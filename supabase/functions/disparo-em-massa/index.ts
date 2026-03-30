@@ -6,10 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const BATCH_SIZE = 5;
 const DEFAULT_DELAY_SECONDS = 7;
-const SAFE_EXECUTION_WINDOW_SECONDS = 45;
 const MIN_DELAY_SECONDS = 1;
+const MAX_DELAY_SECONDS = 300;
 
 function formatPhoneNumber(phone: string): string {
   let cleaned = phone.replace(/[^0-9]/g, '');
@@ -19,35 +18,36 @@ function formatPhoneNumber(phone: string): string {
   return cleaned;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function getSafeDelaySeconds(delayBetweenMessages: number | null | undefined): number {
+  const parsed = Number(delayBetweenMessages);
+  if (!Number.isFinite(parsed)) return DEFAULT_DELAY_SECONDS;
+  return Math.max(MIN_DELAY_SECONDS, Math.min(MAX_DELAY_SECONDS, Math.floor(parsed)));
 }
 
-function getBatchSize(delayBetweenMessages: number | null | undefined): number {
-  const delaySeconds = Math.max(MIN_DELAY_SECONDS, Number(delayBetweenMessages) || DEFAULT_DELAY_SECONDS);
-  const safeBatchSize = Math.floor(SAFE_EXECUTION_WINDOW_SECONDS / delaySeconds) + 1;
+function scheduleNextBatch(selfUrl: string, serviceRoleKey: string, campaignId: string, delayMs: number) {
+  const nextBatchPromise = (async () => {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
 
-  return Math.max(1, Math.min(BATCH_SIZE, safeBatchSize));
-}
+    const response = await fetch(selfUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceRoleKey}`,
+        'apikey': serviceRoleKey,
+      },
+      body: JSON.stringify({ campaign_id: campaignId }),
+    });
 
-function scheduleNextBatch(selfUrl: string, serviceRoleKey: string, campaignId: string) {
-  const nextBatchPromise = fetch(selfUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${serviceRoleKey}`,
-      'apikey': serviceRoleKey,
-    },
-    body: JSON.stringify({ campaign_id: campaignId }),
-  }).then(async (response) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`❌ Erro ao auto-invocar próximo lote (${response.status}): ${errorText}`);
       return;
     }
 
-    console.log(`✅ Próximo lote da campanha ${campaignId} agendado`);
-  }).catch((err) => {
+    console.log(`✅ Próximo lote da campanha ${campaignId} agendado (delay ${Math.round(delayMs / 1000)}s)`);
+  })().catch((err) => {
     console.error('❌ Erro ao auto-invocar próximo lote:', err.message);
   });
 
@@ -113,163 +113,153 @@ serve(async (req) => {
       }).eq('id', campaign_id);
     }
 
-    const leads = campaign.leads_data as any[];
+    const leads = Array.isArray(campaign.leads_data) ? campaign.leads_data as any[] : [];
     let sentCount = campaign.sent_count || 0;
     let errorCount = campaign.error_count || 0;
     const errorDetails: any[] = campaign.error_details || [];
-    const startIndex = sentCount + errorCount; // Resume from where we left off
-    const batchSize = getBatchSize(campaign.delay_between_messages);
-    const endIndex = Math.min(startIndex + batchSize, leads.length);
+    const startIndex = sentCount + errorCount;
+    const safeDelaySeconds = getSafeDelaySeconds(campaign.delay_between_messages);
 
-    console.log(`🚀 Batch: processando leads ${startIndex}-${endIndex - 1} de ${leads.length} (campanha: ${campaign.campaign_name}, lote: ${batchSize}, delay: ${campaign.delay_between_messages || DEFAULT_DELAY_SECONDS}s)`);
+    if (startIndex >= leads.length) {
+      await supabase.from('disparo_campaigns').update({
+        status: 'completed',
+        sent_count: sentCount,
+        error_count: errorCount,
+        error_details: errorDetails,
+        is_paused: false,
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', campaign_id);
 
-    for (let i = startIndex; i < endIndex; i++) {
-      // Check cancellation
-      if (i > startIndex) {
-        const { data: check } = await supabase
-          .from('disparo_campaigns')
-          .select('status')
-          .eq('id', campaign_id)
-          .single();
-        if (check?.status === 'cancelled') {
-          console.log('🛑 Campanha cancelada');
-          return new Response(JSON.stringify({ success: true, cancelled: true }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-      }
+      return new Response(JSON.stringify({
+        success: true,
+        sent: sentCount,
+        errors: errorCount,
+        hasMore: false,
+        totalProcessed: startIndex,
+        total: leads.length,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-      const lead = leads[i];
-      const phone = lead.telefone || lead.phone;
+    console.log(`🚀 Processando lead ${startIndex + 1}/${leads.length} (campanha: ${campaign.campaign_name}, delay: ${safeDelaySeconds}s)`);
 
-      if (!phone) {
-        errorCount++;
-        errorDetails.push({ lead_id: lead.id, name: lead.name, error: 'Sem telefone' });
-        await updateProgress(supabase, campaign_id, sentCount, errorCount, errorDetails);
-        continue;
-      }
+    const lead = leads[startIndex];
+    const phone = lead?.telefone || lead?.phone;
 
+    if (!phone) {
+      errorCount++;
+      errorDetails.push({ lead_id: lead?.id, name: lead?.name, error: 'Sem telefone' });
+    } else {
       const formattedPhone = formatPhoneNumber(phone);
       if (formattedPhone.length < 12) {
         errorCount++;
-        errorDetails.push({ lead_id: lead.id, name: lead.name, error: 'Telefone inválido' });
-        await updateProgress(supabase, campaign_id, sentCount, errorCount, errorDetails);
-        continue;
-      }
+        errorDetails.push({ lead_id: lead?.id, name: lead?.name, error: 'Telefone inválido' });
+      } else {
+        try {
+          const payload: any = {
+            numero: formattedPhone,
+            company_id: campaign.company_id,
+          };
 
-      try {
-        const payload: any = {
-          numero: formattedPhone,
-          company_id: campaign.company_id,
-        };
-
-        if (campaign.message_type === 'text') {
-          payload.mensagem = campaign.message_content || '';
-          payload.tipo_mensagem = 'text';
-        } else if (campaign.message_type === 'template') {
-          payload.template_name = campaign.template_name;
-          payload.template_language = campaign.template_language;
-          payload.template_components = campaign.template_components;
-          payload.tipo_mensagem = 'template';
-          payload.mensagem = `[Template: ${campaign.template_name}]`;
-        } else if (campaign.message_type === 'image' || campaign.message_type === 'video') {
-          payload.mensagem = campaign.message_content || '';
-          payload.caption = campaign.message_content || '';
-          payload.tipo_mensagem = campaign.message_type;
-          if (campaign.media_storage_url) {
-            payload.mediaUrl = campaign.media_storage_url;
+          if (campaign.message_type === 'text') {
+            payload.mensagem = campaign.message_content || '';
+            payload.tipo_mensagem = 'text';
+          } else if (campaign.message_type === 'template') {
+            payload.template_name = campaign.template_name;
+            payload.template_language = campaign.template_language;
+            payload.template_components = campaign.template_components;
+            payload.tipo_mensagem = 'template';
+            payload.mensagem = `[Template: ${campaign.template_name}]`;
+          } else if (campaign.message_type === 'image' || campaign.message_type === 'video') {
+            payload.mensagem = campaign.message_content || '';
+            payload.caption = campaign.message_content || '';
+            payload.tipo_mensagem = campaign.message_type;
+            if (campaign.media_storage_url) {
+              payload.mediaUrl = campaign.media_storage_url;
+            }
           }
+
+          const { error: sendError } = await supabase.functions.invoke('enviar-whatsapp', {
+            body: payload,
+          });
+
+          if (sendError) {
+            throw new Error(sendError.message || 'Erro no envio');
+          }
+
+          sentCount++;
+
+          let mensagemConteudo = campaign.message_content || '';
+          if (campaign.message_type === 'template') {
+            mensagemConteudo = `[Template: ${campaign.template_name}]`;
+          } else if (campaign.message_type === 'image' && !mensagemConteudo) {
+            mensagemConteudo = '[Imagem]';
+          } else if (campaign.message_type === 'video' && !mensagemConteudo) {
+            mensagemConteudo = '[Vídeo]';
+          }
+
+          const conversaData: any = {
+            numero: formattedPhone,
+            telefone_formatado: formattedPhone,
+            mensagem: mensagemConteudo,
+            origem: 'WhatsApp',
+            status: 'Enviada',
+            tipo_mensagem: campaign.message_type,
+            nome_contato: lead.name || 'Lead',
+            company_id: campaign.company_id,
+            lead_id: lead.id,
+            campanha_nome: campaign.campaign_name,
+            campanha_id: campaign_id,
+            fromme: true,
+            delivered: true,
+            is_group: false,
+          };
+
+          if (campaign.media_storage_url && campaign.message_type !== 'text') {
+            conversaData.midia_url = campaign.media_storage_url;
+          }
+
+          await supabase.from('conversas').insert([conversaData]);
+
+        } catch (error: any) {
+          console.error(`❌ Erro ao enviar para ${lead?.name || 'lead'}:`, error.message);
+          errorCount++;
+          errorDetails.push({ lead_id: lead?.id, name: lead?.name, error: error.message });
         }
-
-        const { error: sendError } = await supabase.functions.invoke('enviar-whatsapp', {
-          body: payload,
-        });
-
-        if (sendError) {
-          throw new Error(sendError.message || 'Erro no envio');
-        }
-
-        sentCount++;
-
-        // Save to conversas
-        let mensagemConteudo = campaign.message_content || '';
-        if (campaign.message_type === 'template') {
-          mensagemConteudo = `[Template: ${campaign.template_name}]`;
-        } else if (campaign.message_type === 'image' && !mensagemConteudo) {
-          mensagemConteudo = '[Imagem]';
-        } else if (campaign.message_type === 'video' && !mensagemConteudo) {
-          mensagemConteudo = '[Vídeo]';
-        }
-
-        const conversaData: any = {
-          numero: formattedPhone,
-          telefone_formatado: formattedPhone,
-          mensagem: mensagemConteudo,
-          origem: 'WhatsApp',
-          status: 'Enviada',
-          tipo_mensagem: campaign.message_type,
-          nome_contato: lead.name || 'Lead',
-          company_id: campaign.company_id,
-          lead_id: lead.id,
-          campanha_nome: campaign.campaign_name,
-          campanha_id: campaign_id,
-          fromme: true,
-          delivered: true,
-          is_group: false,
-        };
-
-        if (campaign.media_storage_url && campaign.message_type !== 'text') {
-          conversaData.midia_url = campaign.media_storage_url;
-        }
-
-        await supabase.from('conversas').insert([conversaData]);
-
-      } catch (error: any) {
-        console.error(`❌ Erro ao enviar para ${lead.name}:`, error.message);
-        errorCount++;
-        errorDetails.push({ lead_id: lead.id, name: lead.name, error: error.message });
-      }
-
-      // Update progress
-      await updateProgress(supabase, campaign_id, sentCount, errorCount, errorDetails);
-
-      // Delay between messages (only if not last in batch)
-      if (i < endIndex - 1) {
-        await sleep((campaign.delay_between_messages || DEFAULT_DELAY_SECONDS) * 1000);
       }
     }
+
+    await updateProgress(supabase, campaign_id, sentCount, errorCount, errorDetails);
 
     const totalProcessed = sentCount + errorCount;
     const hasMore = totalProcessed < leads.length;
 
     if (hasMore) {
-      // Check for pause logic
-      const pauseAfter = campaign.pause_after_messages || 15;
-      const pauseDur = campaign.pause_duration || 120;
+      const pauseAfter = Math.max(0, Number(campaign.pause_after_messages) || 0);
+      const pauseDur = Math.max(0, Number(campaign.pause_duration) || 0);
 
-      if (pauseAfter > 0 && totalProcessed % pauseAfter === 0 && totalProcessed > 0) {
-        console.log(`⏸️ Pausa automática: ${pauseDur}s após ${totalProcessed} mensagens`);
-        await supabase.from('disparo_campaigns').update({
-          sent_count: sentCount,
-          error_count: errorCount,
-          error_details: errorDetails,
-          is_paused: true,
-          updated_at: new Date().toISOString(),
-        }).eq('id', campaign_id);
+      let nextDelaySeconds = safeDelaySeconds;
+      let isPaused = false;
 
-        await sleep(pauseDur * 1000);
-
-        await supabase.from('disparo_campaigns').update({
-          is_paused: false,
-          updated_at: new Date().toISOString(),
-        }).eq('id', campaign_id);
+      if (pauseAfter > 0 && totalProcessed % pauseAfter === 0) {
+        isPaused = pauseDur > 0;
+        nextDelaySeconds += pauseDur;
+        if (isPaused) {
+          console.log(`⏸️ Pausa automática: ${pauseDur}s após ${totalProcessed} mensagens`);
+        }
       }
 
-      // Self-invoke for next batch (fire-and-forget)
-      const selfUrl = `${supabaseUrl}/functions/v1/disparo-em-massa`;
-      console.log(`🔄 Invocando próximo lote a partir do index ${totalProcessed}...`);
+      await supabase.from('disparo_campaigns').update({
+        is_paused: isPaused,
+        updated_at: new Date().toISOString(),
+      }).eq('id', campaign_id);
 
-      scheduleNextBatch(selfUrl, supabaseServiceKey, campaign_id);
+      const selfUrl = `${supabaseUrl}/functions/v1/disparo-em-massa`;
+      console.log(`🔄 Invocando próximo lote a partir do index ${totalProcessed} em ${nextDelaySeconds}s...`);
+
+      scheduleNextBatch(selfUrl, supabaseServiceKey, campaign_id, nextDelaySeconds * 1000);
 
     } else {
       // All done - mark completed
