@@ -10,7 +10,7 @@ const corsHeaders = {
 // Cache em memória para evitar chamadas repetidas
 const profilePictureCache = new Map<string, { url: string | null; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos para resultados com foto
-const NULL_CACHE_TTL = 30 * 60 * 1000; // 30 minutos para resultados sem foto
+const NULL_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 horas para resultados sem foto
 
 // Verificar se URL do WhatsApp expirou (pps.whatsapp.net URLs têm parâmetro oe= com timestamp hex)
 function isWhatsAppUrlExpired(url: string): boolean {
