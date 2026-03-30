@@ -1,83 +1,58 @@
 
-Objetivo: corrigir o fluxo de gerar QR Code no módulo Configurações > Canais para que a instância seja criada no servidor correto e o QR exibido seja sempre válido para leitura no WhatsApp.
 
-O que encontrei
-- O frontend usa `src/components/configuracoes/WhatsAppQRCode.tsx` para chamar a função `evolution-create-instance`.
-- A função `supabase/functions/evolution-create-instance/index.ts` cria a instância usando apenas os secrets globais `EVOLUTION_API_URL` e `EVOLUTION_API_KEY`.
-- Nos logs, a tentativa mais recente de criar a instância `TESTE` chegou a iniciar, mas houve timeout em um host diferente do que o sistema usa nas conexões já salvas.
-- No banco, conexões existentes usam principalmente `https://waze-evolution-api.0ntuaf.easypanel.host`, enquanto o fluxo de criação está tentando usar outro host de secret. Isso explica “não gera”.
-- Além disso, o frontend assume que qualquer retorno `data.qrcode` é sempre imagem PNG em base64 e força `data:image/png;base64,...`. Se a Evolution devolver QR em outro formato (ex.: string, data URI diferente, SVG/base64, ou payload textual), a UI pode mostrar um QR inválido. Isso explica “quando gera não é um QR válido”.
+# Plano: Resolver bloqueio de envio/recebimento de mensagens
 
-Plano de correção
-1. Fortalecer a função `evolution-create-instance`
-- Resolver URL/API key por ordem de prioridade:
-  - dados já existentes da empresa/instância no banco, quando houver
-  - fallback para secrets globais
-- Normalizar a URL da Evolution antes de chamar a API, reaproveitando a mesma ideia de sanitização já usada em `enviar-whatsapp`.
-- Adicionar timeout controlado e mensagens de erro mais claras para diferenciar:
-  - servidor offline
-  - host incorreto
-  - resposta sem QR
-  - instância já existente sem QR renovado
+## Diagnóstico Confirmado
 
-2. Corrigir a extração do QR na função
-- Ler múltiplos formatos possíveis de retorno da Evolution:
-  - `qrcode.base64`
-  - `base64`
-  - `qrcode`
-  - `code`
-  - `pairingCode`
-- Se a API retornar um QR textual/em formato alternativo, transformar isso em um formato que a UI consiga renderizar corretamente, em vez de presumir PNG.
-- Salvar `qr_code` e `qr_code_expires_at` na tabela `whatsapp_connections` para manter consistência e permitir reaproveitamento do QR válido.
+O banco de dados mostra que **mensagens estão diminuindo drasticamente**: 296 nas últimas 6 horas, mas apenas 3 na última hora. A causa raiz é:
 
-3. Corrigir a renderização no frontend
-- Criar uma pequena camada de normalização em `WhatsAppQRCode.tsx` para identificar:
-  - data URI pronta
-  - base64 de imagem
-  - conteúdo textual de QR/pairing code
-- Renderizar imagem quando vier imagem válida.
-- Renderizar código alternativo/pairing code quando não vier imagem, com instrução clara para o usuário.
-- Usar o `qr_code` salvo no banco ao recarregar a tela, evitando perder o QR enquanto a instância ainda está em `connecting`.
+**A função `get-profile-picture` está consumindo toda a capacidade de processamento das edge functions.**
 
-4. Ajustar o fluxo de refresh
-- Fazer `refresh_qr` usar sempre a URL/API key da própria instância salva no banco.
-- Se a instância já existir mas não houver QR no retorno, tentar novamente via endpoint de conexão e persistir o novo QR.
-- Se a API responder sem QR e sem pairing code, retornar erro explícito em vez de “sucesso vazio”.
+Evidências:
+- Console do navegador: **TODAS** as chamadas `get-profile-picture` falham com "Timeout após 8000ms" e "Failed to fetch"
+- Logs do servidor: dezenas de boots/shutdowns por segundo para `get-profile-picture`, cada uma tentando **8 variações de número** contra a Evolution API
+- **Zero logs** para `webhook-conversas` e `enviar-whatsapp` — não conseguem iniciar porque a capacidade está esgotada
+- Duas partes do código disparam carregamento de avatares em massa ao abrir Conversas (linhas ~1400 e ~4042)
 
-5. Melhorar observabilidade e UX
-- Exibir mensagens mais específicas no toast:
-  - “Servidor de conexão indisponível”
-  - “Instância criada, mas a API não retornou QR”
-  - “QR expirado, gere um novo”
-- Registrar nos logs da função qual host foi usado e qual formato de QR foi recebido, sem expor segredo.
-- Manter o polling de status, mas sem depender dele para exibir o QR inicial.
+Resultado: as funções críticas de envio e recebimento não conseguem processar, afetando WhatsApp (Evolution + Oficial) e Instagram simultaneamente.
 
-Arquivos a ajustar
-- `supabase/functions/evolution-create-instance/index.ts`
-- `src/components/configuracoes/WhatsAppQRCode.tsx`
+## Plano de Correção
 
-Impacto esperado
-- O botão “Gerar QR Code” vai criar a instância no servidor correto.
-- O QR exibido deixará de ser inválido por erro de interpretação do formato.
-- O usuário conseguirá escanear o código sem precisar configurar manualmente.
-- Quando a API não devolver um QR utilizável, a tela mostrará erro real em vez de um QR quebrado.
+### Passo 1: Desativar carregamento automático de fotos de perfil na listagem
+**Arquivo:** `src/pages/Conversas.tsx`
 
-Detalhes técnicos
-```text
-Problema principal
-Frontend -> evolution-create-instance
-              -> usa secret global com host A
-Banco/conexões existentes -> usam host B
-Resultado -> timeout ou QR inconsistente
+Remover os dois blocos que fazem carregamento em massa de avatares ao abrir a tela de Conversas (linhas ~1399-1432 e ~4042-4064). Substituir por carregamento **sob demanda** — buscar a foto apenas quando o usuário **clicar** em uma conversa específica.
 
-Problema secundário
-API retorna QR em formato variável
-Frontend força "data:image/png;base64,..."
-Resultado -> imagem inválida / QR ilegível
-```
+Isso elimina imediatamente dezenas de chamadas paralelas à edge function.
 
-Validação após implementar
-- Testar geração com uma nova instância no modo “Escanear QR Code”.
-- Confirmar que o QR abre/renderiza corretamente e pode ser escaneado.
-- Confirmar que, ao atualizar o QR, o novo código também continua válido.
-- Confirmar que a conexão muda para `connected` sem precisar recarregar a página.
+### Passo 2: Otimizar a edge function `get-profile-picture`
+**Arquivo:** `supabase/functions/get-profile-picture/index.ts`
+
+- Reduzir variações de número de **8** para **3** (número original, com 55, sem 55)
+- Adicionar timeout interno de **5 segundos** para a chamada à Evolution API
+- Aumentar cache de resultados negativos de 30 min para **2 horas**
+- Retornar `null` imediatamente se a Evolution API não responder
+
+### Passo 3: Remover chamadas de foto de perfil de outros componentes que carregam listas
+**Arquivos:** `src/pages/Leads.tsx`, `src/pages/Agenda.tsx`, `src/components/funil/LeadCard.tsx`, `src/components/tarefas/TaskCard.tsx`
+
+Adicionar throttling global — máximo **1 chamada por vez** em toda a aplicação, com fila que descarta chamadas quando há mais de 3 pendentes.
+
+### Passo 4: Forçar redeploy das funções críticas
+Fazer uma alteração mínima (adicionar comentário) nas funções `webhook-conversas`, `enviar-whatsapp`, `webhook-meta` e `enviar-instagram` para forçar um redeploy limpo e limpar qualquer estado de BOOT_ERROR.
+
+## Resultado Esperado
+- Redução de ~95% das chamadas à edge function `get-profile-picture`
+- Funções críticas (`webhook-conversas`, `enviar-whatsapp`, `webhook-meta`, `enviar-instagram`) voltam a ter capacidade para processar
+- Envio e recebimento de mensagens restaurados em todos os canais
+- Fotos de perfil carregam sob demanda ao clicar na conversa
+
+## Detalhes Técnicos
+
+**Arquivos modificados:**
+1. `src/pages/Conversas.tsx` — remover lazy loading em massa de avatares, carregar sob demanda
+2. `supabase/functions/get-profile-picture/index.ts` — reduzir variações, timeout interno, cache mais longo
+3. `src/pages/Leads.tsx`, `src/pages/Agenda.tsx` — throttling global
+4. `src/components/funil/LeadCard.tsx`, `src/components/tarefas/TaskCard.tsx` — throttling global
+5. Redeploy de `webhook-conversas`, `enviar-whatsapp`, `webhook-meta`, `enviar-instagram`
+
