@@ -7,7 +7,8 @@ const corsHeaders = {
 };
 
 interface RedefinirSenhaRequest {
-  userId: string;
+  userId?: string;
+  companyId?: string;
   novaSenha: string;
   notificar?: boolean;
   email?: string;
@@ -21,19 +22,59 @@ serve(async (req) => {
   }
 
   try {
-    const { userId, novaSenha, notificar, email, telefone, nome }: RedefinirSenhaRequest = await req.json();
+    const { userId, companyId, novaSenha, notificar, email, telefone, nome }: RedefinirSenhaRequest = await req.json();
 
-    console.log('🔐 [REDEFINIR SENHA] Iniciando para usuário:', userId);
+    console.log('🔐 [REDEFINIR SENHA] Iniciando. userId:', userId, 'companyId:', companyId);
 
-    // Criar cliente Supabase com service role para alterar senha de outros usuários
+    if (!novaSenha || novaSenha.length < 6) {
+      return new Response(JSON.stringify({ success: false, error: 'Senha deve ter no mínimo 6 caracteres' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Resolver userId: se não fornecido, buscar pelo companyId
+    let resolvedUserId = userId;
+
+    if (!resolvedUserId && companyId) {
+      console.log('🔍 [REDEFINIR SENHA] Buscando admin da empresa:', companyId);
+      const { data: roles, error: rolesErr } = await supabaseAdmin
+        .from('user_roles')
+        .select('user_id, role')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: true })
+        .limit(1);
+
+      if (rolesErr) {
+        console.error('❌ [REDEFINIR SENHA] Erro ao buscar roles:', rolesErr);
+        return new Response(JSON.stringify({ success: false, error: 'Erro ao buscar usuário da empresa' }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (roles && roles.length > 0) {
+        resolvedUserId = roles[0].user_id;
+        console.log('✅ [REDEFINIR SENHA] Usuário encontrado:', resolvedUserId, 'role:', roles[0].role);
+      }
+    }
+
+    if (!resolvedUserId) {
+      console.error('❌ [REDEFINIR SENHA] Nenhum userId encontrado');
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Usuário não encontrado para esta empresa. Verifique se a subconta possui um usuário administrador.' 
+      }), {
+        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Atualizar senha do usuário
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      userId,
+      resolvedUserId,
       { password: novaSenha }
     );
 
@@ -42,7 +83,7 @@ serve(async (req) => {
       throw updateError;
     }
 
-    console.log('✅ [REDEFINIR SENHA] Senha atualizada com sucesso');
+    console.log('✅ [REDEFINIR SENHA] Senha atualizada com sucesso para:', resolvedUserId);
 
     // Enviar notificação se solicitado
     if (notificar && (email || telefone)) {
@@ -65,7 +106,6 @@ Para acessar o sistema, use seu e-mail e a nova senha.
 Dúvidas? Entre em contato com o suporte.
       `.trim();
 
-      // Enviar por WhatsApp se telefone fornecido
       if (telefone) {
         try {
           const telefoneFormatado = telefone.replace(/\D/g, '');
@@ -96,19 +136,15 @@ Dúvidas? Entre em contato com o suporte.
           console.error('❌ [REDEFINIR SENHA] Erro ao enviar WhatsApp:', error);
         }
       }
-
-      // TODO: Enviar email
-      console.log('📧 [REDEFINIR SENHA] Email seria enviado para:', email);
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        mensagem: 'Senha redefinida com sucesso'
+        mensagem: 'Senha redefinida com sucesso',
+        userId: resolvedUserId,
       }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
@@ -118,10 +154,7 @@ Dúvidas? Entre em contato com o suporte.
         success: false,
         error: error instanceof Error ? error.message : 'Erro desconhecido'
       }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

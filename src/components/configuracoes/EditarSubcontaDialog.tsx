@@ -180,23 +180,14 @@ export function EditarSubcontaDialog({ company, open, onOpenChange, onSuccess }:
       return;
     }
 
-    if (!userId) {
-      toast({
-        title: "Erro",
-        description: "Usuário não encontrado para esta empresa. Verifique se a subconta foi criada corretamente.",
-        variant: "destructive",
-      });
-      console.error('❌ [EDITAR-SUBCONTA] userId não encontrado para empresa:', company.id);
-      return;
-    }
-
     setLoading(true);
     try {
-      console.log('🔐 [EDITAR-SUBCONTA] Redefinindo senha para usuário:', userId);
+      console.log('🔐 [EDITAR-SUBCONTA] Redefinindo senha para empresa:', company.id, 'userId:', userId);
       
       const { data, error } = await supabase.functions.invoke('redefinir-senha-subconta', {
         body: {
-          userId,
+          userId: userId || undefined,
+          companyId: company.id,
           novaSenha,
           notificar: true,
           email: formData.email,
