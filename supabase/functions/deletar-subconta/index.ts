@@ -135,9 +135,14 @@ serve(async (req) => {
       throw new Error('Não autenticado');
     }
 
-    // Verificar se o usuário tem permissão (é admin da parent company)
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    // Usar cliente com anon key + header do usuário para validar o token
+    const supabaseAuth = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
     
     if (authError || !user) {
       throw new Error('Usuário não autenticado');
