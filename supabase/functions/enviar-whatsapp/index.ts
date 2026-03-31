@@ -33,6 +33,51 @@ function sanitizeEvolutionUrl(url: string): string {
   }
 }
 
+function stringifyProviderError(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === 'string' ? item : JSON.stringify(item)))
+      .join(' | ');
+  }
+
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const nested = obj.message ?? obj.error ?? obj.details ?? obj.reason;
+
+    if (typeof nested === 'string') return nested;
+    if (Array.isArray(nested)) {
+      return nested
+        .map((item) => (typeof item === 'string' ? item : JSON.stringify(item)))
+        .join(' | ');
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+
+  return String(value);
+}
+
+function isEvolutionDisconnectedError(message: string): boolean {
+  if (!message) return false;
+
+  return [
+    /connection closed/i,
+    /inst[aâ]ncia desconectada/i,
+    /instance.*disconnected/i,
+    /session.*closed/i,
+    /not connected/i,
+    /reconnect via qr code/i,
+    /scan.*qr/i,
+  ].some((pattern) => pattern.test(message));
+}
+
 // Input validation schema
 const enviarWhatsAppSchema = z.object({
   numero: z.string().refine((val) => {
@@ -758,21 +803,28 @@ async function sendEvolutionMessage(
 
     if (!response.ok) {
       console.error("Evolution API Error:", data);
-      const errorMsg = data?.response?.message?.[0] || data?.response?.message || data?.message || JSON.stringify(data);
+      const rawError = data?.response?.message?.[0] ?? data?.response?.message ?? data?.message ?? data?.error ?? data;
+      const errorMsg = stringifyProviderError(rawError) || 'Falha na Evolution API';
 
       if (response.status === 401 && canRetryWithGlobalKey) {
         console.warn("🔑 Evolution retornou 401 com a chave da conexão; tentando chave global...");
         return sendEvolutionMessage(baseUrl, instanceName, globalEvolutionKey, target, isGroup, validatedData, 1);
       }
 
-      const isDisconnected = errorMsg.includes('Connection Closed') ||
-                             errorMsg.includes('Internal Server Error') ||
-                             errorMsg.includes('onWhatsApp') ||
-                             errorMsg.includes('Cannot read properties of undefined') ||
-                             errorMsg.includes('not connected');
+      const isDisconnected = isEvolutionDisconnectedError(errorMsg);
 
       if (isDisconnected) {
         console.warn("⚠️ Instância WhatsApp com erro de conexão:", errorMsg);
+
+        const stillConnected = await checkEvolutionConnectionState(baseUrl, instanceName, apiKey);
+        if (stillConnected) {
+          console.warn("⚠️ [EVOLUTION] Instância segue conectada. Retornando erro temporário sem marcar desconexão.");
+          return {
+            success: false,
+            provider: 'evolution',
+            error: `Falha temporária da Evolution API: ${errorMsg}`
+          };
+        }
 
         if (_retryAttempt === 0) {
           console.log("🔄 Tentando auto-reconexão antes de desistir...");
@@ -856,12 +908,14 @@ serve(async (req) => {
       );
     }
 
-    // Buscar conexão - NÃO filtrar por status aqui, pois Meta API funciona independente do Evolution
+    // Buscar conexão mais recente da empresa (evita usar registro antigo/stale)
     const { data: connection, error: connError } = await supabase
       .from('whatsapp_connections')
       .select('*')
       .eq('company_id', validatedData.company_id)
-      .single();
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (connError || !connection) {
       console.error("❌ Conexão não encontrada:", connError);
@@ -878,9 +932,9 @@ serve(async (req) => {
     console.log("🔗 Evolution URL resolvida:", resolvedEvolutionUrl || "(vazio)");
 
     // Verificar se há pelo menos uma API disponível
-    const hasMetaCredentials = connection.meta_phone_number_id && connection.meta_access_token;
-    const hasEvolutionConfig = resolvedEvolutionUrl && resolvedEvolutionKey && connection.instance_name;
-    const evolutionConnected = connection.status === 'connected';
+    const hasMetaCredentials = !!(connection.meta_phone_number_id && connection.meta_access_token);
+    const hasEvolutionConfig = !!(resolvedEvolutionUrl && resolvedEvolutionKey && connection.instance_name);
+    const evolutionConnected = ['connected', 'open'].includes(String(connection.status || '').toLowerCase());
 
     // Se não tem nenhuma API configurada OU (Evolution desconectado E não tem Meta)
     if (!hasMetaCredentials && !hasEvolutionConfig) {
