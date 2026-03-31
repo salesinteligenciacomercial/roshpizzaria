@@ -192,6 +192,26 @@ serve(async (req) => {
         });
       }
 
+      // Verificar se CNPJ já existe
+      if (cnpj) {
+        const { data: existingCnpj } = await supabaseAdmin
+          .from('companies')
+          .select('id, name')
+          .eq('cnpj', cnpj)
+          .maybeSingle();
+        
+        if (existingCnpj) {
+          console.error('❌ [CRIAR-USUARIO] CNPJ já cadastrado:', cnpj, 'empresa:', existingCnpj.name);
+          return new Response(JSON.stringify({ 
+            error: `Este CNPJ já está cadastrado para a empresa "${existingCnpj.name}". Use outro CNPJ ou edite a empresa existente.`,
+            code: 'CNPJ_JA_CADASTRADO'
+          }), { 
+            status: 409, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          });
+        }
+      }
+
       console.log('📝 [CRIAR-USUARIO] Criando nova empresa...');
       
       // Criar nova empresa
