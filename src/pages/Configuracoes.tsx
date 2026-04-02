@@ -1250,6 +1250,7 @@ export default function Configuracoes() {
         </TabsContent>
 
         <TabsContent value="avancado" className="space-y-4">
+          <DatabaseHealth />
           <StorageCleanup />
           <Card>
             <CardHeader>

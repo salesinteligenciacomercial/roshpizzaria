@@ -90,5 +90,8 @@ verify_jwt = true
 [functions.cleanup-storage]
 verify_jwt = true
 
+[functions.cleanup-database]
+verify_jwt = true
+
 [functions.disparo-em-massa]
 verify_jwt = false
