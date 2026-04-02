@@ -74,8 +74,12 @@ serve(async (req) => {
         const topTables = await client.queryObject(topTablesQuery);
 
         // Old records count
-        const oldCronQuery = `SELECT COUNT(*) as count FROM cron.job_run_details WHERE end_time < NOW() - INTERVAL '${retention_days} days'`;
-        const oldHttpQuery = `SELECT COUNT(*) as count FROM net._http_response WHERE created < NOW() - INTERVAL '${retention_days} days'`;
+        const oldCronQuery = retention_days === 0
+          ? `SELECT COUNT(*) as count FROM cron.job_run_details`
+          : `SELECT COUNT(*) as count FROM cron.job_run_details WHERE end_time < NOW() - INTERVAL '${retention_days} days'`;
+        const oldHttpQuery = retention_days === 0
+          ? `SELECT COUNT(*) as count FROM net._http_response`
+          : `SELECT COUNT(*) as count FROM net._http_response WHERE created < NOW() - INTERVAL '${retention_days} days'`;
         
         const oldCron = await client.queryObject(oldCronQuery);
         const oldHttp = await client.queryObject(oldHttpQuery);
@@ -102,14 +106,21 @@ serve(async (req) => {
       }
 
       if (action === "cleanup_logs") {
-        const days = Math.max(3, Math.min(90, retention_days));
-        
-        const cronDel = await client.queryObject(
-          `DELETE FROM cron.job_run_details WHERE end_time < NOW() - INTERVAL '${days} days'`
-        );
-        const httpDel = await client.queryObject(
-          `DELETE FROM net._http_response WHERE created < NOW() - INTERVAL '${days} days'`
-        );
+        let cronDel, httpDel;
+
+        if (retention_days === 0) {
+          // Limpar TUDO - todo o período
+          cronDel = await client.queryObject(`DELETE FROM cron.job_run_details`);
+          httpDel = await client.queryObject(`DELETE FROM net._http_response`);
+        } else {
+          const days = Math.max(3, Math.min(90, retention_days));
+          cronDel = await client.queryObject(
+            `DELETE FROM cron.job_run_details WHERE end_time < NOW() - INTERVAL '${days} days'`
+          );
+          httpDel = await client.queryObject(
+            `DELETE FROM net._http_response WHERE created < NOW() - INTERVAL '${days} days'`
+          );
+        }
 
         const deletedCron = cronDel.rowCount ?? 0;
         const deletedHttp = httpDel.rowCount ?? 0;
@@ -141,13 +152,19 @@ serve(async (req) => {
 
       if (action === "full_maintenance") {
         // Step 1: Clean logs
-        const days = Math.max(3, Math.min(90, retention_days));
-        const cronDel = await client.queryObject(
-          `DELETE FROM cron.job_run_details WHERE end_time < NOW() - INTERVAL '${days} days'`
-        );
-        const httpDel = await client.queryObject(
-          `DELETE FROM net._http_response WHERE created < NOW() - INTERVAL '${days} days'`
-        );
+        let cronDel, httpDel;
+        if (retention_days === 0) {
+          cronDel = await client.queryObject(`DELETE FROM cron.job_run_details`);
+          httpDel = await client.queryObject(`DELETE FROM net._http_response`);
+        } else {
+          const days = Math.max(3, Math.min(90, retention_days));
+          cronDel = await client.queryObject(
+            `DELETE FROM cron.job_run_details WHERE end_time < NOW() - INTERVAL '${days} days'`
+          );
+          httpDel = await client.queryObject(
+            `DELETE FROM net._http_response WHERE created < NOW() - INTERVAL '${days} days'`
+          );
+        }
 
         // Step 2: Vacuum main tables
         const tables = ["conversas", "leads", "compromissos"];
