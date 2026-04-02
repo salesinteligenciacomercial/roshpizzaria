@@ -134,6 +134,7 @@ export function DatabaseHealth() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="0">🧹 Todo o período (limpar tudo)</SelectItem>
                 <SelectItem value="3">3 dias</SelectItem>
                 <SelectItem value="7">7 dias</SelectItem>
                 <SelectItem value="15">15 dias</SelectItem>
