@@ -74,8 +74,12 @@ serve(async (req) => {
         const topTables = await client.queryObject(topTablesQuery);
 
         // Old records count
-        const oldCronQuery = `SELECT COUNT(*) as count FROM cron.job_run_details WHERE end_time < NOW() - INTERVAL '${retention_days} days'`;
-        const oldHttpQuery = `SELECT COUNT(*) as count FROM net._http_response WHERE created < NOW() - INTERVAL '${retention_days} days'`;
+        const oldCronQuery = retention_days === 0
+          ? `SELECT COUNT(*) as count FROM cron.job_run_details`
+          : `SELECT COUNT(*) as count FROM cron.job_run_details WHERE end_time < NOW() - INTERVAL '${retention_days} days'`;
+        const oldHttpQuery = retention_days === 0
+          ? `SELECT COUNT(*) as count FROM net._http_response`
+          : `SELECT COUNT(*) as count FROM net._http_response WHERE created < NOW() - INTERVAL '${retention_days} days'`;
         
         const oldCron = await client.queryObject(oldCronQuery);
         const oldHttp = await client.queryObject(oldHttpQuery);
