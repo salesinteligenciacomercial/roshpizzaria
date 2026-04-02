@@ -45,6 +45,7 @@ import { ProdutosServicosManager } from "@/components/configuracoes/ProdutosServ
 import { cleanAllConversationsHistory } from "@/utils/cleanConversationsHistory";
 import { WebhooksConfig } from "@/components/configuracoes/WebhooksConfig";
 import { StorageCleanup } from "@/components/configuracoes/StorageCleanup";
+import { DatabaseHealth } from "@/components/configuracoes/DatabaseHealth";
 import { UsuariosSubcontaDialog } from "@/components/configuracoes/UsuariosSubcontaDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { usePermissions } from "@/hooks/usePermissions";
