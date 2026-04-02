@@ -148,13 +148,19 @@ serve(async (req) => {
 
       if (action === "full_maintenance") {
         // Step 1: Clean logs
-        const days = Math.max(3, Math.min(90, retention_days));
-        const cronDel = await client.queryObject(
-          `DELETE FROM cron.job_run_details WHERE end_time < NOW() - INTERVAL '${days} days'`
-        );
-        const httpDel = await client.queryObject(
-          `DELETE FROM net._http_response WHERE created < NOW() - INTERVAL '${days} days'`
-        );
+        let cronDel, httpDel;
+        if (retention_days === 0) {
+          cronDel = await client.queryObject(`DELETE FROM cron.job_run_details`);
+          httpDel = await client.queryObject(`DELETE FROM net._http_response`);
+        } else {
+          const days = Math.max(3, Math.min(90, retention_days));
+          cronDel = await client.queryObject(
+            `DELETE FROM cron.job_run_details WHERE end_time < NOW() - INTERVAL '${days} days'`
+          );
+          httpDel = await client.queryObject(
+            `DELETE FROM net._http_response WHERE created < NOW() - INTERVAL '${days} days'`
+          );
+        }
 
         // Step 2: Vacuum main tables
         const tables = ["conversas", "leads", "compromissos"];
