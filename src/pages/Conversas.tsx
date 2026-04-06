@@ -2685,10 +2685,12 @@ function Conversas() {
               sentBy = profile.full_name || profile.email || 'Usuário';
             }
           }
+          const msgType = msg.tipo_mensagem === 'image' ? 'image' : msg.tipo_mensagem === 'audio' ? 'audio' : msg.tipo_mensagem === 'video' ? 'video' : msg.tipo_mensagem === 'document' || msg.tipo_mensagem === 'pdf' ? 'pdf' : msg.tipo_mensagem === 'contact' ? 'contact' : 'text';
+          const contactDataParsed = msgType === 'contact' ? parseContactData(msg.mensagem || '') : undefined;
           const message: Message = {
             id: msg.id,
-            content: msg.mensagem || '',
-            type: msg.tipo_mensagem === 'image' ? 'image' : msg.tipo_mensagem === 'audio' ? 'audio' : msg.tipo_mensagem === 'video' ? 'video' : msg.tipo_mensagem === 'document' || msg.tipo_mensagem === 'pdf' ? 'pdf' : 'text',
+            content: msgType === 'contact' ? (contactDataParsed ? `📇 Contato: ${contactDataParsed.name}` : msg.mensagem || '') : (msg.mensagem || ''),
+            type: msgType,
             sender: isFromMe ? 'user' : 'contact',
             timestamp: new Date(msg.created_at),
             delivered: msg.status === 'Enviada',
@@ -2697,7 +2699,8 @@ function Conversas() {
             fileName: msg.arquivo_nome,
             fileSize: extractFileSizeFromMediaUrl(msg.midia_url),
             mimeType: msg.tipo_mensagem === 'video' ? 'video/mp4' : msg.tipo_mensagem === 'audio' ? 'audio/mpeg' : msg.tipo_mensagem === 'image' ? 'image/jpeg' : msg.tipo_mensagem === 'document' || msg.tipo_mensagem === 'pdf' ? 'application/pdf' : undefined,
-            sentBy: sentBy
+            sentBy: sentBy,
+            contactData: contactDataParsed
           };
           conv.messages.push(message);
 
@@ -3704,20 +3707,22 @@ function Conversas() {
           if (!sentBy && m.owner_id && isFromMe) {
             sentBy = ownerNamesMap.get(m.owner_id) || "Equipe";
           }
+          const msgType2 = (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem === 'image' ? 'image' : m.tipo_mensagem === 'audio' ? 'audio' : m.tipo_mensagem === 'video' ? 'video' : m.tipo_mensagem === 'document' || m.tipo_mensagem === 'pdf' ? 'pdf' : m.tipo_mensagem === 'contact' ? 'contact' : m.tipo_mensagem || 'text') as any;
+          const contactDataParsed3 = msgType2 === 'contact' ? parseContactData(m.mensagem || '') : undefined;
           return {
             id: m.id || `msg-${Date.now()}-${Math.random()}`,
-            content: m.mensagem || '',
-            type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem === 'image' ? 'image' : m.tipo_mensagem === 'audio' ? 'audio' : m.tipo_mensagem === 'video' ? 'video' : m.tipo_mensagem === 'document' || m.tipo_mensagem === 'pdf' ? 'pdf' : m.tipo_mensagem || 'text') as any,
+            content: msgType2 === 'contact' ? (contactDataParsed3 ? `📇 Contato: ${contactDataParsed3.name}` : m.mensagem || '') : (m.mensagem || ''),
+            type: msgType2,
             sender: sender,
             timestamp: new Date(m.created_at || Date.now()),
             delivered: m.delivered === true || m.status === 'Enviada',
             read: m.read === true,
-            // ⚡ CORREÇÃO: Usar campo read do banco (true = contato visualizou)
             mediaUrl: m.midia_url,
             fileName: m.arquivo_nome,
             fileSize: extractFileSizeFromMediaUrl(m.midia_url),
             mimeType: m.tipo_mensagem === 'video' ? 'video/mp4' : m.tipo_mensagem === 'audio' ? 'audio/mpeg' : m.tipo_mensagem === 'image' ? 'image/jpeg' : m.tipo_mensagem === 'document' || m.tipo_mensagem === 'pdf' ? 'application/pdf' : undefined,
-            sentBy: sentBy // Nome do usuário que enviou
+            sentBy: sentBy,
+            contactData: contactDataParsed3
           };
         });
 
@@ -4290,18 +4295,20 @@ function Conversas() {
             sentBy = "WhatsApp"; // Indica que foi enviada pelo WhatsApp app, não pelo CRM
           }
           
+          const msgType4 = (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem === 'contact' ? 'contact' : m.tipo_mensagem || 'text') as any;
+          const contactDataParsed4 = msgType4 === 'contact' ? parseContactData(m.mensagem || '') : undefined;
           return {
             id: m.id || `msg-${Date.now()}-${Math.random()}`,
-            content: m.mensagem || '',
-            type: (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem || 'text') as any,
+            content: msgType4 === 'contact' ? (contactDataParsed4 ? `📇 Contato: ${contactDataParsed4.name}` : m.mensagem || '') : (m.mensagem || ''),
+            type: msgType4,
             sender: sender,
             timestamp: new Date(m.created_at || Date.now()),
             delivered: m.delivered === true || m.status === 'Enviada',
             read: m.read === true,
-            // ⚡ CORREÇÃO: Usar campo read do banco (true = contato visualizou)
             mediaUrl: m.midia_url,
             fileName: m.arquivo_nome,
-            sentBy: sentBy, // ✅ CORREÇÃO: Incluir assinatura do usuário que enviou
+            sentBy: sentBy,
+            contactData: contactDataParsed4
           };
         })
         // Ordenar por timestamp para garantir ordem cronológica correta
