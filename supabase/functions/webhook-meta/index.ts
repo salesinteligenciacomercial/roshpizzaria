@@ -260,9 +260,19 @@ function transformWhatsAppPayload(entry: any) {
             messageContent = `📍 Localização: ${message.location?.latitude}, ${message.location?.longitude}`;
             break;
           case 'contacts':
-            messageType = 'text';
-            const contactNames = message.contacts?.map((c: any) => c.name?.formatted_name).join(', ');
-            messageContent = `📇 Contato(s): ${contactNames}`;
+            messageType = 'contact';
+            if (message.contacts?.length === 1) {
+              const c = message.contacts[0];
+              const cName = c.name?.formatted_name || c.name?.first_name || 'Contato';
+              const cPhone = c.phones?.[0]?.phone || c.phones?.[0]?.wa_id || '';
+              messageContent = JSON.stringify({ type: 'contact', name: cName, phone: cPhone.replace(/[^0-9+]/g, '') });
+            } else {
+              const parsedContacts = (message.contacts || []).map((c: any) => ({
+                name: c.name?.formatted_name || c.name?.first_name || 'Contato',
+                phone: (c.phones?.[0]?.phone || c.phones?.[0]?.wa_id || '').replace(/[^0-9+]/g, '')
+              }));
+              messageContent = JSON.stringify({ type: 'contacts', contacts: parsedContacts });
+            }
             break;
           case 'button':
             messageType = 'text';
