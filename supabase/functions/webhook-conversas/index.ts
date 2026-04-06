@@ -411,6 +411,30 @@ async function transformEvolutionPayload(body: any, supabase: any) {
                          '';
     mensagem = templateBody ? `*${templateName}*\n\n${templateBody}` : `[Template: ${templateName}]`;
     tipo_mensagem = 'template';
+  } else if (data.message.contactMessage) {
+    // Mensagem de contato (vCard individual)
+    const vcard = data.message.contactMessage.vcard || '';
+    const displayName = data.message.contactMessage.displayName || '';
+    // Extrair telefone do vCard
+    const telMatch = vcard.match(/TEL[^:]*:([^\n\r]+)/i);
+    const phone = telMatch ? telMatch[1].replace(/[^0-9+]/g, '') : '';
+    const nameMatch = vcard.match(/FN:([^\n\r]+)/i);
+    const contactName = nameMatch ? nameMatch[1].trim() : displayName || 'Contato';
+    mensagem = JSON.stringify({ type: 'contact', name: contactName, phone: phone, vcard: vcard });
+    tipo_mensagem = 'contact';
+  } else if (data.message.contactsArrayMessage) {
+    // Mensagem com múltiplos contatos (vCard array)
+    const contacts = data.message.contactsArrayMessage.contacts || [];
+    const parsedContacts = contacts.map((c: any) => {
+      const vcard = c.vcard || '';
+      const telMatch = vcard.match(/TEL[^:]*:([^\n\r]+)/i);
+      const phone = telMatch ? telMatch[1].replace(/[^0-9+]/g, '') : '';
+      const nameMatch = vcard.match(/FN:([^\n\r]+)/i);
+      const contactName = nameMatch ? nameMatch[1].trim() : c.displayName || 'Contato';
+      return { name: contactName, phone: phone };
+    });
+    mensagem = JSON.stringify({ type: 'contacts', contacts: parsedContacts });
+    tipo_mensagem = 'contact';
   } else if (data.message.buttonsResponseMessage) {
     // Resposta de botão
     mensagem = data.message.buttonsResponseMessage.selectedDisplayText || '[Resposta de botão]';
