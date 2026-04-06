@@ -91,6 +91,24 @@ function extractFileSizeFromMediaUrl(mediaUrl?: string): number | undefined {
   return undefined;
 }
 
+// Função auxiliar para extrair contactData de mensagens tipo 'contact'
+function parseContactData(content: string): { name: string; phone: string } | undefined {
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed.type === 'contact') {
+      return { name: parsed.name || 'Contato', phone: parsed.phone || '' };
+    }
+    if (parsed.type === 'contacts' && parsed.contacts?.length > 0) {
+      return { name: parsed.contacts[0].name || 'Contato', phone: parsed.contacts[0].phone || '' };
+    }
+  } catch {
+    // Not JSON, try legacy format
+    const match = content.match(/📇\s*Contato\(s\):\s*(.+)/);
+    if (match) return { name: match[1].trim(), phone: '' };
+  }
+  return undefined;
+}
+
 interface Message {
   id: string;
   content: string;
@@ -1704,23 +1722,24 @@ function Conversas() {
         console.log('🔍 [REALTIME-MULTIUSER] Mensagem de:', sentBy || (isFromMe ? 'Usuário' : 'Contato'), '| owner_id:', novaMensagem.owner_id);
 
         // Mapear tipos de mensagem corretamente (inclui 'pdf' e 'document')
-        const tipoMensagem = novaMensagem.tipo_mensagem === 'texto' ? 'text' : novaMensagem.tipo_mensagem === 'image' ? 'image' : novaMensagem.tipo_mensagem === 'audio' ? 'audio' : novaMensagem.tipo_mensagem === 'video' ? 'video' : novaMensagem.tipo_mensagem === 'document' || novaMensagem.tipo_mensagem === 'pdf' ? 'pdf' : novaMensagem.tipo_mensagem || 'text';
+        const tipoMensagem = novaMensagem.tipo_mensagem === 'texto' ? 'text' : novaMensagem.tipo_mensagem === 'image' ? 'image' : novaMensagem.tipo_mensagem === 'audio' ? 'audio' : novaMensagem.tipo_mensagem === 'video' ? 'video' : novaMensagem.tipo_mensagem === 'document' || novaMensagem.tipo_mensagem === 'pdf' ? 'pdf' : novaMensagem.tipo_mensagem === 'contact' ? 'contact' : novaMensagem.tipo_mensagem || 'text';
 
         // Criar objeto de mensagem
+        const contactDataParsed = tipoMensagem === 'contact' ? parseContactData(novaMensagem.mensagem || '') : undefined;
         const novaMensagemObj: Message = {
           id: novaMensagem.id,
-          content: novaMensagem.mensagem || '',
+          content: tipoMensagem === 'contact' ? (contactDataParsed ? `📇 Contato: ${contactDataParsed.name}` : novaMensagem.mensagem || '') : (novaMensagem.mensagem || ''),
           type: tipoMensagem as any,
           sender: isFromMe ? 'user' : 'contact',
           timestamp: new Date(novaMensagem.created_at || Date.now()),
           delivered: novaMensagem.delivered === true || novaMensagem.status === 'Enviada',
           read: novaMensagem.read === true,
-          // ⚡ CORREÇÃO: Usar campo read do banco (true = contato visualizou)
           mediaUrl: novaMensagem.midia_url,
           fileName: novaMensagem.arquivo_nome,
           fileSize: extractFileSizeFromMediaUrl(novaMensagem.midia_url),
           mimeType: novaMensagem.tipo_mensagem === 'video' ? 'video/mp4' : novaMensagem.tipo_mensagem === 'audio' ? 'audio/mpeg' : novaMensagem.tipo_mensagem === 'image' ? 'image/jpeg' : novaMensagem.tipo_mensagem === 'document' || novaMensagem.tipo_mensagem === 'pdf' ? 'application/pdf' : undefined,
-          sentBy: sentBy
+          sentBy: sentBy,
+          contactData: contactDataParsed
         };
 
         // ⚡ CRÍTICO MULTI-USER: Atualizar conversa selecionada em tempo real para TODOS
