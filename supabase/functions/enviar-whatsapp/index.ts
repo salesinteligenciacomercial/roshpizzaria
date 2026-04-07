@@ -262,14 +262,20 @@ async function sendMetaTemplateMessage(
     // Sanitize components to prevent Meta API errors
     let sanitizedComponents = sanitizeTemplateComponents(components);
     
-    // If no button components provided, try to auto-fetch from template structure
+    // Auto-fetch missing components (header media + buttons) from template structure
+    const hasHeaderComponent = sanitizedComponents?.some((c: any) => c.type === 'header');
     const hasButtonComponents = sanitizedComponents?.some((c: any) => c.type === 'button');
-    if (!hasButtonComponents && wabaId) {
-      console.log("🔍 Verificando se template tem botões quick_reply...");
-      const autoButtons = await fetchTemplateButtons(wabaId, accessToken, templateName);
-      if (autoButtons) {
-        console.log(`✅ Auto-gerados ${autoButtons.length} componentes de botão`);
-        sanitizedComponents = [...(sanitizedComponents || []), ...autoButtons];
+    if ((!hasHeaderComponent || !hasButtonComponents) && wabaId) {
+      console.log("🔍 Auto-buscando componentes do template na Meta API...");
+      const autoComponents = await fetchTemplateAutoComponents(wabaId, accessToken, templateName);
+      
+      if (!hasHeaderComponent && autoComponents.header) {
+        console.log(`✅ Auto-adicionando header de mídia ao template`);
+        sanitizedComponents = [autoComponents.header, ...(sanitizedComponents || [])];
+      }
+      if (!hasButtonComponents && autoComponents.buttons) {
+        console.log(`✅ Auto-adicionando ${autoComponents.buttons.length} botões ao template`);
+        sanitizedComponents = [...(sanitizedComponents || []), ...autoComponents.buttons];
       }
     }
     
