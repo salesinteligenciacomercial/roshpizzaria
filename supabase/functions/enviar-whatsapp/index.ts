@@ -168,12 +168,12 @@ function sanitizeTemplateComponents(components?: any[]): any[] | undefined {
   return sanitized.length > 0 ? sanitized : undefined;
 }
 
-// Fetch template structure from Meta API to auto-build required button components
-async function fetchTemplateButtons(
+// Fetch template structure from Meta API to auto-build required button and header components
+async function fetchTemplateAutoComponents(
   wabaId: string,
   accessToken: string,
   templateName: string
-): Promise<any[] | null> {
+): Promise<{ buttons: any[] | null; header: any | null }> {
   try {
     const url = `${META_API_BASE_URL}/${META_API_VERSION}/${wabaId}/message_templates?name=${templateName}&limit=1`;
     const response = await fetch(url, {
@@ -181,51 +181,68 @@ async function fetchTemplateButtons(
     });
     if (!response.ok) {
       console.warn("⚠️ Não foi possível buscar template da Meta:", response.status);
-      return null;
+      return { buttons: null, header: null };
     }
     const data = await response.json();
     const template = data.data?.[0];
     console.log("📋 Template encontrado:", template?.name, "- Componentes:", JSON.stringify(template?.components?.map((c: any) => c.type)));
-    if (!template?.components) return null;
+    if (!template?.components) return { buttons: null, header: null };
 
-    const buttonsComp = template.components.find((c: any) => c.type === "BUTTONS");
-    if (!buttonsComp?.buttons?.length) {
-      console.log("ℹ️ Template não possui botões");
-      return null;
+    // === AUTO-GENERATE HEADER COMPONENT (for video/image/document) ===
+    let headerComponent: any | null = null;
+    const headerComp = template.components.find((c: any) => c.type === "HEADER");
+    if (headerComp?.format && headerComp.format !== "TEXT") {
+      const mediaFormat = headerComp.format.toLowerCase(); // video, image, document
+      const handleValue = headerComp.example?.header_handle?.[0];
+      if (handleValue) {
+        const isUrl = handleValue.startsWith('http://') || handleValue.startsWith('https://');
+        const mediaRef = isUrl ? { link: handleValue } : { id: handleValue };
+        headerComponent = {
+          type: "header",
+          parameters: [{ type: mediaFormat, [mediaFormat]: mediaRef }],
+        };
+        console.log(`🎬 Auto-gerado header ${mediaFormat} com ${isUrl ? 'link' : 'id'}:`, handleValue.substring(0, 80));
+      }
     }
 
-    console.log("🔘 Botões encontrados:", JSON.stringify(buttonsComp.buttons.map((b: any) => ({ type: b.type, text: b.text }))));
+    // === AUTO-GENERATE BUTTON COMPONENTS ===
+    const buttonsComp = template.components.find((c: any) => c.type === "BUTTONS");
+    let buttonComponents: any[] | null = null;
+    if (buttonsComp?.buttons?.length) {
+      console.log("🔘 Botões encontrados:", JSON.stringify(buttonsComp.buttons.map((b: any) => ({ type: b.type, text: b.text }))));
+      const btns: any[] = [];
+      buttonsComp.buttons.forEach((btn: any, index: number) => {
+        if (btn.type === "QUICK_REPLY") {
+          btns.push({
+            type: "button",
+            sub_type: "quick_reply",
+            index: String(index),
+            parameters: [{ type: "payload", payload: btn.text || `btn_${index}` }],
+          });
+        } else if (btn.type === "FLOW") {
+          btns.push({
+            type: "button",
+            sub_type: "flow",
+            index: String(index),
+            parameters: [],
+          });
+        } else if (btn.type === "URL" && btn.url?.includes("{{")) {
+          btns.push({
+            type: "button",
+            sub_type: "url",
+            index: String(index),
+            parameters: [{ type: "text", text: "" }],
+          });
+        }
+      });
+      console.log("✅ Componentes de botão gerados:", btns.length);
+      buttonComponents = btns.length > 0 ? btns : null;
+    }
 
-    const buttonComponents: any[] = [];
-    buttonsComp.buttons.forEach((btn: any, index: number) => {
-      if (btn.type === "QUICK_REPLY") {
-        buttonComponents.push({
-          type: "button",
-          sub_type: "quick_reply",
-          index: String(index),
-          parameters: [{ type: "payload", payload: btn.text || `btn_${index}` }],
-        });
-      } else if (btn.type === "FLOW") {
-        buttonComponents.push({
-          type: "button",
-          sub_type: "flow",
-          index: String(index),
-          parameters: [],
-        });
-      } else if (btn.type === "URL" && btn.url?.includes("{{")) {
-        buttonComponents.push({
-          type: "button",
-          sub_type: "url",
-          index: String(index),
-          parameters: [{ type: "text", text: "" }],
-        });
-      }
-    });
-    console.log("✅ Componentes de botão gerados:", buttonComponents.length);
-    return buttonComponents.length > 0 ? buttonComponents : null;
+    return { buttons: buttonComponents, header: headerComponent };
   } catch (e) {
-    console.warn("⚠️ Erro ao buscar template buttons:", e);
-    return null;
+    console.warn("⚠️ Erro ao buscar template auto-components:", e);
+    return { buttons: null, header: null };
   }
 }
 
