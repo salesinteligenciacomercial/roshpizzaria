@@ -30,9 +30,13 @@ export function buildTemplateComponents(
           parameters: [{ type: mediaFormat, [mediaFormat]: { link: templateMediaUrl } }],
         });
       } else if (headerComponent.example?.header_handle?.[0]) {
+        const handleValue = headerComponent.example.header_handle[0];
+        // If handle is a URL, use 'link'; if it's a media ID, use 'id'
+        const isUrl = handleValue.startsWith('http://') || handleValue.startsWith('https://');
+        const mediaRef = isUrl ? { link: handleValue } : { id: handleValue };
         components.push({
           type: "header",
-          parameters: [{ type: mediaFormat, [mediaFormat]: { id: headerComponent.example.header_handle[0] } }],
+          parameters: [{ type: mediaFormat, [mediaFormat]: mediaRef }],
         });
       } else {
         console.warn("⚠️ Template com header de mídia mas sem URL fornecida:", headerComponent.format);
