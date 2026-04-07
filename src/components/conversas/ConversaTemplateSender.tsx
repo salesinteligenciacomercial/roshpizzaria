@@ -17,6 +17,35 @@ interface ConversaTemplateSenderProps {
   onSent?: () => void;
 }
 
+function extractTemplateMediaInfo(template: Template, components: any[], fallbackMediaUrl: string) {
+  const headerComponent = template.components?.find((c: any) => c.type === "HEADER");
+  const headerPayload = components.find((component: any) => component.type === "header");
+  const headerParameter = headerPayload?.parameters?.[0];
+  const mediaType = headerParameter?.type as "image" | "video" | "document" | undefined;
+  const mediaPayload = mediaType ? headerParameter?.[mediaType] : undefined;
+  const mediaUrl = mediaPayload?.link || fallbackMediaUrl || "";
+
+  if (!mediaType || !mediaUrl) {
+    return { mediaUrl: null, fileName: null };
+  }
+
+  const fallbackExtensionByType: Record<string, string> = {
+    image: "jpg",
+    video: "mp4",
+    document: "pdf",
+  };
+
+  const urlWithoutQuery = mediaUrl.split("?")[0];
+  const extensionFromUrl = urlWithoutQuery.includes(".") ? urlWithoutQuery.split(".").pop() : "";
+  const headerFormat = headerComponent?.format?.toLowerCase?.() || mediaType;
+  const extension = extensionFromUrl || fallbackExtensionByType[headerFormat] || fallbackExtensionByType[mediaType] || "bin";
+
+  return {
+    mediaUrl,
+    fileName: `${template.name}.${extension}`,
+  };
+}
+
 export function ConversaTemplateSender({
   open,
   onOpenChange,
@@ -49,6 +78,7 @@ export function ConversaTemplateSender({
       const lead = { name: contactName, telefone: contactPhone, phone: contactPhone, email: "" };
       const components = buildTemplateComponents(selectedTemplate, lead, templateVariables, templateMediaUrl);
       const textContent = buildTemplateTextContent(selectedTemplate, lead, templateVariables);
+      const templateMediaInfo = extractTemplateMediaInfo(selectedTemplate, components, templateMediaUrl);
 
       // Normalize phone
       let telefoneNormalizado = contactPhone.replace(/[^0-9]/g, "");
@@ -67,28 +97,7 @@ export function ConversaTemplateSender({
         .single();
       const sentByName = userProfile?.full_name || userProfile?.email || "Equipe";
 
-      // 1. Save message to DB
-      const { error: dbError } = await supabase.from("conversas").insert([{
-        numero: contactPhone,
-        telefone_formatado: telefoneNormalizado,
-        mensagem: textContent,
-        origem: "WhatsApp",
-        status: "Enviada",
-        tipo_mensagem: "template",
-        nome_contato: contactName,
-        company_id: companyId,
-        owner_id: user.id,
-        sent_by: sentByName,
-        fromme: true,
-        delivered: true,
-        read: false,
-      }]);
-
-      if (dbError) {
-        console.error("❌ Erro ao salvar template no banco:", dbError);
-      }
-
-      // 2. Send via edge function
+      // 1. Send via edge function
       const payload: any = {
         numero: telefoneNormalizado,
         company_id: companyId,
@@ -103,11 +112,42 @@ export function ConversaTemplateSender({
         payload.force_provider = origemApi;
       }
 
-      const { error } = await supabase.functions.invoke("enviar-whatsapp", { body: payload });
+      const { data: sendResult, error } = await supabase.functions.invoke("enviar-whatsapp", { body: payload });
 
-      if (error) {
-        console.error("❌ Erro ao enviar template:", error);
-        toast.warning("Template salvo no histórico, mas pode não ter sido enviado via WhatsApp.");
+      if (error || !sendResult?.success) {
+        console.error("❌ Erro ao enviar template:", error || sendResult);
+        throw new Error(error?.message || sendResult?.error || "Falha ao enviar template via WhatsApp");
+      }
+
+      const whatsappMessageId = sendResult?.message_id || sendResult?.data?.messages?.[0]?.id || null;
+      if (!whatsappMessageId) {
+        throw new Error("Envio sem confirmação do provedor");
+      }
+
+      // 2. Save only confirmed sends to DB
+      const { error: dbError } = await supabase.from("conversas").insert([{
+        numero: contactPhone,
+        telefone_formatado: telefoneNormalizado,
+        mensagem: textContent,
+        origem: "WhatsApp",
+        origem_api: sendResult?.provider || origemApi || null,
+        status: "Enviada",
+        tipo_mensagem: "template",
+        nome_contato: contactName,
+        company_id: companyId,
+        owner_id: user.id,
+        sent_by: sentByName,
+        fromme: true,
+        delivered: false,
+        read: false,
+        whatsapp_message_id: whatsappMessageId,
+        midia_url: templateMediaInfo.mediaUrl,
+        arquivo_nome: templateMediaInfo.fileName,
+      }]);
+
+      if (dbError) {
+        console.error("❌ Erro ao salvar template no banco:", dbError);
+        toast.warning("Template enviado, mas houve erro ao salvar o anexo no histórico.");
       } else {
         toast.success("Template enviado com sucesso!");
       }
