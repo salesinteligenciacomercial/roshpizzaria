@@ -246,6 +246,137 @@ async function fetchTemplateAutoComponents(
   }
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
+}
+
+function getTemplateHeaderFallbackMimeType(mediaType: 'image' | 'video' | 'document'): string {
+  if (mediaType === 'video') return 'video/mp4';
+  if (mediaType === 'image') return 'image/jpeg';
+  return 'application/pdf';
+}
+
+function getTemplateHeaderFileName(mediaLink: string, mediaType: 'image' | 'video' | 'document', templateName: string, mimeType: string): string {
+  try {
+    const pathname = new URL(mediaLink).pathname;
+    const lastSegment = pathname.split('/').filter(Boolean).pop();
+
+    if (lastSegment && lastSegment.includes('.')) {
+      return decodeURIComponent(lastSegment);
+    }
+  } catch {
+    // ignore URL parsing and fallback to generated filename
+  }
+
+  const fallbackExtension = mimeType.includes('video')
+    ? 'mp4'
+    : mimeType.includes('image')
+      ? 'jpg'
+      : 'pdf';
+
+  return `${templateName}.${fallbackExtension}`;
+}
+
+async function uploadTemplateHeaderMediaByLink(
+  phoneNumberId: string,
+  accessToken: string,
+  templateName: string,
+  mediaType: 'image' | 'video' | 'document',
+  mediaLink: string,
+): Promise<{ success: boolean; media_id?: string; error?: string }> {
+  try {
+    console.log(`⬇️ Baixando mídia do header do template (${mediaType}) para upload próprio...`);
+
+    const mediaResponse = await fetch(mediaLink);
+    if (!mediaResponse.ok) {
+      return {
+        success: false,
+        error: `Falha ao baixar mídia do template (${mediaResponse.status})`,
+      };
+    }
+
+    const mimeType = normalizeMimeType(mediaResponse.headers.get('content-type') || '') || getTemplateHeaderFallbackMimeType(mediaType);
+    const fileName = getTemplateHeaderFileName(mediaLink, mediaType, templateName, mimeType);
+    const mediaBuffer = await mediaResponse.arrayBuffer();
+    const mediaBase64 = arrayBufferToBase64(mediaBuffer);
+
+    console.log(`📤 Convertendo header do template para media_id: ${fileName} (${mimeType})`);
+
+    return await uploadMetaMedia(
+      phoneNumberId,
+      accessToken,
+      mediaBase64,
+      mimeType,
+      fileName,
+    );
+  } catch (error) {
+    console.error('❌ Erro ao preparar mídia do header do template:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+async function ensureTemplateHeaderMediaIds(
+  phoneNumberId: string,
+  accessToken: string,
+  templateName: string,
+  components?: any[],
+): Promise<any[] | undefined> {
+  if (!components?.length) return components;
+
+  const updatedComponents: any[] = [];
+
+  for (const component of components) {
+    const componentType = component?.type?.toLowerCase?.();
+    if (componentType !== 'header' || !Array.isArray(component?.parameters)) {
+      updatedComponents.push(component);
+      continue;
+    }
+
+    const nextComponent = JSON.parse(JSON.stringify(component));
+
+    for (const parameter of nextComponent.parameters) {
+      const mediaType = parameter?.type?.toLowerCase?.();
+      if (!mediaType || !['image', 'video', 'document'].includes(mediaType)) {
+        continue;
+      }
+
+      const mediaPayload = parameter?.[mediaType];
+      const mediaLink = mediaPayload?.link;
+      if (!mediaLink || mediaPayload?.id) {
+        continue;
+      }
+
+      const uploadResult = await uploadTemplateHeaderMediaByLink(
+        phoneNumberId,
+        accessToken,
+        templateName,
+        mediaType as 'image' | 'video' | 'document',
+        mediaLink,
+      );
+
+      if (uploadResult.success && uploadResult.media_id) {
+        parameter[mediaType] = { id: uploadResult.media_id };
+        console.log(`✅ Header ${mediaType} do template convertido para media_id`);
+      } else {
+        console.warn(`⚠️ Não foi possível converter link do header ${mediaType} para media_id. Mantendo link original.`, uploadResult.error);
+      }
+    }
+
+    updatedComponents.push(nextComponent);
+  }
+
+  return updatedComponents;
+}
+
 // Send template message via Meta API
 async function sendMetaTemplateMessage(
   phoneNumberId: string,
@@ -278,6 +409,13 @@ async function sendMetaTemplateMessage(
         sanitizedComponents = [...(sanitizedComponents || []), ...autoComponents.buttons];
       }
     }
+
+    sanitizedComponents = await ensureTemplateHeaderMediaIds(
+      phoneNumberId,
+      accessToken,
+      templateName,
+      sanitizedComponents,
+    );
     
     const templatePayload: any = {
       name: templateName,
