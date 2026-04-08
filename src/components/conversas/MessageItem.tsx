@@ -52,6 +52,46 @@ interface Message {
   };
 }
 
+type MediaAttachmentType = "image" | "audio" | "pdf" | "video" | "document";
+
+function inferMediaAttachmentType(message: Message): MediaAttachmentType | null {
+  if (message.type === "image" || message.type === "audio" || message.type === "pdf" || message.type === "video" || message.type === "document") {
+    return message.type;
+  }
+
+  if (message.type !== "template") {
+    return null;
+  }
+
+  const normalizedMimeType = message.mimeType?.toLowerCase() || "";
+  const normalizedFileName = message.fileName?.toLowerCase() || "";
+  const normalizedMediaUrl = message.mediaUrl?.split("?")[0].toLowerCase() || "";
+  const hasExtension = (...extensions: string[]) =>
+    extensions.some((extension) => normalizedFileName.endsWith(extension) || normalizedMediaUrl.endsWith(extension));
+
+  if (!normalizedMimeType && !normalizedFileName && !normalizedMediaUrl) {
+    return null;
+  }
+
+  if (normalizedMimeType.startsWith("video/") || hasExtension(".mp4", ".mov", ".webm", ".m4v")) {
+    return "video";
+  }
+
+  if (normalizedMimeType.startsWith("image/") || hasExtension(".jpg", ".jpeg", ".png", ".gif", ".webp")) {
+    return "image";
+  }
+
+  if (normalizedMimeType.startsWith("audio/") || hasExtension(".mp3", ".ogg", ".wav", ".m4a", ".aac", ".opus")) {
+    return "audio";
+  }
+
+  if (normalizedMimeType.includes("pdf") || hasExtension(".pdf")) {
+    return "pdf";
+  }
+
+  return "document";
+}
+
 // Helper para verificar se é PDF (tipo pdf ou document com extensão .pdf)
 function isPdfMessage(message: Message): boolean {
   if (message.type === 'pdf') return true;
@@ -118,6 +158,8 @@ function MessageItemComponent({
   const repliedMessage = message.replyTo && allMessages
     ? allMessages.find(m => m.id === message.replyTo)
     : null;
+  const mediaMessageType = inferMediaAttachmentType(message);
+  const isPdfAttachment = isPdfMessage(message) || mediaMessageType === "pdf";
 
   // Estado para mídia expirada
   const [mediaExpired, setMediaExpired] = useState(false);
@@ -128,13 +170,13 @@ function MessageItemComponent({
     setMediaExpired(false);
     
     // ⚡ CORREÇÃO DEFINITIVA: Priorizar URLs permanentes do Storage
-    if (message.mediaUrl && (message.type === 'image' || message.type === 'video' || message.type === 'audio' || message.type === 'pdf' || message.type === 'document')) {
+    if (message.mediaUrl && mediaMessageType) {
       
       // ✅ PRIORIDADE 1: URLs permanentes do Supabase Storage (nunca expiram)
       if (isPermanentUrl(message.mediaUrl)) {
         console.log('✅ [MESSAGE-ITEM] URL permanente detectada:', {
           id: message.id,
-          type: message.type,
+          type: mediaMessageType,
           urlPreview: message.mediaUrl.substring(0, 80)
         });
         setMediaUrl(message.mediaUrl);
@@ -152,7 +194,7 @@ function MessageItemComponent({
         }
         console.log('⚠️ [MESSAGE-ITEM] Blob URL detectada (expira) - buscando URL permanente:', {
           id: message.id,
-          type: message.type
+          type: mediaMessageType
         });
       }
       
@@ -160,16 +202,16 @@ function MessageItemComponent({
       setMediaLoading(true);
       console.log('🔄 [MESSAGE-ITEM] Carregando mídia do banco:', {
         id: message.id,
-        type: message.type,
+        type: mediaMessageType,
         hasUrl: !!message.mediaUrl,
         urlPreview: message.mediaUrl.substring(0, 50)
       });
       
-      getMediaUrl(message.id, message.type)
+      getMediaUrl(message.id, mediaMessageType)
         .then((url) => {
           console.log('✅ [MESSAGE-ITEM] Mídia carregada do banco:', { 
             id: message.id, 
-            type: message.type,
+            type: mediaMessageType,
             isPermanent: isPermanentUrl(url),
             urlPreview: url?.substring(0, 100) || 'sem URL'
           });
@@ -179,7 +221,7 @@ function MessageItemComponent({
         .catch((error: any) => {
           console.error('❌ [MESSAGE-ITEM] Erro ao carregar mídia:', {
             id: message.id,
-            type: message.type,
+            type: mediaMessageType,
             error: error?.message || String(error),
             mediaUrlPreview: message.mediaUrl?.substring(0, 50)
           });
@@ -214,7 +256,7 @@ function MessageItemComponent({
         URL.revokeObjectURL(mediaUrl);
       }
     };
-  }, [message.id, message.mediaUrl, message.type]);
+  }, [message.id, message.mediaUrl, mediaMessageType]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setDragStart(e.touches[0].clientX);
@@ -299,7 +341,7 @@ function MessageItemComponent({
                 messageId={message.id}
                 content={message.content}
                 sender={message.sender}
-                messageType={message.type}
+                messageType={mediaMessageType || message.type}
                 mediaUrl={mediaUrl || message.mediaUrl}
                 fileName={message.fileName}
                 onReply={onReply}
@@ -327,18 +369,20 @@ function MessageItemComponent({
                 <LayoutTemplate className="h-4 w-4" />
                 <span className="text-xs font-semibold uppercase">Template WhatsApp</span>
               </div>
-              <div className="max-w-full">
-                {message.content ? (
-                  <TextWithLinks text={message.content} />
-                ) : (
-                  <span className="text-muted-foreground italic">[Mensagem de template enviada]</span>
-                )}
-              </div>
+              {!mediaMessageType && (
+                <div className="max-w-full">
+                  {message.content ? (
+                    <TextWithLinks text={message.content} />
+                  ) : (
+                    <span className="text-muted-foreground italic">[Mensagem de template enviada]</span>
+                  )}
+                </div>
+              )}
             </div>
           )}
           
           {/* Image Message */}
-          {message.type === "image" && (
+          {mediaMessageType === "image" && (
             <div className="space-y-2">
               {mediaExpired ? (
                 <div className="flex flex-col items-center justify-center w-[300px] h-[150px] bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800 p-4">
@@ -400,7 +444,7 @@ function MessageItemComponent({
           )}
           
           {/* Audio Message */}
-          {message.type === "audio" && (
+          {mediaMessageType === "audio" && (
             <div className="space-y-2 min-w-[250px]">
               <div className="flex items-center gap-2">
                 <Volume2 className="h-4 w-4" />
@@ -525,7 +569,7 @@ function MessageItemComponent({
           )}
           
           {/* PDF Message - trata tanto tipo "pdf" quanto "document" com extensão .pdf */}
-          {isPdfMessage(message) && (
+          {isPdfAttachment && (
             <div className="space-y-2 min-w-[250px]">
               {(() => {
                 // Verificar se arquivo é muito grande para preview
@@ -784,7 +828,7 @@ function MessageItemComponent({
           )}
           
           {/* Video Message */}
-          {message.type === "video" && (
+          {mediaMessageType === "video" && (
             <div className="space-y-2">
               {mediaExpired ? (
                 <div className="flex flex-col items-center justify-center w-[300px] h-[150px] bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800 p-4">
@@ -845,6 +889,11 @@ function MessageItemComponent({
                   {message.fileName && (
                     <span className="text-xs text-muted-foreground mt-1 text-center">{message.fileName}</span>
                   )}
+                </div>
+              )}
+              {message.content && !message.content.includes('[Vídeo]') && !message.content.includes('Vídeo enviado') && (
+                <div className="max-w-full">
+                  <TextWithLinks text={message.content} />
                 </div>
               )}
             </div>
