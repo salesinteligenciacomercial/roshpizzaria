@@ -120,6 +120,7 @@ export function ConversaTemplateSender({
       }
 
       const whatsappMessageId = sendResult?.message_id || sendResult?.data?.messages?.[0]?.id || null;
+      const providerMessageStatus = sendResult?.data?.messages?.[0]?.message_status || null;
       if (!whatsappMessageId) {
         throw new Error("Envio sem confirmação do provedor");
       }
@@ -131,7 +132,7 @@ export function ConversaTemplateSender({
         mensagem: textContent,
         origem: "WhatsApp",
         origem_api: sendResult?.provider || origemApi || null,
-        status: "Enviada",
+        status: "Processando",
         tipo_mensagem: "template",
         nome_contato: contactName,
         company_id: companyId,
@@ -147,9 +148,13 @@ export function ConversaTemplateSender({
 
       if (dbError) {
         console.error("❌ Erro ao salvar template no banco:", dbError);
-        toast.warning("Template enviado, mas houve erro ao salvar o anexo no histórico.");
+        toast.warning("Template aceito pela Meta, mas houve erro ao salvar o histórico.");
       } else {
-        toast.success("Template enviado com sucesso!");
+        toast.success(
+          providerMessageStatus === "accepted"
+            ? "Template aceito pela Meta. A entrega será confirmada em instantes."
+            : "Template enviado com sucesso!"
+        );
       }
 
       // Reset & close

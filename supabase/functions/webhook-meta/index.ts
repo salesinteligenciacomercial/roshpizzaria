@@ -48,6 +48,26 @@ function buildMetaMediaJson(mediaId: string, mimeType?: string, sha256?: string,
   });
 }
 
+function mapMetaDeliveryStatusToConversationUpdate(status: any) {
+  const normalizedStatus = String(status?.status || '').toLowerCase();
+  const baseUpdate = {
+    updated_at: new Date().toISOString(),
+  };
+
+  switch (normalizedStatus) {
+    case 'sent':
+      return { ...baseUpdate, status: 'Processando', delivered: false, read: false };
+    case 'delivered':
+      return { ...baseUpdate, status: 'Entregue', delivered: true, read: false };
+    case 'read':
+      return { ...baseUpdate, status: 'Lida', delivered: true, read: true };
+    case 'failed':
+      return { ...baseUpdate, status: 'Falhou', delivered: false, read: false };
+    default:
+      return { ...baseUpdate, status: normalizedStatus || 'Processando' };
+  }
+}
+
 // Buscar e reconstruir o texto completo do template
 async function getTemplateContent(
   supabase: any, 
@@ -626,6 +646,47 @@ serve(async (req) => {
         console.log('📱 Processando mensagens WhatsApp...');
         
         for (const entry of body.entry || []) {
+          for (const change of entry.changes || []) {
+            const value = change?.value;
+
+            if (change?.field !== 'messages' || !Array.isArray(value?.statuses) || value.statuses.length === 0) {
+              continue;
+            }
+
+            for (const deliveryStatus of value.statuses) {
+              const conversationUpdate = mapMetaDeliveryStatusToConversationUpdate(deliveryStatus);
+              const errorInfo = deliveryStatus?.errors?.[0];
+
+              const { data: updatedRows, error: updateError } = await supabase
+                .from('conversas')
+                .update(conversationUpdate)
+                .eq('whatsapp_message_id', deliveryStatus.id)
+                .select('id');
+
+              if (updateError) {
+                console.error('❌ [META-STATUS] Erro ao atualizar conversa pelo status:', updateError);
+                continue;
+              }
+
+              if (!updatedRows?.length) {
+                console.warn('⚠️ [META-STATUS] Conversa não encontrada para o whatsapp_message_id:', deliveryStatus.id);
+              } else {
+                console.log(`✅ [META-STATUS] Conversa atualizada para status ${deliveryStatus.status}:`, deliveryStatus.id);
+              }
+
+              if (String(deliveryStatus?.status || '').toLowerCase() === 'failed') {
+                console.error('❌ [META-STATUS] Falha de entrega confirmada pela Meta:', JSON.stringify({
+                  message_id: deliveryStatus.id,
+                  recipient_id: deliveryStatus.recipient_id,
+                  code: errorInfo?.code,
+                  title: errorInfo?.title,
+                  message: errorInfo?.message,
+                  details: errorInfo?.error_data?.details,
+                }, null, 2));
+              }
+            }
+          }
+
           const messages = transformWhatsAppPayload(entry);
           
           for (const msg of messages) {
