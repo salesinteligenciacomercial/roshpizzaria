@@ -326,9 +326,11 @@ export function ConversaPopup({
           ? "user"
           : (statusStr === "recebida" || statusStr === "received" ? "contact" : "contact");
 
-        // Determinar status de entrega/leitura
-        const delivered = statusStr === "enviada" || statusStr === "entregue" || statusStr === "delivered" || fromMeFlag;
-        const read = statusStr === "lida" || statusStr === "read";
+        // Determinar status de entrega/leitura sem assumir entrega só porque saiu do CRM
+        const isDeliveredStatus = ["entregue", "delivered", "lida", "read"].includes(statusStr);
+        const isReadStatus = ["lida", "read"].includes(statusStr);
+        const delivered = msg.delivered === true || isDeliveredStatus;
+        const read = msg.read === true || isReadStatus;
 
         return {
           id: msg.id || Date.now().toString() + Math.random(),
