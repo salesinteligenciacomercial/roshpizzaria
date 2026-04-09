@@ -152,8 +152,8 @@ export function ConversaTemplateSender({
       } else {
         toast.success(
           providerMessageStatus === "accepted"
-            ? "Template aceito pela Meta. A entrega será confirmada em instantes."
-            : "Template enviado com sucesso!"
+            ? "Template recebido pela Meta. Aguarde a confirmação da entrega."
+            : "Template enviado para processamento. Aguarde a confirmação da Meta."
         );
       }
 

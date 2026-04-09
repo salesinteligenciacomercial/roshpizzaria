@@ -36,6 +36,7 @@ interface Message {
   timestamp: Date;
   delivered: boolean;
   read?: boolean;
+  status?: string;
   mediaUrl?: string;
   fileName?: string;
   mimeType?: string;
@@ -160,6 +161,9 @@ function MessageItemComponent({
     : null;
   const mediaMessageType = inferMediaAttachmentType(message);
   const isPdfAttachment = isPdfMessage(message) || mediaMessageType === "pdf";
+  const normalizedStatus = (message.status || "").toLowerCase();
+  const isFailedMessage = normalizedStatus === "falhou" || normalizedStatus === "failed";
+  const isProcessingMessage = normalizedStatus === "processando" || normalizedStatus === "processing";
 
   // Estado para mídia expirada
   const [mediaExpired, setMediaExpired] = useState(false);
@@ -966,9 +970,29 @@ END:VCARD`;
                     ? 'bg-[#53bdeb]/15 px-1.5 py-0.5 rounded-full' 
                     : ''
                 }`} 
-                title={message.read ? 'Visualizado' : message.delivered ? 'Entregue' : 'Enviado'}
+                title={
+                  isFailedMessage
+                    ? 'Falhou'
+                    : isProcessingMessage
+                      ? 'Processando'
+                      : message.read
+                        ? 'Visualizado'
+                        : message.delivered
+                          ? 'Entregue'
+                          : 'Enviado'
+                }
               >
-                {message.read ? (
+                {isFailedMessage ? (
+                  <>
+                    <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                    <span className="text-[9px] text-destructive ml-0.5">Falhou</span>
+                  </>
+                ) : isProcessingMessage ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    <span className="text-[9px] text-muted-foreground ml-0.5">Processando</span>
+                  </>
+                ) : message.read ? (
                   <>
                     <CheckCheck className="h-4 w-4 text-[#53bdeb] drop-shadow-sm" />
                     <span className="text-[10px] text-[#53bdeb] font-semibold ml-0.5">Visto</span>
