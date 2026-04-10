@@ -109,14 +109,35 @@ function parseContactData(content: string): { name: string; phone: string } | un
   return undefined;
 }
 
+function normalizeMessageDeliveryStatus(status?: string | null): string {
+  return String(status || "").trim().toLowerCase();
+}
+
+function getMessageDeliveryState(message: {
+  status?: string | null;
+  delivered?: boolean | null;
+  read?: boolean | null;
+}) {
+  const normalizedStatus = normalizeMessageDeliveryStatus(message.status);
+  const isDeliveredStatus = ["entregue", "delivered", "lida", "read"].includes(normalizedStatus);
+  const isReadStatus = ["lida", "read"].includes(normalizedStatus);
+
+  return {
+    status: typeof message.status === "string" ? message.status : undefined,
+    delivered: message.delivered === true || isDeliveredStatus,
+    read: message.read === true || isReadStatus,
+  };
+}
+
 interface Message {
   id: string;
   content: string;
-  type: "text" | "image" | "audio" | "pdf" | "video" | "contact" | "document";
+  type: "text" | "image" | "audio" | "pdf" | "video" | "contact" | "document" | "template";
   sender: "user" | "contact";
   timestamp: Date;
   delivered: boolean;
   read?: boolean;
+  status?: string;
   mediaUrl?: string;
   fileName?: string;
   mimeType?: string;
@@ -1657,8 +1678,10 @@ function Conversas() {
         // ⚡ CORREÇÃO: Se for UPDATE, SEMPRE atualizar status de leitura e retornar
         // UPDATE significa que a mensagem já existe no banco - apenas atualizar status
         if (payload.eventType === 'UPDATE') {
+          const deliveryState = getMessageDeliveryState(novaMensagem);
           console.log('👁️ [REALTIME] UPDATE recebido - atualizando status:', {
             id: novaMensagem.id,
+            status: novaMensagem.status,
             read: novaMensagem.read,
             delivered: novaMensagem.delivered
           });
@@ -1672,8 +1695,9 @@ function Conversas() {
               novasMensagens[mensagemIndex] = {
                 ...novasMensagens[mensagemIndex],
                 content: novaMensagem.mensagem || novasMensagens[mensagemIndex].content,
-                read: novaMensagem.read === true,
-                delivered: novaMensagem.delivered === true || novaMensagem.status === 'Enviada'
+                status: deliveryState.status || novasMensagens[mensagemIndex].status,
+                read: deliveryState.read,
+                delivered: deliveryState.delivered
               };
               return {
                 ...prevSelected,
@@ -1691,8 +1715,9 @@ function Conversas() {
               novasMensagens[mensagemIndex] = {
                 ...novasMensagens[mensagemIndex],
                 content: novaMensagem.mensagem || novasMensagens[mensagemIndex].content,
-                read: novaMensagem.read === true,
-                delivered: novaMensagem.delivered === true || novaMensagem.status === 'Enviada'
+                status: deliveryState.status || novasMensagens[mensagemIndex].status,
+                read: deliveryState.read,
+                delivered: deliveryState.delivered
               };
               return {
                 ...conv,
@@ -1726,14 +1751,16 @@ function Conversas() {
 
         // Criar objeto de mensagem
         const contactDataParsed = tipoMensagem === 'contact' ? parseContactData(novaMensagem.mensagem || '') : undefined;
+        const deliveryState = getMessageDeliveryState(novaMensagem);
         const novaMensagemObj: Message = {
           id: novaMensagem.id,
           content: tipoMensagem === 'contact' ? (contactDataParsed ? `📇 Contato: ${contactDataParsed.name}` : novaMensagem.mensagem || '') : (novaMensagem.mensagem || ''),
           type: tipoMensagem as any,
           sender: isFromMe ? 'user' : 'contact',
           timestamp: new Date(novaMensagem.created_at || Date.now()),
-          delivered: novaMensagem.delivered === true || novaMensagem.status === 'Enviada',
-          read: novaMensagem.read === true,
+          delivered: deliveryState.delivered,
+          read: deliveryState.read,
+          status: deliveryState.status,
           mediaUrl: novaMensagem.midia_url,
           fileName: novaMensagem.arquivo_nome,
           fileSize: extractFileSizeFromMediaUrl(novaMensagem.midia_url),
@@ -2687,14 +2714,16 @@ function Conversas() {
           }
           const msgType = msg.tipo_mensagem === 'image' ? 'image' : msg.tipo_mensagem === 'audio' ? 'audio' : msg.tipo_mensagem === 'video' ? 'video' : msg.tipo_mensagem === 'document' || msg.tipo_mensagem === 'pdf' ? 'pdf' : msg.tipo_mensagem === 'contact' ? 'contact' : 'text';
           const contactDataParsed = msgType === 'contact' ? parseContactData(msg.mensagem || '') : undefined;
+          const deliveryState = getMessageDeliveryState(msg);
           const message: Message = {
             id: msg.id,
             content: msgType === 'contact' ? (contactDataParsed ? `📇 Contato: ${contactDataParsed.name}` : msg.mensagem || '') : (msg.mensagem || ''),
             type: msgType,
             sender: isFromMe ? 'user' : 'contact',
             timestamp: new Date(msg.created_at),
-            delivered: msg.status === 'Enviada',
-            read: msg.status === 'Lida',
+            delivered: deliveryState.delivered,
+            read: deliveryState.read,
+            status: deliveryState.status,
             mediaUrl: msg.midia_url,
             fileName: msg.arquivo_nome,
             fileSize: extractFileSizeFromMediaUrl(msg.midia_url),
@@ -3709,14 +3738,16 @@ function Conversas() {
           }
           const msgType2 = (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem === 'image' ? 'image' : m.tipo_mensagem === 'audio' ? 'audio' : m.tipo_mensagem === 'video' ? 'video' : m.tipo_mensagem === 'document' || m.tipo_mensagem === 'pdf' ? 'pdf' : m.tipo_mensagem === 'contact' ? 'contact' : m.tipo_mensagem || 'text') as any;
           const contactDataParsed3 = msgType2 === 'contact' ? parseContactData(m.mensagem || '') : undefined;
+          const deliveryState = getMessageDeliveryState(m);
           return {
             id: m.id || `msg-${Date.now()}-${Math.random()}`,
             content: msgType2 === 'contact' ? (contactDataParsed3 ? `📇 Contato: ${contactDataParsed3.name}` : m.mensagem || '') : (m.mensagem || ''),
             type: msgType2,
             sender: sender,
             timestamp: new Date(m.created_at || Date.now()),
-            delivered: m.delivered === true || m.status === 'Enviada',
-            read: m.read === true,
+            delivered: deliveryState.delivered,
+            read: deliveryState.read,
+            status: deliveryState.status,
             mediaUrl: m.midia_url,
             fileName: m.arquivo_nome,
             fileSize: extractFileSizeFromMediaUrl(m.midia_url),
@@ -4297,14 +4328,16 @@ function Conversas() {
           
           const msgType4 = (m.tipo_mensagem === 'texto' ? 'text' : m.tipo_mensagem === 'contact' ? 'contact' : m.tipo_mensagem || 'text') as any;
           const contactDataParsed4 = msgType4 === 'contact' ? parseContactData(m.mensagem || '') : undefined;
+          const deliveryState = getMessageDeliveryState(m);
           return {
             id: m.id || `msg-${Date.now()}-${Math.random()}`,
             content: msgType4 === 'contact' ? (contactDataParsed4 ? `📇 Contato: ${contactDataParsed4.name}` : m.mensagem || '') : (m.mensagem || ''),
             type: msgType4,
             sender: sender,
             timestamp: new Date(m.created_at || Date.now()),
-            delivered: m.delivered === true || m.status === 'Enviada',
-            read: m.read === true,
+            delivered: deliveryState.delivered,
+            read: deliveryState.read,
+            status: deliveryState.status,
             mediaUrl: m.midia_url,
             fileName: m.arquivo_nome,
             sentBy: sentBy,
