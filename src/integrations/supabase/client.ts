@@ -2,18 +2,8 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-let SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-let SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
-
-// Fail-safe para ambiente de desenvolvimento: evita crash quando vars não estão configuradas
-if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-  console.error(
-    "[Supabase] Variáveis de ambiente ausentes: VITE_SUPABASE_URL e/ou VITE_SUPABASE_PUBLISHABLE_KEY. Configure o arquivo .env.local."
-  );
-  // Valores inofensivos para permitir renderização da UI sem quebrar
-  SUPABASE_URL = SUPABASE_URL || "http://localhost:54321";
-  SUPABASE_PUBLISHABLE_KEY = SUPABASE_PUBLISHABLE_KEY || "anon-key";
-}
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
