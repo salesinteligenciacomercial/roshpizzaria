@@ -1,6 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, MessageSquare, Calendar, Bot, Settings, LogOut, MessagesSquare, Video, PhoneCall, Target, Lock, X, Brain, DollarSign, GraduationCap } from "lucide-react";
+import { LayoutDashboard, Users, MessageSquare, Bot, Settings, LogOut, DollarSign, Lock, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,10 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModuleAccess } from "@/hooks/useModuleAccess";
-import { useInternalChatNotifications } from "@/hooks/useInternalChatNotifications";
 import { useConversasNotifications } from "@/hooks/useConversasNotifications";
-import { useTarefasNotifications } from "@/hooks/useTarefasNotifications";
-import { useAgendaNotifications } from "@/hooks/useAgendaNotifications";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const navigation = [{
@@ -74,39 +70,7 @@ export function Sidebar({
     loading: moduleLoading,
     isMasterAccount
   } = useModuleAccess();
-  const { unreadCount: totalUnread } = useInternalChatNotifications();
   const { unreadCount: conversasUnread } = useConversasNotifications();
-  const { alertCount: tarefasAlert } = useTarefasNotifications();
-  const { todayCount: agendaToday } = useAgendaNotifications();
-
-  // AI Insights count from database
-  const [aiInsightsCount, setAiInsightsCount] = useState(0);
-
-  useEffect(() => {
-    const loadAIInsights = async () => {
-      const { data } = await supabase.rpc('get_my_company_id');
-      if (data) {
-        const { count } = await supabase.
-        from('ai_process_suggestions').
-        select('id', { count: 'exact', head: true }).
-        eq('company_id', data).
-        eq('status', 'pending');
-        setAiInsightsCount(count || 0);
-      }
-    };
-
-    loadAIInsights();
-
-    // Refresh on changes
-    const channel = supabase.
-    channel('sidebar-ai-suggestions').
-    on('postgres_changes', { event: '*', schema: 'public', table: 'ai_process_suggestions' }, loadAIInsights).
-    subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
 
   // Módulos premium que requerem liberação
   const premiumModules = ['automacao', 'chat-equipe', 'discador', 'processos'];
