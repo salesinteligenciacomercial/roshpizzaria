@@ -124,14 +124,19 @@ export function MainLayout() {
       } = supabase.auth.onAuthStateChange((_event, session) => {
         console.log("🔐 Auth state changed:", _event, session?.user?.email || "sem usuário");
         
-        if (_event === 'SIGNED_OUT' || !session) {
+        // Ignorar INITIAL_SESSION - já tratado pelo getSession acima
+        if (_event === 'INITIAL_SESSION') {
+          return;
+        }
+        
+        if (_event === 'SIGNED_OUT') {
           if (!bypassAuth) {
-            console.log("🚪 Limpando dados após logout/sem sessão");
+            console.log("🚪 Limpando dados após logout");
             localStorage.clear();
             sessionStorage.clear();
           }
           setSession(null);
-        } else {
+        } else if (session) {
           console.log("✅ Sessão atualizada:", session.user.email);
           setSession(session);
         }
