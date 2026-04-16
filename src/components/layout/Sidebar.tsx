@@ -73,7 +73,7 @@ export function Sidebar({
   const { unreadCount: conversasUnread } = useConversasNotifications();
 
   // Módulos premium que requerem liberação
-  const premiumModules = ['automacao', 'chat-equipe', 'discador', 'processos'];
+  const premiumModules = ['automacao'];
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
