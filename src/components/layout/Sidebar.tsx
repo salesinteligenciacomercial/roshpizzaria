@@ -1,6 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, MessageSquare, Calendar, Bot, Settings, LogOut, MessagesSquare, Video, PhoneCall, Target, Lock, X, Brain, DollarSign, GraduationCap } from "lucide-react";
+import { LayoutDashboard, Users, MessageSquare, Bot, Settings, LogOut, DollarSign, Lock, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,10 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModuleAccess } from "@/hooks/useModuleAccess";
-import { useInternalChatNotifications } from "@/hooks/useInternalChatNotifications";
 import { useConversasNotifications } from "@/hooks/useConversasNotifications";
-import { useTarefasNotifications } from "@/hooks/useTarefasNotifications";
-import { useAgendaNotifications } from "@/hooks/useAgendaNotifications";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const navigation = [{
@@ -36,55 +32,16 @@ const navigation = [{
   menuKey: "conversas",
   showConversasBadge: true
 }, {
-  name: "Agenda",
-  href: "/agenda",
-  icon: Calendar,
-  menuKey: "agenda",
-  showAgendaBadge: true
-}, {
-  name: "Tarefas",
-  href: "/tarefas",
-  icon: Calendar,
-  menuKey: "tarefas",
-  showTarefasBadge: true
-}, {
   name: "Fluxos e Automação",
   href: "/ia",
   icon: Bot,
   menuKey: "automacao"
-}, {
-  name: "Bate-papo Interno",
-  href: "/chat-equipe",
-  icon: MessagesSquare,
-  menuKey: "chat-equipe",
-  showBadge: true
-}, {
-  name: "Discador",
-  href: "/discador",
-  icon: PhoneCall,
-  menuKey: "discador"
-}, {
-  name: "Processos Comerciais",
-  href: "/processos",
-  icon: Target,
-  menuKey: "processos",
-  showAIBadge: true
-}, {
-  name: "Prospecção",
-  href: "/prospeccao",
-  icon: Target,
-  menuKey: "prospeccao"
 }, {
   name: "Financeiro",
   href: "/financeiro",
   icon: DollarSign,
   menuKey: "financeiro",
   masterOnly: true
-}, {
-  name: "Treinamento",
-  href: "/treinamento",
-  icon: GraduationCap,
-  menuKey: "treinamento" // Central de vídeos do YouTube
 }, {
   name: "Configurações",
   href: "/configuracoes",
@@ -113,42 +70,10 @@ export function Sidebar({
     loading: moduleLoading,
     isMasterAccount
   } = useModuleAccess();
-  const { unreadCount: totalUnread } = useInternalChatNotifications();
   const { unreadCount: conversasUnread } = useConversasNotifications();
-  const { alertCount: tarefasAlert } = useTarefasNotifications();
-  const { todayCount: agendaToday } = useAgendaNotifications();
-
-  // AI Insights count from database
-  const [aiInsightsCount, setAiInsightsCount] = useState(0);
-
-  useEffect(() => {
-    const loadAIInsights = async () => {
-      const { data } = await supabase.rpc('get_my_company_id');
-      if (data) {
-        const { count } = await supabase.
-        from('ai_process_suggestions').
-        select('id', { count: 'exact', head: true }).
-        eq('company_id', data).
-        eq('status', 'pending');
-        setAiInsightsCount(count || 0);
-      }
-    };
-
-    loadAIInsights();
-
-    // Refresh on changes
-    const channel = supabase.
-    channel('sidebar-ai-suggestions').
-    on('postgres_changes', { event: '*', schema: 'public', table: 'ai_process_suggestions' }, loadAIInsights).
-    subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
 
   // Módulos premium que requerem liberação
-  const premiumModules = ['automacao', 'chat-equipe', 'discador', 'processos'];
+  const premiumModules = ['automacao'];
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -269,29 +194,9 @@ export function Sidebar({
                           {isLocked && !effectiveCollapsed &&
                         <Lock className="h-3 w-3 absolute -top-1 -right-1 text-muted-foreground" />
                         }
-                          {item.showBadge && totalUnread > 0 && effectiveCollapsed && !isLocked &&
-                        <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-destructive text-destructive-foreground">
-                              {totalUnread > 99 ? '99+' : totalUnread}
-                            </Badge>
-                        }
                           {item.showConversasBadge && conversasUnread > 0 && effectiveCollapsed && !isLocked &&
-                        <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-green-500 text-white">
+                        <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-destructive text-destructive-foreground">
                               {conversasUnread > 99 ? '99+' : conversasUnread}
-                            </Badge>
-                        }
-                          {item.showAgendaBadge && agendaToday > 0 && effectiveCollapsed && !isLocked &&
-                        <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-blue-500 text-white">
-                              {agendaToday > 99 ? '99+' : agendaToday}
-                            </Badge>
-                        }
-                          {item.showTarefasBadge && tarefasAlert > 0 && effectiveCollapsed && !isLocked &&
-                        <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-yellow-500 text-white">
-                              {tarefasAlert > 99 ? '99+' : tarefasAlert}
-                            </Badge>
-                        }
-                          {item.showAIBadge && aiInsightsCount > 0 && effectiveCollapsed && !isLocked &&
-                        <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-orange-500 text-white">
-                              {aiInsightsCount > 99 ? '99+' : aiInsightsCount}
                             </Badge>
                         }
                         </div>
@@ -301,30 +206,9 @@ export function Sidebar({
                             {isLocked &&
                         <Lock className="h-3 w-3 text-muted-foreground" />
                         }
-                            {item.showBadge && totalUnread > 0 && !isLocked &&
-                        <Badge variant="destructive" className="ml-2 text-xs">
-                                {totalUnread > 99 ? '99+' : totalUnread}
-                              </Badge>
-                        }
                             {item.showConversasBadge && conversasUnread > 0 && !isLocked &&
-                        <Badge className="ml-2 text-xs bg-green-500 hover:bg-green-600 text-white">
+                        <Badge className="ml-2 text-xs bg-destructive hover:bg-destructive/90 text-destructive-foreground">
                                 {conversasUnread > 99 ? '99+' : conversasUnread}
-                              </Badge>
-                        }
-                            {item.showAgendaBadge && agendaToday > 0 && !isLocked &&
-                        <Badge className="ml-2 text-xs bg-blue-500 hover:bg-blue-600 text-white">
-                                {agendaToday > 99 ? '99+' : agendaToday}
-                              </Badge>
-                        }
-                            {item.showTarefasBadge && tarefasAlert > 0 && !isLocked &&
-                        <Badge className="ml-2 text-xs bg-yellow-500 hover:bg-yellow-600 text-white">
-                                {tarefasAlert > 99 ? '99+' : tarefasAlert}
-                              </Badge>
-                        }
-                            {item.showAIBadge && aiInsightsCount > 0 && !isLocked &&
-                        <Badge className="ml-2 text-xs bg-orange-500 hover:bg-orange-600 text-white gap-1">
-                                <Brain className="h-3 w-3" />
-                                {aiInsightsCount}
                               </Badge>
                         }
                           </span>
@@ -335,7 +219,7 @@ export function Sidebar({
                 </TooltipTrigger>
                 {effectiveCollapsed &&
                 <TooltipContent side="right" className="font-medium">
-                    {item.name} {isLocked ? "(Bloqueado)" : item.showBadge && totalUnread > 0 ? `(${totalUnread})` : item.showConversasBadge && conversasUnread > 0 ? `(${conversasUnread})` : item.showAgendaBadge && agendaToday > 0 ? `(${agendaToday})` : item.showTarefasBadge && tarefasAlert > 0 ? `(${tarefasAlert})` : item.showAIBadge && aiInsightsCount > 0 ? `(${aiInsightsCount} IA)` : ""}
+                    {item.name} {isLocked ? "(Bloqueado)" : item.showConversasBadge && conversasUnread > 0 ? `(${conversasUnread})` : ""}
                   </TooltipContent>
                 }
               </Tooltip>);

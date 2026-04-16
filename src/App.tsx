@@ -5,25 +5,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Auth from "./pages/Auth";
 import Analytics from "./pages/Analytics";
-import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
 import Kanban from "./pages/Kanban";
 import Conversas from "./pages/Conversas";
-import Agenda from "./pages/Agenda";
 import AgendaPublica from "./pages/AgendaPublica";
-import Tarefas from "./pages/Tarefas";
 import IA from "./pages/IA";
 import Configuracoes from "./pages/Configuracoes";
 import Relatorios from "./pages/Relatorios";
-import ChatInterno from "./pages/ChatInterno";
-import Reunioes from "./pages/Reunioes";
 import PublicMeeting from "./pages/PublicMeeting";
 import CapturaPublica from "./pages/CapturaPublica";
-import Discador from "./pages/Discador";
-import ProcessosComerciais from "./pages/ProcessosComerciais";
-import Treinamento from "./pages/Treinamento";
 import Financeiro from "./pages/Financeiro";
-import Prospeccao from "./pages/Prospeccao";
 import OAuthCallback from "./pages/OAuthCallback";
 import GmailCallback from "./pages/GmailCallback";
 import { MainLayout } from "./components/layout/MainLayout";
@@ -81,20 +72,12 @@ const App = () => (
               <Route path="dashboard" element={<Navigate to="/analytics" replace />} />
               <Route path="leads" element={<Leads />} />
               <Route path="kanban" element={<Kanban />} />
-              <Route path="tarefas" element={<Tarefas />} />
-              <Route path="agenda" element={<Agenda />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="conversas" element={<Conversas />} />
               <Route path="ia" element={<IA />} />
               <Route path="relatorios" element={<Relatorios />} />
               <Route path="configuracoes" element={<Configuracoes />} />
-              <Route path="chat-equipe" element={<ChatInterno />} />
-              <Route path="reunioes" element={<Navigate to="/chat-equipe" replace />} />
-              <Route path="discador" element={<Discador />} />
-              <Route path="processos" element={<ProcessosComerciais />} />
-              <Route path="prospeccao" element={<Prospeccao />} />
               <Route path="financeiro" element={<Financeiro />} />
-              <Route path="treinamento" element={<Treinamento />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
