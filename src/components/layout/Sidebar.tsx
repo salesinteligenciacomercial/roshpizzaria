@@ -194,29 +194,9 @@ export function Sidebar({
                           {isLocked && !effectiveCollapsed &&
                         <Lock className="h-3 w-3 absolute -top-1 -right-1 text-muted-foreground" />
                         }
-                          {item.showBadge && totalUnread > 0 && effectiveCollapsed && !isLocked &&
-                        <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-destructive text-destructive-foreground">
-                              {totalUnread > 99 ? '99+' : totalUnread}
-                            </Badge>
-                        }
                           {item.showConversasBadge && conversasUnread > 0 && effectiveCollapsed && !isLocked &&
-                        <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-green-500 text-white">
+                        <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-destructive text-destructive-foreground">
                               {conversasUnread > 99 ? '99+' : conversasUnread}
-                            </Badge>
-                        }
-                          {item.showAgendaBadge && agendaToday > 0 && effectiveCollapsed && !isLocked &&
-                        <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-blue-500 text-white">
-                              {agendaToday > 99 ? '99+' : agendaToday}
-                            </Badge>
-                        }
-                          {item.showTarefasBadge && tarefasAlert > 0 && effectiveCollapsed && !isLocked &&
-                        <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-yellow-500 text-white">
-                              {tarefasAlert > 99 ? '99+' : tarefasAlert}
-                            </Badge>
-                        }
-                          {item.showAIBadge && aiInsightsCount > 0 && effectiveCollapsed && !isLocked &&
-                        <Badge className="absolute -top-2 -right-2 h-4 min-w-4 flex items-center justify-center p-0 text-[10px] bg-orange-500 text-white">
-                              {aiInsightsCount > 99 ? '99+' : aiInsightsCount}
                             </Badge>
                         }
                         </div>
@@ -226,30 +206,9 @@ export function Sidebar({
                             {isLocked &&
                         <Lock className="h-3 w-3 text-muted-foreground" />
                         }
-                            {item.showBadge && totalUnread > 0 && !isLocked &&
-                        <Badge variant="destructive" className="ml-2 text-xs">
-                                {totalUnread > 99 ? '99+' : totalUnread}
-                              </Badge>
-                        }
                             {item.showConversasBadge && conversasUnread > 0 && !isLocked &&
-                        <Badge className="ml-2 text-xs bg-green-500 hover:bg-green-600 text-white">
+                        <Badge className="ml-2 text-xs bg-destructive hover:bg-destructive/90 text-destructive-foreground">
                                 {conversasUnread > 99 ? '99+' : conversasUnread}
-                              </Badge>
-                        }
-                            {item.showAgendaBadge && agendaToday > 0 && !isLocked &&
-                        <Badge className="ml-2 text-xs bg-blue-500 hover:bg-blue-600 text-white">
-                                {agendaToday > 99 ? '99+' : agendaToday}
-                              </Badge>
-                        }
-                            {item.showTarefasBadge && tarefasAlert > 0 && !isLocked &&
-                        <Badge className="ml-2 text-xs bg-yellow-500 hover:bg-yellow-600 text-white">
-                                {tarefasAlert > 99 ? '99+' : tarefasAlert}
-                              </Badge>
-                        }
-                            {item.showAIBadge && aiInsightsCount > 0 && !isLocked &&
-                        <Badge className="ml-2 text-xs bg-orange-500 hover:bg-orange-600 text-white gap-1">
-                                <Brain className="h-3 w-3" />
-                                {aiInsightsCount}
                               </Badge>
                         }
                           </span>
@@ -260,7 +219,7 @@ export function Sidebar({
                 </TooltipTrigger>
                 {effectiveCollapsed &&
                 <TooltipContent side="right" className="font-medium">
-                    {item.name} {isLocked ? "(Bloqueado)" : item.showBadge && totalUnread > 0 ? `(${totalUnread})` : item.showConversasBadge && conversasUnread > 0 ? `(${conversasUnread})` : item.showAgendaBadge && agendaToday > 0 ? `(${agendaToday})` : item.showTarefasBadge && tarefasAlert > 0 ? `(${tarefasAlert})` : item.showAIBadge && aiInsightsCount > 0 ? `(${aiInsightsCount} IA)` : ""}
+                    {item.name} {isLocked ? "(Bloqueado)" : item.showConversasBadge && conversasUnread > 0 ? `(${conversasUnread})` : ""}
                   </TooltipContent>
                 }
               </Tooltip>);
