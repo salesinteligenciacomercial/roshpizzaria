@@ -36,55 +36,16 @@ const navigation = [{
   menuKey: "conversas",
   showConversasBadge: true
 }, {
-  name: "Agenda",
-  href: "/agenda",
-  icon: Calendar,
-  menuKey: "agenda",
-  showAgendaBadge: true
-}, {
-  name: "Tarefas",
-  href: "/tarefas",
-  icon: Calendar,
-  menuKey: "tarefas",
-  showTarefasBadge: true
-}, {
   name: "Fluxos e Automação",
   href: "/ia",
   icon: Bot,
   menuKey: "automacao"
-}, {
-  name: "Bate-papo Interno",
-  href: "/chat-equipe",
-  icon: MessagesSquare,
-  menuKey: "chat-equipe",
-  showBadge: true
-}, {
-  name: "Discador",
-  href: "/discador",
-  icon: PhoneCall,
-  menuKey: "discador"
-}, {
-  name: "Processos Comerciais",
-  href: "/processos",
-  icon: Target,
-  menuKey: "processos",
-  showAIBadge: true
-}, {
-  name: "Prospecção",
-  href: "/prospeccao",
-  icon: Target,
-  menuKey: "prospeccao"
 }, {
   name: "Financeiro",
   href: "/financeiro",
   icon: DollarSign,
   menuKey: "financeiro",
   masterOnly: true
-}, {
-  name: "Treinamento",
-  href: "/treinamento",
-  icon: GraduationCap,
-  menuKey: "treinamento" // Central de vídeos do YouTube
 }, {
   name: "Configurações",
   href: "/configuracoes",
