@@ -1324,15 +1324,15 @@ export default function Analytics() {
             <TabsList className="grid w-full grid-cols-3 mb-4">
               <TabsTrigger value="pipeline" className="gap-2">
                 <TrendingUp className="h-4 w-4" />
-                Pipeline & Vendas
+                Pedidos & Faturamento
               </TabsTrigger>
               <TabsTrigger value="customers" className="gap-2">
                 <Users className="h-4 w-4" />
-                Clientes & LTV
+                Clientes Frequentes
               </TabsTrigger>
               <TabsTrigger value="products" className="gap-2">
                 <Package className="h-4 w-4" />
-                Produtos
+                Pizzas & Produtos
               </TabsTrigger>
             </TabsList>
 
