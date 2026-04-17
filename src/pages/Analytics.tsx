@@ -1065,8 +1065,8 @@ export default function Analytics() {
   return <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div className="space-y-2">
-        <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">Dados e Relatórios </h1>
-        <p className="text-muted-foreground text-lg">Visão completa e análises detalhadas do seu CRM</p>
+        <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">Relatórios da Pizzaria</h1>
+        <p className="text-muted-foreground text-lg">Acompanhe vendas, pedidos, clientes e o dia a dia da sua pizzaria</p>
         </div>
         
         {/* ✅ Indicador de Status de Conexão Realtime */}
@@ -1168,34 +1168,22 @@ export default function Analytics() {
       </Card>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className={`grid w-full h-auto p-1`} style={{ gridTemplateColumns: `repeat(${5 + (isMasterAccount || isSegmentoFinanceiro(companySegmento) ? 1 : 0) + (isMasterAccount || isSegmentoJuridico(companySegmento) ? 1 : 0)}, minmax(0, 1fr))` }}>
+        <TabsList className="grid w-full h-auto p-1 grid-cols-2 sm:grid-cols-5">
           <TabsTrigger value="overview" className="gap-2 py-3">
             <Eye className="h-4 w-4" />
             <span className="hidden sm:inline">Visão Geral</span>
           </TabsTrigger>
           <TabsTrigger value="sales" className="gap-2 py-3">
             <TrendingUp className="h-4 w-4" />
-            <span className="hidden sm:inline">Vendas & Clientes</span>
+            <span className="hidden sm:inline">Vendas & Pedidos</span>
           </TabsTrigger>
-          {(isMasterAccount || isSegmentoFinanceiro(companySegmento)) && (
-            <TabsTrigger value="propostas" className="gap-2 py-3">
-              <Building2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Propostas</span>
-            </TabsTrigger>
-          )}
-          {(isMasterAccount || isSegmentoJuridico(companySegmento)) && (
-            <TabsTrigger value="juridico" className="gap-2 py-3">
-              <Scale className="h-4 w-4" />
-              <span className="hidden sm:inline">Jurídico</span>
-            </TabsTrigger>
-          )}
           <TabsTrigger value="campaigns" className="gap-2 py-3">
             <Megaphone className="h-4 w-4" />
             <span className="hidden sm:inline">Campanhas</span>
           </TabsTrigger>
           <TabsTrigger value="operations" className="gap-2 py-3">
             <Activity className="h-4 w-4" />
-            <span className="hidden sm:inline">Equipe & Operações</span>
+            <span className="hidden sm:inline">Equipe & Atendimento</span>
           </TabsTrigger>
           <TabsTrigger value="customize" className="gap-2 py-3">
             <Cake className="h-4 w-4" />
@@ -1336,15 +1324,15 @@ export default function Analytics() {
             <TabsList className="grid w-full grid-cols-3 mb-4">
               <TabsTrigger value="pipeline" className="gap-2">
                 <TrendingUp className="h-4 w-4" />
-                Pipeline & Vendas
+                Pedidos & Faturamento
               </TabsTrigger>
               <TabsTrigger value="customers" className="gap-2">
                 <Users className="h-4 w-4" />
-                Clientes & LTV
+                Clientes Frequentes
               </TabsTrigger>
               <TabsTrigger value="products" className="gap-2">
                 <Package className="h-4 w-4" />
-                Produtos
+                Pizzas & Produtos
               </TabsTrigger>
             </TabsList>
 

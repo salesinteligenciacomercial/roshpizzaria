@@ -880,9 +880,9 @@ export default function Leads() {
       {/* Header responsivo */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Clientes</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Clientes da Pizzaria</h1>
           <p className="text-sm md:text-base text-muted-foreground">
-            Gerencie seus clientes, histórico de consumo e relacionamento
+            Cadastro de clientes, pedidos e aniversariantes
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
