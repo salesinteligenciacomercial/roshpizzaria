@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, MessageSquare, Bot, Settings, LogOut, DollarSign, Lock, X } from "lucide-react";
+import { LayoutDashboard, Users, MessageSquare, Bot, Settings, LogOut, DollarSign, Lock, X, Package, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,15 +16,25 @@ const navigation = [{
   icon: LayoutDashboard,
   menuKey: "analytics"
 }, {
-  name: "Contatos",
+  name: "Clientes",
   href: "/leads",
   icon: Users,
   menuKey: "leads"
 }, {
-  name: "Funil de Vendas",
+  name: "Gestão de Pedidos",
   href: "/kanban",
   icon: LayoutDashboard,
   menuKey: "funil"
+}, {
+  name: "Produtos",
+  href: "/produtos",
+  icon: Package,
+  menuKey: "produtos"
+}, {
+  name: "Cardápio Digital",
+  href: "/cardapio-digital",
+  icon: Store,
+  menuKey: "cardapio-digital"
 }, {
   name: "Bate-Papo",
   href: "/conversas",
@@ -37,7 +47,7 @@ const navigation = [{
   icon: Bot,
   menuKey: "automacao"
 }, {
-  name: "Financeiro",
+  name: "Caixa/PDV",
   href: "/financeiro",
   icon: DollarSign,
   menuKey: "financeiro",

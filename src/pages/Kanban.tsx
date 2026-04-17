@@ -691,17 +691,17 @@ export default function KanbanPage() {
         throw error;
       }
 
-      console.log('[DRAG END] ✅ Lead movido com sucesso no banco');
-      toast.success(`Lead movido para "${etapaDestino.nome}"`, {
+      console.log('[DRAG END] ✅ Pedido movido com sucesso no banco');
+      toast.success(`Pedido movido para "${etapaDestino.nome}"`, {
         description: `${lead.name} foi movido com sucesso`
       });
 
       // 🎯 Abrir popup para criar tarefa somente na coluna Ganho/Fechado
       const nomeDestinoLower = etapaDestino.nome?.toLowerCase().trim() || '';
-      const isGanhoFechado = ['ganho', 'fechado', 'ganha', 'fechada', 'ganho/fechado', 'ganha/fechada'].some(
+      const isPedidoFinal = ['entregue', 'entregues', 'concluido', 'concluida'].some(
         keyword => nomeDestinoLower.includes(keyword)
       );
-      if (isGanhoFechado) {
+      if (isPedidoFinal) {
         setTarefaDialogData({
           open: true,
           leadId: leadId,
@@ -1004,13 +1004,13 @@ export default function KanbanPage() {
       <div className="container mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-3xl font-bold">Funil de Vendas</h1>
-            <p className="text-muted-foreground">Gerencie seus leads por etapas</p>
+            <h1 className="text-3xl font-bold">Gestão de Pedidos</h1>
+            <p className="text-muted-foreground">Gerencie seus pedidos por etapas</p>
           </div>
           {canCreateFunil && <NovoFunilDialog onFunilCreated={() => window.location.reload()} />}
         </div>
         <div className="text-center py-12">
-          <p className="text-muted-foreground mb-4">Nenhum funil criado ainda</p>
+          <p className="text-muted-foreground mb-4">Nenhum funil de pedidos criado ainda</p>
           {canCreateFunil ? (
             <NovoFunilDialog onFunilCreated={() => window.location.reload()} />
           ) : (
@@ -1027,7 +1027,7 @@ export default function KanbanPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
-            Funil de Vendas
+            Gestão de Pedidos
             {isOnline ? (
               <Wifi className="h-5 w-5 text-green-500" />
             ) : (
@@ -1035,7 +1035,7 @@ export default function KanbanPage() {
             )}
           </h1>
           <p className="text-muted-foreground">
-            Gerencie seus leads por etapas • {isOnline ? 'Online' : 'Offline'}
+            Gerencie seus pedidos por etapas • {isOnline ? 'Online' : 'Offline'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -1044,10 +1044,13 @@ export default function KanbanPage() {
           )}
           <NovoLeadDialog
             onLeadCreated={refreshLeads}
+            mode="pedido"
+            defaultFunilId={funilSelecionado?.id}
+            defaultEtapaId={etapasFiltradas[0]?.id}
             triggerButton={
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
-                Novo Lead
+                Novo Pedido
               </Button>
             }
           />

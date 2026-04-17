@@ -34,12 +34,11 @@ export function NovoFunilDialog({ onFunilCreated }: NovoFunilDialogProps) {
   const [loading, setLoading] = useState(false);
   const [nomeFunil, setNomeFunil] = useState("");
   const [etapas, setEtapas] = useState<Etapa[]>([
-    { id: "1", nome: "Novo Lead", posicao: 0, cor: "#ef4444", status: 'normal' },
-    { id: "2", nome: "Contato Realizado", posicao: 1, cor: "#f97316", status: 'normal' },
-    { id: "3", nome: "Proposta Enviada", posicao: 2, cor: "#eab308", status: 'normal' },
-    { id: "4", nome: "Negociação", posicao: 3, cor: "#3b82f6", status: 'normal' },
-    { id: "5", nome: "Ganho", posicao: 99, cor: "#22c55e", status: 'final' },
-    { id: "6", nome: "Perdido", posicao: 100, cor: "#ef4444", status: 'final' },
+    { id: "1", nome: "Novos", posicao: 0, cor: "#ef4444", status: 'normal' },
+    { id: "2", nome: "Aceitos", posicao: 1, cor: "#f97316", status: 'normal' },
+    { id: "3", nome: "Em Produção", posicao: 2, cor: "#eab308", status: 'normal' },
+    { id: "4", nome: "Prontos", posicao: 3, cor: "#3b82f6", status: 'normal' },
+    { id: "5", nome: "Entregues", posicao: 99, cor: "#22c55e", status: 'final' },
   ]);
 
   const adicionarEtapa = () => {
@@ -72,13 +71,13 @@ export function NovoFunilDialog({ onFunilCreated }: NovoFunilDialogProps) {
     if (!etapa) return;
 
     if (etapa.status === 'final') {
-      toast.error("Não é possível remover as etapas Ganho e Perdido");
+      toast.error("Não é possível remover a etapa final");
       return;
     }
 
     const etapasNormais = etapas.filter(e => e.status !== 'final');
     if (etapasNormais.length <= 1) {
-      toast.error("O funil precisa ter pelo menos uma etapa além de Ganho e Perdido");
+      toast.error("O funil precisa ter pelo menos uma etapa além da etapa final");
       return;
     }
 
@@ -157,12 +156,11 @@ export function NovoFunilDialog({ onFunilCreated }: NovoFunilDialogProps) {
       toast.success("Funil criado com sucesso!");
       setNomeFunil("");
       setEtapas([
-        { id: "1", nome: "Novo Lead", posicao: 0, cor: "#ef4444", status: 'normal' },
-        { id: "2", nome: "Contato Realizado", posicao: 1, cor: "#f97316", status: 'normal' },
-        { id: "3", nome: "Proposta Enviada", posicao: 2, cor: "#eab308", status: 'normal' },
-        { id: "4", nome: "Negociação", posicao: 3, cor: "#3b82f6", status: 'normal' },
-        { id: "5", nome: "Ganho", posicao: 99, cor: "#22c55e", status: 'final' },
-        { id: "6", nome: "Perdido", posicao: 100, cor: "#ef4444", status: 'final' },
+        { id: "1", nome: "Novos", posicao: 0, cor: "#ef4444", status: 'normal' },
+        { id: "2", nome: "Aceitos", posicao: 1, cor: "#f97316", status: 'normal' },
+        { id: "3", nome: "Em Produção", posicao: 2, cor: "#eab308", status: 'normal' },
+        { id: "4", nome: "Prontos", posicao: 3, cor: "#3b82f6", status: 'normal' },
+        { id: "5", nome: "Entregues", posicao: 99, cor: "#22c55e", status: 'final' },
       ]);
       setOpen(false);
       onFunilCreated();
@@ -184,7 +182,7 @@ export function NovoFunilDialog({ onFunilCreated }: NovoFunilDialogProps) {
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Criar Novo Funil de Vendas</DialogTitle>
+          <DialogTitle>Criar Novo Funil de Pedidos</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>

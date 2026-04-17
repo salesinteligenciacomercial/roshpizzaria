@@ -16,9 +16,18 @@ import { useTagsManager } from "@/hooks/useTagsManager";
 interface NovoLeadDialogProps {
   onLeadCreated: () => void;
   triggerButton?: React.ReactNode;
+  mode?: "lead" | "cliente" | "pedido";
+  defaultFunilId?: string;
+  defaultEtapaId?: string;
 }
 
-export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogProps) {
+export function NovoLeadDialog({
+  onLeadCreated,
+  triggerButton,
+  mode = "lead",
+  defaultFunilId,
+  defaultEtapaId,
+}: NovoLeadDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [funis, setFunis] = useState<any[]>([]);
@@ -26,6 +35,9 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
   const [etapasFiltradas, setEtapasFiltradas] = useState<any[]>([]);
   const [responsaveis, setResponsaveis] = useState<any[]>([]);
   const { allTags: tagsExistentes } = useTagsManager();
+
+  const entityLabel = mode === "cliente" ? "Cliente" : mode === "pedido" ? "Pedido" : "Lead";
+  const entityLabelLower = entityLabel.toLowerCase();
   const [formData, setFormData] = useState({
     nome: "",
     telefone: "",
@@ -51,6 +63,16 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
       carregarDados();
     }
   }, [open]);
+
+  // Para o modo "pedido", preencher automaticamente o funil/etapa inicial
+  useEffect(() => {
+    if (!open) return;
+    setFormData((prev) => ({
+      ...prev,
+      funil_id: defaultFunilId ?? prev.funil_id,
+      etapa_id: defaultEtapaId ?? prev.etapa_id,
+    }));
+  }, [open, defaultEtapaId, defaultFunilId]);
 
   useEffect(() => {
     if (formData.funil_id) {
@@ -104,7 +126,7 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
     e.preventDefault();
     
     if (!formData.nome.trim()) {
-      toast.error("Digite o nome do lead");
+      toast.error(`Digite o nome do ${entityLabelLower}`);
       return;
     }
 
@@ -184,7 +206,12 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
           responsavel_id: formData.responsavel_id || null,
           company_id: userRole.company_id,
           status: "novo",
-          stage: "prospeccao",
+          stage: (() => {
+            const etapaSelecionada = etapas.find(e => e.id === formData.etapa_id);
+            if (etapaSelecionada?.nome) return String(etapaSelecionada.nome).toLowerCase();
+            if (mode === "pedido") return "novos";
+            return "prospeccao";
+          })(),
           tags: formData.tags.length > 0 ? formData.tags : null,
           probability: formData.probability || 50,
           expected_close_date: formData.expected_close_date || null,
@@ -197,7 +224,7 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
         throw error;
       }
 
-      toast.success("✅ Lead criado com sucesso!");
+      toast.success(`✅ ${entityLabel} criado com sucesso!`);
       setFormData({
         nome: "",
         telefone: "",
@@ -232,13 +259,13 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
         {triggerButton || (
           <Button size="sm" variant="ghost" className="w-full">
             <Plus className="h-4 w-4 mr-2" />
-            Novo Lead
+            Novo {entityLabel}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Novo Lead</DialogTitle>
+          <DialogTitle>Novo {entityLabel}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -304,7 +331,7 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
               id="nome"
               value={formData.nome}
               onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-              placeholder="Nome do lead"
+              placeholder={`Nome do ${entityLabelLower}`}
               required
             />
           </div>
@@ -414,7 +441,7 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               rows={3}
-              placeholder="Informações adicionais sobre o lead"
+              placeholder={`Informações adicionais sobre o ${entityLabelLower}`}
             />
           </div>
 
@@ -519,7 +546,7 @@ export function NovoLeadDialog({ onLeadCreated, triggerButton }: NovoLeadDialogP
               Cancelar
             </Button>
             <Button type="submit" disabled={loading} className="flex-1">
-              {loading ? "Criando..." : "Criar Lead"}
+              {loading ? "Criando..." : `Criar ${entityLabel}`}
             </Button>
           </div>
         </form>

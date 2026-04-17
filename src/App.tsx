@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Auth from "./pages/Auth";
 import Analytics from "./pages/Analytics";
 import Leads from "./pages/Leads";
-import Kanban from "./pages/Kanban";
+import Pedidos from "./pages/Pedidos";
 import Conversas from "./pages/Conversas";
 import AgendaPublica from "./pages/AgendaPublica";
 import IA from "./pages/IA";
@@ -14,7 +14,10 @@ import Configuracoes from "./pages/Configuracoes";
 import Relatorios from "./pages/Relatorios";
 import PublicMeeting from "./pages/PublicMeeting";
 import CapturaPublica from "./pages/CapturaPublica";
-import Financeiro from "./pages/Financeiro";
+import CaixaPDV from "./pages/CaixaPDV";
+import Produtos from "./pages/Produtos";
+import CardapioDigital from "./pages/CardapioDigital";
+import CardapioPublico from "./pages/CardapioPublico";
 import OAuthCallback from "./pages/OAuthCallback";
 import GmailCallback from "./pages/GmailCallback";
 import { MainLayout } from "./components/layout/MainLayout";
@@ -67,17 +70,20 @@ const App = () => (
             <Route path="/agenda/:slug" element={<AgendaPublica />} />
             <Route path="/meeting/:meetingId" element={<PublicMeeting />} />
             <Route path="/captura/:companyId" element={<CapturaPublica />} />
+            <Route path="/cardapio/:slug" element={<CardapioPublico />} />
             <Route path="/" element={<MainLayout />}>
               <Route index element={<Navigate to="/analytics" replace />} />
               <Route path="dashboard" element={<Navigate to="/analytics" replace />} />
               <Route path="leads" element={<Leads />} />
-              <Route path="kanban" element={<Kanban />} />
+              <Route path="kanban" element={<Pedidos />} />
+              <Route path="produtos" element={<Produtos />} />
+              <Route path="cardapio-digital" element={<CardapioDigital />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="conversas" element={<Conversas />} />
               <Route path="ia" element={<IA />} />
               <Route path="relatorios" element={<Relatorios />} />
               <Route path="configuracoes" element={<Configuracoes />} />
-              <Route path="financeiro" element={<Financeiro />} />
+              <Route path="financeiro" element={<CaixaPDV />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

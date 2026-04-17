@@ -880,9 +880,9 @@ export default function Leads() {
       {/* Header responsivo */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Contatos do CRM</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Clientes</h1>
           <p className="text-sm md:text-base text-muted-foreground">
-            Gerencie todos os seus leads em um só lugar
+            Gerencie seus clientes, histórico de consumo e relacionamento
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -898,7 +898,7 @@ export default function Leads() {
             <span className="hidden md:inline">Exportar</span>
           </Button>
           <ImportarLeadsDialog onLeadsImported={carregarLeads} />
-          <NovoLeadDialog onLeadCreated={carregarLeads} />
+          <NovoLeadDialog onLeadCreated={carregarLeads} mode="cliente" />
         </div>
       </div>
 
@@ -908,7 +908,7 @@ export default function Leads() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input 
-              placeholder="Buscar leads..." 
+              placeholder="Buscar clientes..." 
               className="pl-10 text-sm" 
               value={searchTerm} 
               onChange={e => setSearchTerm(e.target.value)} 
@@ -944,7 +944,7 @@ export default function Leads() {
               className="flex-shrink-0 text-green-600 hover:text-green-700 border-green-200 hover:bg-green-50 data-[state=active]:bg-green-600"
             >
               <Trophy className="h-4 w-4 md:mr-1" />
-              <span className="hidden md:inline">Ganhos</span>
+              <span className="hidden md:inline">Compras</span>
             </Button>
             <Button 
               size="sm" 
@@ -953,7 +953,7 @@ export default function Leads() {
               className="flex-shrink-0 text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
             >
               <XCircle className="h-4 w-4 md:mr-1" />
-              <span className="hidden md:inline">Perdidos</span>
+              <span className="hidden md:inline">Não comprou</span>
             </Button>
             <Button size="sm" variant={selectionMode ? "default" : "outline"} onClick={toggleSelectionMode} className={`flex-shrink-0 ${selectionMode ? "bg-primary" : ""}`}>
               <CheckSquare className="h-4 w-4 md:mr-2" />
@@ -1091,17 +1091,17 @@ export default function Leads() {
             {selectedStatus === 'ganho' ? (
               <>
                 <Trophy className="h-12 w-12 text-green-500 opacity-50" />
-                <p className="text-muted-foreground font-medium">Nenhum lead marcado como ganho</p>
-                <p className="text-sm text-muted-foreground text-center max-w-md">
-                  Para marcar um lead como ganho, clique no menu de ações (•••) do lead e selecione "Marcar como Ganho".
+              <p className="text-muted-foreground font-medium">Nenhum cliente com compras registrado</p>
+              <p className="text-sm text-muted-foreground text-center max-w-md">
+                  Para registrar uma compra, clique no menu de ações (•••) do cliente e selecione "Marcar como Ganho".
                 </p>
               </>
             ) : selectedStatus === 'perdido' ? (
               <>
                 <XCircle className="h-12 w-12 text-red-500 opacity-50" />
-                <p className="text-muted-foreground font-medium">Nenhum lead marcado como perdido</p>
-                <p className="text-sm text-muted-foreground text-center max-w-md">
-                  Para marcar um lead como perdido, clique no menu de ações (•••) do lead e selecione "Marcar como Perdido".
+              <p className="text-muted-foreground font-medium">Nenhum cliente marcado como não comprou</p>
+              <p className="text-sm text-muted-foreground text-center max-w-md">
+                  Para marcar como não comprou, clique no menu de ações (•••) do cliente e selecione "Marcar como Perdido".
                 </p>
               </>
             ) : (
