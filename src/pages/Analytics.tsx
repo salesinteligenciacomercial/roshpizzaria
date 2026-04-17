@@ -1065,8 +1065,8 @@ export default function Analytics() {
   return <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div className="space-y-2">
-        <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">Dados e Relatórios </h1>
-        <p className="text-muted-foreground text-lg">Visão completa e análises detalhadas do seu CRM</p>
+        <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">Relatórios da Pizzaria</h1>
+        <p className="text-muted-foreground text-lg">Acompanhe vendas, pedidos, clientes e o dia a dia da sua pizzaria</p>
         </div>
         
         {/* ✅ Indicador de Status de Conexão Realtime */}
