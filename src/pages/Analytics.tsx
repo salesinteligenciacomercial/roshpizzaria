@@ -13,6 +13,7 @@ import ProductsAnalytics from "@/components/analytics/ProductsAnalytics";
 import { CustomerLTVAnalytics } from "@/components/analytics/CustomerLTVAnalytics";
 import PropostasAnalytics from "@/components/analytics/PropostasAnalytics";
 import JuridicoAnalytics from "@/components/analytics/JuridicoAnalytics";
+import { PizzariaAnalytics } from "@/components/analytics/PizzariaAnalytics";
 import { isSegmentoFinanceiro, isSegmentoJuridico } from "@/lib/segmentos";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
