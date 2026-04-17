@@ -40,6 +40,7 @@ import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { LeadAttachments } from "@/components/leads/LeadAttachments";
 import { ProdutoSelectorDialog } from "@/components/conversas/ProdutoSelectorDialog";
 import { VendasLeadPanel } from "@/components/conversas/VendasLeadPanel";
+import { PedidoChatModal } from "@/components/conversas/PedidoChatModal";
 import { PropostasBancariasPanel } from "@/components/conversas/PropostasBancariasPanel";
 import { ProcessosJuridicosPanel } from "@/components/conversas/ProcessosJuridicosPanel";
 import { isSegmentoFinanceiro, isSegmentoJuridico } from "@/lib/segmentos";
