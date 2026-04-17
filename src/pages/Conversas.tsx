@@ -456,6 +456,7 @@ function Conversas() {
   const [pastedImageFile, setPastedImageFile] = useState<File | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>('idle');
   const [leadVinculado, setLeadVinculado] = useState<any>(null);
+  const [pedidoModalOpen, setPedidoModalOpen] = useState(false);
   const [leadExtraInfo, setLeadExtraInfo] = useState<{ etapaNome?: string; funilNome?: string; responsavelNome?: string }>({});
   const [mostrarBotaoCriarLead, setMostrarBotaoCriarLead] = useState(false);
   const [leadsVinculados, setLeadsVinculados] = useState<Record<string, string>>({}); // conversationId -> leadId
