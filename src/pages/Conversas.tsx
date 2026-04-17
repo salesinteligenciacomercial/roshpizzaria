@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle, Eye, ChevronDown, Mail, Building2, Globe, Pencil, MapPin, Key, Shield, Package, PenLine, BarChart3, Music } from "lucide-react";
+import { MessageSquare, Instagram, Facebook, Send, Search, Bot, User, Paperclip, Clock, Calendar, Zap, FileText, Tag, TrendingUp, ArrowRightLeft, Image as ImageIcon, Mic, FileUp, Check, CheckCheck, Phone, Video, Info, DollarSign, Users, Bell, Download, Volume2, RefreshCw, CheckCircle2, AlertCircle, Reply, CheckSquare, X, Plus, Trash2, Loader2, UserCog, ArrowLeft, SpellCheck, Trophy, XCircle, Eye, ChevronDown, Mail, Building2, Globe, Pencil, MapPin, Key, Shield, Package, PenLine, BarChart3, Music, ShoppingCart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FinalizarNegociacaoDialog } from "@/components/leads/FinalizarNegociacaoDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -40,6 +40,7 @@ import { TarefaModal } from "@/components/tarefas/TarefaModal";
 import { LeadAttachments } from "@/components/leads/LeadAttachments";
 import { ProdutoSelectorDialog } from "@/components/conversas/ProdutoSelectorDialog";
 import { VendasLeadPanel } from "@/components/conversas/VendasLeadPanel";
+import { PedidoChatModal } from "@/components/conversas/PedidoChatModal";
 import { PropostasBancariasPanel } from "@/components/conversas/PropostasBancariasPanel";
 import { ProcessosJuridicosPanel } from "@/components/conversas/ProcessosJuridicosPanel";
 import { isSegmentoFinanceiro, isSegmentoJuridico } from "@/lib/segmentos";
@@ -455,6 +456,7 @@ function Conversas() {
   const [pastedImageFile, setPastedImageFile] = useState<File | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>('idle');
   const [leadVinculado, setLeadVinculado] = useState<any>(null);
+  const [pedidoModalOpen, setPedidoModalOpen] = useState(false);
   const [leadExtraInfo, setLeadExtraInfo] = useState<{ etapaNome?: string; funilNome?: string; responsavelNome?: string }>({});
   const [mostrarBotaoCriarLead, setMostrarBotaoCriarLead] = useState(false);
   const [leadsVinculados, setLeadsVinculados] = useState<Record<string, string>>({}); // conversationId -> leadId
@@ -9714,27 +9716,16 @@ function Conversas() {
                     }} triggerButton={<Button size="sm" variant="outline" className="w-full">
                                   <Pencil className="h-3 w-3 mr-2" /> Editar Informações
                                 </Button>} />
-                            {/* ✅ Painel de Vendas/Negociações com botões Ganho/Perdido integrados */}
+                            {/* 🛒 Botão "Novo Pedido" - abre cardápio direto na conversa */}
                             <div className="mt-3">
-                              <VendasLeadPanel
-                                leadId={leadVinculado.id}
-                                leadName={leadVinculado.name || selectedConv?.contactName || "Cliente"}
-                                companyId={userCompanyId || ""}
-                                onVendaUpdated={async () => {
-                                  // Recarregar lead após atualização de venda
-                                  if (selectedConv && (selectedConv.phoneNumber || selectedConv.id)) {
-                                    const telefoneFormatado = safeFormatPhoneNumber(selectedConv.phoneNumber || selectedConv.id);
-                                    const { data: leadAtualizado } = await supabase
-                                      .from('leads')
-                                      .select('*')
-                                      .or(`phone.eq.${telefoneFormatado},telefone.eq.${telefoneFormatado}`)
-                                      .maybeSingle();
-                                    if (leadAtualizado) {
-                                      setLeadVinculado(leadAtualizado);
-                                    }
-                                  }
-                                }}
-                              />
+                              <Button
+                                size="lg"
+                                className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-semibold shadow-md"
+                                onClick={() => setPedidoModalOpen(true)}
+                              >
+                                <ShoppingCart className="h-5 w-5 mr-2" />
+                                Novo Pedido
+                              </Button>
                             </div>
 
                             {/* ✅ Painel de Propostas Bancárias - Apenas segmentos financeiros */}
@@ -11441,6 +11432,18 @@ function Conversas() {
         onOpenChange={setProductivityPanelOpen}
         companyId={userCompanyId || ""}
       />
+
+      {/* 🛒 Modal de novo pedido direto da conversa (cardápio) */}
+      {userCompanyId && (
+        <PedidoChatModal
+          open={pedidoModalOpen}
+          onOpenChange={setPedidoModalOpen}
+          companyId={userCompanyId}
+          leadId={leadVinculado?.id || null}
+          clienteNome={leadVinculado?.name || selectedConv?.contactName || ""}
+          clienteTelefone={selectedConv?.phoneNumber || selectedConv?.id || leadVinculado?.phone || leadVinculado?.telefone || ""}
+        />
+      )}
     </div>;
 }
 export default Conversas;
