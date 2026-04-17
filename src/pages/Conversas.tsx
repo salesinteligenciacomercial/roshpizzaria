@@ -11432,6 +11432,18 @@ function Conversas() {
         onOpenChange={setProductivityPanelOpen}
         companyId={userCompanyId || ""}
       />
+
+      {/* 🛒 Modal de novo pedido direto da conversa (cardápio) */}
+      {userCompanyId && (
+        <PedidoChatModal
+          open={pedidoModalOpen}
+          onOpenChange={setPedidoModalOpen}
+          companyId={userCompanyId}
+          leadId={leadVinculado?.id || null}
+          clienteNome={leadVinculado?.name || selectedConv?.contactName || ""}
+          clienteTelefone={selectedConv?.phoneNumber || selectedConv?.id || leadVinculado?.phone || leadVinculado?.telefone || ""}
+        />
+      )}
     </div>;
 }
 export default Conversas;
